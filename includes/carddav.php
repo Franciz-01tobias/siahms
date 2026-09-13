@@ -42,6 +42,22 @@ require_once __DIR__ . '/functions.php';
 const CARDDAV_TIMEOUT = 20;
 
 /**
+ * The same, for a request made while somebody is waiting on a form.
+ *
+ * 🔴 A write-back runs INSIDE an analyst's save. Twenty seconds is a reasonable
+ * wait for an import somebody deliberately started and is watching a spinner
+ * for; it is an eternity when you have pressed Save on a ticket and the page has
+ * gone quiet. An unreachable server would make every edit feel broken even
+ * though the local save had already succeeded perfectly.
+ *
+ * ⚠️ Short, but not so short that a slow-but-working server is called dead. The
+ * connect timeout is what actually bites on an unreachable host, so that is the
+ * one cut hardest.
+ */
+const CARDDAV_INTERACTIVE_TIMEOUT = 8;
+const CARDDAV_INTERACTIVE_CONNECT_TIMEOUT = 4;
+
+/**
  * One HTTP request to a DAV server.
  *
  * Returns ['ok' => bool, 'status' => int, 'body' => string, 'error' => string,
@@ -93,8 +109,10 @@ function cardDavRequest(array $cfg, string $method, string $url, string $body = 
         CURLOPT_URL            => $url,
         CURLOPT_CUSTOMREQUEST  => $method,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => CARDDAV_TIMEOUT,
-        CURLOPT_CONNECTTIMEOUT => 10,
+        // `interactive` shortens both, for a request made while somebody is
+        // waiting on a form rather than watching an import they started.
+        CURLOPT_TIMEOUT        => !empty($cfg['interactive']) ? CARDDAV_INTERACTIVE_TIMEOUT : CARDDAV_TIMEOUT,
+        CURLOPT_CONNECTTIMEOUT => !empty($cfg['interactive']) ? CARDDAV_INTERACTIVE_CONNECT_TIMEOUT : 10,
         CURLOPT_HTTPAUTH       => $authMode,
         CURLOPT_USERPWD        => ($cfg['username'] ?? '') . ':' . ($cfg['password'] ?? ''),
         // ⚠️ Follow redirects: a DAV server very often answers the collection

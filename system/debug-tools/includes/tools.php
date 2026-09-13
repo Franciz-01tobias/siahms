@@ -334,6 +334,13 @@ function getDebugTools() {
             'persists' => 'Nothing. It stats directories and reads no file contents, touches no database row, and writes nothing at all.',
         ],
         [
+            // ⚠️ This key was MISSING, and had been since D014 shipped. The
+            // landing page renders `htmlspecialchars($t['id'])` into every card's
+            // badge, so its absence printed an "Undefined array key" warning and a
+            // deprecation notice INTO the card itself, on a page every other tool
+            // shares. Worth noting as a class: one malformed row in a registry
+            // damages the page, not just its own entry.
+            'id'       => 'D014',
             'slug'     => 'd014',
             'file'     => 'D014_azure_openai.php',
             'title'    => 'Azure OpenAI — deployment endpoints',
@@ -353,6 +360,50 @@ function getDebugTools() {
             ],
             'duration' => 'A few seconds, plus one live call per Azure-configured feature.',
             'persists' => 'Nothing is written. It makes the same tiny live call the Test button makes, which spends a handful of tokens against your own deployment. No API key is printed — only its first four characters and its length — and no prompt or ticket content appears in the output.',
+        ],
+        [
+            'id'       => 'D015',
+            'slug'     => 'd015',
+            'file'     => 'D015_carddav_health.php',
+            'title'    => 'CardDAV health — can FreeITSM read and write this address book',
+            'category' => 'Login',
+            'icon'     => 'sync',
+            'desc'     => 'Walk the connection to each address book one rung at a time: reach it, sign in, read the chosen book, and ask whether this account may write to it.',
+            'keywords' => 'carddav address book contacts write back writeback permission read-only privilege baikal sabredav nextcloud owncloud vcard digest basic 401 etag source_ref cannot write d015',
+            'when'     => 'Run this when contacts will not import, or when a change made in FreeITSM is not reaching the address book. Where D011 asks whether a directory is CONFIGURED to import, this asks whether an address book actually WORKS right now — and unlike D011 it does contact the server, because reachability is the whole question here rather than a distraction from it. The four rungs fail for entirely different reasons and an operator told only "it does not work" has four separate things to check, so each is reported on its own. It also names the mismatch that actually bites: write-back switched on while the account holds no write permission, which saves every change locally and has every one of them refused.',
+            'checks'   => [
+                'Install-wide prerequisites: the PHP curl extension, the two CardDAV files, and the three schema pieces write-back needs (which is how an install older than the feature identifies itself)',
+                'Rung 1 — reach the server and sign in, reporting the HTTP status and WHICH authentication scheme the server actually offers, because a stock Baikal ships Digest and answers Basic with a flat 401 that reads exactly like a wrong password',
+                'Rung 2 — read the chosen address book, and how many contacts, groups and tags are in it',
+                'Rung 3 — whether this account may WRITE, asked of the server as a privilege query. 🔴 It writes nothing: proving it by creating a card and deleting it again risks leaving a contact called "FreeITSM test" in a real address book',
+                'The mismatch worth naming on its own: write-back ON with no write permission, and the harmless opposite',
+                'FreeITSM\'s own side — how many people this book manages, and how many are missing the card URL or version marker a write-back needs (contacts imported before write-back existed have neither until the next import)',
+                'What the write log has actually recorded, per outcome, with the most recent attempt — and a note that "conflict" is the safety net working rather than a fault',
+            ],
+            'duration' => '~2 seconds per address book, including live calls to the server.',
+            'persists' => 'Nothing. Read-only on both sides: it never writes to the address book and never changes a person here. The server address is masked to its shape and the account name to its first letter, so the report can be sent on; the password is reported only as present or absent.',
+        ],
+        [
+            'id'       => 'D016',
+            'slug'     => 'd016',
+            'file'     => 'D016_carddav_drift.php',
+            'title'    => 'CardDAV drift — where FreeITSM and the address book disagree',
+            'category' => 'Login',
+            'icon'     => 'sync',
+            'desc'     => 'Compare every imported person with the card they came from, field by field, and report which details have drifted apart.',
+            'keywords' => 'carddav drift compare difference diff reconcile out of sync mismatch contacts address book audit which fields change two-way d016',
+            'when'     => 'Run this to answer "are the two lists still the same?" — before switching write-back on, after an import that looked wrong, or whenever somebody says a phone number is out of date and you need to know which side is stale. It is also the tool that measures something nobody could otherwise tell you: which details actually drift, and in which direction. That question was put to the person who asked for two-way sync in #133 and never answered, and this answers it from your own data rather than from anybody\'s recollection.',
+            'checks'   => [
+                'Every person imported from each address book, compared against their card as it stands right now, across the five details a vCard can hold',
+                'Both values shown side by side for each disagreement, FreeITSM\'s first and the card\'s second, with an empty value named as empty rather than left as a confusing blank',
+                'People whose card has GONE from the server — kept, not deleted, because FreeITSM never deletes anybody; the import marks them as left after the configured number of missed runs',
+                'Contacts on the server that never became people here, which is usually correct rather than wrong — they are outside the group or tag chosen for import',
+                'People missing the card URL a write-back needs, which is what an import from before write-back existed leaves behind',
+                'A tally of WHICH details drift most, across everybody — the actual evidence for whether two-way sync is worth having, and for which fields',
+                'What to do about each kind of disagreement, including the trap that a drifted value is exactly what makes a write-back get refused: import first, then edit',
+            ],
+            'duration' => 'Slower than the other tools — it reads every card in the book. Seconds for a few hundred contacts.',
+            'persists' => 'Nothing, in either direction. It does not write to the address book and does not change anybody here, and it deliberately offers no "fix it" button: which side is right is a judgement a person has to make, and a one-click reconcile across hundreds of contacts is how a careful integration becomes a data-loss incident. ⚠️ Contact names and details DO appear in the output, so treat the report as personal data.',
         ],
     ];
 }

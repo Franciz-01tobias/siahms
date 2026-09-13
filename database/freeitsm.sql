@@ -2029,6 +2029,41 @@ CREATE TABLE IF NOT EXISTS `directory_sync_entries` (
     CONSTRAINT `fk_dse_run` FOREIGN KEY (`run_id`) REFERENCES `directory_sync_runs` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Every attempt to write a contact BACK to a CardDAV address book — succeeded,
+-- refused, or failed.
+--
+-- The attempt, not the success. When an operator says "it isn't writing", the
+-- difference between "we never tried", "the server said no" and "we refused on
+-- purpose because their copy had changed" is the whole diagnosis, and none of it
+-- is recoverable afterwards without this.
+--
+-- Not folded into directory_sync_runs: a write-back is one contact triggered by
+-- one person saving one form, and a synthetic run per save would make the import
+-- history unreadable.
+CREATE TABLE IF NOT EXISTS `carddav_write_log` (
+    `id`                INT NOT NULL AUTO_INCREMENT,
+    `provider_id`       INT NOT NULL,
+    -- NULL once the person is deleted; display_name is kept so the row still
+    -- says who it was about.
+    `user_id`           INT NULL,
+    `display_name`      VARCHAR(255) NULL,
+    -- ok | conflict | failed | skipped. `conflict` is distinct from `failed`
+    -- for the same reason the import keeps 'stopped' apart: refusing to
+    -- overwrite somebody is the feature working, not breaking.
+    `outcome`           VARCHAR(12) NOT NULL,
+    `fields`            VARCHAR(255) NULL,
+    `http_status`       INT NULL,
+    -- The server's own words, verbatim and truncated rather than summarised.
+    `server_response`   TEXT NULL,
+    `message`           VARCHAR(1000) NULL,
+    `triggered_by_analyst_id` INT NULL,
+    `created_datetime`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_cdwl_provider` (`provider_id`, `created_datetime`),
+    KEY `idx_cdwl_user` (`user_id`),
+    CONSTRAINT `fk_cdwl_provider` FOREIGN KEY (`provider_id`) REFERENCES `auth_providers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Documents that can be attached to anything (GH discussion #76).
 --
 -- A document is EITHER a file FreeITSM holds OR a link to an external DMS, so the

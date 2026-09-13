@@ -568,7 +568,22 @@ async function savePerson(id, owned) {
         if (!d.success) { err.textContent = d.error || 'Save failed'; return false; }
         await loadPeople(document.getElementById('auSearch').value.trim());
         if (d.id) selectPerson(d.id);
-        showToast(window.t('asset-management.users.saved'), 'success');
+
+        // 🔴 Both people editors post to the SAME endpoint, so both have to
+        // report the address book. Telling the analyst on one screen and not the
+        // other is worse than telling neither: it makes whether you find out
+        // depend on which door you came in through, which is the same trap the
+        // two editors already caused once with the person fields themselves.
+        const ab = d.address_book;
+        if (ab && ab.conflict) {
+            showToast(ab.error || window.t('asset-management.users.ab_conflict'), 'warning', 12000);
+        } else if (ab && !ab.ok) {
+            showToast(window.t('asset-management.users.ab_failed', { error: ab.error || '' }), 'error', 12000);
+        } else if (ab && ab.ok && ab.changed && ab.changed.length) {
+            showToast(window.t('asset-management.users.ab_written'), 'success');
+        } else {
+            showToast(window.t('asset-management.users.saved'), 'success');
+        }
         return true;
     } catch (e) {
         err.textContent = String(e.message || e);

@@ -161,6 +161,7 @@ function getHelpTopics() {
                 ['id' => 'carddav-scope',  'label' => 'Choosing which contacts'],
                 ['id' => 'carddav-fields', 'label' => 'What gets imported'],
                 ['id' => 'carddav-write',  'label' => 'Sending changes back'],
+                ['id' => 'carddav-diagnostics', 'label' => 'Checking it is working'],
                 ['id' => 'carddav-safety', 'label' => 'Safety, leavers & scheduling'],
                 ['id' => 'carddav-faq',    'label' => 'CardDAV troubleshooting'],
                 ['id' => 'experience', 'label' => 'What people see'],
@@ -179,7 +180,9 @@ function getHelpTopics() {
                      . ' baikal sabredav sabre nextcloud owncloud radicale thunderbird apple contacts groups'
                      . ' categories tags kind group member digest basic phone number job title department office'
                      . ' write back writeback two-way two way send changes back update the address book'
-                     . ' read-only permission privilege etag conflict changed since',
+                     . ' read-only permission privilege etag conflict changed since'
+                     . ' log logging troubleshoot diagnose health check drift compare d015 d016'
+                     . ' not writing failed unreachable server response refused',
         ],
         'api' => [
             'hero' => 'API',

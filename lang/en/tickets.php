@@ -1826,6 +1826,14 @@ return [
             // an address book has some of them editable and some not, so naming
             // the whole group makes the note contradict the form it sits under.
             'managed_note'               => 'This person is kept up to date from a directory, so the greyed-out details are read-only. Change them at the source instead.',
+            // The address book is a separate outcome from the save, and always
+            // said out loud — the record here is written either way, so silence
+            // would let an analyst believe the contact card was updated when it
+            // was not. ⚠️ The failure wording leads with what DID happen, because
+            // the first thing somebody needs to know is that their work is safe.
+            'ab_written'                 => 'Saved, and the contact card was updated too.',
+            'ab_conflict'                => 'Saved here, but not written to the address book: someone changed the same detail there since the last import.',
+            'ab_failed'                  => 'Saved here, but the address book could not be updated: {error}',
             'job_title'                  => 'Job title',
             'job_title_placeholder'      => 'e.g. Finance Manager',
             'department'                 => 'Department',

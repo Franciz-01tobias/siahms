@@ -202,6 +202,12 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
         .pill.ok { background: var(--success-bg, #e8f5e9); color: var(--success-text, #2e7d32); }
         .pill.stopped { background: var(--warning-bg, #fff4ce); color: var(--warning-text, #6b5900); }
         .pill.failed, .pill.running { background: var(--danger-bg, #ffebee); color: var(--danger-text, #c62828); }
+        /* 🔑 `conflict` borrows the WARNING colour, the same one `stopped` uses,
+           and deliberately not the danger colour. Refusing to overwrite somebody
+           else's newer value is the feature working; showing it in red would
+           teach an operator to treat the safety net as a fault to be cleared. */
+        .pill.conflict { background: var(--warning-bg, #fff4ce); color: var(--warning-text, #6b5900); }
+        .pill.skipped  { background: var(--surface-2, #f1f1f1); color: var(--text-dim, #888); }
         @media (max-width: 700px) { .prov-wrap { padding: 14px 12px 50px; } }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
@@ -345,6 +351,17 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
                 <div class="hint"><?php echo htmlspecialchars(t('system.sso.carddav_history_hint')); ?></div>
                 <div id="runsBox" style="overflow-x:auto;"></div>
             </div>
+            <?php /* 🔴 The write log, on the SAME tab as the import history and
+                     under it. Imports and write-backs are two directions of one
+                     relationship with this address book, and an operator asking
+                     "what has FreeITSM done to my contacts" wants both answers in
+                     one place — a separate tab would mean finding out that the
+                     other half existed first. */ ?>
+            <div class="fld" style="border-top:1px solid var(--border-soft,#f0f0f0); padding-top:18px;">
+                <label><?php echo htmlspecialchars(t('system.sso.carddav_writelog_heading')); ?></label>
+                <div class="hint"><?php echo htmlspecialchars(t('system.sso.carddav_writelog_hint')); ?></div>
+                <div id="writeLogBox" style="overflow-x:auto;"></div>
+            </div>
         </div>
     </div><!-- /.prov-card -->
 
@@ -374,7 +391,7 @@ function switchCardDavTab(id) {
     history.replaceState(null, '', '?id=' + PROVIDER_ID + '&tab=' + id);
     // Loaded on open rather than up front: most visits here are to change a
     // setting, and the history is a query nobody asked for until they click it.
-    if (id === 'history') loadRuns();
+    if (id === 'history') { loadRuns(); loadWriteLog(); }
 }
 
 /* ---- running the import ---- */
@@ -432,6 +449,85 @@ async function runImport(mode, btn) {
 }
 $('previewBtn').addEventListener('click', function () { runImport('preview', this); });
 $('runBtn').addEventListener('click', function () { runImport('live', this); });
+
+/* Every write-back attempt, newest first.
+   🔑 The SERVER'S OWN RESPONSE is shown, not just our conclusion — a DAV server
+   puts the real reason in its error body, and that is the one thing that can
+   diagnose a server nobody here can log in to. Collapsed behind a details
+   element so the table stays readable when nothing has gone wrong. */
+async function loadWriteLog() {
+    const box = $('writeLogBox');
+    box.textContent = window.t('system.sso.loading');
+    try {
+        const d = await (await fetch(API + 'system/get_carddav_write_log.php?provider_id=' + PROVIDER_ID)).json();
+        if (!d.success || !(d.entries || []).length) {
+            box.innerHTML = '';
+            const p = document.createElement('div');
+            p.className = 'hint';
+            p.textContent = window.t('system.sso.carddav_writelog_none');
+            box.appendChild(p);
+            return;
+        }
+        const table = document.createElement('table');
+        table.className = 'runs';
+        const thead = document.createElement('thead');
+        const hr = document.createElement('tr');
+        ['when', 'person', 'outcome', 'fields', 'detail'].forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = window.t('system.sso.wl_' + h) || h;
+            hr.appendChild(th);
+        });
+        thead.appendChild(hr); table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        d.entries.forEach(e => {
+            const tr = document.createElement('tr');
+            // ⚠️ textContent throughout. Every one of these values can contain
+            // an operator's own contact names and a remote server's error text,
+            // and this table is the one place they are displayed back.
+            [fmtDateTime(e.created_datetime), e.display_name || '—'].forEach(v => {
+                const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
+            });
+
+            const tdOut = document.createElement('td');
+            const pill = document.createElement('span');
+            // ⚠️ `pill <outcome>`, NOT `pill-<outcome>`. The stylesheet above uses
+            // `.pill.ok` / `.pill.failed`, so a hyphenated class matches nothing
+            // and renders as unstyled text that still looks deliberate.
+            pill.className = 'pill ' + e.outcome;
+            pill.textContent = window.t('system.sso.wl_out_' + e.outcome) || e.outcome;
+            tdOut.appendChild(pill); tr.appendChild(tdOut);
+
+            const tdF = document.createElement('td');
+            tdF.textContent = e.fields || '—'; tr.appendChild(tdF);
+
+            const tdD = document.createElement('td');
+            tdD.textContent = e.message || '';
+            // The raw response only when there is one, and only opened on demand.
+            if (e.server_response || e.http_status) {
+                const det = document.createElement('details');
+                det.style.marginTop = '4px';
+                const sum = document.createElement('summary');
+                sum.style.cursor = 'pointer';
+                sum.style.fontSize = '11.5px';
+                sum.textContent = window.t('system.sso.wl_raw', { status: e.http_status || '—' });
+                det.appendChild(sum);
+                const pre = document.createElement('pre');
+                pre.style.cssText = 'white-space:pre-wrap;word-break:break-word;margin:6px 0 0;font-size:11px;max-height:220px;overflow:auto;';
+                pre.textContent = e.server_response || window.t('system.sso.wl_no_body');
+                det.appendChild(pre);
+                tdD.appendChild(det);
+            }
+            tr.appendChild(tdD);
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        box.innerHTML = '';
+        box.appendChild(table);
+    } catch (e) {
+        box.textContent = window.t('system.sso.carddav_writelog_failed');
+    }
+}
 
 async function loadRuns() {
     const box = $('runsBox');
@@ -727,7 +823,7 @@ renderPicker();
    broken, and reloading did not help because reloading was what caused it.
    Caught in a screenshot, not by the harness: the harness clicked the tab, and
    so always took the path that worked. */
-if (<?php echo json_encode($activeTab); ?> === 'history') loadRuns();
+if (<?php echo json_encode($activeTab); ?> === 'history') { loadRuns(); loadWriteLog(); }
 </script>
 </body>
 </html>

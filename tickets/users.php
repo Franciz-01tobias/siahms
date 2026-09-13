@@ -1167,6 +1167,25 @@ $translationNamespaces = ['common', 'tickets'];
                     showToast(data.error || 'Save failed', 'error');
                     return;
                 }
+                // 🔴 The address book is a SEPARATE outcome from the save, and it
+                // must be said out loud. The record here is written either way, so
+                // reporting only `success` would show "Saved" after a push that
+                // failed, silently — the analyst would believe the contact card
+                // had been updated and never find out it had not. That silence is
+                // exactly what the whole write-back design exists to avoid, and
+                // leaving this out was the last inch of it undone.
+                const ab = data.address_book;
+                if (ab && ab.ok && ab.changed && ab.changed.length) {
+                    showToast(t('tickets.users.modal.ab_written'), 'success');
+                } else if (ab && ab.conflict) {
+                    // Not an error the analyst caused, and not one they can retry
+                    // their way out of — so it stays on screen rather than
+                    // flashing past, and says what to do.
+                    showToast(ab.error || t('tickets.users.modal.ab_conflict'), 'warning', 12000);
+                } else if (ab && !ab.ok) {
+                    showToast(t('tickets.users.modal.ab_failed', { error: ab.error || '' }), 'error', 12000);
+                }
+
                 const savedId = data.id;
                 closeUserModal();
                 await loadUsers(document.getElementById('userSearch').value);

@@ -143,7 +143,7 @@ try {
         // from "somebody changed it in the address book". Read here rather than
         // after the UPDATE, which would compare the new value with itself.
         $mStmt = $conn->prepare(
-            "SELECT u.is_managed, p.protocol, p.carddav_write_back,
+            "SELECT u.is_managed, p.protocol, p.carddav_write_back, u.display_name,
                     u.job_title, u.department, u.office, u.phone, u.mobile
                FROM users u
           LEFT JOIN auth_providers p ON p.id = u.auth_provider_id
@@ -275,7 +275,9 @@ try {
             }
             if ($changed) {
                 require_once '../../includes/carddav_write.php';
-                $writeBack = cardDavPushPersonChanges($conn, (int)$id, $changed, $mRow);
+                $writeBack = cardDavPushPersonChanges(
+                    $conn, (int)$id, $changed, $mRow, (int)($_SESSION['analyst_id'] ?? 0) ?: null
+                );
             }
         }
 

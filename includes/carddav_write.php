@@ -69,7 +69,10 @@ const CARDDAV_FOLD_AT = 75;
  */
 function cardDavPutCard(array $cfg, string $cardUrl, string $vcard, string $etag): array
 {
-    $out = ['ok' => false, 'status' => 0, 'etag' => '', 'conflict' => false, 'error' => ''];
+    // `body` is the server's own response, kept for the write log. A tidied
+    // message is the one thing that cannot diagnose a server nobody here can
+    // log in to — and DAV servers put the real reason in an XML error body.
+    $out = ['ok' => false, 'status' => 0, 'etag' => '', 'conflict' => false, 'error' => '', 'body' => ''];
 
     if (trim($etag) === '') {
         $out['error'] = 'FreeITSM has no version marker for this contact, so it will not '
@@ -85,6 +88,7 @@ function cardDavPutCard(array $cfg, string $cardUrl, string $vcard, string $etag
     ]);
 
     $out['status'] = $res['status'];
+    $out['body']   = $res['body'];
 
     // 412 Precondition Failed, and 409 which a few servers send for the same
     // thing. Reported as a conflict rather than an error so the caller can offer
@@ -117,8 +121,10 @@ function cardDavPutCard(array $cfg, string $cardUrl, string $vcard, string $etag
  */
 function cardDavGetCard(array $cfg, string $cardUrl): array
 {
-    $out = ['ok' => false, 'vcard' => '', 'etag' => '', 'error' => ''];
+    $out = ['ok' => false, 'vcard' => '', 'etag' => '', 'error' => '', 'status' => 0, 'body' => ''];
     $res = cardDavRequest($cfg, 'GET', $cardUrl, '', ['Accept: text/vcard, text/x-vcard, */*']);
+    $out['status'] = $res['status'];
+    $out['body']   = $res['body'];
 
     if (!$res['ok']) {
         $out['error'] = $res['error'] !== '' ? $res['error'] : cardDavExplainStatus($res['status']);
@@ -538,6 +544,54 @@ function cardDavApplyPersonEdits(string $raw, array $changes): array
     return ['card' => $card, 'changed' => $changed, 'skipped' => $skipped];
 }
 
+/** How much of a server's response to keep. Enough for a DAV error body. */
+const CARDDAV_LOG_RESPONSE_MAX = 4000;
+
+/**
+ * Record one write-back attempt.
+ *
+ * 🔴 THE ATTEMPT, NOT THE SUCCESS — and this is the whole point. An import
+ * records every run and every person it touched. Write-back, the half that
+ * changes SOMEBODY ELSE'S data, recorded nothing until this existed, so
+ * "it isn't writing" had no evidence behind it at all. The three answers the
+ * operator needs to tell apart are *we never tried*, *the server said no*, and
+ * *we refused on purpose because their copy had changed* — and only the last
+ * one is FreeITSM working as intended.
+ *
+ * 🔑 `$response` is stored VERBATIM (truncated, not summarised). A DAV server
+ * puts the real reason in an XML error body, and paraphrasing it throws away the
+ * one thing that can diagnose a server nobody here can log in to.
+ *
+ * ⚠️ NEVER THROWS. This is called on the failure path of a feature that is
+ * itself already reported as failed; a logging error must not become the thing
+ * the analyst sees instead.
+ */
+function cardDavLogWrite(PDO $conn, int $providerId, ?int $userId, string $displayName,
+                         string $outcome, array $fields, ?int $status, string $response,
+                         string $message, ?int $analystId): void
+{
+    try {
+        $conn->prepare(
+            "INSERT INTO carddav_write_log
+                (provider_id, user_id, display_name, outcome, fields, http_status,
+                 server_response, message, triggered_by_analyst_id, created_datetime)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())"
+        )->execute([
+            $providerId,
+            $userId ?: null,
+            $displayName !== '' ? mb_substr($displayName, 0, 255) : null,
+            $outcome,
+            $fields ? mb_substr(implode(', ', $fields), 0, 255) : null,
+            $status ?: null,
+            $response !== '' ? mb_substr($response, 0, CARDDAV_LOG_RESPONSE_MAX) : null,
+            mb_substr($message, 0, 1000),
+            $analystId ?: null,
+        ]);
+    } catch (Throwable $e) {
+        error_log('[carddav-write] could not write the log row: ' . $e->getMessage());
+    }
+}
+
 /**
  * Push a person's changed fields to their card in the address book.
  *
@@ -583,7 +637,8 @@ function cardDavApplyPersonEdits(string $raw, array $changes): array
  *               `reason` explains an attempted=false, which is the ordinary case
  *               for every person who is not a CardDAV contact.
  */
-function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array $previous): array
+function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array $previous,
+                                  ?int $analystId = null): array
 {
     $out = ['attempted' => false, 'ok' => false, 'changed' => [],
             'conflict' => false, 'error' => '', 'reason' => ''];
@@ -624,15 +679,28 @@ function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array 
 
     $out['attempted'] = true;
     $cfg = cardDavConfigFromProvider($row);
+    // 🔴 Interactive: this runs inside somebody's save, so it uses the short
+    // timeouts. An unreachable server must cost a few seconds, not twenty.
+    $cfg['interactive'] = true;
     $url = cardDavAbsoluteUrl($cfg['url'], (string)$row['source_ref']);
 
+    $pid  = (int)$row['id'];
+    $name = (string)($previous['display_name'] ?? '');
+
     $got = cardDavGetCard($cfg, $url);
-    if (!$got['ok']) { $out['error'] = $got['error']; return $out; }
+    if (!$got['ok']) {
+        $out['error'] = $got['error'];
+        cardDavLogWrite($conn, $pid, $userId, $name, 'failed', [], $got['status'] ?? null,
+                        $got['body'] ?? '', 'Could not read the contact card: ' . $got['error'], $analystId);
+        return $out;
+    }
 
     // --- the three-way merge, field by field ---
     $server = cdsyncMapCard($got['vcard'], (string)$row['source_ref']);
     if ($server === null) {
         $out['error'] = 'That card could not be read as a contact, so it was left alone.';
+        cardDavLogWrite($conn, $pid, $userId, $name, 'failed', [], null, $got['vcard'],
+                        $out['error'], $analystId);
         return $out;
     }
 
@@ -654,14 +722,31 @@ function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array 
                 str_replace('_', ' ', $field),
                 $theirs === '' ? '(blank)' : $theirs
             );
+            cardDavLogWrite($conn, $pid, $userId, $name, 'conflict', [$field], null, '',
+                            sprintf('Refused: the card has %s = "%s", FreeITSM last saw "%s", '
+                                    . 'and the analyst set "%s".',
+                                    str_replace('_', ' ', $field), $theirs, $ours, $want),
+                            $analystId);
             return $out;
         }
         $apply[$field] = $want;
     }
-    if (!$apply) { $out['ok'] = true; $out['reason'] = 'the card already matched'; return $out; }
+    if (!$apply) {
+        $out['ok'] = true; $out['reason'] = 'the card already matched';
+        // Logged as skipped rather than ok: nothing was sent, and a log full of
+        // successes that wrote nothing would make a broken write-back look busy.
+        cardDavLogWrite($conn, $pid, $userId, $name, 'skipped', [], null, '',
+                        'The card already matched — nothing to send.', $analystId);
+        return $out;
+    }
 
     $edited = cardDavApplyPersonEdits($got['vcard'], $apply);
-    if (!$edited['changed']) { $out['ok'] = true; $out['reason'] = 'nothing to write'; return $out; }
+    if (!$edited['changed']) {
+        $out['ok'] = true; $out['reason'] = 'nothing to write';
+        cardDavLogWrite($conn, $pid, $userId, $name, 'skipped', [], null, '',
+                        'Nothing on the card needed changing.', $analystId);
+        return $out;
+    }
 
     // 🔑 The ETag from the GET just done, not the one stored at import. See the
     // docblock: its job here is only to close the GET-to-PUT gap, because the
@@ -673,6 +758,17 @@ function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array 
     $out['conflict'] = $put['conflict'];
     $out['error']    = $put['error'];
     $out['changed']  = $put['ok'] ? $edited['changed'] : [];
+
+    cardDavLogWrite(
+        $conn, $pid, $userId, $name,
+        $put['ok'] ? 'ok' : ($put['conflict'] ? 'conflict' : 'failed'),
+        $edited['changed'], $put['status'], $put['body'] ?? '',
+        $put['ok']
+            ? 'Wrote ' . implode(', ', array_map(function ($f) { return str_replace('_', ' ', $f); },
+                                                 $edited['changed'])) . ' to the contact card.'
+            : $put['error'],
+        $analystId
+    );
 
     if ($put['ok']) {
         // Record the new version marker so the next write does not begin by

@@ -46,6 +46,12 @@ return [
         'add_title'          => 'Add a person',
         'edit_title'         => 'Edit person',
         'saved'              => 'Saved',
+        // Kept word-for-word in step with tickets.users.modal.ab_* — the two
+        // people editors post to the same endpoint, and an analyst who uses both
+        // should not be told the same outcome two different ways.
+        'ab_written'         => 'Saved, and the contact card was updated too.',
+        'ab_conflict'        => 'Saved here, but not written to the address book: someone changed the same detail there since the last import.',
+        'ab_failed'          => 'Saved here, but the address book could not be updated: {error}',
         'deactivated'        => 'Marked as left',
         'reactivated'        => 'Reactivated',
         'flag_left'          => 'Left',

@@ -1232,6 +1232,40 @@ return [
         'created_datetime'   => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
+    // Every attempt to write a contact back to an address book — succeeded,
+    // refused, or failed.
+    //
+    // 🔴 THE ATTEMPT, NOT THE SUCCESS. An import records its runs and every
+    // person it touched; write-back, which is the half that changes SOMEBODY
+    // ELSE'S data, recorded nothing at all until this table. When an operator
+    // says "it isn't writing", the difference between "we never tried", "we
+    // tried and the server said no", and "we refused on purpose because their
+    // copy had changed" is the whole of the diagnosis, and none of it was
+    // recoverable afterwards.
+    //
+    // ⚠️ Deliberately NOT folded into `directory_sync_runs`. A write-back is not
+    // a run: it is one contact, triggered by one person saving one form, and
+    // giving it a synthetic run per save would make the import history unreadable.
+    'carddav_write_log' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'provider_id'       => 'INT NOT NULL',
+        'user_id'           => 'INT NULL',
+        'display_name'      => 'VARCHAR(255) NULL',   // denormalised: still answerable after a delete
+        // ok | conflict | failed | skipped. `conflict` is kept distinct from
+        // `failed` for the same reason the import keeps 'stopped' apart from
+        // 'failed' — refusing to overwrite somebody is the feature working.
+        'outcome'           => 'VARCHAR(12) NOT NULL',
+        'fields'            => 'VARCHAR(255) NULL',   // which ones were written, comma-separated
+        'http_status'       => 'INT NULL',
+        // 🔑 The server's OWN words, kept verbatim and truncated rather than
+        // summarised. A tidied message is the one thing that cannot be used to
+        // diagnose a server nobody here can log in to.
+        'server_response'   => 'TEXT NULL',
+        'message'           => 'VARCHAR(1000) NULL',  // what FreeITSM concluded, in plain English
+        'triggered_by_analyst_id' => 'INT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
     // A document is either a file we hold or a link to somewhere else (an external
     // DMS). It carries NO permissions of its own — see includes/documents.php:
     // visibility is inherited from whatever it is attached to.

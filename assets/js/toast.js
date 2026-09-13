@@ -83,7 +83,13 @@
         return container;
     }
 
-    window.showToast = function(message, type) {
+    // `ms` is optional and defaults to the usual 4 seconds, so every existing
+    // two-argument call behaves exactly as before. It exists because some
+    // messages are not acknowledgements but instructions — "the address book has
+    // a different number, import again to see theirs" cannot be read, understood
+    // and acted on inside four seconds, and a toast that vanishes mid-sentence
+    // is the same as not having shown it.
+    window.showToast = function(message, type, ms) {
         type = type || 'info';
         var c = getContainer();
 
@@ -116,6 +122,6 @@
         setTimeout(function() {
             toast.classList.remove('show');
             setTimeout(function() { toast.remove(); }, 300);
-        }, 4000);
+        }, (typeof ms === 'number' && ms > 0) ? ms : 4000);
     };
 })();

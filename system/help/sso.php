@@ -296,6 +296,32 @@ require __DIR__ . '/_top.php';
     <h4>Check permission first</h4>
     <p>Press <strong>Check permission</strong> and FreeITSM asks the server what this account is allowed to do, without writing anything. Plenty of address books are shared or subscribed and are read-only however correct your password is — far better to know that here than to discover it halfway through somebody's edit.</p>
     <div class="help-note"><strong>If the answer is no.</strong> Grant the account write access on the address book server itself. Nothing in FreeITSM can work around a permission the server has not given, and changes simply stay in FreeITSM until it does.</div>
+
+    <h4>When something goes wrong</h4>
+    <p><strong>Your work is never lost.</strong> The person's record in FreeITSM is saved first and completely; sending the change onward happens afterwards and cannot undo it. If the address book is unreachable, read-only, or holding a newer value, the save still stands here.</p>
+    <p><strong>You are always told.</strong> A save that reached the card says so; one that did not says what stopped it. An unreachable server costs a couple of seconds rather than holding the form open, because a write-back runs on a shorter time limit than an import does.</p>
+    <p>Every attempt is recorded on the <strong>History</strong> tab under <em>Changes sent back</em> — who, when, which details, and <strong>what the server itself said</strong>, kept word for word. That last part is the bit worth having: when an address book refuses something, the reason is in its own response, and a tidied-up version of it is no use for diagnosing a server FreeITSM cannot log in to.</p>
+    <div class="help-note"><strong>"Refused" is not a fault.</strong> It means somebody had already changed the same detail in the address book, and FreeITSM did not overwrite them. Import first to see their version, then decide.</div>
+</div>
+
+<!-- 4i3. CardDAV diagnostics -->
+<div class="help-section" id="carddav-diagnostics">
+    <div class="help-section-header"><?php echo helpSectionNum('carddav-diagnostics'); ?>
+        <div>
+            <h3>Checking it is working</h3>
+        </div>
+    </div>
+    <p>Two tools under <strong>System &rarr; Debug Tools</strong> answer the two different questions people actually have.</p>
+
+    <h4>D015 — is the connection healthy?</h4>
+    <p>Walks the connection one rung at a time: reach the server, sign in, read the chosen book, and may this account write to it. They fail for entirely different reasons, so each is reported separately rather than as one verdict — being told "it does not work" leaves you four things to check.</p>
+    <p>It also names the mismatch that catches people out: <strong>write-back switched on while the account has no write permission</strong>, which saves every change here and has every one of them refused. And it reports how many people are missing the card reference a write-back needs, which is what contacts imported before this feature existed look like until the next import.</p>
+    <div class="help-note">It writes nothing. The permission question is asked of the server directly, rather than proved by creating a test contact and deleting it again — a delete can fail, and you would be left with a contact called "FreeITSM test" in a real address book.</div>
+
+    <h4>D016 — do the two lists still agree?</h4>
+    <p>A top-to-bottom comparison: every imported person against their card as it stands now, detail by detail, with both values side by side. It also flags cards that have gone from the server, and contacts on the server that never came here (usually correct — they are outside the group or tag you chose).</p>
+    <p>Worth running before you switch write-back on, and any time somebody says a number is out of date and you need to know <em>which side</em> is stale.</p>
+    <div class="help-note"><strong>It changes nothing, and offers no "fix it" button on purpose.</strong> Which side is right is a judgement, and a single button that reconciles hundreds of contacts at once is how a careful integration turns into a data-loss incident. It also summarises which details drift most across everybody, which is the honest evidence for whether keeping them in step is worth it at all.</div>
 </div>
 
 <!-- 4j. CardDAV safety and scheduling -->
