@@ -301,7 +301,18 @@ require __DIR__ . '/_top.php';
     <p><strong>Your work is never lost.</strong> The person's record in FreeITSM is saved first and completely; sending the change onward happens afterwards and cannot undo it. If the address book is unreachable, read-only, or holding a newer value, the save still stands here.</p>
     <p><strong>You are always told.</strong> A save that reached the card says so; one that did not says what stopped it. An unreachable server costs a couple of seconds rather than holding the form open, because a write-back runs on a shorter time limit than an import does.</p>
     <p>Every attempt is recorded on the <strong>History</strong> tab under <em>Changes sent back</em> — who, when, which details, and <strong>what the server itself said</strong>, kept word for word. That last part is the bit worth having: when an address book refuses something, the reason is in its own response, and a tidied-up version of it is no use for diagnosing a server FreeITSM cannot log in to.</p>
-    <div class="help-note"><strong>"Refused" is not a fault.</strong> It means somebody had already changed the same detail in the address book, and FreeITSM did not overwrite them. Import first to see their version, then decide.</div>
+
+    <h4>The four results, and what to do about each</h4>
+    <div class="help-table"><table>
+        <thead><tr><th>Result</th><th>What it means</th><th>What to do</th></tr></thead>
+        <tbody>
+            <tr><td><strong>Written</strong></td><td>The contact card was updated.</td><td>Nothing.</td></tr>
+            <tr><td><strong>Refused</strong></td><td>Somebody had already changed <em>the same detail</em> in the address book, and FreeITSM did not overwrite them.</td><td>Import to bring their version in, then decide which is right. If yours was, edit again and it will go through.</td></tr>
+            <tr><td><strong>Failed</strong></td><td>The server could not be reached, or said no. The log row carries its exact words.</td><td>Run <strong>D015</strong> — it separates "cannot reach", "cannot sign in", "cannot read" and "cannot write".</td></tr>
+            <tr><td><strong>Nothing to send</strong></td><td>The card already matched — usually a save where none of the five details actually changed.</td><td>Nothing. It is logged separately so a write-back that is doing nothing cannot look busy.</td></tr>
+        </tbody>
+    </table></div>
+    <div class="help-note"><strong>"Refused" is not a fault.</strong> It is the safety net working. If you find yourself trying to stop refusals happening, step back — each one is protecting a value somebody else entered deliberately. A refusal is also <em>per detail</em>: if an analyst changed the mobile and somebody else changed the job title, the mobile still goes through.</div>
 </div>
 
 <!-- 4i3. CardDAV diagnostics -->
@@ -368,6 +379,18 @@ require __DIR__ . '/_top.php';
         <li><strong>Fewer contacts imported than the book holds.</strong> Group cards are skipped, and so is any contact with no unique id. The run's summary counts them separately from the ones it brought in.</li>
         <li><strong>Somebody's details are not updating.</strong> They are probably not linked to this address book — check the conflict setting, and whether they were created here by hand before the import existed. Only people the import manages are kept up to date by it.</li>
         <li><strong>Nothing has imported for weeks.</strong> An import only runs when something runs it. Check your scheduled task exists and is firing; the History tab shows the last run and where it came from.</li>
+    </ul>
+
+    <h4>Sending changes back</h4>
+    <ul>
+        <li><strong>The details are greyed out and I cannot edit them.</strong> Either <em>Write changes made in FreeITSM back to the address book</em> is switched off, or it was ticked and <strong>Save</strong> was never pressed. The tick alone does not store it. With write-back on, all seven details become editable; with it off, the five the address book owns stay read-only.</li>
+        <li><strong>Employee number and manager are greyed out on a contact.</strong> They should not be, and are not any more. A contact card has nowhere to keep either, so an address book import never fills them in — which means they are yours to type regardless of write-back. If you still see them locked, the person came from a <em>directory</em> rather than an address book, where all seven genuinely are owned elsewhere.</li>
+        <li><strong>It says saved, but the card never changes.</strong> Check the <em>Changes sent back</em> log on the History tab. No row at all means nothing was attempted — the usual cause is that this contact has no card reference yet, which happens to anybody imported before write-back existed. <strong>D015</strong> counts them under "missing a card URL", and the fix is simply to run an import.</li>
+        <li><strong>Everything says Refused.</strong> Your copy is stale — something else is maintaining those contacts and FreeITSM has not read them recently. Import, then try again. <strong>D016</strong> shows exactly how far apart the two lists have drifted, and which details are responsible.</li>
+        <li><strong>Everything says Failed with the same message.</strong> That is a configuration problem rather than a data one. Run <strong>D015</strong>: it walks reach, sign in, read and write separately, so you find out which of the four is actually broken instead of guessing.</li>
+        <li><strong>Failed, saying the account may not write.</strong> The address book is read-only for that account. This must be fixed on the address book server — nothing in FreeITSM can grant a permission the server withholds. Shared, subscribed and published books are commonly read-only however correct the password is.</li>
+        <li><strong>It worked, and now it does not.</strong> The log is in date order; the last successful row tells you when the behaviour changed, which is usually enough to remember what else changed that day.</li>
+        <li><strong>Does a customer correcting their own details in the portal get sent back?</strong> No. Write-back carries an <em>analyst's</em> edit only. A portal user is still refused on an imported contact, because those five details belong to the address book.</li>
     </ul>
 </div>
 

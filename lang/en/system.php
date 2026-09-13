@@ -124,7 +124,7 @@ return [
         'security_keywords' => 'security password expiry lockout trusted device mfa 2fa login policy brute force',
         'sso_title'         => 'Authentication',
         'sso_desc'          => 'Choose how people sign in — single sign-on through an identity provider (OpenID Connect), or against your LDAP / Active Directory — and bring contacts in from a CardDAV address book.',
-        'sso_keywords'      => 'authentication auth sso single sign-on single sign on oidc openid connect saml identity provider idp keycloak entra azure ad okta google oauth federation login ldap active directory ad domain directory bind samba openldap carddav card dav addressbook vcard vcf sabredav sabre baikal nextcloud owncloud thunderbird contact sync import people two-way two way write back writeback sync back update contacts push changes',
+        'sso_keywords'      => 'authentication auth sso single sign-on single sign on oidc openid connect saml identity provider idp keycloak entra azure ad okta google oauth federation login ldap active directory ad domain directory bind samba openldap carddav card dav addressbook vcard vcf sabredav sabre baikal nextcloud owncloud thunderbird contact sync import people two-way two way write back writeback sync back update contacts push changes refused conflict drift compare not writing read-only permission',
         'api_title'         => 'API',
         'api_desc'          => 'Create API keys with granular permissions, and explore the REST API with interactive documentation.',
         'api_keywords'      => 'api rest keys tokens integration webhook endpoints documentation swagger developer external',
