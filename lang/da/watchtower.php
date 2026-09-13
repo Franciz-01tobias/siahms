@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - watchtower strings.
+ * FreeITSM — watchtower strings (da).
  *
- * Mirrors lang/en/watchtower.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/watchtower.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Vagttårn',
     'settings' => [
@@ -51,6 +55,8 @@ return [
         'card_service_status_desc' => 'Forringede tjenester og åbne hændelser.',
         'card_contracts' => 'Kontrakter',
         'card_contracts_desc' => 'Udløbende kontrakter og opsigelsesperioder, der løber ud.',
+        'card_software' => 'Software',
+        'card_software_desc' => 'Kommende licensfornyelser og opsigelsesperioder, der er ved at løbe ud.',
         'card_knowledge' => 'Viden',
         'card_knowledge_desc' => 'Nye artikler og gennemgange, der nu er forfaldne.',
         'card_assets' => 'Aktiver',
@@ -76,6 +82,7 @@ return [
         'calendar' => 'Kalender',
         'service_status' => 'Servicestatus',
         'contracts' => 'Kontrakter',
+        'software' => 'Software',
         'knowledge' => 'Viden',
         'assets' => 'Aktiver',
         'tasks' => 'Opgaver',
@@ -128,6 +135,15 @@ return [
         'notices' => '<span class="wt-attention-bold">{count}</span> opsigelsesperiode(r) nærmer sig',
         'all_clear' => 'Ingen kontrakter kræver opmærksomhed',
     ],
+    'software' => [
+        'metric_30d' => '30 dage',
+        'metric_90d' => '90 dage',
+        'metric_notices' => 'Opsigelser',
+        'expiring' => '<span class="wt-attention-bold">{count}</span> softwarelicens(er) fornyes inden for 30 dage',
+        'notices' => '<span class="wt-attention-bold">{count}</span> opsigelsesperiode(r) nærmer sig',
+        'all_clear' => 'Ingen softwarefornyelser kræver opmærksomhed',
+        'none' => 'Ingen fornyelsesdatoer registreret mod dine licenser',
+    ],
     'knowledge' => [
         'overdue' => '<span class="wt-attention-bold">{count}</span> artikel(er) er forfaldne til gennemgang',
         'published_week' => 'Udgivet denne uge',
@@ -155,17 +171,17 @@ return [
         'nav_overview' => 'Oversigt',
         'nav_layout' => 'Dashboardets layout',
         'nav_dots' => 'Forstå statusprikkerne',
-        'nav_whose'            => 'Hvis arbejde',
-        's_whose_title'        => 'Mine, mit team eller alle',
-        's_whose_p1'           => 'En knap øverst på dashboardet indsnævrer tavlen til dit eget ansvar. Dit valg <strong>huskes</strong>, så Watchtower åbner, som du forlod det.',
-        's_whose_mine'         => '<strong>Mine</strong> &mdash; arbejde tildelt dig.',
-        's_whose_team'         => '<strong>Mit team</strong> &mdash; arbejde tildelt nogen på et team, du er med i.',
-        's_whose_all'          => '<strong>Alle</strong> &mdash; hele installationen. Det er standarden og det, Watchtower altid har vist, så intet ændrer sig, medmindre du beder om det.',
-        's_whose_narrows'      => 'Fire kort indsnævres: <strong>Sager</strong>, <strong>Opgaver</strong>, <strong>Ændringer</strong> og <strong>Morgentjek</strong>. Alle tal på dem følger knappen.',
-        's_whose_impersonal'   => '<strong>Seks kort kan ikke indsnævres og mærkes <em>alle</em></strong>, så du aldrig læser et teamdækkende tal som et personligt. En forringet tjeneste og en fejlet arbejdsgang tilhører ingen. Udstyr tildeles <em>slutbrugere</em>, ikke medarbejdere, så “mit udstyr” ville være tomt for næsten alle. Kalenderkortet viser den fælles teamkalender. Kontrakter og viden har godt nok en ejer, men en kontrakt, der udløber, skal følges op uanset hvem der ejer den, og en artikel til gennemgang er et hul i biblioteket snarere end i én persons arbejde.',
-        's_whose_unassigned'   => '<strong>Ikke-tildelte sager indsnævres aldrig</strong>, uanset indstilling. En ikke-tildelt sag er per definition ikke din, så “mine” ville vise nul for evigt &mdash; og nul der læses som <em>køen er tom</em>, det modsatte af hvad en ubehandlet bunke betyder.',
-        's_whose_checks'       => '<strong>Morgentjek matches gennem deres gruppe.</strong> Et tjek rutes ved at lægge det i en gruppe og pege den gruppe mod et team eller en person, så <em>mine</em> betyder tjek tildelt dig, tjek i en gruppe der peger på dig, eller tjek i en gruppe der peger på et af dine teams.',
-        's_whose_setting'      => 'Hvad der sker med de seks kort, mens du er på <strong>Mine</strong>, bestemmer du selv under <strong>Indstillinger &rarr; Generelt</strong>: bliv ved med at vise dem, eller skjul dem. De beholdes som standard, for en forringet tjeneste er det sidste, der bør forsvinde, fordi du skiftede til dit eget arbejde.',
+        'nav_whose' => 'Hvis arbejde',
+        's_whose_title' => 'Mine, mit team eller alle',
+        's_whose_p1' => 'En knap øverst på dashboardet indsnævrer tavlen til dit eget ansvar. Dit valg <strong>huskes</strong>, så Watchtower åbner, som du forlod det.',
+        's_whose_mine' => '<strong>Mine</strong> &mdash; arbejde tildelt dig.',
+        's_whose_team' => '<strong>Mit team</strong> &mdash; arbejde tildelt nogen på et team, du er med i.',
+        's_whose_all' => '<strong>Alle</strong> &mdash; hele installationen. Det er standarden og det, Watchtower altid har vist, så intet ændrer sig, medmindre du beder om det.',
+        's_whose_narrows' => 'Fire kort indsnævres: <strong>Sager</strong>, <strong>Opgaver</strong>, <strong>Ændringer</strong> og <strong>Morgentjek</strong>. Alle tal på dem følger knappen.',
+        's_whose_impersonal' => '<strong>Seks kort kan ikke indsnævres og mærkes <em>alle</em></strong>, så du aldrig læser et teamdækkende tal som et personligt. En forringet tjeneste og en fejlet arbejdsgang tilhører ingen. Udstyr tildeles <em>slutbrugere</em>, ikke medarbejdere, så “mit udstyr” ville være tomt for næsten alle. Kalenderkortet viser den fælles teamkalender. Kontrakter og viden har godt nok en ejer, men en kontrakt, der udløber, skal følges op uanset hvem der ejer den, og en artikel til gennemgang er et hul i biblioteket snarere end i én persons arbejde.',
+        's_whose_unassigned' => '<strong>Ikke-tildelte sager indsnævres aldrig</strong>, uanset indstilling. En ikke-tildelt sag er per definition ikke din, så “mine” ville vise nul for evigt &mdash; og nul der læses som <em>køen er tom</em>, det modsatte af hvad en ubehandlet bunke betyder.',
+        's_whose_checks' => '<strong>Morgentjek matches gennem deres gruppe.</strong> Et tjek rutes ved at lægge det i en gruppe og pege den gruppe mod et team eller en person, så <em>mine</em> betyder tjek tildelt dig, tjek i en gruppe der peger på dig, eller tjek i en gruppe der peger på et af dine teams.',
+        's_whose_setting' => 'Hvad der sker med de seks kort, mens du er på <strong>Mine</strong>, bestemmer du selv under <strong>Indstillinger &rarr; Generelt</strong>: bliv ved med at vise dem, eller skjul dem. De beholdes som standard, for en forringet tjeneste er det sidste, der bør forsvinde, fordi du skiftede til dit eget arbejde.',
         'nav_cards' => 'Modulkort forklaret',
         'nav_refresh' => 'Automatisk opdatering',
         'nav_tips' => 'Hurtige tips',
@@ -226,6 +242,9 @@ return [
         's4_ct_title' => 'Kontrakter',
         's4_ct_desc' => 'Viser kontrakter, der udløber inden for 30 dage, inden for 90 dage, og opsigelsesperioder, der nærmer sig. Opmærksomhedspunkter advarer om nært forestående udløb og kommende opsigelsesfrister.',
         's4_ct_triggers' => '<strong>Rød:</strong> Kontrakter udløber inden for 30 dage. <strong>Gul:</strong> Kontrakter udløber inden for 90 dage, eller opsigelsesperioder nærmer sig. <strong>Grøn:</strong> Ingen kontrakter kræver opmærksomhed.',
+        's4_sw_title' => 'Software',
+        's4_sw_desc' => 'Viser softwarelicenser, der fornyes inden for 30 dage, inden for 90 dage, og opsigelsesperioder, der er ved at løbe ud. Licensers fornyelsesdatoer har altid været på posten; dette er, hvad der gør én synlig, før den udløber.',
+        's4_sw_triggers' => '<strong>Rød:</strong> Licenser, der fornyes inden for 30 dage. <strong>Gul:</strong> Licenser, der fornyes inden for 90 dage, eller opsigelsesperioder, der nærmer sig. <strong>Grøn:</strong> Ingen softwarefornyelser kræver opmærksomhed. Kortet siger det ligeud, når der slet ikke er registreret nogen fornyelsesdatoer, i stedet for at melde alt i orden på en tom liste.',
         's4_kb_title' => 'Viden',
         's4_kb_desc' => 'Viser antallet af artikler, der er forfaldne til gennemgang, og lister nyligt udgivne artikler fra denne uge. Når ingen gennemgange er forfaldne, og videnbasen er ajour, viser kortet en alt-i-orden-besked.',
         's4_kb_triggers' => '<strong>Gul:</strong> Artikler er forfaldne til gennemgang. <strong>Grøn:</strong> Videnbasen er opdateret.',
@@ -264,16 +283,14 @@ return [
         's7_paused_title' => 'Sat på pause for længe',
         's7_paused_desc' => 'Hvor mange timer en sag må stå med sit SLA-ur stoppet, før Vagttårn nævner den. Standardværdien er 24.',
     ],
-    // Whose work the dashboard is answering about (#58).
     'scope' => [
-        'mine'                 => 'Mine',
-        'team'                 => 'Mit team',
-        'all'                  => 'Alle',
-        'everyone_tag'         => 'alle',
-        'impersonal_heading'   => 'Ved “Mine”: kort uden en ejer',
-        'impersonal_show'      => 'Bliv ved med at vise dem',
-        'impersonal_hide'      => 'Skjul dem',
-        'impersonal_note'      => 'Servicestatus, arbejdsgange, udstyr, den fælles kalender, kontrakter og viden tilhører teamet frem for en person og kan derfor ikke indsnævres til dig. At beholde dem er det sikreste: en forringet tjeneste er det sidste, der bør forsvinde, fordi du skiftede til en personlig visning.',
+        'mine' => 'Mine',
+        'team' => 'Mit team',
+        'all' => 'Alle',
+        'everyone_tag' => 'alle',
+        'impersonal_heading' => 'Ved “Mine”: kort uden en ejer',
+        'impersonal_show' => 'Bliv ved med at vise dem',
+        'impersonal_hide' => 'Skjul dem',
+        'impersonal_note' => 'Servicestatus, arbejdsgange, udstyr, den fælles kalender, kontrakter og viden tilhører teamet frem for en person og kan derfor ikke indsnævres til dig. At beholde dem er det sikreste: en forringet tjeneste er det sidste, der bør forsvinde, fordi du skiftede til en personlig visning.',
     ],
-
 ];

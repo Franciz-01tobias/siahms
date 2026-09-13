@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - lms strings.
+ * FreeITSM — lms strings (da).
  *
- * Mirrors lang/en/lms.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/lms.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'LMS',
     'nav' => [
@@ -25,6 +29,12 @@ return [
         'start' => 'Start',
         'resume' => 'Genoptag',
         'review' => 'Gennemgå',
+        'progress' => 'Lektion {n} af {total}',
+        'not_opened' => 'Ikke åbnet endnu',
+    ],
+    'layout' => [
+        'list' => 'Listevisning',
+        'cards' => 'Kortvisning',
     ],
     'tabs' => [
         'courses' => 'Kurser',
@@ -65,6 +75,30 @@ return [
         'heading' => 'LMS-indstillinger',
         'tab_ai' => 'LMS AI',
         'ai_intro' => 'AI-hjælperne i kursusredigeringen bruger denne udbyder: til at udkaste en kursusoversigt, omskrive en videnartikel til en lektion og skrive quizspørgsmål ud fra en lektion, du har skrevet. Lad den stå ukonfigureret, og redigeringen virker stadig — du skriver så bare alt selv.',
+        'tab_reminders' => 'Påmindelser',
+        'reminders_intro' => 'Send en e-mail til personer, hvis undervisning snart forfalder, eller allerede er forsinket. Medarbejdere ser deres kurser, hver gang de bruger FreeITSM; en person, der kun bruger selvbetjeningsportalen, har ingen grund til at logge ind, medmindre du fortæller dem det — så det er det, der får undervisning skubbet til portalen til rent faktisk at blive gennemført.',
+        'reminders_enabled' => 'Send undervisningspåmindelser',
+        'reminders_enabled_help' => 'Fra, indtil du slår den til. Der sendes aldrig nogen e-mail, mens denne er fra — heller ikke ved den første kørsel efter en opgradering, hvilket er præcis det tidspunkt, hvor en velmenende standardindstilling ville sende e-mail til alle om undervisning, der blev tildelt for måneder siden.',
+        'reminders_days' => 'Påmind så mange dage før fristen',
+        'reminders_days_help' => 'En liste, for eksempel 7, 1 — en uge før og igen dagen før. Brug 0 for en påmindelse på selve fristdagen. Lad stå tomt for ingen.',
+        'reminders_chase' => 'Bliv ved med at påminde, efter fristen er overskredet',
+        'reminders_chase_every' => 'Hver',
+        'reminders_chase_help' => 'Dage mellem rykker-e-mails. En person, der har gennemført kurset, får aldrig en rykker.',
+        'reminders_opportunistic' => 'Send selv uden en planlagt opgave',
+        'reminders_opportunistic_help' => 'FreeITSM sender de påmindelser, der forfalder, når nogen åbner LMS\'en — højst én gang i timen. Det gør, at påmindelser virker uden at skulle sætte noget op — men det er en reserveløsning, ikke en tidsplan: hvis ingen åbner LMS\'en i en uge, bliver der ikke sendt noget i en uge. For pålidelig daglig afsendelse skal du køre cron/lms_reminders.php én gang om dagen.',
+        'reminders_no_mailbox' => 'Der er ikke sat en postkasse op at sende fra, så ingen påmindelse kan forlade huset. Konfigurér én under Sager → Indstillinger → Postkasser først.',
+        'reminders_loading' => 'Beregner, hvad der ville blive sendt…',
+        'reminders_preview' => '{count} påmindelser ville blive sendt lige nu.',
+        'reminders_preview_sent' => '{count} er allerede sendt og bliver ikke sendt igen.',
+        'reminders_preview_noemail' => '{count} personer har ingen e-mailadresse og kan derfor ikke påmindes.',
+        'reminders_saved' => 'Påmindelsesindstillinger gemt',
+        'reminders_test' => 'Send en test',
+        'reminders_test_sent' => 'Test sendt til {email}',
+        'reminders_run' => 'Send nu',
+        'reminders_run_confirm' => 'Send alle påmindelser, der forfalder lige nu? Dette sender rent faktisk e-mail til folk.',
+        'reminders_ran' => '{count} påmindelser sendt',
+        'reminders_last_run' => 'Sidst kørt {when}',
+        'reminders_never_run' => 'Aldrig kørt endnu',
     ],
     'editor' => [
         'title' => 'Kursusredigering',
@@ -157,7 +191,9 @@ return [
         'loading' => 'Indlæser...',
         'empty' => 'Ingen kurser tildelt endnu',
         'no_deadline' => 'Ingen',
+        'edit' => 'Redigér',
         'delete' => 'Slet',
+        'everyone' => 'Alle på portalen',
     ],
     'progress' => [
         'heading' => 'Fremskridt',
@@ -207,12 +243,19 @@ return [
     ],
     'assign_modal' => [
         'title' => 'Tildel kursus',
+        'edit_title' => 'Redigér tildeling',
         'field_course' => 'Kursus *',
         'field_group' => 'Gruppe *',
         'field_deadline' => 'Frist',
         'deadline_hint' => 'Lad stå tomt for ingen frist',
         'select_course' => 'Vælg kursus...',
         'select_group' => 'Vælg gruppe...',
+        'one_person' => 'Én person…',
+        'field_person' => 'Hvem',
+        'person_placeholder' => 'Søg efter navn eller e-mail…',
+        'person_chosen' => 'Dette kursus tildeles til {name}.',
+        'no_people' => 'Ingen fundet',
+        'pick_a_person' => 'Søg efter den person, det er til, og vælg dem på listen.',
         'cancel' => 'Annullér',
         'submit' => 'Tildel',
     ],
@@ -252,6 +295,7 @@ return [
         'prev' => 'Tilbage',
         'next' => 'Næste',
         'finish' => 'Afslut',
+        'finish_course' => 'Færdig',
         'check' => 'Tjek, hvad du har lært',
         'pick_several' => 'Vælg alle, der passer.',
         'unanswered_title' => 'Ubesvarede spørgsmål',
@@ -279,6 +323,7 @@ return [
         'deleted' => 'Slettet',
         'saved' => 'Gemt',
         'assigned' => 'Tildelt',
+        'assignment_saved' => 'Tildeling opdateret',
         'removed' => 'Fjernet',
         'save_failed' => 'Kunne ikke gemme',
         'delete_failed' => 'Kunne ikke slette',
@@ -292,6 +337,8 @@ return [
         'nav_uploading' => 'Upload et kursus',
         'nav_groups' => 'Læringsgrupper',
         'nav_assigning' => 'Tildel kurser',
+        'nav_portal' => 'Undervisning i portalen',
+        'nav_reminders' => 'Påmindelses-e-mails',
         'nav_launching' => 'Start et kursus',
         'nav_progress' => 'Følg fremskridt',
         'nav_learner_data' => 'Kursistdata i detaljer',
@@ -345,6 +392,7 @@ return [
         'groups_step3' => 'Sæt flueben ved de medarbejdere, der skal være medlemmer — du kan ændre medlemskab når som helst.',
         'groups_step4' => 'Gem. Gruppen er nu tilgængelig på fanen Tildelinger.',
         'groups_tip' => '<strong>En medarbejder kan være i mange grupper:</strong> overlappende medlemskaber er fint. Hvis Jane er i både <em>Tier 1</em> og <em>Nyansatte</em>, ser hun bare begge gruppers tildelinger i sin fremskridtsvisning.',
+        'groups_expiry' => '<strong>Persongrupper kan have en slutdato pr. person.</strong> Tre teknikere på stedet i fjorten dage tilføjes med en sidste dag og falder selv ud af gruppen, når den passeres — adgangen fjernes af uret i stedet for af, at nogen husker det. Kun en administrator kan ændre en persongruppe, fordi det at føje nogen til én også kan give dem adgang til videnmapper.',
         'assigning_heading' => 'Tildel kurser',
         'assigning_intro' => 'Fanen <strong>Tildelinger</strong> parrer et kursus med en gruppe, eventuelt med en frist. Så snart tildelingen er gemt, får hvert medlem af gruppen en fremskridtspost for det kursus (status <span class="help-pill">Ikke startet</span>), og kurset bliver spilbart for dem.',
         'assigning_step1' => 'Klik på <strong>Tildel</strong> på fanen Tildelinger.',
@@ -352,7 +400,28 @@ return [
         'assigning_step3' => 'Sæt en frist (valgfrit). Lad stå tomt for undervisning uden slutdato.',
         'assigning_step4' => 'Gem. Fremskridtsposter vises straks på fanen Fremskridt.',
         'assigning_tip' => '<strong>Frister styrer filteret Forfalden:</strong> enhver fremskridtspost, hvor fristen er overskredet, og hvor status ikke er <span class="help-pill info">Gennemført</span> eller <span class="help-pill ok">Bestået</span>, vises under filteret <span class="help-pill warn">Forfalden</span> på fanen Fremskridt.',
+        'assigning_everyone' => '<strong>&ldquo;Alle på portalen&rdquo; betyder alle.</strong> Det når ud til hver eneste aktive selvbetjeningskonto, også personer, der tilføjes senere, og det er sådan, du skubber obligatorisk undervisning — sikkerhedsbevidsthed, for eksempel — ud til hele organisationen i én instruktion i stedet for en liste, nogen vedligeholder i hånden.',
         'assigning_warn' => '<strong>Én tildeling pr. kursus/gruppe-par:</strong> en dublet-kombination bliver afvist (du får en venlig fejlmeddelelse). Vil du gentildele med en ny frist? Slet den gamle tildeling først, og opret så en ny.',
+        'portal_heading' => 'Undervisning i selvbetjeningsportalen',
+        'portal_intro' => 'Når et kursus når frem til en person, der kun bruger selvbetjeningsportalen, tager de det der. Det er <strong>den samme afspiller, de samme videnstjek og den samme bedømmelse</strong>, som medarbejdersiden bruger — en bestået prøve i portalen er den samme registrering som en bestået prøve i appen, og vises side om side med alle andres på fanen Fremskridt.',
+        'portal_card1_title' => 'En fane til undervisning',
+        'portal_card1_body' => 'Vises i portalens egen navigation og viser hvert kursus, hvor langt de er nået, og hvornår det forfalder. Den <strong>vises kun til en person, der faktisk har undervisning</strong>, så en portal, der aldrig bruger funktionen, får aldrig en fane, der fører hen til ingenting.',
+        'portal_card2_title' => 'På deres dashboard',
+        'portal_card2_body' => 'Alt, der stadig mangler, vises som kort <strong>over deres sagstal</strong>, med det, der forfalder snarest, først, og alt overskredet forrest og markeret. Gennemførte kurser vises ikke — panelet er et prompt, ikke en registrering — og det mangler helt for alle, der ikke har noget udestående.',
+        'portal_card3_title' => 'Begge slags kurser',
+        'portal_card3_body' => 'Kurser, du har skrevet, og SCORM-pakker, du har uploadet, afspilles begge i portalen. Intet ekstra at konfigurere.',
+        'portal_card4_title' => 'Én person ad gangen',
+        'portal_card4_body' => 'En portalbruger ser kun nogensinde kurser, der er tildelt dem, og kan ikke åbne noget andet, selv ved at redigere adresselinjen.',
+        'portal_tip' => '<strong>Portalbrugere skal have en e-mailadresse for at blive påmindet.</strong> En person uden postkasse — lager- og produktionsmedarbejdere har ofte ingen — vil stadig se deres undervisning, når de logger ind, men ingen påmindelse kan nå dem. Skærmen Påmindelser fortæller dig, hvor mange personer det gælder for.',
+        'reminders_heading' => 'Påmindelses-e-mails',
+        'reminders_intro' => 'Medarbejdere ser deres kurser, hver gang de bruger FreeITSM. En person, der kun bruger portalen, har ingen grund til at logge ind, medmindre du fortæller dem det — så <strong>LMS &rarr; Indstillinger &rarr; Påmindelser</strong> sender e-mail til personer, hvis undervisning snart forfalder, eller allerede er forsinket. Det er det, der får undervisning skubbet til portalen til rent faktisk at blive gennemført.',
+        'reminders_step1' => 'Slå <strong>Send undervisningspåmindelser</strong> til. Den er <strong>fra, indtil du gør</strong>, med vilje: den første kørsel efter en opgradering er præcis det tidspunkt, hvor en velmenende standardindstilling ville sende e-mail til flere hundrede personer om undervisning, der blev tildelt for måneder siden.',
+        'reminders_step2' => 'Angiv, hvor mange dage før fristen der skal påmindes — en liste, som f.eks. <em>7, 1</em> for en uge før og igen dagen før. Brug <em>0</em> for en påmindelse på selve fristdagen.',
+        'reminders_step3' => 'Beslut, om der skal blive ved med at blive rykket efter fristen, og hvor ofte. En person, der har gennemført kurset, får aldrig en rykker.',
+        'reminders_step4' => 'Gem. <strong>Send en test</strong> sender en prøvepåmindelse til dig og ingen andre; <strong>Send nu</strong> sender alt, der forfalder.',
+        'reminders_preview' => '<strong>Du får at vide, hvor mange der bliver sendt, før du slår den til.</strong> Skærmen viser antallet af påmindelser, der ville blive sendt lige nu, og hvor mange personer der ingen brugbar e-mailadresse har — beregnet af den samme kode, der står for afsendelsen, så det tal, du ser, er det tal, der bliver sendt.',
+        'reminders_once' => '<strong>Ingen bliver påmindet to gange om den samme frist.</strong> Hvis du flytter en frist, er det reelt ny information, og der sendes en ny påmindelse; kører du igen samme dag, bliver der ikke sendt noget.',
+        'reminders_cron' => '<strong>Skal du bruge en planlagt opgave?</strong> Ikke for at komme i gang. Med <em>Send selv uden en planlagt opgave</em> slået til sender FreeITSM alt, der forfalder, når nogen åbner LMS\'en, højst én gang i timen — så påmindelser virker ud af boksen. Men det er en reserveløsning, ikke en tidsplan: hvis ingen åbner LMS\'en i en uge, bliver der ikke sendt noget i en uge. <strong>For pålidelig daglig afsendelse skal du køre <code>cron/lms_reminders.php</code> én gang om dagen</strong> (Windows Task Scheduler, eller cron på Linux). Påmindelser kræver også en postkasse, der kan sende — skærmen siger det tydeligt, hvis der ikke er nogen.',
         'launching_heading' => 'Start et kursus',
         'launching_intro' => 'Klik på afspilningsikonet ved siden af et kursus på fanen Kurser (eller åbn det fra fanen Fremskridt), så indlæses SCORM-afspilleren i en iframe. SCORM-API-broen kører på det overordnede vindue, så kursets runtime-kald (<code>LMSInitialize</code>, <code>LMSGetValue</code>, <code>LMSSetValue</code>, <code>LMSCommit</code>, <code>LMSFinish</code> for 1.x, eller <code>Initialize</code> / <code>GetValue</code> / <code>SetValue</code> / <code>Commit</code> / <code>Terminate</code> for 2004) opfanges og gemmes i databasen.',
         'launching_card1_title' => 'Genoptag fra bogmærke',

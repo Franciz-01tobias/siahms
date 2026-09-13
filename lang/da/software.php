@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - software strings.
+ * FreeITSM — software strings (da).
  *
- * Mirrors lang/en/software.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/software.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Software',
     'nav' => [
@@ -29,6 +33,20 @@ return [
         'col_name' => 'Programnavn',
         'col_publisher' => 'Udgiver',
         'col_installed' => 'Installeret på',
+        'col_seats' => 'Pladser',
+        'col_actions' => '',
+        'add_app' => 'Tilføj program',
+        'edit_app' => 'Redigér program',
+        'added_by_hand' => 'Tilføjet manuelt',
+        'f_name' => 'Navn',
+        'f_publisher' => 'Udgiver eller leverandør',
+        'f_url' => 'Webadresse',
+        'f_url_hint' => 'Der hvor du administrerer det. Valgfrit.',
+        'f_notes' => 'Noter',
+        'licence_hint' => 'Når dette er gemt, kan du registrere en licens mod det, med pladser, pris og en fornyelsesdato - ligesom for ethvert andet program.',
+        'app_saved' => 'Program gemt',
+        'app_deleted' => 'Program slettet',
+        'confirm_delete_app' => 'Slet "{name}"? En eventuel licens registreret mod det skal slettes først.',
         'count_app' => '{count} program',
         'count_apps' => '{count} programmer',
         'count_component' => '{count} komponent',
@@ -229,6 +247,14 @@ return [
     'settings' => [
         'page_title' => 'Service Desk - Softwareindstillinger',
         'tab_api_keys' => 'API-nøgler',
+        'tab_renewals' => 'Fornyelser',
+        'renewals_intro' => 'Licensernes fornyelsesdatoer kan vises på Vagttårn-dashboardet, skrives ind i kalenderen som heldagsbegivenheder, eller begge dele. Intet gemmes to gange - licensen er stadig posten, og disse genereres ud fra den.',
+        'renewal_show_in' => 'Vis fornyelser i',
+        'renewal_off' => 'Ingen steder',
+        'renewal_dashboard_only' => 'Kun Vagttårn-dashboardet',
+        'renewal_calendar_only' => 'Kun Kalenderen',
+        'renewal_both' => 'Vagttårn-dashboardet og Kalenderen',
+        'renewal_saved' => 'Indstillinger for fornyelser gemt',
         'heading' => 'API-nøgler',
         'label_input' => 'Label (valgfrit)',
         'generate' => 'Generér',
@@ -299,6 +325,14 @@ return [
         'inventory_s5_b' => 'Opdag versionsspredning',
         'inventory_s5_t' => 'den udvidede visning gør det nemt at identificere maskiner, der kører forældede versioner. Hvis ti maskiner har version 5.2, men to stadig er på 4.8, kan du se det med det samme og reagere.',
         'inventory_tip' => 'Installationsantallet afspejler, hvor mange unikke maskiner der aktuelt har softwaren installeret. Når en maskine rapporterer ind uden et tidligere set program, ryddes den gamle post automatisk op.',
+        'manual_heading' => '<strong>Tilføj en cloud-platform manuelt</strong>',
+        'manual_body' => 'Inventory-agenten finder det, der er installeret på dine maskiner, hvilket slet ikke hjælper med Xero, Canva, Figma eller andet, der lever i en browser. <strong>Tilføj program</strong> lader dig selv indtaste ét, med en udgiver, den webadresse du administrerer det på, og noter.',
+        'manual_rule_why' => 'Intet installerer en cloud-platform, så intet kan opdage den. Dette er den eneste måde, den kommer med på listen.',
+        'manual_rule_licence' => '<strong>Det er mere værd, end det ser ud til.</strong> En licens skal høre til et program, så indtil du tilføjer ét, er der ingen steder at registrere, hvad et cloud-abonnement koster, hvor mange pladser det har, eller hvornår det fornyes.',
+        'manual_rule_edit' => 'Manuelle poster er markeret <em>Tilføjet manuelt</em> og er de eneste, du kan redigere. Et agent-opdaget program er en rapport om, hvad der er på nogens maskine, og enhver redigering ville blive overskrevet ved næste inventarkørsel.',
+        'manual_rule_adopt' => 'Hvis agenten senere finder en af dine manuelle poster reelt installeret et sted, knytter den maskinerne til den <strong>uden at røre et ord, du har skrevet</strong>.',
+        'manual_rule_seats' => '<strong>Pladser og installationer er separate kolonner.</strong> En cloud-platform er installeret ingen steder, så et nul under Installeret på siger intet om, hvorvidt nogen bruger den &mdash; det gør pladserne på dens licenser.',
+        'manual_tip' => 'Tilføj programmet først, og registrér derefter en licens mod det med antallet af pladser, pris og fornyelsesdato. Det er fornyelsen, der derefter dukker op på Vagttårn og i din kalender.',
         'dashboard_heading' => 'Dashboard',
         'dashboard_intro' => 'Software-dashboardet giver dig mulighed for at visualisere dit softwarelandskab med tilpasselige Chart.js-widgets. Hver medarbejder har sit eget dashboardlayout, så du kan fokusere på de diagrammer og datapunkter, der betyder mest for din rolle.',
         'dashboard_s1_b' => 'Åbn biblioteket',
@@ -334,6 +368,16 @@ return [
         'licences_field_over_b' => 'Overlicenseret',
         'licences_field_over_t' => 'der er registreret flere installationer end købte licenser. Dette er en overholdelsesrisiko, der bør håndteres hurtigt.',
         'licences_tip' => 'Licensoverholdelse beregnes i realtid ud fra den aktuelle softwareoversigt. Efterhånden som maskiner rapporterer ind, og softwaren ændrer sig, opdateres overholdelsesstatussen automatisk.',
+        'renewals_heading' => '<strong>Hvor fornyelser dukker op</strong>',
+        'renewals_body' => 'En fornyelsesdato på en licens er kun nyttig, hvis nogen ser den i tide. Vælg under <strong>Indstillinger &rarr; Fornyelser</strong>, om fornyelser skal vises på Vagttårn-dashboardet, i kalenderen, i begge dele, eller ingen steder.',
+        'renewals_card_wt_title' => 'På Vagttårn',
+        'renewals_card_wt_body' => 'Et Software-kort, der tæller fornyelser inden for de næste 30 og 90 dage, samt opsigelsesperioder, der er ved at løbe ud. Bevidst de samme tre vinduer, som Kontrakter-kortet bruger, så du kan læse de to op mod hinanden.',
+        'renewals_card_cal_title' => 'I kalenderen',
+        'renewals_card_cal_body' => 'Heldagsbegivenheder genereret ud fra dine licenser. De genopbygges, hver gang en licens ændres, så de ikke kan drifte &mdash; og intet, du selv har skrevet ind i kalenderen, bliver nogensinde rørt.',
+        'renewals_rule_where' => 'Licensen er stadig posten. Kalenderbegivenheder genereres ud fra den, så det er at redigere fornyelsesdatoen på licensen, der ændrer dem.',
+        'renewals_rule_notice' => '<strong>To begivenheder pr. licens, ikke én.</strong> Fornyelsesdatoen er, når pengene går ud; <em>opsigelsesfristen</em> &mdash; udregnet fra opsigelsesvarslet &mdash; er den sidste dag, du stadig kan trække dig, og det er den, der reelt koster dig noget, hvis du misser den. En licens uden opsigelsesvarsel får ingen opsigelsesbegivenhed.',
+        'renewals_rule_active' => 'Kun aktive licenser vises. En annulleret licens har stadig en fornyelsesdato på posten, men det er historik snarere end en forpligtelse.',
+        'renewals_tip' => 'Hvis du ikke registrerer andet på en licens, så registrér fornyelsesdatoen og opsigelsesvarslet. De to er det, der gør en liste over software til en advarsel, du får i tide til at handle på.',
         'collection_heading' => 'Sådan indsamles data',
         'collection_intro' => 'Software-modulet indsamler ikke selv data. I stedet er det afhængigt af PowerShell-scriptet til aktivstyring ({script}), som kører på hver administreret Windows-maskine og rapporterer installeret software som en del af den bredere hardware- og softwareoversigt.',
         'collection_p2' => 'Når PowerShell-scriptet kører på en maskine, læser det registreringsdatabasens poster fra Programmer og funktioner og indsamler alle installerede programmer og systemkomponenter. Disse data sendes til FreeITSM-API\'et, hvor de gemmes på aktivposten. Software-modulet samler derefter disse data på tværs af alle maskiner for at give dig overblikket over hele maskinparken.',

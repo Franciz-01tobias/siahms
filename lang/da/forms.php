@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - forms strings.
+ * FreeITSM — forms strings (da).
  *
- * Mirrors lang/en/forms.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/forms.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Formularer',
     'nav' => [
@@ -146,6 +150,24 @@ return [
         'meta_modified' => 'Sidst ændret',
         'meta_modified_by' => 'Ændret af',
         'readonly_save_title' => 'Dette er en historisk version — åbn den aktuelle for at redigere, eller forgren derfra med "Gem som ny version"',
+    ],
+    'actions' => [
+        'tab' => 'Hvad der sker derefter',
+        'intro' => 'Vælg, hvad der skal ske, når denne formular bruges. Handlinger kører i rækkefølge, fra top til bund, og en senere handling kan bruge det, en tidligere har produceret.',
+        'when_submitted' => 'Ved indsendelse',
+        'when_submitted_gated' => 'Ved indsendelse (før godkendelse)',
+        'when_approved' => 'Ved godkendelse',
+        'when_rejected' => 'Ved afvisning',
+        'add' => 'Tilføj',
+        'none' => 'Der sker ikke noget.',
+        'remove' => 'Fjern',
+        'move_up' => 'Flyt op',
+        'move_down' => 'Flyt ned',
+        'arg_unset' => 'Ikke angivet',
+        'vars_hint' => 'Svar kan bruges her, f.eks. {{submission.fields.Device type}}',
+        'gate_warning' => 'Denne formular kræver godkendelse, og disse handlinger kører, før godkenderen har set den — så det at oprette en sag her sker uden deres godkendelse.',
+        'needs_gate' => 'Disse kører kun, hvis formularen kræver godkendelse. Slå det til under Egenskaber for at bruge dem; alt, der er sat her, bevares under alle omstændigheder.',
+        'approved_default' => 'Intet er sat, så godkendelse opretter en sag på den sædvanlige måde. Tilføj en handling her for i stedet selv at bestemme.',
     ],
     'fieldtypes' => [
         'lookup' => 'Opslag',
@@ -449,6 +471,26 @@ return [
         'nav_export' => 'Eksport',
         'nav_settings' => 'Indstillinger',
         'nav_tips' => 'Hurtige tips',
+        'nav_actions' => 'Hvad der sker derefter',
+        'actions_title' => 'Hvad der sker derefter',
+        'actions_intro' => 'En formular kan gøre noget, når den bruges, i stedet for blot at gemme et svar. Åbn en formular, vælg fanen Hvad der sker derefter, og angiv, hvad der skal ske — opret en sag, send en e-mail, kald et webhook, opret en opgave, tilføj en note. Der er tre separate tidspunkter, og du kan lægge lige så mange handlinger i hvert, som du vil, eller ingen overhovedet.',
+        'actions_submitted_title' => 'Ved indsendelse',
+        'actions_submitted_body' => 'Kører i det øjeblik, nogen sender formularen ind. Det er den, de fleste formularer bruger.',
+        'actions_approved_title' => 'Ved godkendelse',
+        'actions_approved_body' => 'Gælder kun formularer, der kræver godkendelse. Kører, efter din godkender har sagt ja.',
+        'actions_rejected_title' => 'Ved afvisning',
+        'actions_rejected_body' => 'Også kun godkendelse. Nyttig til at fortælle anmelderen hvorfor — og den kan også oprette en sag, hvis du vil have et spor af afslaget.',
+        'actions_step1' => '<strong>Åbn fanen</strong> &mdash; redigér en formular, og vælg <strong>Hvad der sker derefter</strong>, ved siden af Felter og Forhåndsvisning.',
+        'actions_step2' => '<strong>Tilføj en handling</strong> &mdash; tryk på <strong>Tilføj</strong> på det afsnit, du vil bruge, og vælg derefter, hvad den skal gøre. Hver handling beder om sine egne indstillinger: at oprette en sag lader dig sætte prioritet, kø, type og hvem den går til.',
+        'actions_step3' => '<strong>Sæt dem i rækkefølge</strong> &mdash; handlinger kører fra top til bund. Brug pilene til at flytte en op eller ned.',
+        'actions_step4' => '<strong>Gem formularen</strong> &mdash; intet træder i kraft, før du gør det.',
+        'actions_answers_title' => 'Brug af svarene',
+        'actions_answers_body' => 'Overalt hvor du kan skrive, kan du sætte det, nogen har svaret, ind ved at skrive feltetiketten i dobbelte krøllede parenteser. Hvis din formular spørger om <em>Device type</em>, bliver <code>{{submission.fields.Device type}}</code> til deres svar &mdash; så en sag kan få en titel efter det, der reelt blev spurgt om, i stedet for at hedde det samme hver gang.',
+        'actions_chain_title' => 'Én handling, der bruger en anden',
+        'actions_chain_body' => 'En senere handling kan bruge det, en tidligere har produceret. Opret først en sag, og send derefter en e-mail, hvis tekst indeholder <code>{{last.ticket_id}}</code>, så personen får sit sagsnummer i bekræftelsen. For at nå et bestemt trin frem for det umiddelbart foregående, skal du bruge dets nummer &mdash; <code>{{steps.1.ticket_number}}</code> er den første handling på listen.',
+        'actions_gate_title' => 'Formularer, der kræver godkendelse',
+        'actions_gate_body' => 'Hvis en formular kræver godkendelse, omdøber det første afsnit sig selv til <strong>Ved indsendelse (før godkendelse)</strong>, fordi det er præcis dét tidspunkt, det kører på. At sætte <em>Opret en sag</em> dér betyder, at sagen oprettes uden den godkendelse, du bad om, så skærmen advarer dig &mdash; sæt den under <strong>Ved godkendelse</strong> i stedet. Og hvis godkendelse er slået til, men intet er sat op, opretter en godkendelse stadig en sag på den sædvanlige måde; skærmen siger det, i stedet for at lade et tomt afsnit se ud, som om der ikke sker noget.',
+        'actions_tip' => 'Hver kørsel bliver registreret. Åbn <strong>Arbejdsgange &rarr; Kørselslog</strong> for at se præcis, hvad en formular gjorde, trin for trin, inklusive alt, der fejlede &mdash; en formulars handlinger logges der sammen med alt andet.',
         'hero_title' => 'Formularguide',
         'hero_sub' => 'Byg tilpassede formularer, indsaml strukturerede data, og eksportér besvarelser — helt uden at skrive en eneste linje kode.',
         'overview_title' => 'Oversigt',

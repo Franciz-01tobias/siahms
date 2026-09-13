@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - process-mapper strings.
+ * FreeITSM — process-mapper strings (da).
  *
- * Mirrors lang/en/process-mapper.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/process-mapper.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Proceskortlægger',
     'nav' => [
@@ -31,6 +35,13 @@ return [
         'new_process' => '+ Ny',
         'search_placeholder' => 'Søg efter processer...',
         'no_processes_yet' => 'Ingen processer endnu',
+    ],
+    'new_modal' => [
+        'title' => 'Ny proces',
+        'field_title' => 'Procesnavn',
+        'placeholder' => 'f.eks. Hændelsestriage',
+        'create' => 'Opret',
+        'failed' => 'Kunne ikke oprette processen.',
     ],
     'toolbar' => [
         'process' => 'Proces',

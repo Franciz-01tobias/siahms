@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - workflow strings.
+ * FreeITSM — workflow strings (da).
  *
- * Mirrors lang/en/workflow.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/workflow.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Arbejdsgange',
     'nav' => [
@@ -309,6 +313,12 @@ return [
         'variables_li4' => 'For <code>ticket.status_changed</code> / <code>ticket.priority_changed</code>: også <code>{{old_status_id}}</code>, <code>{{new_status_id}}</code>, <code>{{old_priority_id}}</code>, <code>{{new_priority_id}}</code>',
         'variables_li5' => 'For <code>ticket.assigned</code>: også <code>{{analyst_id}}</code>, <code>{{team_id}}</code>',
         'variables_tip' => '<strong>Bedste praksis:</strong> i handlingers <code>ticket_id</code>-felter skal du lade standarden <code>{{ticket.id}}</code> stå i stedet for at skrive et specifikt id &mdash; på den måde arbejder arbejdsgangen på den sag, der udløste den, og ikke en fast sag.',
+        'variables_chain_heading' => 'Brug af det, en tidligere handling producerede',
+        'variables_chain_intro' => 'Handlinger kører i rækkefølge, og en senere kan referere til, hvad en tidligere gjorde. Det er det, der gør <em>&ldquo;opret en sag, og send derefter personen deres sagsnummer på e-mail&rdquo;</em> til én enkelt arbejdsgang snarere end en umulighed.',
+        'variables_chain_last' => '<code>{{last.ticket_id}}</code> &mdash; hvad end den handling umiddelbart før denne producerede.',
+        'variables_chain_steps' => '<code>{{steps.1.ticket_number}}</code> &mdash; en bestemt handling, ved det nummer der vises ved siden af den på lærredet. Brug denne, når den handling, du vil bruge, ikke er den umiddelbart foregående.',
+        'variables_chain_note' => 'Disse ligger bevidst under deres egne navne i stedet for at overskrive arbejdsgangens egne data. Hvis oprettelse af en sag erstattede <code>{{ticket.id}}</code>, ville hvert senere trin i en sags-arbejdsgang stille begynde at pege på den nye sag i stedet for den, der satte arbejdsgangen i gang.',
+        'actions_forms_callout' => '<strong>Formularer kan også køre disse handlinger.</strong> I stedet for at bygge en arbejdsgang kan du åbne en formular og bruge dens fane <strong>Hvad der sker derefter</strong> til at angive, hvad der skal ske, når den indsendes, godkendes eller afvises. Det er den samme motor og de samme handlinger, og kørslerne vises i den samme kørselslog &mdash; formulareditoren er blot en anden vej ind, afgrænset til den ene formular. Byg en arbejdsgang her, når en regel skal spænde over flere formularer.',
         'ai_heading' => 'AI-medforfatter',
         'ai_intro' => 'Klik på <strong>AI-medforfatter</strong> i værktøjslinjen, og beskriv arbejdsgangen med almindelige ord. AI\'en returnerer et struktureret forslag &mdash; udløser, betingelser, handlinger &mdash; som du kan <em>Anvende</em> på lærredet eller <em>Kassere</em>.',
         'ai_examples' => 'Eksempler, der fungerer godt:',
@@ -340,6 +350,7 @@ return [
         'triggers_time_cron' => '<strong>Hvis de cron-jobs ikke er planlagt, affyrer disse udløsere aldrig.</strong> Arbejdsgangen sidder bare der, aktiv, og gør ingenting. SLA-begivenheder kommer fra SLA-overskridelses-cronnen (hvert 5. minut); udløbsbegivenhederne fra <code>cron/workflow_scheduled.php</code> (hver time er rigeligt). Opsætning: <code>docs/workflow-scheduled-cron-setup.md</code>, eller <a href="https://github.com/edmozley/freeitsm/wiki/Time-Based-Triggers" target="_blank" rel="noopener noreferrer">Tidsbaserede udløsere på wikien</a>, som også forklarer, hvorfor en fortsat sand betingelse (en overskredet SLA forbliver overskredet) ikke affyrer igen hvert par minutter.',
         'triggers_time_once' => 'En tidsbaseret betingelse <strong>forbliver sand</strong> &mdash; en overskredet SLA er stadig overskredet fem minutter senere &mdash; så FreeITSM fører en fortegnelse, og hver situation affyrer <strong>præcis én gang</strong>. Den genoprustes, når det, der ligger under den, ændrer sig: hæv en sags prioritet, og dens SLA-mål krymper, så den nye, strammere frist får lov at eskalere igen. Forny en kontrakt, og næste års påmindelser affyrer stadig. Udløb affyrer ved <strong>90, 30, 7 og 1 dage</strong> tilbage, hver med <code>window_days</code> &mdash; så "kun påmind mig ved 30 dage" er bare en betingelse.',
         'triggers_family_domain' => '<strong>Rige domænebegivenheder</strong> &mdash; meningsfulde livscyklusøjeblikke med en fuld typet nyttelast: <code>ticket.created</code>, <code>ticket.status_changed</code>, <code>change.approved</code>, <code>problem.status_changed</code>, <code>task.completed</code>, <code>service_status.incident_resolved</code>, <code>software.application_discovered</code>, og mange flere.',
+        'triggers_family_forms' => '<strong>Formularer og kataloganmodninger</strong> &mdash; <code>form.submitted</code> udløses for en almindelig formular. En formular, der kræver godkendelse, udløser i stedet <code>catalogue_request.submitted</code>, derefter <code>catalogue_request.approved</code> eller <code>catalogue_request.rejected</code>, når din godkender har besluttet sig. Den separate begivenhed er bevidst: den betyder, at en regel, der opretter en sag ved indsendelse, ikke kan springe hen over en godkendelse, du har bedt om. Alle fire bærer de indsendte svar, så <code>{{submission.fields.Device type}}</code> virker på hvert trin, og alle fire kan indsnævres til én formular.',
         'triggers_family_crud' => '<strong>Opret/opdatér/slet-begivenheder</strong> &mdash; hver genanvendelig post og opslagsliste i indstillinger udsender <code>&lt;entity&gt;.created</code> / <code>.updated</code> / <code>.deleted</code>: sager, aktiver, ændringer, problemer, opgaver, CMDB, kontrakter &amp; leverandører, kalender, softwarelicenser, netværksdiagrammer og alle deres indstillingslister (statusser, prioriteter, typer, mærkater&hellip;).',
         'triggers_picker' => 'Fordi listen er dusinvis dyb, er editorens <strong>udløservælger søgbar</strong> &mdash; begynd at skrive (<code>resolved</code>, <code>contract</code>, <code>delete</code>&hellip;) for at filtrere den. Hver begivenhed affyrer fra en <strong>enkelt fælles skrivesti</strong>, så den opfører sig identisk, uanset om ændringen kom fra browseren, REST API\'et eller en anden arbejdsgang &mdash; den kan ikke drifte.',
         'failures_heading' => 'Motorfejl er isolerede',

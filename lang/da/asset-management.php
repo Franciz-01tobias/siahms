@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - asset-management strings.
+ * FreeITSM — asset-management strings (da).
  *
- * Mirrors lang/en/asset-management.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/asset-management.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Aktiver',
     'nav' => [
@@ -32,6 +36,9 @@ return [
         'add_title' => 'Tilføj en person',
         'edit_title' => 'Redigér person',
         'saved' => 'Gemt',
+        'ab_written' => 'Gemt, og kontaktkortet blev også opdateret.',
+        'ab_conflict' => 'Gemt her, men ikke skrevet til adressebogen: nogen har ændret den samme oplysning der siden sidste import.',
+        'ab_failed' => 'Gemt her, men adressebogen kunne ikke opdateres: {error}',
         'deactivated' => 'Markeret som fratrådt',
         'reactivated' => 'Genaktiveret',
         'flag_left' => 'Fratrådt',
@@ -139,6 +146,12 @@ return [
         'order_number' => 'Ordrenummer',
         'warranty_expiry' => 'Garantiudløb',
         'assigned_user' => 'Tildelt bruger',
+        'first_seen' => 'Først set',
+        'last_seen' => 'Sidst set',
+        'never_seen' => 'Aldrig indberettet',
+        'seen_under_a_day' => 'mindre end en dag siden',
+        'seen_one_day' => '1 dag siden',
+        'seen_days_ago' => '{count} dage siden',
     ],
     'status' => [
         'assigned' => 'Tildelt',
@@ -150,6 +163,7 @@ return [
         'search_placeholder' => 'Søg efter navn, serienr., mærke, placering eller kontrakt...',
         'no_assets' => 'Ingen aktiver fundet',
         'count' => '{count} aktiver',
+        'count_heading' => 'Aktiver - {count} fundet',
         'n_selected' => '{count} valgt',
         'clear_selection' => 'Ryd',
         'print_labels' => 'Udskriv etiketter',
@@ -157,20 +171,18 @@ return [
         'scan' => 'Scan',
         'add_asset' => 'Tilføj',
     ],
-    // Right-click an asset (Ed)
     'ctx' => [
-        'open'               => 'Åbn',
-        'status'             => 'Status',
-        'type'               => 'Type',
-        'location'           => 'Placering',
-        'add_to_contract'    => 'Tilføj til en kontrakt',
-        'assign'             => 'Tildel til nogen',
-        'print_label'        => 'Udskriv mærkat',
-        'copy_tag'           => 'Kopiér aktivmærke',
-        'copy_serial'        => 'Kopiér serienummer',
-        'none_configured'    => 'Intet konfigureret',
+        'open' => 'Åbn',
+        'status' => 'Status',
+        'type' => 'Type',
+        'location' => 'Placering',
+        'add_to_contract' => 'Tilføj til en kontrakt',
+        'assign' => 'Tildel til nogen',
+        'print_label' => 'Udskriv mærkat',
+        'copy_tag' => 'Kopiér aktivmærke',
+        'copy_serial' => 'Kopiér serienummer',
+        'none_configured' => 'Intet konfigureret',
     ],
-
     'detail' => [
         'select_prompt' => 'Vælg et aktiv for at se detaljer og tildelte brugere',
         'service_tag' => 'Service Tag',
@@ -188,24 +200,22 @@ return [
         'tab_devices' => 'Enheder',
         'tab_software' => 'Software',
         'tab_tickets' => 'Sager',
-
-        // Contracts covering this asset (#106)
-        'tab_contracts'                => 'Kontrakter',
-        'no_contracts'                 => 'Dette udstyr er ikke på nogen kontrakt.',
-        'contracts_load_failed'        => 'Kontrakter kunne ikke indlæses.',
-        'contracts_no_access'          => 'Du har ikke adgang til modulet Kontrakter.',
-        'contract_ends'                => 'Slutter',
-        'contract_notice_by'           => 'Opsigelse senest',
-        'contract_no_end'              => 'Ingen slutdato',
-        'col_number'                   => 'Nummer',
-        'col_contract'                 => 'Kontrakt',
-        'col_supplier'                 => 'Leverandør',
-        'add_contract'                 => 'Tilføj til en kontrakt',
-        'remove_contract'              => 'Fjern',
-        'remove_contract_message'      => 'Dette tager udstyret af den kontrakt. Selve kontrakten bliver hverken opsagt eller slettet, og udstyret bliver her.',
-        'contract_picker_title'        => 'Tilføj dette udstyr til en kontrakt',
-        'contract_search_placeholder'  => 'Søg efter kontraktnummer, titel eller leverandør',
-        'no_contracts_found'           => 'Intet matchede. Prøv leverandørens navn eller en del af kontrakttitlen.',
+        'tab_contracts' => 'Kontrakter',
+        'no_contracts' => 'Dette udstyr er ikke på nogen kontrakt.',
+        'contracts_load_failed' => 'Kontrakter kunne ikke indlæses.',
+        'contracts_no_access' => 'Du har ikke adgang til modulet Kontrakter.',
+        'contract_ends' => 'Slutter',
+        'contract_notice_by' => 'Opsigelse senest',
+        'contract_no_end' => 'Ingen slutdato',
+        'col_number' => 'Nummer',
+        'col_contract' => 'Kontrakt',
+        'col_supplier' => 'Leverandør',
+        'add_contract' => 'Tilføj til en kontrakt',
+        'remove_contract' => 'Fjern',
+        'remove_contract_message' => 'Dette tager udstyret af den kontrakt. Selve kontrakten bliver hverken opsagt eller slettet, og udstyret bliver her.',
+        'contract_picker_title' => 'Tilføj dette udstyr til en kontrakt',
+        'contract_search_placeholder' => 'Søg efter kontraktnummer, titel eller leverandør',
+        'no_contracts_found' => 'Intet matchede. Prøv leverandørens navn eller en del af kontrakttitlen.',
         'saved' => 'Gemt.',
         'save_failed' => 'Kunne ikke gemme det.',
         'name_required' => 'Et aktiv skal have et navn.',
@@ -265,6 +275,25 @@ Omdøb det alligevel?',
         'free' => '{free} GB ledigt',
         'no_data' => 'Ingen diskdata tilgængelige',
         'load_error' => 'Fejl ved indlæsning af diske',
+        'drives' => 'Drev',
+        'serial' => 'Serienummer',
+        'no_serial' => 'Intet serienummer indberettet',
+        'hide' => 'Skjul',
+        'show' => 'Vis',
+        'hidden_count' => '{count} skjult(e)',
+        'show_hidden' => 'Vis skjulte',
+        'hide_hidden' => 'Skjul igen',
+        'hidden_badge' => 'Skjult',
+        'hide_title' => 'Skjul dette drev?',
+        'hide_intro' => 'Det forbliver i posten og i API\'et. Dette afgør kun, om det vises her.',
+        'hide_others' => 'Skjul også de andre {count} drev som dette, på tværs af alle aktiver',
+        'hide_others_one' => 'Skjul også det 1 andet drev som dette, på et andet aktiv',
+        'hide_others_none' => 'Intet andet drev i din bestand ligner dette.',
+        'hide_counting' => 'Tæller…',
+        'show_title' => 'Vis dette drev igen?',
+        'show_scoped' => 'Det var kun skjult på dette aktiv, så intet andet ændres.',
+        'show_everywhere' => 'Det er skjult på tværs af alle aktiver, så de andre {count} drev som det kommer tilbage igen.',
+        'hide_failed' => 'Det virkede ikke.',
     ],
     'devices' => [
         'filter_placeholder' => 'Filtrér enheder...',
@@ -367,6 +396,9 @@ Omdøb det alligevel?',
         'col_bios' => 'BIOS',
         'col_assigned_users' => 'Tildelte brugere',
         'col_cost' => 'Pris',
+        'stale_notice' => 'Viser {count} aktiver, der ikke har indberettet i {days} dage.',
+        'stale_notice_one' => 'Viser 1 aktiv, der ikke har indberettet i {days} dage.',
+        'stale_show_all' => 'Vis alle',
     ],
     'dashboard' => [
         'title' => 'Aktivdashboard',
