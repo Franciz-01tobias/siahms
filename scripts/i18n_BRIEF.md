@@ -25,7 +25,20 @@ so they are worth more than any stylistic judgement.
 4. **Keep line breaks.** A `\n` in the English means a real line break; keep the
    same number.
 5. **Never leave a non-empty string empty.** If English has a value, so must you.
-   If English is empty, leave it empty.
+   If English is empty, leave it empty — but **the line still needs its tab**:
+   write the key, a tab, and nothing after it.
+
+   > 🔴 This is the most-failed rule in the whole brief. It has been broken five
+   > times across five different translators and two languages, always on a key
+   > whose English is blank, and every one of those translators had checked their
+   > own work and reported it correct. There is nothing after the tab to make the
+   > tab look necessary, which is exactly why it goes missing.
+   >
+   > The orchestrator repairs this automatically now
+   > (`scripts/i18n_repair_chunk.php`), so it is no longer fatal — but only for
+   > keys whose English is genuinely blank. A missing tab on a key that *does*
+   > have English text is treated as a lost translation, refused, and the chunk
+   > is sent back.
 6. **UTF-8, written directly.** Never HTML entities, never escapes for letters.
 
 ## What to leave in English

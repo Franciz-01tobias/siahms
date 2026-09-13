@@ -186,4 +186,7 @@ docker-compose.override.yml
 tests/azure-openai/last-request.json
 
 # Translation pipeline working state (chunks + worklist) - regenerate with scripts/i18n_chunk.php
+# The numbered variants are parallel batches: one locale set per directory, so a
+# run in progress is not clobbered by chunking the next locale.
 .i18n-work/
+.i18n-work-*/
