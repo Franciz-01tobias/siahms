@@ -238,6 +238,15 @@ return [
         'talking_send_title'   => 'Enter sends',
         'talking_send_desc'    => 'Enter sends your message and Shift+Enter starts a new line, the same as every other chat tool. If the page loses contact with the server it says so where the list of people usually is, rather than looking quiet.',
         'talking_mention_title'=> 'Mentioning somebody',
+        // 🔴 TRANSLATORS: `@everyone` in the next string is a LITERAL TRIGGER, not
+        // a word. includes/warroom.php matches /@everyone\b/ and the mention picker
+        // in assets/js/war-room.js inserts the ASCII string `@everyone` whatever the
+        // interface language is. Translating it tells the reader to type something
+        // that does nothing at all.
+        //
+        // ⚠️ This has already happened twice: German shipped `@alle` and Polish
+        // nearly shipped `@wszyscy`, both caught in September 2026. Translate the
+        // sentence around it and leave `@everyone` exactly as it is.
         'talking_mention_desc' => 'Type @ and start typing a name, then pick it from the list or keep typing. Backspace at the end of a name removes the whole mention in one press. Use @everyone when you need the room to look up. Mentioning somebody puts a bell in the header of every page in FreeITSM, so it reaches them even if they are in Tickets.',
         'talking_files_title'  => 'Attaching files',
         'talking_files_desc'   => 'Up to five files per message, using the + button. Screenshots appear in the conversation rather than as a filename you have to open. Files are deleted along with their message.',

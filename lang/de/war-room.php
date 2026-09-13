@@ -213,7 +213,7 @@ return [
         'talking_send_title'   => 'Die Eingabetaste sendet',
         'talking_send_desc'    => 'Die Eingabetaste sendet Ihre Nachricht, Umschalt+Eingabe beginnt eine neue Zeile — wie in jedem anderen Chat. Verliert die Seite die Verbindung zum Server, steht das dort, wo sonst die Personenliste ist, damit es nicht bloß still wirkt.',
         'talking_mention_title'=> 'Jemanden erwähnen',
-        'talking_mention_desc' => 'Tippen Sie @ und beginnen Sie, einen Namen zu schreiben; wählen Sie ihn dann aus der Liste oder tippen Sie weiter. Die Rücktaste am Ende eines Namens entfernt die gesamte Erwähnung mit einem Tastendruck. Verwenden Sie @alle, wenn der ganze Raum aufmerken soll. Eine Erwähnung setzt eine Glocke in die Kopfzeile jeder Seite von FreeITSM — sie erreicht die Person also auch, wenn sie gerade in den Tickets ist.',
+        'talking_mention_desc' => 'Tippen Sie @ und beginnen Sie, einen Namen zu schreiben; wählen Sie ihn dann aus der Liste oder tippen Sie weiter. Die Rücktaste am Ende eines Namens entfernt die gesamte Erwähnung mit einem Tastendruck. Verwenden Sie @everyone, wenn der ganze Raum aufmerken soll. Eine Erwähnung setzt eine Glocke in die Kopfzeile jeder Seite von FreeITSM — sie erreicht die Person also auch, wenn sie gerade in den Tickets ist.',
         'talking_files_title'  => 'Dateien anhängen',
         'talking_files_desc'   => 'Bis zu fünf Dateien je Nachricht über die Schaltfläche „+“. Screenshots erscheinen direkt im Verlauf statt als Dateiname, den man erst öffnen muss. Dateien werden zusammen mit ihrer Nachricht gelöscht.',
         'talking_edit_title'   => 'Bearbeiten und Löschen',
