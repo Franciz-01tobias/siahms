@@ -275,6 +275,29 @@ require __DIR__ . '/_top.php';
     <div class="help-note"><strong>Somebody already here?</strong> The <strong>When somebody is already here</strong> setting decides: link them to this address book, so the import keeps them up to date from now on, or leave them alone and flag it for you to look at. Matching is by email address.</div>
 </div>
 
+<!-- 4i2. CardDAV write-back -->
+<div class="help-section" id="carddav-write">
+    <div class="help-section-header"><?php echo helpSectionNum('carddav-write'); ?>
+        <div>
+            <h3>Sending changes back</h3>
+        </div>
+    </div>
+    <p>By default an address book import only ever <em>reads</em>. Switch on <strong>Write changes made in FreeITSM back to the address book</strong>, on the Contacts tab, and it works the other way too: when an analyst corrects a contact's details on a ticket, the contact card is updated as well.</p>
+    <p>This exists because the correction usually happens <em>during the call</em>. Without it, the analyst has to remember to go and fix the same detail in a second application afterwards, which is exactly the sort of double entry a service desk tool ought to remove.</p>
+
+    <h4>What it changes, and what it never touches</h4>
+    <p>Only the five details an address book actually holds: <strong>job title</strong>, <strong>department</strong>, <strong>office</strong>, <strong>phone</strong> and <strong>mobile</strong>. Employee number and manager stay in FreeITSM, because a contact card has nowhere to keep them — which also means those two are yours to fill in freely even on an imported contact.</p>
+    <div class="help-note"><strong>Nothing else on the card is altered.</strong> FreeITSM edits the single line that changed and leaves the rest of the card exactly as it found it — photo, notes, birthday, the full street address, group membership, and anything your other systems have added. It does not rebuild the card from what it knows, which is the usual way an integration quietly strips a contact of everything it does not understand.</div>
+
+    <h4>When two people change the same thing</h4>
+    <p>Before writing, FreeITSM re-reads the card and compares it with what it last imported. If somebody has changed <em>the same detail</em> in the address book in the meantime, the change is refused and you are told what their version says — nothing is overwritten. If they changed something else on the card, that is left alone and your change goes through.</p>
+    <p>A refusal is not an error to work around. It means two people had different information, and the right next step is to import again and see theirs before deciding.</p>
+
+    <h4>Check permission first</h4>
+    <p>Press <strong>Check permission</strong> and FreeITSM asks the server what this account is allowed to do, without writing anything. Plenty of address books are shared or subscribed and are read-only however correct your password is — far better to know that here than to discover it halfway through somebody's edit.</p>
+    <div class="help-note"><strong>If the answer is no.</strong> Grant the account write access on the address book server itself. Nothing in FreeITSM can work around a permission the server has not given, and changes simply stay in FreeITSM until it does.</div>
+</div>
+
 <!-- 4j. CardDAV safety and scheduling -->
 <div class="help-section" id="carddav-safety">
     <div class="help-section-header"><?php echo helpSectionNum('carddav-safety'); ?>

@@ -1822,7 +1822,10 @@ return [
             // The person, as opposed to the login. Every one of these is a field a
             // directory owns when there is one, so all of them grey out together
             // and `managed_note` explains it once rather than seven times.
-            'managed_note'               => 'This person is kept up to date from a directory, so the details below are read-only. Change them in the directory instead.',
+            // ⚠️ "the greyed-out details", not "the details below" — a contact from
+            // an address book has some of them editable and some not, so naming
+            // the whole group makes the note contradict the form it sits under.
+            'managed_note'               => 'This person is kept up to date from a directory, so the greyed-out details are read-only. Change them at the source instead.',
             'job_title'                  => 'Job title',
             'job_title_placeholder'      => 'e.g. Finance Manager',
             'department'                 => 'Department',
@@ -2245,7 +2248,7 @@ return [
             'add_details' => '<strong>Job title, department, office, phone, mobile, employee ID and manager</strong> &mdash; all optional, and all describing the <em>person</em> rather than the login. Worth filling in: <strong>office</strong> tells you which site somebody is at before you go looking for them, <strong>manager</strong> records the reporting line, and <strong>employee ID</strong> is the join key when you reconcile against a payroll system that has never heard of an email address. Where you import from a directory, all of these arrive filled in. A CardDAV address book fills in everything except employee ID and manager, which a contact card has nowhere to store.',
 
             'managed_heading' => '<strong>People maintained somewhere else</strong>',
-            'managed_body'    => 'Where a person was imported &mdash; from LDAP or Active Directory, or from a CardDAV address book &mdash; those same details are <strong>read-only</strong> and the modal says so. Whatever they came from is the source of truth for them, and the next import would overwrite anything typed here &mdash; so the save is refused outright rather than accepted and quietly reverted an hour later. Change the value at the source instead; everything else on the record, including their company and password, stays editable.',
+            'managed_body'    => 'Where a person was imported &mdash; from LDAP or Active Directory, or from a CardDAV address book &mdash; the details that source owns are <strong>read-only</strong> and the modal greys them out. Whatever they came from is the source of truth, and the next import would overwrite anything typed here, so the save is refused outright rather than accepted and quietly reverted an hour later. <strong>Which</strong> details depends on the source: a directory owns all seven, while an address book owns five &mdash; it has nowhere to keep an employee number or a reporting line, so those two stay yours to fill in. And if the address book has <em>write changes back</em> switched on, none of them are locked: what you type is sent to the contact card, so there is nothing for the next import to revert. Everything else on the record, including their company and password, is always editable.',
             'edit_heading' => '<strong>Edit user</strong>',
             'edit_body'    => 'Select a user from the list, then click <strong>Edit</strong> in the detail header. Same modal, pre-filled. Saving without a password leaves the existing hash untouched; supplying one resets it.',
             'delete_heading' => '<strong>Delete user</strong>',

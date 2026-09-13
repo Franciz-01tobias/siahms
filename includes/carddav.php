@@ -55,7 +55,7 @@ const CARDDAV_TIMEOUT = 20;
  */
 function cardDavRequest(array $cfg, string $method, string $url, string $body = '', array $headers = []): array
 {
-    $out = ['ok' => false, 'status' => 0, 'body' => '', 'error' => '', 'auth' => ''];
+    $out = ['ok' => false, 'status' => 0, 'body' => '', 'error' => '', 'auth' => '', 'headers' => []];
 
     if (!function_exists('curl_init')) {
         $out['error'] = 'PHP cURL is not available, so FreeITSM cannot talk to a CardDAV server.';
@@ -69,8 +69,27 @@ function cardDavRequest(array $cfg, string $method, string $url, string $body = 
     if (($cfg['auth'] ?? 'auto') === 'digest') $authMode = CURLAUTH_DIGEST;
     if (($cfg['auth'] ?? 'auto') === 'basic')  $authMode = CURLAUTH_BASIC;
 
+    // Response headers, lowercased. Needed because a successful PUT returns the
+    // card's NEW ETag in a header rather than a body — without capturing it the
+    // stored ETag is stale the instant we write, and every later write to that
+    // card is refused as a conflict with itself.
+    //
+    // ⚠️ Reset per redirect hop: cURL hands the callback the headers of every
+    // response in the chain, so a 301's headers would otherwise be merged with
+    // the real one's.
+    $respHeaders = [];
+
     $ch = curl_init();
     curl_setopt_array($ch, [
+        CURLOPT_HEADERFUNCTION => function ($ch, $header) use (&$respHeaders) {
+            $len = strlen($header);
+            if (stripos($header, 'HTTP/') === 0) { $respHeaders = []; return $len; }
+            $colon = strpos($header, ':');
+            if ($colon !== false) {
+                $respHeaders[strtolower(trim(substr($header, 0, $colon)))] = trim(substr($header, $colon + 1));
+            }
+            return $len;
+        },
         CURLOPT_URL            => $url,
         CURLOPT_CUSTOMREQUEST  => $method,
         CURLOPT_RETURNTRANSFER => true,
@@ -101,8 +120,9 @@ function cardDavRequest(array $cfg, string $method, string $url, string $body = 
     $err    = curl_error($ch);
     curl_close($ch);
 
-    $out['status'] = $status;
-    $out['body']   = is_string($resp) ? $resp : '';
+    $out['status']  = $status;
+    $out['body']    = is_string($resp) ? $resp : '';
+    $out['headers'] = $respHeaders;
 
     if ($resp === false) {
         $out['error'] = $err !== '' ? $err : 'The request failed with no further detail.';
@@ -374,6 +394,62 @@ function cardDavUnfold(string $vcard): array
     return array_values(array_filter(array_map('trim', explode("\n", $norm)), function ($l) {
         return $l !== '';
     }));
+}
+
+/**
+ * Turn a vCard TEXT value into the plain string a human means by it.
+ *
+ * RFC 6350 §3.4: within a text value, `\\`, `\,`, `\;` and `\n` (or `\N`) stand
+ * for a backslash, a comma, a semicolon and a line break. Everything else after
+ * a backslash is that character.
+ *
+ * 🔴 A SINGLE LEFT-TO-RIGHT PASS, not a sequence of str_replace calls. Chained
+ * replacement gets `\\,` wrong in both directions: unescaping `\\` first yields
+ * `\,`, which the next pass then reads as an escaped comma — so a value that
+ * legitimately ended in a backslash before a comma comes out having silently
+ * lost the separator. Scanning once means an escape can never be re-read as the
+ * start of another.
+ *
+ * ⚠️ This was MISSING for TITLE and TEL and present for ORG and ADR, so two of
+ * the four mapped text fields imported a job title of `Head\, Sales` with the
+ * backslash still in it. Harmless-looking while the sync was one-way; the moment
+ * a value is written back it would be re-escaped to `Head\\, Sales` and the card
+ * would gain a backslash on every run.
+ */
+function cardDavUnescapeText(string $v): string
+{
+    $out = '';
+    $len = strlen($v);
+    for ($i = 0; $i < $len; $i++) {
+        if ($v[$i] !== '\\' || $i + 1 >= $len) { $out .= $v[$i]; continue; }
+        $next = $v[++$i];
+        switch ($next) {
+            case 'n': case 'N': $out .= "\n"; break;
+            // `\\`, `\,`, `\;` and anything else: the character itself. Passing
+            // an unknown escape through as its literal is what the spec asks for
+            // and keeps an unfamiliar extension readable rather than mangled.
+            default: $out .= $next;
+        }
+    }
+    return $out;
+}
+
+/**
+ * The inverse of cardDavUnescapeText() — a plain string as a vCard TEXT value.
+ *
+ * 🔴 The backslash MUST be escaped first, and it is the only one where order
+ * matters: doing it after the comma would find the backslash that the comma rule
+ * just inserted and double it.
+ *
+ * ⚠️ CR is dropped rather than escaped. A lone `\r` has no representation in a
+ * vCard text value, and emitting a bare carriage return inside one would be read
+ * by the next parser as a line fold.
+ */
+function cardDavEscapeText(string $v): string
+{
+    $v = str_replace('\\', '\\\\', $v);
+    $v = str_replace(["\r\n", "\r", "\n"], ['\\n', '', '\\n'], $v);
+    return str_replace([',', ';'], ['\\,', '\\;'], $v);
 }
 
 /**

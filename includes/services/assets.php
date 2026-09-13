@@ -32,6 +32,7 @@
 
 require_once __DIR__ . '/../service_context.php';
 require_once __DIR__ . '/../tenancy.php';
+require_once __DIR__ . '/../users.php';            // userDirectoryOwnedFields()
 require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 
 class AssetsService
@@ -595,11 +596,12 @@ class AssetsService
                        u.job_title, u.department, u.office, u.phone, u.mobile,
                        u.employee_id, u.manager_id, u.is_active, u.is_managed,
                        u.directory_username, u.last_seen_in_source, u.deactivated_datetime,
-                       u.tenant_id,
+                       u.tenant_id, ap.protocol AS managed_protocol, ap.carddav_write_back AS managed_write_back,
                        m.display_name AS manager_name,
                        (SELECT COUNT(*) FROM users_assets ua2 WHERE ua2.user_id = u.id) AS asset_count
                   FROM users u
              LEFT JOIN users m ON m.id = u.manager_id $mgrTenantSql
+             LEFT JOIN auth_providers ap ON ap.id = u.auth_provider_id
                  WHERE 1=1 $tenantSql $where
                  ORDER BY (u.display_name IS NULL OR u.display_name = ''), u.display_name, u.email
                  LIMIT $limit";
@@ -615,6 +617,17 @@ class AssetsService
             $r['asset_count'] = (int)$r['asset_count'];
             $r['is_active']   = (int)$r['is_active'] === 1;
             $r['is_managed']  = (int)$r['is_managed'] === 1;
+            // Resolved server-side so no screen retypes it. See the same note in
+            // api/tickets/get_users.php: an address book owns five of the seven
+            // person fields, LDAP owns all seven, and the list that used to be a
+            // JavaScript literal in this module's own screen was wrong for the
+            // first the moment CardDAV shipped.
+            $r['managed_fields'] = $r['is_managed']
+                ? array_values(userDirectoryOwnedFields(
+                      $r['managed_protocol'] ?? null,
+                      (int)($r['managed_write_back'] ?? 0) === 1
+                  ))
+                : [];
             $r['manager_id']  = $r['manager_id'] !== null ? (int)$r['manager_id'] : null;
             $r['name']        = self::personName($r);
         }
@@ -646,9 +659,11 @@ class AssetsService
                     u.job_title, u.department, u.office, u.phone, u.mobile,
                     u.employee_id, u.manager_id, u.is_active, u.is_managed,
                     u.directory_username, u.deactivated_datetime,
+                    ap.protocol AS managed_protocol, ap.carddav_write_back AS managed_write_back,
                     m.display_name AS manager_name
                FROM users u
           LEFT JOIN users m ON m.id = u.manager_id $mgrTenantSql
+          LEFT JOIN auth_providers ap ON ap.id = u.auth_provider_id
               WHERE u.id = ?"
         );
         $u->execute(array_merge($mgrTenantArgs, [$userId]));
@@ -660,6 +675,12 @@ class AssetsService
         $user['name']       = self::personName($user);
         $user['is_active']  = (int)$user['is_active'] === 1;
         $user['is_managed'] = (int)$user['is_managed'] === 1;
+        $user['managed_fields'] = $user['is_managed']
+            ? array_values(userDirectoryOwnedFields(
+                  $user['managed_protocol'] ?? null,
+                  (int)($user['managed_write_back'] ?? 0) === 1
+              ))
+            : [];
         $user['manager_id'] = $user['manager_id'] !== null ? (int)$user['manager_id'] : null;
 
         // Who reports to this person. The relationship is stored once, pointing

@@ -697,16 +697,23 @@ $translationNamespaces = ['common', 'tickets'];
                 .map(f => [f, USER_PERSON_FIELD_ELS[f]])
         );
 
-        // Is the person currently open in the modal owned by a directory? Every
-        // field above is directory-owned, so on a managed record they are shown
-        // read-only and left OUT of the payload entirely.
+        // WHICH of the person fields are owned by a directory for the person
+        // currently open in the modal. These are shown read-only and left OUT of
+        // the payload entirely; everything else stays editable.
+        //
+        // 🔴 An ARRAY, not a boolean, and it comes from the server. It was a
+        // boolean until CardDAV shipped, on the assumption that a managed record
+        // means all seven fields are somebody else's — true of LDAP, false of an
+        // address book, which has nowhere to keep a payroll number or a reporting
+        // line. Under the boolean those two were greyed out on a contact and
+        // refused on save, for data no import would ever supply.
         //
         // ⚠️ Not cosmetic. save_user.php refuses the whole save if a managed
-        // record's request so much as MENTIONS one of these keys — deliberately,
-        // because accepting an edit the next sync would revert is worse than
-        // saying no. Posting them anyway would fail the save with an error the
-        // analyst did nothing to cause.
-        let editingManagedUser = false;
+        // record's request so much as MENTIONS one of the keys IT considers owned
+        // — deliberately, because accepting an edit the next sync would revert is
+        // worse than saying no. Both ends resolve the list through
+        // userDirectoryOwnedFields(), so they cannot drift apart.
+        let editingOwnedFields = [];
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -794,8 +801,12 @@ $translationNamespaces = ['common', 'tickets'];
 
         // Fill, or read-only, the person fields. Split out because the managed
         // case has to touch every one of them and the modal has two entry paths.
-        function applyUserPersonFields(user, isManaged) {
-            editingManagedUser = !!isManaged;
+        function applyUserPersonFields(user, ownedFields) {
+            // Anything not an array means "no directory owns anything here" — a new
+            // person, or a server that did not send the list. Falling back to empty
+            // keeps the form editable rather than mysteriously locked; the API is
+            // the guard, and it refuses independently.
+            editingOwnedFields = Array.isArray(ownedFields) ? ownedFields : [];
             Object.entries(USER_PERSON_FIELD_IDS).forEach(([key, elId]) => {
                 const el = document.getElementById(elId);
                 if (!el) return;
@@ -803,10 +814,14 @@ $translationNamespaces = ['common', 'tickets'];
                 // `disabled` rather than `readonly`: read-only still looks typeable
                 // and still submits, and the point is that this field is somebody
                 // else's to change.
-                el.disabled = !!isManaged;
+                el.disabled = editingOwnedFields.includes(key);
             });
+            // The note explains why fields are greyed out, so it belongs with the
+            // greying and not with is_managed: a CardDAV contact is managed but has
+            // two fields still editable, and a note on a form with nothing disabled
+            // would be explaining something that is not on screen.
             const note = document.getElementById('userManagedNote');
-            if (note) note.hidden = !isManaged;
+            if (note) note.hidden = editingOwnedFields.length === 0;
         }
 
         // Load users from API
@@ -1069,7 +1084,7 @@ $translationNamespaces = ['common', 'tickets'];
                 populateUserCompanies(user?.tenant_id ?? null, false);
                 // Order matters: applyUserPersonFields() sets `disabled` on the
                 // select too, and rebuilding its options below does not clear that.
-                applyUserPersonFields(user, Number(user?.is_managed) === 1);
+                applyUserPersonFields(user, user?.managed_fields);
                 populateUserManagers(user?.manager_id ?? null, userId);
             } else {
                 title.textContent = t('tickets.users.modal.add_title');
@@ -1082,7 +1097,7 @@ $translationNamespaces = ['common', 'tickets'];
                 populateUserCompanies(null, true);
                 // A brand-new person is never directory-owned: a sync adopts an
                 // existing record, it does not arrive through this form.
-                applyUserPersonFields(null, false);
+                applyUserPersonFields(null, []);
                 populateUserManagers(null, null);
             }
             passwordField.value = '';
@@ -1107,22 +1122,25 @@ $translationNamespaces = ['common', 'tickets'];
 
             // The person fields.
             //
-            // ⚠️ Omitted WHOLESALE on a directory-owned record rather than sent
-            // and refused: save_user.php rejects the entire save if a managed
-            // record's body mentions any of these keys, so posting them would
-            // turn "I changed the company" into an error about a job title.
+            // ⚠️ A directory-owned field is omitted rather than sent and refused:
+            // save_user.php rejects the entire save if a managed record's body
+            // mentions one, so posting it would turn "I changed the company" into
+            // an error about a job title. Omitted PER FIELD, not wholesale — on a
+            // CardDAV contact the employee ID and manager are ours, and skipping
+            // them with the rest is what made them unfillable.
             //
             // ⚠️ And `manager_id` is omitted when the current value could not be
             // resolved to an option — a manager in a company this analyst cannot
             // see. Sending the select's empty value there would read as "no
             // manager" and wipe a reporting line the analyst was never shown.
-            if (!editingManagedUser) {
+            {
                 const managerSelect = document.getElementById('userManager');
                 Object.entries(USER_PERSON_FIELD_IDS).forEach(([key, elId]) => {
                     if (key === 'manager_id') return;
+                    if (editingOwnedFields.includes(key)) return;
                     payload[key] = document.getElementById(elId).value.trim();
                 });
-                if (!managerSelect.dataset.unresolved) {
+                if (!editingOwnedFields.includes('manager_id') && !managerSelect.dataset.unresolved) {
                     payload.manager_id = managerSelect.value || null;
                 }
             }

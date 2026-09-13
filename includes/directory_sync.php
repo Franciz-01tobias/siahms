@@ -779,11 +779,27 @@ function dsyncLinkIdentity(PDO $conn, int $providerId, int $userId, array $p): v
 {
     if ($p['guid'] === '') return;
     try {
+        // `source_ref` and `source_etag` are refreshed on every sighting, not
+        // just on the first link: a card that moves between address books gets a
+        // new URL, and its ETag changes every time anybody edits it. A stale
+        // pair is worse than none — the href would write to a card that has
+        // moved, and the ETag would make every write look like a conflict.
         $conn->prepare(
-            "INSERT INTO user_sso_identities (user_id, provider_id, subject, email, linked_datetime)
-             VALUES (?, ?, ?, ?, UTC_TIMESTAMP())
-             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), email = VALUES(email)"
-        )->execute([$userId, $providerId, $p['guid'], $p['email']]);
+            "INSERT INTO user_sso_identities
+                    (user_id, provider_id, subject, email, source_ref, source_etag, linked_datetime)
+             VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE user_id     = VALUES(user_id),
+                                     email       = VALUES(email),
+                                     source_ref  = VALUES(source_ref),
+                                     source_etag = VALUES(source_etag)"
+        )->execute([
+            $userId, $providerId, $p['guid'], $p['email'],
+            // ⚠️ `dn` is the LDAP distinguished name OR the CardDAV card URL —
+            // the mappers on both sides already fill the same key with whichever
+            // one applies, which is why this needs no protocol test.
+            ($p['dn'] ?? '') !== '' ? $p['dn'] : null,
+            ($p['carddav_etag'] ?? '') !== '' ? $p['carddav_etag'] : null,
+        ]);
     } catch (Throwable $e) {
         error_log('[dsync] identity link failed: ' . $e->getMessage());
     }

@@ -14,7 +14,7 @@
 session_start();
 require_once '../../config.php';
 require_once '../../includes/functions.php';
-require_once '../../includes/users.php';   // USER_SELF_EDITABLE_FIELDS, USER_DIRECTORY_OWNED
+require_once '../../includes/users.php';   // USER_SELF_EDITABLE_FIELDS, userDirectoryOwnedFields()
 
 header('Content-Type: application/json');
 
@@ -48,18 +48,40 @@ try {
     // it. A save that silently does nothing is worse than one that says no —
     // and for a customer correcting their own phone number, an edit that
     // vanishes overnight is exactly the experience this feature exists to fix.
-    $mStmt = $conn->prepare("SELECT is_managed FROM users WHERE id = ?");
+    $mStmt = $conn->prepare(
+        "SELECT u.is_managed, p.protocol
+           FROM users u
+      LEFT JOIN auth_providers p ON p.id = u.auth_provider_id
+          WHERE u.id = ?"
+    );
     $mStmt->execute([$_SESSION['ss_user_id']]);
-    $managedRow = $mStmt->fetchColumn();
+    $managedRow = $mStmt->fetch(PDO::FETCH_ASSOC);
 
-    // ⚠️ `false` from fetchColumn means NO ROW, which is not the same as
+    // ⚠️ `false` from fetch means NO ROW, which is not the same as
     // is_managed = 0. The session can outlive the record. Without this the
     // UPDATE below would match nothing and still report success.
     if ($managedRow === false) {
         echo json_encode(['success' => false, 'error' => 'Account not found']);
         exit;
     }
-    $isManaged = (int)$managedRow === 1;
+    $isManaged = (int)($managedRow['is_managed'] ?? 0) === 1;
+
+    // Which fields the directory owns depends on WHICH directory.
+    //
+    // 🔴 `false` FOR WRITE-BACK, DELIBERATELY, AND DO NOT "FIX" IT. On the
+    // analyst screens that argument is passed through, because an edit there is
+    // pushed to the contact card and so survives the next import. **This endpoint
+    // pushes nothing.** Passing the provider's real setting here would unlock
+    // these fields for a portal user the moment write-back was switched on, their
+    // correction would be saved locally, and the next import would quietly revert
+    // it — which is precisely the failure the whole managed-record rule exists to
+    // prevent, arriving through the door built to prevent it.
+    //
+    // ⬜ Letting a customer's own correction reach the address book is the GDPR
+    // Article 16 case from #133 and is a genuinely wanted thing. It needs the push
+    // wiring here plus a decision about a customer writing to the operator's
+    // address book — not a one-character change to this line.
+    $ownedFields = userDirectoryOwnedFields($managedRow['protocol'] ?? null, false);
 
     // 🔴 "Absent means don't touch", and preferred_name had to join that rule.
     //
@@ -85,7 +107,7 @@ try {
     // preferred_name does not blank somebody's telephone number.
     foreach (USER_SELF_EDITABLE_FIELDS as $f) {
         if (!array_key_exists($f, $input)) continue;
-        if ($isManaged && in_array($f, USER_DIRECTORY_OWNED, true)) {
+        if ($isManaged && in_array($f, $ownedFields, true)) {
             echo json_encode([
                 'success' => false,
                 'error'   => 'managed',

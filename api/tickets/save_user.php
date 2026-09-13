@@ -128,14 +128,34 @@ try {
         exit;
     }
 
-    // Is this record owned by a directory? Decides whether the directory-owned
-    // person fields may be edited at all. Read once, here, so the update block
-    // below does not have to go back to the database per field.
+    // Is this record owned by a directory, and by WHICH KIND of directory? Both
+    // halves matter: `is_managed` says somebody else maintains this person, and
+    // the provider's protocol says which parts of them. An address book owns a
+    // job title and a phone number; it has nowhere to keep a payroll number or a
+    // reporting line, so those stay ours to fill in. Read once, here, so the
+    // update block below does not have to go back to the database per field.
     $isManaged = false;
+    $ownedFields = USER_DIRECTORY_OWNED;
     if ($id) {
-        $mStmt = $conn->prepare("SELECT is_managed FROM users WHERE id = ?");
+        // ⚠️ The person fields are read too, BEFORE the update, because CardDAV
+        // write-back needs to know what FreeITSM held previously — that is the
+        // third leg of the three-way merge that tells "I changed this" apart
+        // from "somebody changed it in the address book". Read here rather than
+        // after the UPDATE, which would compare the new value with itself.
+        $mStmt = $conn->prepare(
+            "SELECT u.is_managed, p.protocol, p.carddav_write_back,
+                    u.job_title, u.department, u.office, u.phone, u.mobile
+               FROM users u
+          LEFT JOIN auth_providers p ON p.id = u.auth_provider_id
+              WHERE u.id = ?"
+        );
         $mStmt->execute([$id]);
-        $isManaged = (int)($mStmt->fetchColumn() ?: 0) === 1;
+        $mRow = $mStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $isManaged = (int)($mRow['is_managed'] ?? 0) === 1;
+        $ownedFields = userDirectoryOwnedFields(
+            $mRow['protocol'] ?? null,
+            (int)($mRow['carddav_write_back'] ?? 0) === 1
+        );
     }
 
     // A manager chain that loops would make any code walking it to find an
@@ -209,7 +229,7 @@ try {
         // silently does nothing is worse than one that says no.
         foreach (USER_PERSON_FIELDS as $f) {
             if (!array_key_exists($f, $data)) continue;
-            if ($isManaged && in_array($f, USER_DIRECTORY_OWNED, true)) {
+            if ($isManaged && in_array($f, $ownedFields, true)) {
                 echo json_encode([
                     'success' => false,
                     'error'   => 'This person is kept up to date from a directory, so ' . $f
@@ -232,7 +252,46 @@ try {
             $args[] = $id;
             $conn->prepare("UPDATE users SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
         }
-        echo json_encode(['success' => true, 'id' => $id, 'message' => 'User updated']);
+
+        // --- CardDAV write-back -------------------------------------------
+        //
+        // 🔴 AFTER the local save, and it can never undo it. FreeITSM's own
+        // record is the thing the analyst asked to change; an address book that
+        // is unreachable, read-only or holding a newer value is a fact to report,
+        // not a reason to throw their edit away. So this is reported alongside a
+        // successful save and never turns one into a failure.
+        //
+        // Returns immediately for the overwhelming majority of saves — anybody
+        // who is not a contact from an address book with write-back switched on.
+        // ⚠️ Offers everything that was saved and lets cardDavPushPersonChanges()
+        // pick what a vCard can hold. NOT `$ownedFields` — that list is EMPTY
+        // once write-back is on, which is the point of it, so iterating it here
+        // would find nothing to push and the feature would silently do nothing.
+        $writeBack = ['attempted' => false];
+        if ($isManaged) {
+            $changed = [];
+            foreach (USER_PERSON_FIELDS as $f) {
+                if (array_key_exists($f, $data)) $changed[$f] = userPersonFieldValue($f, $data[$f]);
+            }
+            if ($changed) {
+                require_once '../../includes/carddav_write.php';
+                $writeBack = cardDavPushPersonChanges($conn, (int)$id, $changed, $mRow);
+            }
+        }
+
+        $response = ['success' => true, 'id' => $id, 'message' => 'User updated'];
+        // Only ever mentioned when a write was actually tried, so an ordinary
+        // save carries no new keys and nothing downstream has to learn about a
+        // feature it does not use.
+        if (!empty($writeBack['attempted'])) {
+            $response['address_book'] = [
+                'ok'       => (bool)$writeBack['ok'],
+                'conflict' => (bool)$writeBack['conflict'],
+                'changed'  => $writeBack['changed'],
+                'error'    => $writeBack['error'],
+            ];
+        }
+        echo json_encode($response);
     } else {
         $hash = $password !== '' ? password_hash($password, PASSWORD_BCRYPT) : null;
         // Not told a company → pre-filled from the address so a new install doesn't

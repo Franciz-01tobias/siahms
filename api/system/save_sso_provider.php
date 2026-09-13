@@ -110,7 +110,7 @@ $LDAP_EMPTY = [
     'attr_phone' => null, 'attr_mobile' => null, 'attr_employee_id' => null, 'attr_manager' => null,
 ];
 $CARDDAV_EMPTY = ['url' => null, 'username' => null, 'addressbook' => null, 'auth' => 'auto',
-                  'scope' => 'all', 'scope_value' => null];
+                  'scope' => 'all', 'scope_value' => null, 'write_back' => 0];
 
 $carddav          = $CARDDAV_EMPTY;
 $cardDavSecretIn  = '';
@@ -153,6 +153,11 @@ if ($protocol === 'carddav') {
         'scope'       => in_array(($data['carddav_scope'] ?? 'all'), ['all', 'group', 'category'], true)
                        ? $data['carddav_scope'] : 'all',
         'scope_value' => trim($data['carddav_scope_value'] ?? '') ?: null,
+        // 🔴 Whether edits in FreeITSM are pushed back to the card. Absent means
+        // OFF, not "leave as it was": the one setting on this screen that can
+        // modify the operator's own address book should never be left on by a
+        // request that simply forgot to mention it.
+        'write_back'  => !empty($data['carddav_write_back']) ? 1 : 0,
     ];
     $cardDavSecretIn = $data['carddav_password'] ?? '';
     // ⚠️ Both of these MUST be set, even though a CardDAV provider has neither
@@ -287,7 +292,7 @@ try {
              'ldap_attr_job_title', 'ldap_attr_department', 'ldap_attr_office',
              'ldap_attr_phone', 'ldap_attr_mobile', 'ldap_attr_employee_id', 'ldap_attr_manager',
              'carddav_url', 'carddav_username', 'carddav_addressbook', 'carddav_auth',
-             'carddav_scope', 'carddav_scope_value'];
+             'carddav_scope', 'carddav_scope_value', 'carddav_write_back'];
     $vals = [$displayName, $protocol, $issuerUrl, $clientId, $scopes,
              $enabled, $autoCreate, $requireVerified,
              $defaultModules, $sortOrder, $tenantId,
@@ -300,7 +305,7 @@ try {
              $ldap['attr_job_title'], $ldap['attr_department'], $ldap['attr_office'],
              $ldap['attr_phone'], $ldap['attr_mobile'], $ldap['attr_employee_id'], $ldap['attr_manager'],
              $carddav['url'], $carddav['username'], $carddav['addressbook'], $carddav['auth'],
-             $carddav['scope'], $carddav['scope_value']];
+             $carddav['scope'], $carddav['scope_value'], $carddav['write_back']];
 
     // A blank/masked secret on update = keep what is stored.
     $writeSecret        = !isMaskedNoChangeValue($secretInput);

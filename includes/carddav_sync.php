@@ -111,7 +111,12 @@ function cdsyncMapCard(string $vcard, string $href): ?array
         'username'    => '',
         'email'       => $email !== '' ? $email : null,
         'name'        => $name,
-        'job_title'   => trim(cardDavProperty($lines, 'TITLE')[0] ?? '') ?: null,
+        // ⚠️ Unescaped, like ORG and ADR below and unlike this line before 1.8.1.
+        // A job title of `Head\, Sales` on the card was arriving with the
+        // backslash still in it, because only two of the four text mappers
+        // handled escapes. See cardDavUnescapeText() for why that matters far
+        // more once the value can be written back.
+        'job_title'   => trim(cardDavUnescapeText(cardDavProperty($lines, 'TITLE')[0] ?? '')) ?: null,
         'department'  => $org['department'],
         'office'      => cdsyncLocality($lines),
         'phone'       => $phone,
@@ -139,9 +144,36 @@ function cdsyncMapCard(string $vcard, string $href): ?array
  */
 function cdsyncPhones(array $lines): array
 {
+    $at = cdsyncPhoneLines($lines);
+    $val = function (?int $i) use ($lines) {
+        if ($i === null) return null;
+        $colon = strpos($lines[$i], ':');
+        // A telephone number rarely contains an escape, but "+44 1234 567890\,
+        // ext 21" is legal and does happen, and an unescaped read here would
+        // both store the backslash and re-escape it on write-back.
+        return trim(cardDavUnescapeText(substr($lines[$i], $colon + 1)));
+    };
+    return [$val($at['phone']), $val($at['mobile'])];
+}
+
+/**
+ * WHICH lines the two numbers came from, as indexes into the unfolded card.
+ *
+ * 🔴 Split out from cdsyncPhones() so that reading and writing cannot disagree.
+ * A card routinely carries three or four `TEL` lines, and "the mobile" is not a
+ * property name but the result of a selection rule — first CELL, else first
+ * WORK, else the first untyped one. If the writer re-implemented that rule and
+ * got it even slightly different, editing somebody's mobile would overwrite
+ * their desk number and leave the mobile untouched, with no error anywhere.
+ * One selector, used by both ends, makes that class of bug unrepresentable.
+ *
+ * @return array ['phone' => int|null, 'mobile' => int|null] indexes into $lines
+ */
+function cdsyncPhoneLines(array $lines): array
+{
     $mobile = null; $work = null; $other = null;
 
-    foreach ($lines as $line) {
+    foreach ($lines as $i => $line) {
         $colon = strpos($line, ':');
         if ($colon === false) continue;
         $left = strtoupper(substr($line, 0, $colon));
@@ -150,20 +182,19 @@ function cdsyncPhones(array $lines): array
         if ($prop !== 'TEL') continue;
 
         $params = $semi === false ? '' : $left;
-        $value  = trim(substr($line, $colon + 1));
-        if ($value === '') continue;
+        if (trim(substr($line, $colon + 1)) === '') continue;
 
         if (strpos($params, 'CELL') !== false || strpos($params, 'MOBILE') !== false) {
-            if ($mobile === null) $mobile = $value;
+            if ($mobile === null) $mobile = $i;
         } elseif (strpos($params, 'WORK') !== false) {
-            if ($work === null) $work = $value;
+            if ($work === null) $work = $i;
         } elseif ($other === null) {
-            $other = $value;
+            $other = $i;
         }
     }
     // A work number wins; failing that any non-mobile number, because a single
     // untyped number on a card is the number somebody wants rung.
-    return [$work ?? $other, $mobile];
+    return ['phone' => $work ?? $other, 'mobile' => $mobile];
 }
 
 /**
@@ -180,7 +211,10 @@ function cdsyncOrg(array $lines): array
     if ($raw === '') return ['organisation' => null, 'department' => null];
     // An escaped semicolon is part of a value, not a separator.
     $parts = preg_split('/(?<!\\\\);/', $raw);
-    $clean = array_map(function ($s) { return trim(str_replace(['\\;', '\\,'], [';', ','], $s)); }, $parts);
+    // ⚠️ cardDavUnescapeText() rather than a local str_replace pair: the pair
+    // handled only `\;` and `\,`, so `\\` and `\n` came through as the literal
+    // two characters, and it got `\\,` wrong in the way that helper documents.
+    $clean = array_map(function ($s) { return trim(cardDavUnescapeText($s)); }, $parts);
     return [
         'organisation' => ($clean[0] ?? '') !== '' ? $clean[0] : null,
         'department'   => ($clean[1] ?? '') !== '' ? $clean[1] : null,
@@ -197,7 +231,7 @@ function cdsyncLocality(array $lines): ?string
 {
     foreach (cardDavProperty($lines, 'ADR') as $raw) {
         $parts = preg_split('/(?<!\\\\);/', $raw);
-        $town  = trim(str_replace(['\\;', '\\,'], [';', ','], $parts[3] ?? ''));
+        $town  = trim(cardDavUnescapeText($parts[3] ?? ''));
         if ($town !== '') return $town;
     }
     return null;
@@ -350,6 +384,11 @@ function cardDavSyncRun(PDO $conn, array $provider, string $mode = 'live', ?int 
             $p = cdsyncMapCard($card['vcard'], $card['href']);
             if ($p === null) continue;                       // group card, or no UID
             if (!cdsyncInScope($resolved, $p)) continue;
+            // Carried alongside the mapped person rather than inside the mapper,
+            // which stays a pure vCard-to-person function. The ETag is a fact
+            // about the HTTP resource, not about the human on the card — and it
+            // is what a later write-back sends as `If-Match`.
+            $p['carddav_etag'] = $card['etag'] ?? '';
             $people[] = $p;
         }
         $counts['seen'] = count($people);

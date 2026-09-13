@@ -179,6 +179,15 @@ return [
         // list since directory sync shipped, so there is one idiom rather than
         // two. Read with cardDavScopeList().
         'carddav_scope_value'    => 'TEXT NULL',
+        // 🔴 DEFAULT 0, and it must stay 0. This is the switch that turns a
+        // provably read-only integration into one that can modify somebody
+        // else's address book, and an upgrade that silently enabled it would be
+        // the worst kind of surprise. An operator who wants write-back says so.
+        //
+        // ⚠️ Only ever set after cardDavCanWrite() has confirmed the account
+        // actually holds the privilege — see the note there on why the server is
+        // asked rather than a list of known-good products kept.
+        'carddav_write_back'     => 'TINYINT(1) NOT NULL DEFAULT 0',
 
         'sync_last_run_datetime' => 'DATETIME NULL',
         'sync_last_count'        => 'INT NULL',
@@ -501,6 +510,22 @@ return [
         'email'               => 'VARCHAR(255) NULL',
         'linked_datetime'     => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'last_login_datetime' => 'DATETIME NULL',
+        // WHERE this person's record lives in the source, as opposed to WHAT the
+        // source calls them (`subject`, above). For LDAP it is the distinguished
+        // name; for CardDAV the URL of the individual .vcf. Named for the job
+        // rather than the protocol because `subject` already means two different
+        // things on this table depending on which provider owns the row.
+        //
+        // 🔴 Load-bearing for CardDAV write-back: without it, changing one
+        // contact's phone number means re-fetching the ENTIRE address book to
+        // find which card is theirs — slow, and a race against anybody else
+        // editing in between.
+        'source_ref'          => 'VARCHAR(1000) NULL',
+        // The version marker the source gave us for that record — a CardDAV
+        // ETag. Sent back as `If-Match` on a write, which is what makes the
+        // server refuse rather than clobber when the card changed underneath us.
+        // NULL for LDAP and OIDC, which have no equivalent.
+        'source_etag'         => 'VARCHAR(255) NULL',
     ],
 
     'user_verification_tokens' => [

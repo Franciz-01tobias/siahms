@@ -124,7 +124,7 @@ return [
         'security_keywords' => 'security password expiry lockout trusted device mfa 2fa login policy brute force',
         'sso_title'         => 'Authentication',
         'sso_desc'          => 'Choose how people sign in — single sign-on through an identity provider (OpenID Connect), or against your LDAP / Active Directory — and bring contacts in from a CardDAV address book.',
-        'sso_keywords'      => 'authentication auth sso single sign-on single sign on oidc openid connect saml identity provider idp keycloak entra azure ad okta google oauth federation login ldap active directory ad domain directory bind samba openldap carddav card dav addressbook vcard vcf sabredav sabre baikal nextcloud owncloud thunderbird contact sync import people',
+        'sso_keywords'      => 'authentication auth sso single sign-on single sign on oidc openid connect saml identity provider idp keycloak entra azure ad okta google oauth federation login ldap active directory ad domain directory bind samba openldap carddav card dav addressbook vcard vcf sabredav sabre baikal nextcloud owncloud thunderbird contact sync import people two-way two way write back writeback sync back update contacts push changes',
         'api_title'         => 'API',
         'api_desc'          => 'Create API keys with granular permissions, and explore the REST API with interactive documentation.',
         'api_keywords'      => 'api rest keys tokens integration webhook endpoints documentation swagger developer external',
@@ -1136,6 +1136,16 @@ return [
         'carddav_pick_summary_none'  => 'Nothing selected yet.',
 
         // --- running the import ---
+        // Write-back. The wording avoids "sync", which people read as "both ways,
+        // automatically, all the time" — this is one contact at a time, only when
+        // somebody edits it, and only for the details an address book can hold.
+        'carddav_write_heading'      => 'Sending changes back',
+        'carddav_write_hint'         => 'Normally FreeITSM only reads this address book. Switch this on and a change an analyst makes to a contact\'s job title, department, office, phone or mobile is also written to their card. Their employee ID and manager stay in FreeITSM, because a contact card has nowhere to keep them.',
+        'carddav_write_back'         => 'Write changes made in FreeITSM back to the address book',
+        'carddav_write_warning'      => 'Only the details listed above are changed, and only on the contact being edited. Everything else on the card — photo, notes, birthday, full address, groups — is left exactly as it is. If someone has changed the same detail in the address book since FreeITSM last imported, the change is refused rather than overwriting theirs.',
+        'carddav_write_check'        => 'Check permission',
+        'carddav_write_checking'     => 'Asking the server…',
+        'carddav_write_check_failed' => 'The permission check could not be completed.',
         'carddav_run_heading'        => 'Bring the contacts in',
         'carddav_run_hint'           => 'Preview reads the address book and tells you exactly what it would do, without changing anything. Run it does the same thing for real.',
         'carddav_preview'            => 'Preview',

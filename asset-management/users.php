@@ -476,15 +476,29 @@ document.getElementById('auModal').addEventListener('click', e => {
     if (e.target.id === 'auModal') closeModal();
 });
 
-// Fields a directory owns. On a managed record these are shown, disabled, with
-// an explanation — rather than editable and then silently reverted by the next
-// sync, which is how somebody concludes FreeITSM lost their change.
-const DIRECTORY_OWNED = ['job_title','department','office','phone','mobile','employee_id','manager_id'];
+// Every person field this form can post. The list of which ones a DIRECTORY owns
+// is NOT here: it arrives per person as `managed_fields`, because the answer
+// depends on the protocol. LDAP is authoritative for all seven; an address book
+// has no payroll number and no reporting line, so a CardDAV contact owns five and
+// the other two stay ours to fill in.
+//
+// 🔴 This used to be a hardcoded DIRECTORY_OWNED literal, and it was wrong from
+// the day CardDAV shipped — greying out two fields that no import would ever
+// populate. includes/users.php had warned that duplicating the list across
+// writers would make it disagree with itself; resolving it server-side is what
+// stops that happening again.
+const PERSON_FIELDS = ['job_title','department','office','phone','mobile','employee_id','manager_id'];
+
+// Fields a directory owns for THIS person. Shown disabled with an explanation
+// rather than editable and then silently reverted by the next sync, which is how
+// somebody concludes FreeITSM lost their change.
+const ownedFields = p => (p && Array.isArray(p.managed_fields)) ? p.managed_fields : [];
 
 function openPerson(id) {
     const p = id ? (personById(id) || {}) : {};
     const managed = !!p.is_managed;
-    const dis = f => (managed && DIRECTORY_OWNED.includes(f)) ? ' disabled' : '';
+    const owned = ownedFields(p);
+    const dis = f => owned.includes(f) ? ' disabled' : '';
 
     // Manager options come from the people already loaded. Somebody cannot be
     // their own manager, so they are left out of their own list.
@@ -518,11 +532,11 @@ function openPerson(id) {
                         + esc(window.t('asset-management.users.managed_note')) + '</div>' : ''}
             <div class="au-form-err" id="pfErr"></div>
         </div>`,
-        () => savePerson(id, managed)
+        () => savePerson(id, owned)
     );
 }
 
-async function savePerson(id, managed) {
+async function savePerson(id, owned) {
     const err = document.getElementById('pfErr');
     err.textContent = '';
 
@@ -534,8 +548,8 @@ async function savePerson(id, managed) {
     if (id) body.id = id;
     // Only send what this record is allowed to change. Sending a disabled field
     // would be rejected by the API anyway — not sending it is the honest request.
-    for (const f of ['job_title','department','office','phone','mobile','employee_id','manager_id']) {
-        if (managed && DIRECTORY_OWNED.includes(f)) continue;
+    for (const f of PERSON_FIELDS) {
+        if (owned.includes(f)) continue;
         body[f] = val(f);
     }
 

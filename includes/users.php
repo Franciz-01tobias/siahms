@@ -56,6 +56,64 @@ const USER_DIRECTORY_OWNED = [
 ];
 
 /**
+ * Of USER_DIRECTORY_OWNED, the ones a CARDDAV address book is the source of
+ * truth for.
+ *
+ * 🔴 The full list was wrong for CardDAV and shipped that way in 1.8.0. The
+ * constant above says, in its own doc comment, "keep in step with what the sync
+ * actually maps" — and `cdsyncMapCard()` returns a hard `null` for `employee_id`
+ * and `manager_dn`, because a vCard has nowhere to keep a payroll number and
+ * almost nothing in the wild writes `RELATED;TYPE=manager`. So an address-book
+ * contact had those two fields greyed out and refused on save, for data no
+ * import will ever supply: permanently unfillable, while the help page said the
+ * import "leaves them alone" and the code then contradicted it.
+ *
+ * ⚠️ This is why the question is per-PROTOCOL, not per-record. `is_managed` says
+ * somebody else owns this person; it does not say who, or which parts of them.
+ *
+ * @see cdsyncMapCard() in includes/carddav_sync.php — the other end of this list
+ */
+const USER_CARDDAV_OWNED = [
+    'job_title',    // TITLE
+    'department',   // ORG, second component
+    'office',       // ADR, the locality
+    'phone',        // TEL without a CELL type
+    'mobile',       // TEL;TYPE=CELL
+];
+
+/**
+ * Which person fields are READ-ONLY on a managed record, given the protocol of
+ * the provider that manages it and whether that provider writes changes back.
+ *
+ * 🔴 THE SECOND ARGUMENT IS THE WHOLE POINT OF WRITE-BACK, and leaving it out is
+ * a bug that hides well. The reason these fields are refused is that the next
+ * import would overwrite anything typed here, so an edit that silently reverts
+ * an hour later is worse than one that says no. **An address book with write-back
+ * switched on does not have that problem**: the edit is sent to the card, so the
+ * next import reads back the value the analyst just typed. The justification for
+ * refusing disappears, and the refusal has to disappear with it — otherwise the
+ * feature is unreachable, because the save is rejected before anything is pushed.
+ *
+ * An unrecognised or absent protocol falls back to the FULL list, which is the
+ * safe direction: a transport this function has not been taught about is assumed
+ * to own everything, so a future importer cannot silently leave fields editable
+ * that it then overwrites on its next run.
+ *
+ * @param ?string $protocol  `auth_providers.protocol` — 'ldap', 'oidc', 'carddav'
+ * @param bool    $writeBack `auth_providers.carddav_write_back`; meaningless for
+ *                           any other protocol and ignored there
+ */
+function userDirectoryOwnedFields(?string $protocol, bool $writeBack = false): array
+{
+    if (strtolower(trim((string)$protocol)) !== 'carddav') {
+        return USER_DIRECTORY_OWNED;
+    }
+    // Write-back on: nothing is read-only. The five it holds are editable
+    // because they are sent back, and the other two were never its business.
+    return $writeBack ? [] : USER_CARDDAV_OWNED;
+}
+
+/**
  * Of those, the ones a person may change about THEMSELVES in the self-service
  * portal.
  *

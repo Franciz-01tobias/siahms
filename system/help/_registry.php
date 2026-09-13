@@ -160,6 +160,7 @@ function getHelpTopics() {
                 ['id' => 'carddav-setup',  'label' => 'Connecting an address book'],
                 ['id' => 'carddav-scope',  'label' => 'Choosing which contacts'],
                 ['id' => 'carddav-fields', 'label' => 'What gets imported'],
+                ['id' => 'carddav-write',  'label' => 'Sending changes back'],
                 ['id' => 'carddav-safety', 'label' => 'Safety, leavers & scheduling'],
                 ['id' => 'carddav-faq',    'label' => 'CardDAV troubleshooting'],
                 ['id' => 'experience', 'label' => 'What people see'],
@@ -176,7 +177,9 @@ function getHelpTopics() {
                      . " no such object cannot log in can't sign in invalid credentials directory"
                      . ' carddav card dav addressbook address book vcard vcf contacts contact sync import people'
                      . ' baikal sabredav sabre nextcloud owncloud radicale thunderbird apple contacts groups'
-                     . ' categories tags kind group member digest basic phone number job title department office',
+                     . ' categories tags kind group member digest basic phone number job title department office'
+                     . ' write back writeback two-way two way send changes back update the address book'
+                     . ' read-only permission privilege etag conflict changed since',
         ],
         'api' => [
             'hero' => 'API',

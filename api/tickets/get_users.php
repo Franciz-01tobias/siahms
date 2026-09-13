@@ -7,6 +7,7 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
+require_once '../../includes/users.php';   // userDirectoryOwnedFields()
 
 header('Content-Type: application/json');
 
@@ -75,6 +76,14 @@ try {
                 -- unmanaged, post them, and the save would fail with an error the
                 -- analyst did nothing to deserve.
                 u.is_managed,
+                -- WHICH directory, not just whether. An address book owns a job
+                -- title and a phone number but has nowhere to keep a payroll
+                -- number or a reporting line, so those two stay editable on a
+                -- CardDAV contact. The client is told the resulting field list
+                -- rather than deriving it — see the note by `managed_fields`
+                -- below and userDirectoryOwnedFields() in includes/users.php.
+                ap.protocol AS managed_protocol,
+                ap.carddav_write_back AS managed_write_back,
                 -- Deliberately NOT a join to users for the manager's name: manager_id
                 -- is not tenant-scoped, so `LEFT JOIN users mgr` would hand an analyst
                 -- scoped to one company the name of somebody in another. The name is
@@ -82,7 +91,8 @@ try {
                 -- a manager you cannot see reads as blank rather than leaking.
                 (SELECT COUNT(*) FROM tickets t WHERE t.user_id = u.id{$ttSql}) as ticket_count
             FROM users u
-            LEFT JOIN tenants ten ON ten.id = u.tenant_id";
+            LEFT JOIN tenants ten ON ten.id = u.tenant_id
+            LEFT JOIN auth_providers ap ON ap.id = u.auth_provider_id";
 
     $params = $ttParams;
 
@@ -117,6 +127,25 @@ try {
     $stmt = $conn->prepare($sql);
     $stmt->execute($params);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // 🔑 The read-only field list is RESOLVED HERE and sent, never derived by the
+    // client. It was previously retyped as a JavaScript literal in two screens,
+    // and includes/users.php warned in writing that a list duplicated across
+    // writers "will disagree with itself within a month" — which is exactly what
+    // then happened when CardDAV arrived and owned five of the seven rather than
+    // all of them. One function, one answer, every consumer.
+    //
+    // Empty array on an unmanaged person, so a client can use it directly without
+    // first testing is_managed.
+    foreach ($users as &$u) {
+        $u['managed_fields'] = ((int)($u['is_managed'] ?? 0) === 1)
+            ? array_values(userDirectoryOwnedFields(
+                  $u['managed_protocol'] ?? null,
+                  (int)($u['managed_write_back'] ?? 0) === 1
+              ))
+            : [];
+    }
+    unset($u);
 
     echo json_encode([
         'success' => true,

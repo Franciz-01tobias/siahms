@@ -297,6 +297,27 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
                 </div>
                 <div class="pick-summary" id="pickSummary"></div>
             </div>
+            <?php /* 🔴 The one control on this page that can CHANGE the operator's
+                     address book. Everything above it only reads. It sits below
+                     the scope choices deliberately — you decide which contacts
+                     first, and only then whether FreeITSM may write to them —
+                     and it carries its own warning rather than a hint, because
+                     "hint" styling is for guidance and this is a consequence. */ ?>
+            <div class="fld" style="border-top:1px solid var(--border-soft,#f0f0f0); padding-top:18px;">
+                <label><?php echo htmlspecialchars(t('system.sso.carddav_write_heading')); ?></label>
+                <div class="hint"><?php echo htmlspecialchars(t('system.sso.carddav_write_hint')); ?></div>
+                <label class="chk" style="display:flex; gap:8px; align-items:flex-start; margin-top:8px;">
+                    <input type="checkbox" id="fWriteBack" style="margin-top:3px;"<?php echo !empty($p['carddav_write_back']) ? ' checked' : ''; ?>>
+                    <span><?php echo htmlspecialchars(t('system.sso.carddav_write_back')); ?></span>
+                </label>
+                <div class="hint" id="writeBackWarn" style="margin-top:8px;"<?php echo !empty($p['carddav_write_back']) ? '' : ' hidden'; ?>>
+                    <?php echo htmlspecialchars(t('system.sso.carddav_write_warning')); ?>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                    <button class="btn btn-test" id="checkWriteBtn" type="button"><?php echo htmlspecialchars(t('system.sso.carddav_write_check')); ?></button>
+                </div>
+                <div class="result" id="writeResult"></div>
+            </div>
             <?php /* Running it lives on the Contacts tab, next to the choices it
                      acts on — not on a tab of its own, and not next to Save,
                      where it would read as part of saving. */ ?>
@@ -649,6 +670,7 @@ $('saveBtn').addEventListener('click', async function () {
                 carddav_scope: scope,
                 // Newline-separated, the same convention as sync_ou_includes.
                 carddav_scope_value: scope === 'all' ? '' : picked.join('\n'),
+                carddav_write_back: $('fWriteBack').checked ? 1 : 0,
                 enabled: 1
             })
         });
@@ -656,6 +678,44 @@ $('saveBtn').addEventListener('click', async function () {
         if (d.success) showToast(window.t('system.sso.provider_saved'), 'success');
         else showToast(window.t('system.sso.error', { error: d.error }), 'error');
     } catch (e) { showToast(window.t('system.sso.save_failed'), 'error'); }
+    this.disabled = false;
+});
+
+/* The warning only appears once the box is actually ticked. Shown permanently it
+   becomes furniture and stops being read; shown on tick it is a response to
+   something the operator just did. */
+$('fWriteBack').addEventListener('change', function () {
+    $('writeBackWarn').hidden = !this.checked;
+});
+
+/* 🔑 Ask the SERVER whether this account may write, rather than keeping a list
+   of address-book products FreeITSM claims to support. Writing is plain PUT from
+   the same standard as the reads, so what actually varies between servers is
+   permission — and a shared or subscribed address book is commonly read-only. */
+$('checkWriteBtn').addEventListener('click', async function () {
+    const box = $('writeResult');
+    this.disabled = true;
+    box.className = 'result';
+    box.textContent = window.t('system.sso.carddav_write_checking');
+    try {
+        const r = await fetch(API + 'system/test_carddav_write.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: PROVIDER_ID,
+                carddav_url: $('fUrl').value.trim(),
+                carddav_username: $('fUsername').value.trim(),
+                carddav_password: $('fPassword').value,
+                carddav_auth: $('fAuth').value,
+                carddav_addressbook: $('fBook').value
+            })
+        });
+        const d = await r.json();
+        box.className = 'result ' + (d.success && d.writable ? 'ok' : 'err');
+        box.textContent = d.message || d.error || '';
+    } catch (e) {
+        box.className = 'result err';
+        box.textContent = window.t('system.sso.carddav_write_check_failed');
+    }
     this.disabled = false;
 });
 

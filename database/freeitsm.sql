@@ -181,6 +181,13 @@ CREATE TABLE IF NOT EXISTS `auth_providers` (
     -- AS MANY as the operator ticks rather than one. Same convention as
     -- `sync_ou_includes` above. NULL when scope = 'all'.
     `carddav_scope_value`    TEXT NULL,
+    -- Whether edits made in FreeITSM are written back to the address book.
+    -- DEFAULT 0 and it must stay 0: this is the switch between a provably
+    -- read-only integration and one that can modify the operator's own contacts,
+    -- and an upgrade that turned it on by itself would be the worst kind of
+    -- surprise. Only set after the server has confirmed the account holds the
+    -- write privilege.
+    `carddav_write_back`     TINYINT(1) NOT NULL DEFAULT 0,
 
     `sync_last_run_datetime` DATETIME NULL,
     -- People found by the last SUCCESSFUL run. The number the brake compares
@@ -737,6 +744,15 @@ CREATE TABLE IF NOT EXISTS `user_sso_identities` (
     `email`               VARCHAR(255) NULL,
     `linked_datetime`     DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
     `last_login_datetime` DATETIME NULL,
+    -- WHERE the record lives in the source, as opposed to what the source calls
+    -- them (`subject`): an LDAP distinguished name, or the URL of a CardDAV
+    -- .vcf. Required for CardDAV write-back, which would otherwise have to
+    -- re-fetch a whole address book to locate one contact's card.
+    `source_ref`          VARCHAR(1000) NULL,
+    -- The source's version marker for that record (a CardDAV ETag). Sent back as
+    -- If-Match on a write so the server refuses rather than overwrites when the
+    -- card has changed since we read it. NULL for LDAP and OIDC.
+    `source_etag`         VARCHAR(255) NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_user_sso_provider_subject` (`provider_id`, `subject`),
     UNIQUE KEY `uq_user_sso_provider_user` (`provider_id`, `user_id`),
