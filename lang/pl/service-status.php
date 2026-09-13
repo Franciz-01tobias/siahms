@@ -27,7 +27,7 @@ return [
         'history_loading' => 'Obliczanie…',
         'history_uptime' => 'dostępność',
         'history_today' => 'dziś',
-        'history_days_ago' => ' dni temu',
+        'history_days_ago' => '{n} dni temu',
         'history_none' => 'Brak incydentów w tym okresie.',
         'history_ongoing' => 'Trwa',
         'history_excluded' => '(nie liczy się jako przestój)',

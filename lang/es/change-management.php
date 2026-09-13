@@ -1,8 +1,15 @@
 <?php
 /**
- * Español (es) — Change-management module strings.
- * Missing keys fall back to lang/en/change-management.php per-key.
+ * FreeITSM — change-management strings (es).
+ *
+ * Keys mirror lang/en/change-management.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php es
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Gestión de cambios',
     'nav' => [
@@ -45,6 +52,17 @@ return [
         'edit' => 'Editar',
         'delete' => 'Eliminar',
         'not_set' => 'Sin definir',
+        'linked_incidents' => 'Incidencias vinculadas',
+        'link_incident' => 'Vincular incidencia',
+        'open_incident' => 'Abrir incidencia',
+        'unlink' => 'Desvincular',
+        'no_incidents' => 'Todavía no hay incidencias vinculadas.',
+        'no_linkable' => 'No hay incidencias disponibles para vincular.',
+        'loading' => 'Cargando…',
+        'link_search_placeholder' => 'Buscar incidencias por número o asunto…',
+        'linked_incident' => 'incidencia vinculada',
+        'unlinked_incident' => 'incidencia desvinculada',
+        'unlink_incident_confirm' => '¿Quitar el vínculo con esta incidencia? La incidencia en sí no se elimina.',
         'impact' => 'Impacto',
         'category' => 'Categoría',
         'requester' => 'Solicitante',
@@ -298,6 +316,9 @@ return [
         'tab_priorities' => 'Prioridades',
         'tab_types' => 'Tipos',
         'tab_impacts' => 'Impactos',
+        'left_panel_intro' => 'Elige cómo se comporta la barra lateral en la lista de cambios. Esta preferencia se guarda en tu cuenta.',
+        'left_panel_always_desc' => 'Mantén la barra lateral siempre fija y abierta.',
+        'left_panel_hover_desc' => 'Reduce la barra lateral a una franja fina que se expande al pasar el cursor por encima, dejando más espacio para la lista.',
         'fields_heading' => 'Campos del formulario',
         'fields_intro' => 'Arrastra para reordenar secciones y campos, arrastra campos entre secciones, haz clic en el nombre de una sección para renombrarla. Las secciones sin campos visibles se ocultan en el formulario de cambio. Los cambios se guardan automáticamente.',
         'add_section' => '+ Añadir sección',
@@ -394,6 +415,29 @@ return [
         'deleted' => 'Eliminado',
         'save_failed' => 'No se pudo guardar',
         'delete_failed' => 'No se pudo eliminar',
+        'incident_linked' => 'Incidencia vinculada',
+        'incident_unlinked' => 'Incidencia desvinculada',
+        'link_failed' => 'No se pudo vincular la incidencia',
+        'unlink_failed' => 'No se pudo desvincular la incidencia',
+        'load_incidents_failed' => 'No se pudieron cargar las incidencias',
+    ],
+    'context' => [
+        'set_status' => 'Establecer estado',
+        'set_priority' => 'Establecer prioridad',
+        'set_type' => 'Establecer tipo',
+        'set_impact' => 'Establecer impacto',
+        'move_company' => 'Mover a empresa',
+        'no_statuses' => 'Ningún estado configurado',
+        'no_priorities' => 'Ninguna prioridad configurada',
+        'no_types' => 'Ningún tipo configurado',
+        'no_impacts' => 'Ningún impacto configurado',
+        'no_companies' => 'Ninguna empresa disponible',
+        'status_set' => 'Estado actualizado',
+        'priority_set' => 'Prioridad actualizada',
+        'type_set' => 'Tipo actualizado',
+        'impact_set' => 'Impacto actualizado',
+        'update_error' => 'No se pudo actualizar el cambio',
+        'move_error' => 'No se pudo mover el cambio',
     ],
     'help' => [
         'guide' => 'Guía',
@@ -443,6 +487,7 @@ return [
         'rec_5' => '<strong>Evalúa el riesgo</strong> &mdash; elige Probabilidad (1&ndash;5) e Impacto (1&ndash;5). La puntuación de riesgo se calcula automáticamente. Una matriz codificada por colores muestra dónde se sitúa.',
         'rec_6' => '<strong>Redacta los planes</strong> &mdash; usa las pestañas para rellenar Descripción, Motivo, Evaluación de riesgos, Plan de pruebas y Plan de reversión.',
         'rec_7' => '<strong>Guarda</strong> como Borrador. Puedes volver y editar en cualquier momento antes de enviarlo para aprobación.',
+        'rec_preview_note' => 'Cada incidencia vinculada a un cambio lleva un pequeño <strong>&#9432;</strong> en su columna de acciones. Haz clic en él para ver una tarjeta con el estado del ticket, la prioridad, con quién está y quién lo creó &mdash; suficiente para comprobar que las incidencias asociadas a un cambio son realmente las que aborda, sin tener que abrir cada una por turno. La tarjeta es de solo lectura, y <strong>Abrir</strong> te lleva al propio ticket.',
         'cab_heading' => 'Revisión del CAB &mdash; cuando necesitas varios aprobadores',
         'cab_intro' => 'Para cambios de mayor riesgo o impacto, un único aprobador puede no ser suficiente. El <strong>Comité Asesor de Cambios (CAB)</strong> te permite reunir un panel de revisores que votan cada uno sobre el cambio.',
         'cab_setup_heading' => 'Configurar el comité',

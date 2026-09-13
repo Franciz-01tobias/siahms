@@ -33,7 +33,11 @@ return [
         'history_loading'     => 'Working it out…',
         'history_uptime'      => 'uptime',
         'history_today'       => 'today',
-        'history_days_ago'    => ' days ago',
+        // 🔴 TRANSLATORS: keep {n}, and put it where YOUR language wants it.
+        // This used to be the bare suffix ' days ago', glued onto the number in
+        // JS. That forced every language into English word order - Spanish
+        // wants "hace 30 días" and could only produce "30 días atrás".
+        'history_days_ago'    => '{n} days ago',
         'history_none'        => 'No incidents in this period.',
         'history_ongoing'     => 'Ongoing',
         'history_excluded'     => '(not counted as downtime)',

@@ -28,7 +28,7 @@ return [
         'history_loading'   => 'Wird berechnet …',
         'history_uptime'    => 'Verfügbarkeit',
         'history_today'     => 'heute',
-        'history_days_ago'  => ' Tage her',
+        'history_days_ago'  => 'vor {n} Tagen',
         'history_none'      => 'Keine Vorfälle in diesem Zeitraum.',
         'history_ongoing'   => 'Andauernd',
         'history_excluded'  => '(zählt nicht als Ausfallzeit)',

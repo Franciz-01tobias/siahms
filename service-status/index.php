@@ -776,7 +776,7 @@ $translationNamespaces = ['common', 'service-status'];
                 </div>
                 <div class="svc-strip">${strip}</div>
                 <div class="svc-strip-ends">
-                    <span>${s.window_days}${escapeHtml(window.t('service-status.board.history_days_ago'))}</span>
+                    <span>${escapeHtml(window.t('service-status.board.history_days_ago', { n: s.window_days }))}</span>
                     <span>${escapeHtml(window.t('service-status.board.history_today'))}</span>
                 </div>
                 <table class="svc-history-table"><tbody>${rows}</tbody></table>

@@ -23,7 +23,7 @@ return [
         'history_loading' => 'Beregner…',
         'history_uptime' => 'oppetid',
         'history_today' => 'i dag',
-        'history_days_ago' => ' dage siden',
+        'history_days_ago' => 'for {n} dage siden',
         'history_none' => 'Ingen hændelser i denne periode.',
         'history_ongoing' => 'I gang',
         'history_excluded' => '(tæller ikke som nedetid)',

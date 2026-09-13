@@ -27,7 +27,7 @@ return [
         'history_loading' => 'गणना की जा रही है...',
         'history_uptime' => 'अपटाइम',
         'history_today' => 'आज',
-        'history_days_ago' => ' दिन पहले',
+        'history_days_ago' => '{n} दिन पहले',
         'history_none' => 'इस अवधि में कोई घटना नहीं।',
         'history_ongoing' => 'जारी',
         'history_excluded' => '(डाउनटाइम के रूप में नहीं गिना जाता)',

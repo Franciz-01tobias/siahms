@@ -27,7 +27,7 @@ return [
         'history_loading' => 'ગણતરી થઈ રહી છે…',
         'history_uptime' => 'અપટાઇમ',
         'history_today' => 'આજે',
-        'history_days_ago' => ' દિવસ પહેલા',
+        'history_days_ago' => '{n} દિવસ પહેલા',
         'history_none' => 'આ સમયગાળામાં કોઈ ઘટના નથી.',
         'history_ongoing' => 'ચાલુ',
         'history_excluded' => '(ડાઉનટાઇમ તરીકે ગણાતું નથી)',
