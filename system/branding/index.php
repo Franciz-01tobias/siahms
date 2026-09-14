@@ -452,7 +452,9 @@ $translationNamespaces = ['common', 'system'];
                             </label>
                             <div data-when="image">
                                 <label class="dlabel"><?php echo htmlspecialchars(t('system.branding.login_bg_upload')); ?>
-                                    <input type="file" id="ln_bg_file" name="login_bg" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
+                                    <?php foreach (array_keys(brandingScopes()) as $sc): ?>
+                                        <input type="file" id="ln_<?php echo $sc; ?>_bg_file" name="<?php echo $sc; ?>_bg" class="ln-bg-input" data-scope="<?php echo $sc; ?>" accept=".png,.jpg,.jpeg,image/png,image/jpeg" style="display: <?php echo $sc === 'login' ? 'block' : 'none'; ?>;">
+                                    <?php endforeach; ?>
                                 </label>
                                 <label class="dlabel"><?php echo htmlspecialchars(t('system.branding.login_dim')); ?> <output id="ln_dim_out"></output>
                                     <input type="range" id="ln_bg_dim" min="0" max="80" step="5">
@@ -915,6 +917,9 @@ $translationNamespaces = ['common', 'system'];
             document.getElementById('ln_open_tab').href = frame.src;
 
             lnWrite(LN_ALL[scope]);
+            document.querySelectorAll('.ln-bg-input').forEach(input => {
+                input.style.display = (input.dataset.scope === scope) ? 'block' : 'none';
+            });
         }
 
         document.querySelectorAll('.scope').forEach(b =>
@@ -948,8 +953,12 @@ $translationNamespaces = ['common', 'system'];
         for (const sc of LN_SCOPES) {
             for (const f in LN_FIELDSET[sc]) fd.append(sc + '_' + f, LN_ALL[sc][f]);
         }
-        const lnBg = document.getElementById('ln_bg_file');
-        if (lnBg && lnBg.files[0]) fd.append('login_bg', lnBg.files[0]);
+        for (const sc of LN_SCOPES) {
+            const bgInput = document.getElementById('ln_' + sc + '_bg_file');
+            if (bgInput && bgInput.files && bgInput.files[0]) {
+                fd.append(sc + '_bg', bgInput.files[0]);
+            }
+        }
         fd.append('header_left',   document.getElementById('headerLeft').value);
         fd.append('header_center', document.getElementById('headerCenter').value);
         fd.append('header_right',  document.getElementById('headerRight').value);
