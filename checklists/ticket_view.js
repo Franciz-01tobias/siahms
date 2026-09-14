@@ -114,7 +114,7 @@ function renderChecklistToolbarButton(ticketId) {
 
     btn.innerHTML = `
         <span class="action-btn-icon">✅</span>
-        <span>SOP Checklist${badgeText}</span>
+        <span>SOP checklist${badgeText}</span>
     `;
 }
 
@@ -134,10 +134,10 @@ function renderTicketChecklistsInline(ticketId) {
         host.innerHTML = `
             <div id="sopEmptyStateHost_${ticketId}" style="background: var(--surface, #ffffff); border: 1px dashed var(--border, #cbd5e1); border-radius: 6px; padding: 8px 14px; margin: -15px 0 12px 0; display: flex; justify-content: space-between; align-items: center;">
                 <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                    <strong>SOP Checklist:</strong> None attached to this ticket.
+                    <strong>SOP checklist:</strong> None attached to this ticket.
                 </div>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
-                    + Attach SOP
+                    Attach
                 </button>
             </div>
         `;
@@ -150,14 +150,14 @@ function renderTicketChecklistsInline(ticketId) {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">✅</span>
-                    <strong style="font-size: 13px; color: var(--text, #1e293b);">SOP Next Steps</strong>
+                    <strong style="font-size: 13px; color: var(--text, #1e293b);">SOP next steps</strong>
                 </div>
                 <div style="display: flex; gap: 6px;">
                     <button type="button" onclick="openChecklistModal(${ticketId})" title="Pop out full checklist" style="padding: 3px 8px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333); display: flex; align-items: center; gap: 4px;">
                         <span>⤢</span> Pop out
                     </button>
                     <button type="button" onclick="openAttachChecklistModal(${ticketId})" style="padding: 3px 8px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
-                        + Attach
+                        Attach
                     </button>
                 </div>
             </div>
@@ -235,7 +235,7 @@ function openChecklistModal(ticketId) {
             <div style="text-align: center; padding: 30px; color: var(--text-muted, #64748b);">
                 <p style="margin-bottom: 12px;">No SOP checklists are attached to this ticket.</p>
                 <button type="button" class="btn btn-primary" onclick="closeChecklistModal(); openAttachChecklistModal(${ticketId});" style="padding: 6px 14px; font-size: 13px; cursor: pointer; border-radius: 4px; background: var(--primary, #2563eb); color: #fff; border: none;">
-                    + Attach an SOP Checklist
+                    Attach
                 </button>
             </div>
         `;
@@ -300,13 +300,13 @@ function openChecklistModal(ticketId) {
             <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 18px;">✅</span>
-                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text, #1e293b);">SOP Checklists for Ticket #${ticketId}</h3>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text, #1e293b);">SOP checklists for ticket #${ticketId}</h3>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <button type="button" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
-                        + Attach Another SOP
+                        Attach
                     </button>
-                    <button type="button" onclick="closeChecklistModal()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-muted, #64748b); line-height: 1;">&times;</button>
+                    
                 </div>
             </div>
             <div style="padding: 16px 18px; overflow-y: auto; flex: 1;">
@@ -363,7 +363,7 @@ function promptDataCapture(ticketId, item, checklistTitle, reopenPopout) {
         <div style="background: var(--surface, #ffffff); border-radius: 8px; width: 90%; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b); padding: 18px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h4 style="margin: 0; font-size: 15px; font-weight: 600;">📝 Step Data Capture</h4>
-                <button type="button" onclick="closeDataCaptureModal()" style="border: none; background: none; font-size: 18px; cursor: pointer; color: #64748b;">&times;</button>
+                
             </div>
             <p style="font-size: 12px; color: var(--text-muted, #64748b); margin: 0 0 10px 0;">
                 Step: <strong>${escapeHtml(item.title)}</strong>
@@ -536,7 +536,7 @@ async function openAttachChecklistModal(ticketId) {
         <div style="background: var(--surface, #ffffff); border-radius: 8px; width: 90%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b);">
             <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
                 <h4 style="margin: 0; font-size: 15px; font-weight: 600;">Attach SOP Checklist</h4>
-                <button type="button" onclick="closeAttachModal()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-muted, #64748b);">&times;</button>
+                
             </div>
             <div style="padding: 12px 18px 6px 18px;">
                 <input type="text" id="chkSearchInput" onkeyup="filterTemplatesList(${ticketId})" placeholder="Search standard procedures..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333);">
@@ -728,7 +728,7 @@ async function checkAndShowSopSuggestion(ticketId) {
                                 ${targetIcon}${conf}%
                             </span>
                             <button type="button" onclick="attachSopToTicket(${ticketId}, ${s.id})" style="background: #0d9488; color: #fff; border: none; padding: 4px 10px; font-size: 11px; border-radius: 4px; font-weight: 600; cursor: pointer; white-space: nowrap;">
-                                + Attach This SOP
+                                Attach
                             </button>
                         </div>
                     </div>
@@ -760,10 +760,10 @@ async function checkAndShowSopSuggestion(ticketId) {
         } else {
             hostDiv.innerHTML = `
                 <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                    <strong>SOP Checklist:</strong> None attached to this ticket. <span style="font-style: italic; opacity: 0.85;">(No suggestions found)</span>
+                    <strong>SOP checklist:</strong> None attached to this ticket. <span style="font-style: italic; opacity: 0.85;">(No suggestions found)</span>
                 </div>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
-                    + Attach SOP
+                    Attach
                 </button>
             `;
         }
@@ -781,10 +781,10 @@ function dismissSopSuggestion(ticketId) {
         hostDiv.style.padding = '8px 14px';
         hostDiv.innerHTML = `
             <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                <strong>SOP Checklist:</strong> None attached to this ticket.
+                <strong>SOP checklist:</strong> None attached to this ticket.
             </div>
             <button type="button" class="btn btn-sm btn-secondary" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
-                + Attach SOP
+                Attach
             </button>
         `;
     }
