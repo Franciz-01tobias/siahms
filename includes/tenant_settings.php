@@ -159,6 +159,29 @@ const SETTING_TICKET_CATEGORY         = 'ticket_category_enabled';
 const SETTING_TICKET_CLOSURE_CATEGORY = 'ticket_closure_category_enabled';
 const SETTING_TICKET_RESOLUTION_CODE  = 'ticket_resolution_code_enabled';
 
+// ---------------------------------------------------------------------------
+// SOP checklists: what happens when a ticket with outstanding mandatory steps
+// is closed (PR #141).
+//
+// 🔑 A setting rather than a decision taken for everybody. An MSP running ISO
+// procedures for one client and best-effort support for another needs both
+// answers on one install, which is why it resolves per company over an
+// install-wide default like the classification switches above.
+//
+// WARN is the default, matching what tasks already do on the same screen:
+// "closing a ticket that still has unfinished tasks WARNS, it never blocks …
+// a warning that cannot be shown must not become a block that cannot be
+// cleared." Either way the skipped steps are recorded on the ticket - the
+// setting decides whether the analyst may proceed, never whether it is logged.
+const SETTING_TICKET_CHECKLIST_CLOSURE = 'ticket_checklist_closure_mode';
+
+/** 'warn' (default) or 'block' — how closure with outstanding mandatory steps behaves. */
+function ticketChecklistClosureMode(PDO $conn, ?int $tenantId): string
+{
+    $v = tenantSetting($conn, $tenantId, SETTING_TICKET_CHECKLIST_CLOSURE, 'warn');
+    return $v === 'block' ? 'block' : 'warn';
+}
+
 /** Should the "reported as" category field show on a ticket for this company? */
 function ticketCategoryOn(PDO $conn, ?int $tenantId): bool
 {

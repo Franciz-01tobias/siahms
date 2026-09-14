@@ -45,6 +45,7 @@
  */
 
 require_once __DIR__ . '/../service_context.php';
+require_once __DIR__ . '/../tenant_settings.php';   // ticketChecklistClosureMode()
 
 class ChecklistsService
 {
@@ -85,6 +86,33 @@ class ChecklistsService
      *
      * @return array<int, array{checklist: string, step: string, item_id: int}>
      */
+    /**
+     * Refuse the closure outright if the operator chose 'block'.
+     *
+     * 🔴 MUST be called BEFORE the status is written. Called after, a 'block'
+     * install would throw having already closed the ticket - the caller sees an
+     * error and the database disagrees with it.
+     *
+     * Tickets → Settings → Checklists decides. Enforced here rather than in the
+     * browser so the REST API, bulk actions and automation obey whichever the
+     * operator chose; that is the whole reason the rule left inbox.js.
+     */
+    public static function assertClosureAllowed(PDO $conn, int $ticketId, ?int $tenantId = null): void
+    {
+        if (!function_exists('ticketChecklistClosureMode')) return;
+        if (ticketChecklistClosureMode($conn, $tenantId) !== 'block') return;
+
+        $outstanding = self::outstandingMandatorySteps($conn, $ticketId);
+        if (!$outstanding) return;
+
+        $names = implode(', ', array_map(fn($r) => $r['step'], $outstanding));
+        throw new ServiceError(
+            'validation',
+            'mandatory_steps_outstanding',
+            'This ticket cannot be closed until its mandatory SOP steps are complete: ' . $names
+        );
+    }
+
     public static function recordClosureOverride(PDO $conn, ActorContext $ctx, int $ticketId): array
     {
         $outstanding = self::outstandingMandatorySteps($conn, $ticketId);
@@ -114,5 +142,102 @@ class ChecklistsService
         }
 
         return $outstanding;
+    }
+
+    // ======================================================================
+    //  Lookup lists — checklist categories and suggested roles
+    //
+    //  Two tables with identical shape (id, name) and identical rules, so one
+    //  pair of methods serves both rather than four near-identical copies. The
+    //  table is chosen from a whitelist, never from caller input, so `$kind`
+    //  can never reach SQL.
+    // ======================================================================
+
+    private const LOOKUPS = [
+        'category' => ['table' => 'checklist_categories', 'label' => 'Category'],
+        'role'     => ['table' => 'checklist_roles',      'label' => 'Role'],
+    ];
+
+    private static function lookup(string $kind): array
+    {
+        if (!isset(self::LOOKUPS[$kind])) {
+            throw new ServiceError('validation', 'invalid_field', 'Unknown list: ' . $kind);
+        }
+        return self::LOOKUPS[$kind];
+    }
+
+    /**
+     * Create (no id) or rename (id present) a category or role. Returns the id.
+     *
+     * Renaming matters more than it looks: templates store their category as
+     * TEXT (`checklist_templates.category`) and steps store their suggested role
+     * the same way, so the rows have to be carried across with the rename or the
+     * list silently orphans every template that used the old name.
+     */
+    public static function saveLookup(PDO $conn, ActorContext $ctx, string $kind, array $in): int
+    {
+        ['table' => $table, 'label' => $label] = self::lookup($kind);
+
+        $name = trim((string)($in['name'] ?? ''));
+        if ($name === '')            throw new ServiceError('validation', 'missing_field', $label . ' name is required.');
+        if (mb_strlen($name) > 100)  throw new ServiceError('validation', 'invalid_field', $label . ' name is too long (100 characters maximum).');
+
+        $id = isset($in['id']) ? (int)$in['id'] : 0;
+
+        // Names are UNIQUE in both tables; catch the clash here so the caller
+        // gets a sentence rather than a driver error.
+        $clash = $conn->prepare("SELECT id FROM `$table` WHERE name = ? AND id <> ? LIMIT 1");
+        $clash->execute([$name, $id]);
+        if ($clash->fetchColumn() !== false) {
+            throw new ServiceError('conflict', 'duplicate', $label . ' "' . $name . '" already exists.');
+        }
+
+        if ($id > 0) {
+            $cur = $conn->prepare("SELECT name FROM `$table` WHERE id = ? LIMIT 1");
+            $cur->execute([$id]);
+            $oldName = $cur->fetchColumn();
+            if ($oldName === false) throw new ServiceError('not_found', 'not_found', $label . ' not found.');
+
+            if ($oldName !== $name) {
+                $conn->beginTransaction();
+                try {
+                    $conn->prepare("UPDATE `$table` SET name = ? WHERE id = ?")->execute([$name, $id]);
+                    // Carry the rows that reference it by name.
+                    if ($kind === 'category') {
+                        $conn->prepare("UPDATE checklist_templates SET category = ? WHERE category = ?")->execute([$name, $oldName]);
+                    } else {
+                        $conn->prepare("UPDATE checklist_template_items SET suggested_role = ? WHERE suggested_role = ?")->execute([$name, $oldName]);
+                        $conn->prepare("UPDATE ticket_checklist_items  SET suggested_role = ? WHERE suggested_role = ?")->execute([$name, $oldName]);
+                    }
+                    $conn->commit();
+                } catch (Throwable $e) {
+                    $conn->rollBack();
+                    throw $e;
+                }
+            }
+            return $id;
+        }
+
+        $conn->prepare("INSERT INTO `$table` (name, created_datetime) VALUES (?, UTC_TIMESTAMP())")->execute([$name]);
+        return (int)$conn->lastInsertId();
+    }
+
+    /**
+     * Delete a category or role.
+     *
+     * The rows that reference it by name are left alone deliberately: a template
+     * filed under a category you retire keeps saying what it said. Losing the
+     * list entry should not silently re-file somebody's SOP.
+     */
+    public static function deleteLookup(PDO $conn, ActorContext $ctx, string $kind, int $id): void
+    {
+        ['table' => $table, 'label' => $label] = self::lookup($kind);
+        if ($id <= 0) throw new ServiceError('validation', 'invalid_field', 'A valid id is required.');
+
+        $stmt = $conn->prepare("DELETE FROM `$table` WHERE id = ?");
+        $stmt->execute([$id]);
+        if ($stmt->rowCount() === 0) {
+            throw new ServiceError('not_found', 'not_found', $label . ' not found.');
+        }
     }
 }

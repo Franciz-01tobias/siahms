@@ -304,6 +304,15 @@ class TicketsService
         $statusRes = self::resolveStatus($conn, $in);
         if ($statusRes !== null) {
             [$newStatusId, $newStatusName, $newIsClosed] = $statusRes;
+            // SOP checklists (PR #141): on a 'block' install, refuse the closure
+            // BEFORE anything is written. Checked here, not after the update, or
+            // the throw would arrive with the ticket already closed.
+            if ($newIsClosed && !$oldIsClosed && $newStatusId !== (int)$current['status_id']) {
+                ChecklistsService::assertClosureAllowed(
+                    $conn, $ticketId,
+                    isset($current['tenant_id']) && $current['tenant_id'] !== null ? (int)$current['tenant_id'] : null
+                );
+            }
             if ($newStatusId !== (int)$current['status_id']) {
                 $updates[] = 'status_id = ?';
                 $args[]    = $newStatusId;

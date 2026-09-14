@@ -90,6 +90,17 @@ return [
             ],
         ],
         [
+            // Sits next to categories because it is the other half of "what a
+            // ticket must have on it before it is allowed to finish".
+            'id'        => 'checklists',
+            'cap'       => Cap::TICKETS_CHECKLISTS,
+            'label_key' => 'tickets.settings.tabs.checklists',
+            'grant'     => 'Choose whether outstanding mandatory SOP steps block a ticket from closing',
+            'setting_keys' => [
+                'ticket_checklist_closure_mode',
+            ],
+        ],
+        [
             'id'        => 'statuses',
             'cap'       => Cap::TICKETS_STATUSES,
             'label_key' => 'tickets.settings.tabs.statuses',

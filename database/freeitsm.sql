@@ -6633,6 +6633,7 @@ CREATE TABLE IF NOT EXISTS `checklist_categories` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(100) NOT NULL UNIQUE,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_demo` tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -6640,6 +6641,7 @@ CREATE TABLE IF NOT EXISTS `checklist_roles` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(100) NOT NULL UNIQUE,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_demo` tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -6656,6 +6658,7 @@ CREATE TABLE IF NOT EXISTS `checklist_templates` (
     `created_by_id` INT NULL,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_demo` tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_tpl_category` (`category`),
     KEY `idx_tpl_scope` (`scope`)
@@ -6673,6 +6676,7 @@ CREATE TABLE IF NOT EXISTS `checklist_template_items` (
     `input_placeholder` VARCHAR(255) NULL,
     `default_value` VARCHAR(255) NULL,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_demo` tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_item_tpl` (`template_id`),
     CONSTRAINT `fk_chk_tpl_items_tpl` FOREIGN KEY (`template_id`) REFERENCES `checklist_templates` (`id`) ON DELETE CASCADE
@@ -6685,6 +6689,7 @@ CREATE TABLE IF NOT EXISTS `ticket_checklists` (
     `title` VARCHAR(255) NOT NULL,
     `created_by_id` INT NULL,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_demo` tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_chk_ticket` (`ticket_id`),
     CONSTRAINT `fk_ticket_checklists_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE CASCADE
@@ -6704,6 +6709,7 @@ CREATE TABLE IF NOT EXISTS `ticket_checklist_items` (
     `input_placeholder` VARCHAR(255) NULL,
     `response_value` TEXT NULL,
     `sort_order` INT NOT NULL DEFAULT 1,
+  `is_demo` tinyint(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_item_ticket_chk` (`ticket_checklist_id`),
     CONSTRAINT `fk_ticket_chk_items_chk` FOREIGN KEY (`ticket_checklist_id`) REFERENCES `ticket_checklists` (`id`) ON DELETE CASCADE

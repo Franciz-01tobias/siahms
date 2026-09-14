@@ -17,6 +17,7 @@
 /** Modules with a database/demo-data/{module}.json file. Order is display order. */
 const DEMO_MODULES = [
     'core', 'tickets', 'assets', 'knowledge', 'changes', 'calendar', 'checks',
+    'checklists',
     'contracts', 'services', 'software', 'forms', 'software-assets',
     'dashboards', 'tasks', 'process-mapper', 'cmdb', 'lms', 'workflow',
     'network-mapper',

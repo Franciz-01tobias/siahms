@@ -201,6 +201,9 @@ final class Cap
     // deciding whether those fields appear on a ticket at all (#1540). One tab,
     // because all of it is the same kind of thing: lists of words used to classify.
     const TICKETS_CATEGORIES      = 'tickets.categories';
+    // What happens when a ticket is closed with mandatory SOP steps still
+    // outstanding — warn and record, or refuse (PR #141).
+    const TICKETS_CHECKLISTS      = 'tickets.checklists';
     const TICKETS_STATUSES        = 'tickets.statuses';
     const TICKETS_PRIORITIES      = 'tickets.priorities';
     const TICKETS_SLA             = 'tickets.sla';

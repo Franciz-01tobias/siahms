@@ -720,6 +720,7 @@ return [
             'ticket_types'    => 'Ticket types',
             'ticket_origins'  => 'Ticket origins',
             'categories'      => 'Categories',
+            'checklists'      => 'Checklists',
             'statuses'        => 'Statuses',
             'priorities'      => 'Priorities',
             'sla'             => 'SLA',
@@ -742,6 +743,7 @@ return [
         // some are more descriptive — kept separate so translators can pick
         // different phrasings where natural.
         'headings' => [
+            'checklists'       => 'Closing with steps outstanding',
             'departments'      => 'Departments',
             'teams'            => 'Teams',
             'ticket_types'     => 'Ticket types',
@@ -1392,7 +1394,20 @@ return [
         // Instructional paragraphs / notes / info boxes shown at the top of (or
         // within) the various tabs. Values that contain intended HTML are echoed
         // raw (no htmlspecialchars) so the markup renders.
+        // The closure-mode choice itself. 🔴 TRANSLATORS: "warn" is not a
+        // refusal — the ticket closes either way under that option, and the
+        // skipped steps are written to the ticket notes in BOTH cases. Only the
+        // second option actually prevents the close.
+        'checklists' => [
+            'warn_title'       => 'Warn, and record it',
+            'warn_desc'        => 'The analyst is told which mandatory steps are outstanding and can close anyway. Recommended: a step that has become impossible never traps the ticket.',
+            'block_title'      => 'Refuse the close',
+            'block_desc'       => 'The ticket cannot reach a closed status until every mandatory step is ticked. Choose this where an external standard requires it.',
+            'always_recorded'  => 'Either way, closing with steps outstanding writes an internal note naming the skipped steps, who closed it and through which interface. The setting decides whether it is allowed, never whether it is logged.',
+        ],
+
         'intros' => [
+            'checklists'      => 'An SOP checklist can mark steps as mandatory. This decides what happens if somebody closes a ticket before those steps are ticked.',
             'departments'     => 'Departments group and route tickets to the right area of your organisation — create the ones your service desk uses to categorise and assign work.',
             'teams'           => 'Teams determine which departments analysts can access. Assign departments to teams, then assign analysts to teams to control their access.',
             'ticket_types'    => 'Ticket types classify what a request is (e.g. Incident, Service Request) — define the types analysts can set on a ticket.',

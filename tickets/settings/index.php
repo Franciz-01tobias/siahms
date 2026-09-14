@@ -30,6 +30,11 @@ $conn             = connectToDatabase();
 $visibleTabs      = settingsVisibleTabs($conn, (int) $_SESSION['analyst_id'], $settingsManifest);
 $activeTabId      = settingsFirstTabId($visibleTabs);
 
+// SOP checklists (PR #141) — resolved server-side so the tab opens on the value
+// actually in force, the same reason row display below is read here.
+require_once '../../includes/tenant_settings.php';
+$checklistClosureMode = ticketChecklistClosureMode($conn, null);
+
 // Row display (discussion #61) — what this analyst's own ticket rows show.
 // Resolved server-side so the tab opens on the values actually in force, rather
 // than on the shipped defaults with the real ones arriving a moment later.
@@ -778,6 +783,40 @@ $translationNamespaces = ['common', 'tickets'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
+        <!-- Checklists: what happens when a ticket with outstanding mandatory
+             SOP steps is closed (PR #141). -->
+        <div class="tab-content<?php echo $activeTabId === 'checklists' ? ' active' : ''; ?>" id="checklists-tab" data-capability="<?php echo Cap::TICKETS_CHECKLISTS; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('tickets.settings.headings.checklists')); ?></h2>
+            </div>
+            <p style="margin-bottom: 20px; color: var(--text-muted, #666);"><?php echo t('tickets.settings.intros.checklists'); ?></p>
+
+            <div style="display: flex; flex-direction: column; gap: 14px; max-width: 720px;">
+                <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                    <input type="radio" name="chkClosureMode" value="warn" style="margin-top: 3px;"<?php echo $checklistClosureMode === 'warn' ? ' checked' : ''; ?>>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.warn_title')); ?></div>
+                        <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.warn_desc')); ?></div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                    <input type="radio" name="chkClosureMode" value="block" style="margin-top: 3px;"<?php echo $checklistClosureMode === 'block' ? ' checked' : ''; ?>>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.block_title')); ?></div>
+                        <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.block_desc')); ?></div>
+                    </div>
+                </label>
+            </div>
+
+            <p style="margin-top: 18px; font-size: 12px; color: var(--text-muted, #64748b); max-width: 720px;">
+                <?php echo htmlspecialchars(t('tickets.settings.checklists.always_recorded')); ?>
+            </p>
+
+            <div style="margin-top: 22px;">
+                <button class="add-btn" id="chkClosureSave"><?php echo htmlspecialchars(t('common.save')); ?></button>
+            </div>
+        </div>
+
         <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo Cap::TICKETS_STATUSES; ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.statuses')); ?></h2>
@@ -8182,6 +8221,30 @@ $translationNamespaces = ['common', 'tickets'];
                 }
                 this.disabled = !loaded;
             });
+
+            // ── Checklists: closing with mandatory steps outstanding (PR #141) ──
+            // The radios are rendered already checked from the stored value, so
+            // there is nothing to load — only to save.
+            const chkSaveBtn = document.getElementById('chkClosureSave');
+            if (chkSaveBtn) {
+                chkSaveBtn.addEventListener('click', async function () {
+                    const picked = document.querySelector('input[name="chkClosureMode"]:checked');
+                    if (!picked) { showToast('Choose an option first', 'error'); return; }
+                    this.disabled = true;
+                    try {
+                        const r = await fetch(API_BASE + 'save_checklist_settings.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ mode: picked.value })
+                        });
+                        const d = await r.json();
+                        showToast(d.success ? T.settingsSaved : (d.error || 'Failed'), d.success ? 'success' : 'error');
+                    } catch (e) {
+                        showToast('Failed', 'error');
+                    }
+                    this.disabled = false;
+                });
+            }
 
             // ── The category dialog ──────────────────────────────────────────
             function parentOptions(excludeId) {

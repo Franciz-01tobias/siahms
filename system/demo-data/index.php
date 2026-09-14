@@ -423,6 +423,16 @@ if (!isset($_SESSION['analyst_id'])) {
                 <div class="error-text" id="err-checks" style="display:none"></div>
             </div>
 
+            <div class="module-card" data-module="checklists">
+                <h4>Checklists</h4>
+                <p class="module-desc">5 SOP templates with 29 steps — onboarding, offboarding, server decommissioning, VPN troubleshooting and a firewall change — plus their categories and suggested roles.</p>
+                <div class="module-footer">
+                    <span class="record-count">~44 records</span>
+                    <button class="import-btn" id="btn-checklists" onclick="importModule('checklists', this)" disabled><?php echo htmlspecialchars(t('system.demo.import')); ?></button>
+                </div>
+                <div class="error-text" id="err-checklists" style="display:none"></div>
+            </div>
+
             <div class="module-card" data-module="contracts">
                 <h4>Contracts</h4>
                 <p class="module-desc">3 suppliers, 5 contacts, 3 contracts with SLA terms, plus lookup tables.</p>
@@ -616,7 +626,7 @@ if (!isset($_SESSION['analyst_id'])) {
         }
 
         function enableModuleButtons() {
-            const modules = ['tickets', 'assets', 'knowledge', 'changes', 'calendar', 'checks', 'contracts', 'services', 'software', 'forms', 'tasks', 'process-mapper', 'cmdb', 'lms', 'workflow', 'network-mapper'];
+            const modules = ['tickets', 'assets', 'knowledge', 'changes', 'calendar', 'checks', 'checklists', 'contracts', 'services', 'software', 'forms', 'tasks', 'process-mapper', 'cmdb', 'lms', 'workflow', 'network-mapper'];
             modules.forEach(function(m) {
                 const btn = document.getElementById('btn-' + m);
                 if (btn && !btn.classList.contains('success')) {

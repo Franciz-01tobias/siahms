@@ -67,8 +67,8 @@ foreach ($templates as $t) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - Checklists</title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=62">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=133">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=139">
     <style>
         body { margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }
         .chk-layout { display: flex; height: calc(100vh - 48px); width: 100%; overflow: hidden; }
@@ -106,7 +106,7 @@ foreach ($templates as $t) {
         <aside class="chk-sidebar">
             <button class="chk-btn-primary" onclick="openTemplateModal()">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                New Template
+                New template
             </button>
 
             <div>
@@ -116,7 +116,7 @@ foreach ($templates as $t) {
             <!-- Scope Filter -->
             <div style="display: flex; flex-direction: column; gap: 4px;">
                 <div style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase; margin-bottom: 4px;">Scope</div>
-                <a class="chk-filter-link active scope-link" onclick="setScopeFilter('all', this)">All Scopes <span class="chk-filter-count"><?php echo count($templates); ?></span></a>
+                <a class="chk-filter-link active scope-link" onclick="setScopeFilter('all', this)">All scopes <span class="chk-filter-count"><?php echo count($templates); ?></span></a>
                 <a class="chk-filter-link scope-link" onclick="setScopeFilter('ticket', this)">Ticket</a>
                 <a class="chk-filter-link scope-link" onclick="setScopeFilter('task', this)">Task</a>
             </div>
@@ -127,7 +127,7 @@ foreach ($templates as $t) {
                     <span style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase;">Categories</span>
                     <a href="settings/?tab=categories" style="font-size: 11px; color: #0d9488; text-decoration: none; font-weight: 600;">Manage</a>
                 </div>
-                <a class="chk-filter-link active cat-link" onclick="setCategoryFilter('all', this)">All Categories</a>
+                <a class="chk-filter-link active cat-link" onclick="setCategoryFilter('all', this)">All categories</a>
                 <?php foreach ($categories as $cat): ?>
                     <?php $cName = $cat['name']; $cCount = $catCounts[$cName] ?? 0; ?>
                     <a class="chk-filter-link cat-link" onclick="setCategoryFilter('<?php echo htmlspecialchars(strtolower($cName)); ?>', this)">
@@ -143,7 +143,7 @@ foreach ($templates as $t) {
                     <span style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase;">Suggested Roles</span>
                     <a href="settings/?tab=roles" style="font-size: 11px; color: #0d9488; text-decoration: none; font-weight: 600;">Manage</a>
                 </div>
-                <a class="chk-filter-link active role-link" onclick="setRoleFilter('all', this)">All Roles</a>
+                <a class="chk-filter-link active role-link" onclick="setRoleFilter('all', this)">All roles</a>
                 <?php foreach ($definedRoles as $r): ?>
                     <?php $rName = $r['name']; $rCount = $roleCounts[$rName] ?? 0; ?>
                     <a class="chk-filter-link role-link" onclick="setRoleFilter('<?php echo htmlspecialchars(strtolower($rName)); ?>', this)">
@@ -158,7 +158,7 @@ foreach ($templates as $t) {
         <main class="chk-main">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <div>
-                    <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 4px 0; color: var(--text, #0f172a);">Checklist &amp; SOP Templates</h1>
+                    <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 4px 0; color: var(--text, #0f172a);">Checklist and SOP templates</h1>
                     <p style="font-size: 13px; color: var(--text-muted, #64748b); margin: 0;">Multi-use Standard Operating Procedures with task-level role assignments</p>
                 </div>
             </div>
@@ -246,7 +246,7 @@ foreach ($templates as $t) {
     <div class="chk-modal-backdrop" id="chkModal">
         <div class="chk-modal-dialog">
             <div class="chk-modal-header">
-                <h3 id="chkModalTitle" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text, #0f172a);">New Template</h3>
+                <h3 id="chkModalTitle" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text, #0f172a);">New template</h3>
                 <button type="button" onclick="closeTemplateModal()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-muted, #64748b);">&times;</button>
             </div>
             <div class="chk-modal-body">
@@ -293,7 +293,7 @@ foreach ($templates as $t) {
                 <div class="chk-input-group">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <label>Checklist Steps &amp; Role Assignments</label>
-                        <button type="button" onclick="addItemRow()" style="font-size: 12px; color: #0d9488; font-weight: 600; border: none; background: none; cursor: pointer;">+ Add Step</button>
+                        <button type="button" onclick="addItemRow()" style="font-size: 12px; color: #0d9488; font-weight: 600; border: none; background: none; cursor: pointer;">Add step</button>
                     </div>
                     <div id="chkItemsContainer" style="display: flex; flex-direction: column; gap: 8px;">
                         <!-- Dynamically populated rows -->
@@ -305,7 +305,7 @@ foreach ($templates as $t) {
                     Cancel
                 </button>
                 <button type="button" onclick="saveTemplate()" style="padding: 8px 18px; border-radius: 6px; border: none; background: #0d9488; color: #fff; cursor: pointer; font-weight: 600; font-size: 13px;">
-                    Save Template
+                    Save
                 </button>
             </div>
         </div>
@@ -378,7 +378,7 @@ foreach ($templates as $t) {
         }
 
         function openTemplateModal() {
-            document.getElementById('chkModalTitle').innerText = 'New Template';
+            document.getElementById('chkModalTitle').innerText = 'New template';
             document.getElementById('chkTemplateId').value = '0';
             document.getElementById('chkInputTitle').value = '';
             document.getElementById('chkInputScope').value = 'both';
@@ -464,7 +464,7 @@ foreach ($templates as $t) {
                     return;
                 }
                 const t = data.template;
-                document.getElementById('chkModalTitle').innerText = 'Edit Template';
+                document.getElementById('chkModalTitle').innerText = 'Edit template';
                 document.getElementById('chkTemplateId').value = t.id;
                 document.getElementById('chkInputTitle').value = t.title;
                 document.getElementById('chkInputCategory').value = t.category || '';

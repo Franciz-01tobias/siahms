@@ -4386,11 +4386,13 @@ return [
         'id'               => 'INT NOT NULL AUTO_INCREMENT',
         'name'             => 'VARCHAR(100) NOT NULL',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
     'checklist_roles' => [
         'id'               => 'INT NOT NULL AUTO_INCREMENT',
         'name'             => 'VARCHAR(100) NOT NULL',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
     'checklist_templates' => [
         'id'               => 'INT NOT NULL AUTO_INCREMENT',
@@ -4405,6 +4407,7 @@ return [
         'created_by_id'    => 'INT DEFAULT NULL',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
     'checklist_template_items' => [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
@@ -4418,6 +4421,7 @@ return [
         'input_placeholder' => 'VARCHAR(255) DEFAULT NULL',
         'default_value'     => 'VARCHAR(255) DEFAULT NULL',
         'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
     'ticket_checklists' => [
         'id'               => 'INT NOT NULL AUTO_INCREMENT',
@@ -4426,6 +4430,7 @@ return [
         'title'            => 'VARCHAR(255) NOT NULL',
         'created_by_id'    => 'INT DEFAULT NULL',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
     'ticket_checklist_items' => [
         'id'                  => 'INT NOT NULL AUTO_INCREMENT',
@@ -4441,5 +4446,6 @@ return [
         'input_placeholder'   => 'VARCHAR(255) DEFAULT NULL',
         'response_value'      => 'TEXT DEFAULT NULL',
         'sort_order'          => 'INT NOT NULL DEFAULT 1',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
 ];
