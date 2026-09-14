@@ -6,6 +6,33 @@
 // Default is 'api/' for root-level pages; module pages should set window.API_BASE = '../api/'
 const API_BASE = window.API_BASE || 'api/';
 
+/**
+ * Does closing a ticket offer a one-off message for the closing email? (#142)
+ *
+ * Only when an operator has actually put [ticket_closed_message] into an active
+ * "Ticket closed" template. Without that, anything typed would be silently
+ * discarded, and every install that has not configured it would gain an extra
+ * click on every close.
+ *
+ * ⚠️ MODULE SCOPE, not inside the status handler. Declared in there, the `let`
+ * is reinitialised on every call and the cache never caches — one request per
+ * close, which is the thing it exists to avoid.
+ *
+ * Cached as the PROMISE, not the result, so two quick closes share one request
+ * instead of racing to make two.
+ */
+let closeMessagePromise = null;
+function closeMessageEnabled() {
+    if (!closeMessagePromise) {
+        closeMessagePromise = fetch(API_BASE + 'get_close_message_config.php')
+            .then(r => r.json())
+            .then(d => !!(d && d.enabled))
+            // A diagnostic must never block a close: on failure, no prompt.
+            .catch(() => false);
+    }
+    return closeMessagePromise;
+}
+
 let emails = [];
 let selectedEmailId = null;
 let composeMode = 'new';
@@ -4411,6 +4438,8 @@ async function assignStatus() {
     // block that cannot be cleared.
     const closing = ticketStatuses.some(s => s.name === status && s.is_closed);
 
+    // Answered once per page load, not once per close: an operator does not
+    // edit the email template between two closes, and asking again on every
     // SOP checklists (PR #141): outstanding mandatory steps WARN and are
     // recorded, they do not block — the same line the tasks check above draws,
     // and for the same reason. As contributed this was a hard block with an
@@ -4458,13 +4487,37 @@ async function assignStatus() {
         }
     }
 
+    // A one-off note for the closing email (#142). Offered ONLY when an active
+    // "Ticket closed" template actually contains [ticket_closed_message] — see
+    // api/tickets/get_close_message_config.php for why. Without that check
+    // every install would gain a click on every close, and anything typed
+    // against a template lacking the code would be silently discarded.
+    let closedMessage = '';
+    if (closing && await closeMessageEnabled()) {
+        let cancelled = false;
+        await showConfirm({
+            title: t('tickets.close_message.title'),
+            message: t('tickets.close_message.intro'),
+            okLabel: t('tickets.close_message.ok'),
+            textarea: { placeholder: t('tickets.close_message.placeholder'),
+                        label: t('tickets.close_message.title') },
+            onConfirm: state => { closedMessage = state.text; },
+            onCancel:  () => { cancelled = true; }
+        });
+        if (cancelled) {
+            select.value = oldValue;   // or the dropdown shows a status never applied
+            return;
+        }
+    }
+
     try {
         const response = await fetch(API_BASE + 'assign_ticket.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 ticket_id: currentEmail.ticket_id,
-                status: status
+                status: status,
+                closed_message: closedMessage
             })
         });
         const data = await response.json();

@@ -603,7 +603,20 @@ class TicketsService
                 sendTemplateEmail($conn, $ticketId, 'ticket_assigned');
             }
             if ($newIsClosed && !$oldIsClosed) {
-                sendTemplateEmail($conn, $ticketId, 'ticket_closed');
+                // A one-off note for THIS closure, typed by the analyst as they
+                // close (#142, asked for by mbsouth). Not a setting and not
+                // stored: it exists only for this email.
+                //
+                // 🔴 THE KEY IS ALWAYS PASSED, EVEN EMPTY. resolveMergeCodes()
+                // only substitutes codes it is handed and there is no
+                // strip-unknown pass, so a template containing
+                // [ticket_closed_message] would otherwise mail that literal
+                // string to the customer on every close that did not type one —
+                // bulk closes, the REST API and workflow closes included, none
+                // of which can prompt for anything.
+                sendTemplateEmail($conn, $ticketId, 'ticket_closed', [
+                    'ticket_closed_message' => trim((string)($in['closed_message'] ?? '')),
+                ]);
                 require_once __DIR__ . '/../csat.php';
                 try {
                     if (csatGetSetting($conn, 'csat_mode', 'off') === 'auto') {

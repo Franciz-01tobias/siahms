@@ -31,20 +31,26 @@
  *   okLabel     - Label for the OK button. Default: 'OK'.
  *   okClass     - 'primary' | 'danger'. Drives the OK button colour. Default: 'primary'.
  *   cancelLabel - Label for the Cancel button. Default: 'Cancel'.
- *   onConfirm   - Callback fired when the user confirms. Receives { checked }.
+ *   onConfirm   - Callback fired when the user confirms. Receives { checked, text }.
  *   onCancel    - Callback fired when the user cancels (or dismisses).
  *   checkbox    - Optional extra opt-in inside the dialog, for a destructive
  *                 action with a wider and a narrower reading:
  *                   checkbox: { label: 'Also delete unread', checked: false }
  *                 Omit it entirely and the dialog is exactly as it always was.
+ *   textarea    - Optional free-text box, for a question that wants a sentence
+ *                 rather than a yes (#142 — a one-off note on a closing ticket):
+ *                   textarea: { placeholder: 'Have a nice day', label: 'Message' }
+ *                 The typed value arrives TRIMMED on onConfirm's `text`, so a
+ *                 box holding only spaces reads as empty for every caller.
  *
  * Returns: Promise<boolean> — resolves true on confirm, false on cancel.
  *
  * ⚠️ THE RETURN TYPE IS A BOOLEAN AND MUST STAY ONE. 114 of the 129 call sites
  * do `if (await showConfirm(...))`. Resolving an object instead would make every
  * one of them treat a CANCEL as a confirm, because `{}` is truthy — a silent,
- * app-wide, destructive regression. So the checkbox state is reported through
- * onConfirm's argument rather than the promise.
+ * app-wide, destructive regression. So the checkbox state, AND the textarea's
+ * text, are reported through onConfirm's argument rather than the promise.
+ * Anything added here later must follow the same rule.
  */
 (function() {
     if (window.showConfirm) return; // already loaded
@@ -85,7 +91,17 @@
             'cursor:pointer;color:var(--text,#333);font-size:13px;line-height:1.4}' +
         '.fitsm-confirm-check[hidden]{display:none}' +
         '.fitsm-confirm-check input{margin:1px 0 0;flex:none;width:15px;height:15px;cursor:pointer;' +
-            'accent-color:var(--accent,#0078d4)}';
+            'accent-color:var(--accent,#0078d4)}' +
+        // The optional textarea (#142). Same placement reasoning as the
+        // checkbox: inside the body, under the message, so it reads as part of
+        // the question rather than as a second dialogue.
+        '.fitsm-confirm-text{display:block;margin-top:14px}' +
+        '.fitsm-confirm-text[hidden]{display:none}' +
+        '.fitsm-confirm-text textarea{width:100%;box-sizing:border-box;min-height:82px;resize:vertical;' +
+            'padding:8px 10px;font-size:13px;line-height:1.45;font-family:inherit;' +
+            'color:var(--text,#333);background:var(--surface,#fff);' +
+            'border:1px solid var(--border,#ddd);border-radius:4px}' +
+        '.fitsm-confirm-text textarea:focus{outline:2px solid var(--accent,#0078d4);outline-offset:-1px}';
     document.head.appendChild(style);
 
     var overlay = null;
@@ -96,6 +112,8 @@
     var checkWrap = null;
     var checkInput = null;
     var checkLabel = null;
+    var textWrap = null;
+    var textInput = null;
     var currentOnConfirm = null;
     var currentOnCancel = null;
     var currentResolve = null;
@@ -132,6 +150,13 @@
         checkWrap.appendChild(checkLabel);
         body.appendChild(checkWrap);
 
+        textWrap = document.createElement('div');
+        textWrap.className = 'fitsm-confirm-text';
+        textWrap.hidden = true;
+        textInput = document.createElement('textarea');
+        textWrap.appendChild(textInput);
+        body.appendChild(textWrap);
+
         modal.appendChild(body);
 
         var footer = document.createElement('div');
@@ -162,7 +187,12 @@
         var resolve = currentResolve;
         // Read the box BEFORE close() resets anything, and hand it to the
         // callback. The promise still resolves a plain boolean — see the header.
-        var state = { checked: !!(checkInput && !checkWrap.hidden && checkInput.checked) };
+        var state = {
+            checked: !!(checkInput && !checkWrap.hidden && checkInput.checked),
+            // Trimmed here so every caller gets the same answer for a box
+            // containing only whitespace: the empty string.
+            text: (textInput && !textWrap.hidden) ? textInput.value.trim() : ''
+        };
         close();
         if (typeof cb === 'function') cb(state);
         if (typeof resolve === 'function') resolve(true);
@@ -207,6 +237,15 @@
         if (opts.checkbox) {
             checkLabel.textContent = opts.checkbox.label || '';
             checkInput.checked = !!opts.checkbox.checked;
+        }
+
+        // Reset every time, same reason as the checkbox: one reused element,
+        // so yesterday's typing must not surface on an unrelated question.
+        textWrap.hidden = !opts.textarea;
+        textInput.value = '';
+        if (opts.textarea) {
+            textInput.placeholder = opts.textarea.placeholder || '';
+            textInput.setAttribute('aria-label', opts.textarea.label || opts.title || '');
         }
 
         currentOnConfirm = opts.onConfirm || null;

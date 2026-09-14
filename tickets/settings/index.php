@@ -2930,7 +2930,14 @@ $translationNamespaces = ['common', 'tickets'];
                         <div id="tplBodyEdit">
                             <textarea id="templateBody" rows="10" placeholder="<?php echo htmlspecialchars(t('tickets.settings.modals.template.body_placeholder')); ?>"></textarea>
                             <small style="color: var(--text-muted, #666);">
-                                <?php echo htmlspecialchars(t('tickets.settings.modals.template.body_help')); ?>
+                                <?php /* Echoed RAW, like its sibling msg_template.body_help 185 lines
+                                         above and every tickets.settings.intros.* string. The value
+                                         is a lang-file constant, not user input, and it deliberately
+                                         contains <strong> to pick out the two trigger names. Wrapped
+                                         in htmlspecialchars() it showed the customer literal
+                                         "<strong>Note shared with requester</strong>" — which it had
+                                         been doing since the note_text line was added. */ ?>
+                                <?php echo t('tickets.settings.modals.template.body_help'); ?>
                             </small>
                         </div>
                         <div id="tplBodyPreview" style="display: none;">

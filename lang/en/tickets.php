@@ -292,6 +292,17 @@ return [
 
     // Tasks on a ticket (discussion #83). One picker does both verbs, so the
     // strings distinguish creating from linking rather than the UI doing it.
+    // A one-off note added to the closing email (#142, asked for by mbsouth).
+    // 🔴 TRANSLATORS: this is OPTIONAL and per-ticket — the analyst types a
+    // sentence for this one customer, this once. It is not a saved setting and
+    // not a template. "Close" alone sends the standard email with nothing added.
+    'close_message' => [
+        'title'       => 'Add a message?',
+        'intro'       => 'Anything you write here is added to the email this customer receives. Leave it empty to send the standard closing email.',
+        'placeholder' => 'For example: the spare charger is on your desk. Have a nice day.',
+        'ok'          => 'Close',
+    ],
+
     // SOP checklists on a ticket (PR #141, Santhosh Srinivasan).
     'checklists' => [
         'default_name'                 => 'SOP checklist',
@@ -1189,7 +1200,7 @@ return [
                 'subject_help'        => '[SDREF:...] is added automatically for reply threading.',
                 'body'                => 'Body',
                 'body_placeholder'    => "Dear [requester_name],\n\nThank you for contacting us...",
-                'body_help'           => 'Merge codes: [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date]. On the <strong>Note shared with requester</strong> trigger, [note_text] is the note itself - leave it out and the email simply says there is an update. HTML is supported (e.g. styled buttons).',
+                'body_help'           => 'Merge codes: [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date]. On the <strong>Note shared with requester</strong> trigger, [note_text] is the note itself - leave it out and the email simply says there is an update. On the <strong>Ticket closed</strong> trigger, [ticket_closed_message] is a one-off note the analyst types as they close - add it and they are asked for one, leave it out and they are not. HTML is supported (e.g. styled buttons).',
                 'display_order'       => 'Display order',
                 'active'              => 'Active',
                 'tab_edit'            => 'Edit',

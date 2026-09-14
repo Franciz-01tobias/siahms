@@ -33,7 +33,11 @@ try {
               'category_id', 'closure_category_id', 'resolution_code_id',
               // #1566. Independent of assigned_analyst_id by design — the service
               // never writes one as a side effect of the other.
-              'assigned_team_id'] as $k) {
+              'assigned_team_id',
+              // ⚠️ NOT a ticket field (#142). A one-off note for the closure
+              // email only: nothing stores it, and it is ignored unless this
+              // request is the one that closes the ticket.
+              'closed_message'] as $k) {
         if (array_key_exists($k, $data)) $in[$k] = $data[$k];
     }
 

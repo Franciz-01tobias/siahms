@@ -757,7 +757,7 @@ function renderWaffleMenuJS() {
          analyst-facing module page). Individual pages no longer need their
          own <script src="toast.js"> tag. -->
     <script src="<?php echo BASE_URL; ?>assets/js/toast.js"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/confirm.js?v=3"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/confirm.js?v=4"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/clipboard.js?v=1"></script>
     <?php
     // Command palette (#932). ⌘/Ctrl-K launcher on every analyst page. We hand
