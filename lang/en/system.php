@@ -554,6 +554,7 @@ return [
         'count_created' => 'Created',
         'count_updated' => 'Updated',
         'count_errors'  => 'Errors',
+        'count_warnings' => 'Warnings',
 
         'col_table'   => 'Table',
         'col_status'  => 'Status',

@@ -175,6 +175,7 @@ if (!isset($_SESSION['analyst_id'])) {
         .summary-created { background: #fff3cd; color: #856404; }
         .summary-updated { background: #cce5ff; color: #004085; }
         .summary-error { background: #f8d7da; color: #721c24; }
+        .summary-warning { background: #fff3cd; color: #7a5b00; }
 
         /* A summary card with a non-zero count doubles as a filter for that
            status; the active one gets a ring in its own semantic colour. */
@@ -224,6 +225,10 @@ if (!isset($_SESSION['analyst_id'])) {
         .status-pill.updated { background: #cce5ff; color: #004085; }
         .status-pill.error { background: #f8d7da; color: #721c24; }
         .status-pill.pending { background: #ffe0b2; color: #8a4b00; }
+        /* 'warning' has been in the payload since the mailbox checks and never
+           had a pill of its own, so it rendered as bare text beside styled
+           neighbours and read as unfinished. */
+        .status-pill.warning { background: #fff3cd; color: #7a5b00; }
 
         .detail-text { font-size: 12px; color: var(--text-muted, #666); }
 
@@ -287,6 +292,7 @@ if (!isset($_SESSION['analyst_id'])) {
         [data-theme-mode="dark"] .summary-error,
         [data-theme-mode="dark"] .status-pill.error { background: #3a1a1d; color: #fca5a5; }
         [data-theme-mode="dark"] .status-pill.pending { background: #3d2a10; color: #ffcc80; }
+        [data-theme-mode="dark"] .status-pill.warning { background: #3a2e12; color: #fcd34d; }
 
         [data-theme-mode="dark"] .fix-btn { background: #b26500; color: #fff; }
         [data-theme-mode="dark"] .fix-btn:hover { background: #8a4b00; }
@@ -389,6 +395,10 @@ if (!isset($_SESSION['analyst_id'])) {
         .tcard-dot.updated { background: #1a73e8; }
         .tcard-dot.error { background: #d13438; }
         .tcard-dot.pending { background: #e8871e; }
+        /* Without this a warning card fell through to the base colour, which
+           is GREEN - so the four mailbox warnings that predate this looked
+           exactly like OK at a glance. */
+        .tcard-dot.warning { background: #e0a800; }
         .tcard.has-fix { border-color: #e8871e; }
         .tcard .fix-flag {
             font-size: 10px; font-weight: 700; color: #8a4b00;
@@ -398,6 +408,7 @@ if (!isset($_SESSION['analyst_id'])) {
         [data-theme-mode="dark"] .tcard-dot.updated { background: #93c5fd; }
         [data-theme-mode="dark"] .tcard-dot.error { background: #fca5a5; }
         [data-theme-mode="dark"] .tcard-dot.pending { background: #ffcc80; }
+        [data-theme-mode="dark"] .tcard-dot.warning { background: #fcd34d; }
         [data-theme-mode="dark"] .tcard .fix-flag { color: #ffcc80; }
 
         .grid-empty {
@@ -675,7 +686,7 @@ if (!isset($_SESSION['analyst_id'])) {
             VERIFY_RESULTS = results;
             STATUS_FILTER = '';   // a fresh run clears any status filter
 
-            const counts = { ok: 0, created: 0, updated: 0, error: 0 };
+            const counts = { ok: 0, created: 0, updated: 0, error: 0, warning: 0 };
             results.forEach(r => counts[r.status] = (counts[r.status] || 0) + 1);
 
             // Each summary card with a non-zero count doubles as a filter for that
@@ -685,6 +696,11 @@ if (!isset($_SESSION['analyst_id'])) {
                 { key: 'created', cls: 'summary-created', label: window.t('system.db_verify.count_created') },
                 { key: 'updated', cls: 'summary-updated', label: window.t('system.db_verify.count_updated') },
                 { key: 'error',   cls: 'summary-error',   label: window.t('system.db_verify.count_errors') },
+                // 'warning' rows have existed since the mailbox checks and were
+                // counted by the line above but never shown, so the only way to
+                // find one was to scroll. Added when the schema-drift rows moved
+                // from error to warning — quieter must not mean invisible.
+                { key: 'warning', cls: 'summary-warning', label: dt('system.db_verify.count_warnings', 'Warnings') },
             ];
             let summaryHtml = '<div class="results-summary">';
             summaryCards.forEach(s => {

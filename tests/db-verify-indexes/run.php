@@ -135,6 +135,46 @@ $sawType = (bool) array_filter($controlDrift, fn($d) => strpos($d, 'differs') !=
 ok('CONTROL — and it specifically catches a FULLTEXT downgraded to KEY', $sawType);
 @unlink($tmp); @unlink($controlSql);
 
+section('5. Formatting is not drift');
+// A user upgrading through the 2026-08 parser change was shown:
+//   "Index task_recurrences.ix_task_recurrences_due differs — freeitsm.sql has
+//    [KEY (is_active,next_due_date)], the list has [KEY (is_active, next_due_date)]"
+// which is one index spelled two ways. The fresh parse stripped whitespace and
+// the committed list still carried it, and the two were compared as strings.
+// A difference only a diff tool can see is not drift — but the check must not
+// go blind in the process, so each of these has a control.
+$wsSql = tempnam(sys_get_temp_dir(), 'dbvws');
+file_put_contents($wsSql,
+    "CREATE TABLE IF NOT EXISTS `task_recurrences` (\n"
+  . "    `id` INT NOT NULL AUTO_INCREMENT,\n"
+  . "    `is_active` TINYINT(1) NOT NULL DEFAULT 1,\n"
+  . "    `next_due_date` DATE NULL,\n"
+  . "    PRIMARY KEY (`id`),\n"
+  . "    KEY `ix_task_recurrences_due` (`is_active`,`next_due_date`)\n"
+  . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n");
+$wsList = tempnam(sys_get_temp_dir(), 'dbvwsl');
+$withList = function (string $ret) use ($wsList, $wsSql) {
+    file_put_contents($wsList, "<?php\nreturn $ret;\n");
+    return dbVerifyIndexListSelfCheck($wsSql, $wsList);
+};
+
+ok('a space after the comma is NOT reported as drift',
+   $withList("[['task_recurrences','ix_task_recurrences_due','key','(`is_active`, `next_due_date`)']]") === []);
+ok('CONTROL — a REORDERED column list IS still drift',
+   (bool) array_filter($withList("[['task_recurrences','ix_task_recurrences_due','key','(`next_due_date`,`is_active`)']]"),
+       fn($d) => strpos($d, 'differs') !== false));
+ok('CONTROL — a KEY promoted to UNIQUE IS still drift, despite the space',
+   (bool) array_filter($withList("[['task_recurrences','ix_task_recurrences_due','unique','(`is_active`, `next_due_date`)']]"),
+       fn($d) => strpos($d, 'differs') !== false));
+ok('CONTROL — an index missing from the list IS still drift',
+   (bool) array_filter($withList('[]'), fn($d) => strpos($d, 'missing from the backfill list') !== false));
+ok('CONTROL — an index only in the list IS still drift',
+   (bool) array_filter(
+       $withList("[['task_recurrences','ix_task_recurrences_due','key','(`is_active`,`next_due_date`)'],"
+               . "['task_recurrences','ix_gone','key','(`id`)']]"),
+       fn($d) => strpos($d, 'no longer in freeitsm.sql') !== false));
+@unlink($wsSql); @unlink($wsList);
+
 echo "\n" . str_repeat('=', 60) . "\n";
 printf("%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

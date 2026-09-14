@@ -3536,14 +3536,32 @@ try {
     // The check is right; what was missing was running it before shipping —
     // `php scripts/gen_db_verify_indexes.php --check` now does that, and exits
     // non-zero.
+    //
+    // ⚠️ AND IT SHIPPED AGAIN, in 1.6 and again in 1.9, reported by three
+    // people. `--check` was the right tool and nothing was obliged to run it,
+    // so it caught nothing; .github/workflows/schema-drift.yml now runs it on
+    // every push, which is the part that was actually missing. The lesson is
+    // not "remember harder" - a guard a human has to remember is not a guard.
+    //
+    // 🔑 The wording below is for the person READING it, who is an
+    // administrator with no repository and nothing to commit. Telling them to
+    // run a developer script, in red, on the screen that tells them whether
+    // their database is healthy, reads as "your data is broken". It is not:
+    // this is a fault in the release, their rows are untouched, and the only
+    // useful thing they can do is say so. Hence 'warning', not 'error' - the
+    // loud alarm belongs in CI, where somebody can act on it.
     require_once '../../includes/db_verify_index_parse.php';
     $indexListDrift = dbVerifyIndexListSelfCheck();
     if (!empty($indexListDrift)) {
         $results[] = [
             'table'   => 'index backfill list',
-            'status'  => 'error',
+            'status'  => 'warning',
             'details' => array_merge(
-                ['The index list is out of date vs freeitsm.sql — run scripts/gen_db_verify_indexes.php and commit both files.'],
+                ['Your database is fine and your data is unaffected - this is a fault in the FreeITSM release itself.',
+                 'The list FreeITSM uses to restore missing database indexes does not match the schema it ships with, '
+                 . 'which means this installation may be missing an index. Nothing here is lost or at risk, and there is '
+                 . 'nothing for you to do beyond reporting it: please open an issue at '
+                 . 'https://github.com/edmozley/freeitsm/issues and paste the lines below. It is a one-file fix.'],
                 array_slice($indexListDrift, 0, 12)
             ),
         ];
@@ -3557,15 +3575,21 @@ try {
     // (this shipped once — asset_locations.tenant_id), while a column only in
     // freeitsm.sql means an EXISTING install never gains it. Silent when in sync.
     require_once '../../includes/db_verify_column_parse.php';
+    // Same audience, same reasoning as the index list above: an administrator
+    // cannot fix a disagreement between two files inside the release. The
+    // consequence for them is real but narrow (a fresh install missing a
+    // column, or an existing one never gaining it), so say that plainly rather
+    // than in the vocabulary of whoever has to repair it.
     $columnDrift = dbVerifyColumnSelfCheck();
     if (!empty($columnDrift)) {
         $results[] = [
             'table'   => 'schema column drift',
-            'status'  => 'error',
+            'status'  => 'warning',
             'details' => array_merge(
-                ['freeitsm.sql and Database Verification disagree about which columns exist. '
-                 . 'Both are sources of truth — freeitsm.sql builds a NEW install, Verification upgrades an EXISTING one — '
-                 . 'so make them match and commit both.'],
+                ['Your database is fine and your data is unaffected - this is a fault in the FreeITSM release itself.',
+                 'The two descriptions of the schema that ship with FreeITSM disagree about which columns exist, '
+                 . 'so a column listed below may be missing here. Please open an issue at '
+                 . 'https://github.com/edmozley/freeitsm/issues and paste the lines below.'],
                 array_slice($columnDrift, 0, 12)
             ),
         ];

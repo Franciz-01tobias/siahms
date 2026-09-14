@@ -94,7 +94,14 @@ There are **two** help systems, and a System-module change needs the second:
 - [ ] `database/freeitsm.sql`
 - [ ] `includes/db_verify_schema.php` — ⚠️ **not** `api/system/db_verify.php`,
       which now `require`s it. Foreign keys and repair passes still live there.
-- [ ] `includes/db_verify_indexes.php` is **generated** — `scripts/gen_db_verify_indexes.php`, never by hand
+- [ ] `includes/db_verify_indexes.php` is **generated** — `scripts/gen_db_verify_indexes.php`, never by hand.
+      🔴 **Hand-editing it is what shipped #113 AND #121.** Two rows were added
+      to the mirror by hand instead of to `freeitsm.sql`, with a comment saying
+      so, and three users reported the resulting error. If the generator seems
+      to be "dropping" an index you want, the answer is to add it to
+      **`freeitsm.sql`** — the index is missing from the schema, not from the list.
+      ✅ This box is no longer load-bearing: `.github/workflows/schema-drift.yml`
+      fails the push. It was a checkbox for three releases and caught nothing.
 - [ ] Run **System → Database Verification** and confirm it reports the change
 - [ ] ⚠️ **db_verify adds columns but does not WIDEN an existing one.** Changing
       a type needs a probe-then-`MODIFY` pass (see `users.email`). Harmless only

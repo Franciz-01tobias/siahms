@@ -79,7 +79,16 @@ function dbVerifyIndexListSelfCheck(?string $sqlPath = null, ?string $listPath =
     // Key each index by "table.name" -> a signature of "type + columns". Read via
     // dbVerifyIndexTypeOf so a pre-2026-08 list reports real drift rather than 233
     // false ones caused purely by the format change.
-    $sig = fn($r) => strtoupper(dbVerifyIndexTypeOf($r[2])) . ' ' . $r[3];
+    //
+    // ⚠️ Whitespace is stripped from BOTH sides. The fresh parse already strips
+    // it, but a list generated before that normalisation carries `(a, b)` where
+    // the parse now yields `(a,b)` — and the two were compared as strings, so a
+    // user upgrading through that boundary was shown
+    //   "Index task_recurrences.ix_task_recurrences_due differs — freeitsm.sql
+    //    has [KEY (is_active,next_due_date)], the list has [KEY (is_active, next_due_date)]"
+    // which is the same index, spelled two ways. Reported by a user. A
+    // difference only a diff tool can see is not drift.
+    $sig = fn($r) => strtoupper(dbVerifyIndexTypeOf($r[2])) . ' ' . preg_replace('/\s+/', '', (string)$r[3]);
     $freshMap = $commMap = [];
     foreach ($fresh as $r)     $freshMap[$r[0] . '.' . $r[1]] = $sig($r);
     foreach ($committed as $r) $commMap[$r[0] . '.' . $r[1]] = $sig($r);

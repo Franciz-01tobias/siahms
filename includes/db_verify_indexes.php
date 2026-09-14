@@ -146,19 +146,10 @@ return [
     ['assets', 'uq_assets_qr_token', 'unique', '(`qr_token`)'],
     ['users_assets', 'uq_user_asset', 'unique', '(`user_id`,`asset_id`)'],
     ['asset_checkout_log', 'idx_acl_asset', 'key', '(`asset_id`)'],
-    // ⚠️ Kept by hand. The generator drops these two because they are no longer
-    // in database/freeitsm.sql, which is pre-existing drift unrelated to the
-    // checklists work - removing them as a side effect of it would quietly cost
-    // grown installs two indexes. Left in until the real question is answered:
-    // should freeitsm.sql get them back, or should they genuinely go?
-    ['asset_devices', 'idx_asset_devices_asset', 'key', '(`asset_id`)'],
     ['asset_physical_disks', 'idx_asset_physical_disks_asset', 'key', '(`asset_id`)'],
+    ['asset_physical_disks', 'idx_asset_physical_disks_model', 'key', '(`model`(100))'],
     ['asset_disk_hide_rules', 'idx_adhr_asset', 'key', '(`asset_id`)'],
     ['asset_disk_hide_rules', 'idx_adhr_model', 'key', '(`model`(100))'],
-    // The hide rules are read once per asset screen and matched on model; the
-    // "how many others like this" count scans by model across the estate.
-    // (Also kept by hand — see the note above.)
-    ['asset_physical_disks', 'idx_asset_physical_disks_model', 'key', '(`model`(100))'],
     ['asset_devices', 'idx_asset_devices_asset', 'key', '(`asset_id`)'],
     ['asset_fields', 'uq_asset_fields_tenant_key', 'unique', '(`tenant_id`,`field_key`)'],
     ['asset_field_options', 'ix_asset_field_options_field', 'key', '(`field_id`)'],

@@ -2516,6 +2516,10 @@ CREATE TABLE IF NOT EXISTS `asset_physical_disks` (
     `interface_type` VARCHAR(50) NULL,
     PRIMARY KEY (`id`),
     KEY `idx_asset_physical_disks_asset` (`asset_id`),
+    -- "Also hide the other 49 drives like this" counts across the whole estate
+    -- with `WHERE pd.model <=> ?` (assetDiskMatchCount), so this is a scan of
+    -- every drive row on every asset screen that offers the option.
+    KEY `idx_asset_physical_disks_model` (`model`(100)),
     CONSTRAINT `fk_asset_physical_disks_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

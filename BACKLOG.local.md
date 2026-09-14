@@ -15,13 +15,17 @@ Private working document, like `TODO.local.md` and `WRITEUP.local.md`.
 
 ## 🔴 Broken right now
 
-- **After upgrading, Database Verification complains the index list is out of date.** It
-  names `asset_physical_disks.idx_asset_physical_disks_model` as present in the app's list
-  but missing from the reference schema. **This shipped in 1.8.0 last night**, so anybody
-  upgrading today sees it. Reported by tjedelhauser as #121 back on 30 August, against an
-  earlier fix that did not fully land. One command fixes it
-  (`php scripts/gen_db_verify_indexes.php`, commit both files), which makes it a patch
-  candidate rather than a job.
+*(nothing outstanding)*
+
+<!-- FIXED in 2.0.0, #1703-#1705. The index-list drift (#121, and #113 before it).
+     ⚠️ Worth keeping: the fix recorded here was WRONG. "One command fixes it
+     (php scripts/gen_db_verify_indexes.php)" would have regenerated the list
+     WITHOUT idx_asset_physical_disks_model and quietly cost every grown install
+     an index that assetDiskMatchCount() actually needs - the generator deletes
+     whatever freeitsm.sql does not have. The index belonged in the SCHEMA; it
+     had been hand-added to the generated mirror instead. Deciding which of two
+     disagreeing files is the wrong one is the whole job, and it is not a
+     one-liner. -->
 
 ---
 
