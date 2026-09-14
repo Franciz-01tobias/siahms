@@ -21,8 +21,8 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 $conn = connectToDatabase();
-require_once __DIR__ . '/../includes/db_schema.php';
-ensureChecklistTablesExist($conn);
+
+// Schema: database/freeitsm.sql + includes/db_verify_schema.php only.
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -79,64 +79,26 @@ try {
     }
 } catch (Throwable $e) {}
 
-// Fetch categories safely
-$categories = [];
-try {
-    $catStmt = $conn->query("SELECT id, name FROM checklist_categories ORDER BY name ASC");
-    if ($catStmt) {
-        $rawCats = $catStmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rawCats as $rc) {
-            $countStmt = $conn->prepare("SELECT COUNT(*) FROM checklist_templates WHERE category = ?");
-            $countStmt->execute([$rc['name']]);
-            $rc['template_count'] = (int)$countStmt->fetchColumn();
-            $categories[] = $rc;
-        }
-    }
-} catch (Throwable $e) {
-    try {
-        $conn->exec("CREATE TABLE IF NOT EXISTS checklist_categories (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(100) NOT NULL UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        $conn->exec("INSERT IGNORE INTO checklist_categories (name) VALUES ('Network'), ('HR & IT'), ('Infrastructure'), ('Security'), ('General')");
-        $categories = [
-            ['id' => 1, 'name' => 'Network', 'template_count' => 0],
-            ['id' => 2, 'name' => 'HR & IT', 'template_count' => 0],
-            ['id' => 3, 'name' => 'Infrastructure', 'template_count' => 0],
-            ['id' => 4, 'name' => 'Security', 'template_count' => 0],
-            ['id' => 5, 'name' => 'General', 'template_count' => 0],
-        ];
-    } catch (Throwable $e2) {}
-}
+// Categories, with how many templates use each. One grouped query rather than a
+// COUNT per row - the original issued 1 + N queries to render a list that is
+// usually short but need not be.
+$categories = $conn->query(
+    "SELECT c.id, c.name, COUNT(t.id) AS template_count
+       FROM checklist_categories c
+       LEFT JOIN checklist_templates t ON t.category = c.name
+      GROUP BY c.id, c.name
+      ORDER BY c.name ASC"
+)->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch suggested roles safely
-$roles = [];
-try {
-    $conn->exec("CREATE TABLE IF NOT EXISTS checklist_roles (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-    $roleStmt = $conn->query("SELECT id, name FROM checklist_roles ORDER BY name ASC");
-    if ($roleStmt) {
-        $rawRoles = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
-        if (empty($rawRoles)) {
-            $defaultRoles = ['Tier 1 Support', 'Tier 2 Support', 'Network Admin', 'Systems Administrator', 'Security Team', 'Database Admin', 'DevOps / Cloud', 'HR & IT'];
-            $insRole = $conn->prepare("INSERT IGNORE INTO checklist_roles (name) VALUES (?)");
-            foreach ($defaultRoles as $dr) { $insRole->execute([$dr]); }
-            $rawRoles = $conn->query("SELECT id, name FROM checklist_roles ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-        }
-
-        foreach ($rawRoles as $rr) {
-            $countStmt = $conn->prepare("SELECT COUNT(*) FROM checklist_template_items WHERE suggested_role = ?");
-            $countStmt->execute([$rr['name']]);
-            $rr['step_count'] = (int)$countStmt->fetchColumn();
-            $roles[] = $rr;
-        }
-    }
-} catch (Throwable $e) {}
+// Suggested roles, with how many template steps name each. Same shape, and the
+// default eight are seeded by Database Verification, not from this render.
+$roles = $conn->query(
+    "SELECT r.id, r.name, COUNT(i.id) AS step_count
+       FROM checklist_roles r
+       LEFT JOIN checklist_template_items i ON i.suggested_role = r.name
+      GROUP BY r.id, r.name
+      ORDER BY r.name ASC"
+)->fetchAll(PDO::FETCH_ASSOC);
 
 $activeTab = $_GET['tab'] ?? 'categories';
 if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {

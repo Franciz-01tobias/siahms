@@ -111,6 +111,8 @@ return [
     ['directory_sync_runs', 'idx_dsr_status', 'key', '(`status`)'],
     ['directory_sync_entries', 'idx_dse_run', 'key', '(`run_id`,`action`)'],
     ['directory_sync_entries', 'idx_dse_user', 'key', '(`user_id`)'],
+    ['carddav_write_log', 'idx_cdwl_provider', 'key', '(`provider_id`,`created_datetime`)'],
+    ['carddav_write_log', 'idx_cdwl_user', 'key', '(`user_id`)'],
     ['documents', 'idx_documents_hash', 'key', '(`content_hash`)'],
     ['documents', 'idx_documents_tenant', 'key', '(`tenant_id`)'],
     ['documents', 'ft_documents', 'fulltext', '(`title`,`description`)'],
@@ -144,13 +146,20 @@ return [
     ['assets', 'uq_assets_qr_token', 'unique', '(`qr_token`)'],
     ['users_assets', 'uq_user_asset', 'unique', '(`user_id`,`asset_id`)'],
     ['asset_checkout_log', 'idx_acl_asset', 'key', '(`asset_id`)'],
+    // ⚠️ Kept by hand. The generator drops these two because they are no longer
+    // in database/freeitsm.sql, which is pre-existing drift unrelated to the
+    // checklists work - removing them as a side effect of it would quietly cost
+    // grown installs two indexes. Left in until the real question is answered:
+    // should freeitsm.sql get them back, or should they genuinely go?
     ['asset_devices', 'idx_asset_devices_asset', 'key', '(`asset_id`)'],
     ['asset_physical_disks', 'idx_asset_physical_disks_asset', 'key', '(`asset_id`)'],
-    // The hide rules are read once per asset screen and matched on model; the
-    // "how many others like this" count scans by model across the estate.
     ['asset_disk_hide_rules', 'idx_adhr_asset', 'key', '(`asset_id`)'],
     ['asset_disk_hide_rules', 'idx_adhr_model', 'key', '(`model`(100))'],
+    // The hide rules are read once per asset screen and matched on model; the
+    // "how many others like this" count scans by model across the estate.
+    // (Also kept by hand — see the note above.)
     ['asset_physical_disks', 'idx_asset_physical_disks_model', 'key', '(`model`(100))'],
+    ['asset_devices', 'idx_asset_devices_asset', 'key', '(`asset_id`)'],
     ['asset_fields', 'uq_asset_fields_tenant_key', 'unique', '(`tenant_id`,`field_key`)'],
     ['asset_field_options', 'ix_asset_field_options_field', 'key', '(`field_id`)'],
     ['asset_field_sets', 'ix_asset_field_sets_tenant', 'key', '(`tenant_id`)'],
@@ -377,4 +386,9 @@ return [
     ['warroom_presence', 'uq_warroom_presence', 'unique', '(`analyst_id`)'],
     ['warroom_presence', 'ix_warroom_presence_last_seen', 'key', '(`last_seen`)'],
     ['analyst_recent_trail', 'ix_analyst_recent_trail_analyst', 'key', '(`analyst_id`,`visited_datetime`)'],
+    ['checklist_templates', 'idx_tpl_category', 'key', '(`category`)'],
+    ['checklist_templates', 'idx_tpl_scope', 'key', '(`scope`)'],
+    ['checklist_template_items', 'idx_item_tpl', 'key', '(`template_id`)'],
+    ['ticket_checklists', 'idx_chk_ticket', 'key', '(`ticket_id`)'],
+    ['ticket_checklist_items', 'idx_item_ticket_chk', 'key', '(`ticket_checklist_id`)'],
 ];

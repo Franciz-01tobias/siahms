@@ -3,7 +3,6 @@ session_start(['read_and_close' => false]);
 require_once '../config.php';
 require_once '../includes/functions.php';
 requireModuleAccessJson('checklists');
-require_once __DIR__ . '/includes/db_schema.php';
 
 header('Content-Type: application/json');
 
@@ -13,7 +12,6 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 $conn = connectToDatabase();
-ensureChecklistTablesExist($conn);
 
 $analystId = (int)$_SESSION['analyst_id'];
 $action = $_GET['action'] ?? $_POST['action'] ?? '';

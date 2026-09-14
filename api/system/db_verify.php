@@ -2914,6 +2914,32 @@ try {
         }
     }
 
+    // SOP checklist roles (PR #141). Seeded here for the same reason resolution
+    // codes are: "who normally does this step" is near enough universal across
+    // service desks, and an empty dropdown on first use teaches nobody anything.
+    //
+    // ⚠️ checklist_categories is deliberately NOT seeded alongside it, on exactly
+    // the reasoning given for ticket_categories above: a category tree is the one
+    // thing an organisation has to own. The contributed module seeded five
+    // (Network, HR & IT, Infrastructure, Security, General) from inside a page;
+    // the table now fills itself as templates are saved, which gets there without
+    // anybody having to delete somebody else's taxonomy first.
+    if ($tableExists('checklist_roles')) {
+        $cnt = (int) $conn->query("SELECT COUNT(*) FROM checklist_roles")->fetchColumn();
+        if ($cnt === 0) {
+            $conn->exec("INSERT INTO checklist_roles (name) VALUES
+                ('Tier 1 Support'),
+                ('Tier 2 Support'),
+                ('Network Admin'),
+                ('Systems Administrator'),
+                ('Security Team'),
+                ('Database Admin'),
+                ('DevOps / Cloud'),
+                ('HR & IT')");
+            $results[] = ['table' => 'checklist_roles', 'status' => 'seeded', 'details' => ['Inserted 8 default checklist roles']];
+        }
+    }
+
     if ($tableExists('process_step_types')) {
         $cnt = (int) $conn->query("SELECT COUNT(*) FROM process_step_types")->fetchColumn();
         if ($cnt === 0) {

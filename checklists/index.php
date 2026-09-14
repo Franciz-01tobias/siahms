@@ -13,8 +13,10 @@ $current_page = 'templates';
 $path_prefix = '../';
 
 $conn = connectToDatabase();
-require_once __DIR__ . '/includes/db_schema.php';
-ensureChecklistTablesExist($conn);
+
+// Schema lives in database/freeitsm.sql + includes/db_verify_schema.php, like
+// every other module's. It used to be created from here as well - see the wiki
+// page Checklists-Module-House-Style, "the same table, created five ways".
 
 // Fetch templates and items
 $templates = $conn->query("SELECT * FROM checklist_templates ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
@@ -37,22 +39,10 @@ foreach ($templates as $t) {
     $catCounts[$c] = ($catCounts[$c] ?? 0) + 1;
 }
 
-// Fetch defined roles safely
-$definedRoles = [];
-try {
-    $conn->exec("CREATE TABLE IF NOT EXISTS checklist_roles (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    $definedRoles = $conn->query("SELECT id, name FROM checklist_roles ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-    if (empty($definedRoles)) {
-        $defaultRoles = ['Tier 1 Support', 'Tier 2 Support', 'Network Admin', 'Systems Administrator', 'Security Team', 'Database Admin', 'DevOps / Cloud', 'HR & IT'];
-        $insR = $conn->prepare("INSERT IGNORE INTO checklist_roles (name) VALUES (?)");
-        foreach ($defaultRoles as $dr) { $insR->execute([$dr]); }
-        $definedRoles = $conn->query("SELECT id, name FROM checklist_roles ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
-    }
-} catch (Throwable $e) {}
+// Defined roles. The default eight are seeded by Database Verification on an
+// empty table, the same way ticket resolution codes are - not created and
+// inserted from inside a page render.
+$definedRoles = $conn->query("SELECT id, name FROM checklist_roles ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // Compute template counts per role
 $roleCounts = [];

@@ -11,15 +11,6 @@ require_once __DIR__ . "/../../includes/functions.php";
 
 $conn = connectToDatabase();
 
-// Auto-bootstrap schema if needed
-$schemaFile = __DIR__ . "/../../checklists/includes/db_schema.php";
-if (file_exists($schemaFile)) {
-    require_once $schemaFile;
-    if (function_exists('ensureChecklistTablesExist')) {
-        ensureChecklistTablesExist($conn);
-    }
-}
-
 header("Content-Type: application/json");
 
 if (!isset($_SESSION["analyst_id"])) {
