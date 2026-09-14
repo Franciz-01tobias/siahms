@@ -678,6 +678,12 @@ try {
                                 <?php echo t('tickets.help.cal_rota.rota_step5'); ?>
                             </div>
                         </div>
+                        <div class="help-step">
+                            <div class="help-step-num">6</div>
+                            <div>
+                                <?php echo t('tickets.help.cal_rota.rota_step6'); ?>
+                            </div>
+                        </div>
                     </div>
 
                     <p class="help-note"><?php echo t('tickets.help.cal_rota.tip'); ?></p>

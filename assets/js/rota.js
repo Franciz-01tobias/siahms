@@ -361,9 +361,27 @@ async function deleteRotaEntry() {
 // onto a different (analyst, date) and the source row must not be touched.
 
 let rotaCellClipboard = null;   // { shift_id, location_id, is_on_call, shift_name }
+let rotaLineClipboard = null;   // { kind: 'col'|'row', label, count, entries: [...] }
 let rotaWeekClipboard = null;   // { week_start, entries: [...], count }
 let rotaCtxCell = null;         // the cell the context menu was opened on
 let rotaCtxLine = null;         // or the column / row it was opened on
+
+/**
+ * One clipboard at a time for the grid (Ed).
+ *
+ * A cell holds one shift; a line holds a different shift in every cell. They
+ * paste onto completely different things, so a menu offering both at once
+ * would be asking the reader to work out which Paste is which. Copying
+ * either one puts the other down, the way a clipboard actually behaves.
+ *
+ * (The whole-week clipboard is separate on purpose - it lives on its own
+ * toolbar button rather than in this menu, and copying a cell should not
+ * silently throw away a week you set up three screens ago.)
+ */
+function rotaSetClipboard(cell, line) {
+    rotaCellClipboard = cell;
+    rotaLineClipboard = line;
+}
 
 function rotaEntryAt(analystId, date) {
     return rotaEntries.find(e => e.analyst_id == analystId && e.rota_date === date) || null;
@@ -542,25 +560,42 @@ function openRotaCellMenu(event, cell) {
         ? t('tickets.rota.ctx.cells_selected', { count: rotaSelection.size })
         : (analyst ? analyst.full_name : '') + ' — ' + rotaDateLabel(date);
 
-    // Copy and Clear only mean something on a single cell that has a shift in
-    // it. Across a selection they would need their own confirmations and their
-    // own answers to "copy WHAT, exactly" - one shift is what a cell holds.
-    document.getElementById('rotaCtxCopy').style.display  = (entry && !inSelection) ? '' : 'none';
-    document.getElementById('rotaCtxClear').style.display = (entry && !inSelection) ? '' : 'none';
+    // Copy has no meaning across a selection - "copy WHAT, exactly" has no
+    // answer when the cells hold different shifts. One shift is what a cell
+    // holds, so Copy stays a single-cell action.
+    document.getElementById('rotaCtxCopy').style.display = (entry && !inSelection) ? '' : 'none';
 
-    rotaSetPasteItem(inSelection
-        ? t('tickets.rota.ctx.paste_cells', { count: rotaSelection.size })
-        : t('tickets.rota.ctx.paste_cell') + (rotaCellClipboard ? ' — ' + rotaCellClipboard.shift_name : ''));
+    document.getElementById('rotaCtxCopyLabel').textContent = t('tickets.rota.ctx.copy_cell');
+
+    if (inSelection) {
+        rotaSetClearItem(rotaSelectionTargets());
+    } else {
+        document.getElementById('rotaCtxClear').style.display = entry ? '' : 'none';
+        document.getElementById('rotaCtxClearLabel').textContent = t('tickets.rota.ctx.clear_cell');
+    }
+
+    if (rotaLineClipboard) {
+        // A whole day or a whole week cannot be laid over one cell, or over a
+        // block of them. Say so where the click was, rather than offering a
+        // Paste that would have to guess.
+        rotaSetPasteBlocked(t('tickets.rota.ctx.paste_line_nowhere'),
+            rotaLineClipboard.kind === 'col'
+                ? t('tickets.rota.ctx.paste_col_onto_cell_why')
+                : t('tickets.rota.ctx.paste_row_onto_cell_why'));
+    } else if (inSelection) {
+        rotaSetPasteItems(rotaSelectionTargets());
+    } else {
+        rotaSetPasteItem(t('tickets.rota.ctx.paste_cell') + (rotaCellClipboard ? ' — ' + rotaCellClipboard.shift_name : ''));
+        rotaHidePasteEmpty();
+    }
 
     rotaPositionMenu(event);
     return false;
 }
 
 /**
- * The same menu, opened on a column heading or an analyst's name: paste one
- * shift down a day or across a week. Copy and Clear are hidden - a line is a
- * paste TARGET, and "clear the whole column" is a destructive action nobody
- * asked for hidden behind a right-click.
+ * The same menu, opened on a column heading or an analyst's name: copy the
+ * whole line, paste one onto it, or empty it.
  */
 function openRotaLineMenu(event, head, kind) {
     event.preventDefault();
@@ -576,7 +611,10 @@ function openRotaLineMenu(event, head, kind) {
         : ((rotaAnalysts.find(a => a.id == head.dataset.analyst) || {}).full_name || '');
 
     rotaCtxLine = {
+        kind: kind,
         label: label,
+        date: head.dataset.date || null,
+        analystId: head.dataset.analyst || null,
         targets: cells.map(c => ({ analyst_id: c.dataset.analyst, rota_date: c.dataset.date })),
     };
 
@@ -586,21 +624,98 @@ function openRotaLineMenu(event, head, kind) {
     rotaHoverSet(head);
 
     document.getElementById('rotaCtxHeader').textContent = label;
-    document.getElementById('rotaCtxCopy').style.display  = 'none';
-    document.getElementById('rotaCtxClear').style.display = 'none';
-    rotaSetPasteItem(t('tickets.rota.ctx.paste_into', { count: cells.length }));
+
+    // Copy the line, if there is anything on it to copy.
+    const copyBtn = document.getElementById('rotaCtxCopy');
+    const filled = rotaCtxLine.targets.filter(tg => rotaEntryAt(tg.analyst_id, tg.rota_date)).length;
+    copyBtn.style.display = filled ? '' : 'none';
+    document.getElementById('rotaCtxCopyLabel').textContent = filled === 1
+        ? t('tickets.rota.ctx.copy_line_one')
+        : t('tickets.rota.ctx.copy_line', { count: filled });
+
+    rotaSetLinePasteItem(kind, label);
+    rotaSetClearItem(rotaCtxLine.targets);
 
     rotaPositionMenu(event);
     return false;
 }
 
 /**
+ * What Paste offers on a column heading or an analyst's name, which depends
+ * on what is actually on the clipboard:
+ *
+ *   - a LINE of the SAME kind  -> paste it, replacing this one
+ *   - a LINE of the OTHER kind -> 🔑 REFUSED, and the item says why (Ed).
+ *     A day is a shift per analyst and a week is a shift per day; there is
+ *     no honest way to lay one over the other, and silently doing something
+ *     plausible instead is worse than saying no.
+ *   - one SHIFT               -> stamp it into every cell, or the empty ones
+ *   - nothing                 -> "Nothing copied yet"
+ */
+function rotaSetLinePasteItem(kind, label) {
+    const pasteBtn = document.getElementById('rotaCtxPaste');
+    const pasteLbl = document.getElementById('rotaCtxPasteLabel');
+
+    if (!rotaLineClipboard) {
+        rotaSetPasteItems(rotaCtxLine.targets);
+        return;
+    }
+
+    const pasteLabel = t('tickets.rota.ctx.paste_line', { source: rotaLineClipboard.label });
+
+    if (rotaLineClipboard.kind !== kind) {
+        rotaSetPasteBlocked(
+            kind === 'col' ? t('tickets.rota.ctx.paste_row_onto_col') : t('tickets.rota.ctx.paste_col_onto_row'),
+            kind === 'col' ? t('tickets.rota.ctx.paste_row_onto_col_why') : t('tickets.rota.ctx.paste_col_onto_row_why'));
+        return;
+    }
+
+    // Pasting a line back onto itself is a no-op dressed as an action.
+    const same = kind === 'col'
+        ? rotaLineClipboard.sourceDate === rotaCtxLine.date
+        : rotaLineClipboard.sourceAnalyst == rotaCtxLine.analystId;
+    if (same) {
+        rotaSetPasteBlocked(pasteLabel, t('tickets.rota.ctx.paste_same_line'));
+        return;
+    }
+
+    rotaPasteBlockedReason = null;
+    pasteBtn.disabled = false;
+    pasteBtn.style.opacity = '';
+    pasteBtn.title = '';
+    pasteLbl.textContent = pasteLabel;
+    rotaHidePasteEmpty();
+}
+
+/**
  * Paste is always listed, but says why it cannot be used rather than sitting
  * there as a dead option that appears to do nothing.
  */
+let rotaPasteBlockedReason = null;
+
+/**
+ * Paste is offered but refused, with the reason in a tooltip AND in a toast
+ * if you click it anyway (Ed asked for the tooltip).
+ *
+ * Deliberately NOT `disabled`: a disabled button swallows mouse events in
+ * several browsers, so the tooltip explaining the refusal would be the one
+ * thing you could not see.
+ */
+function rotaSetPasteBlocked(label, why) {
+    const pasteBtn = document.getElementById('rotaCtxPaste');
+    rotaPasteBlockedReason = why;
+    pasteBtn.disabled = false;
+    pasteBtn.style.opacity = '0.55';
+    pasteBtn.title = why;
+    document.getElementById('rotaCtxPasteLabel').textContent = label;
+    rotaHidePasteEmpty();
+}
+
 function rotaSetPasteItem(label) {
     const pasteBtn = document.getElementById('rotaCtxPaste');
     const pasteLbl = document.getElementById('rotaCtxPasteLabel');
+    pasteBtn.title = '';
+    rotaPasteBlockedReason = null;
     if (rotaCellClipboard) {
         pasteBtn.disabled = false;
         pasteBtn.style.opacity = '';
@@ -610,6 +725,55 @@ function rotaSetPasteItem(label) {
         pasteBtn.style.opacity = '0.5';
         pasteLbl.textContent = t('tickets.rota.ctx.nothing_copied');
     }
+}
+
+function rotaHidePasteEmpty() {
+    document.getElementById('rotaCtxPasteEmpty').style.display = 'none';
+}
+
+/**
+ * The two ways to paste into several cells, offered side by side (Ed).
+ *
+ * The choice between filling everything and filling only the gaps belongs in
+ * the menu, next to the thing it is a choice about, rather than in a modal
+ * that appears after you have already committed to pasting. The second item
+ * only appears when there is genuinely a mix - with nothing in the way, or
+ * with nothing empty, it would be the same action under two names.
+ */
+function rotaSetPasteItems(targets) {
+    const filled = targets.filter(tg => rotaEntryAt(tg.analyst_id, tg.rota_date)).length;
+    const empty  = targets.length - filled;
+
+    rotaSetPasteItem(t('tickets.rota.ctx.paste_into', { count: targets.length }));
+
+    const emptyBtn = document.getElementById('rotaCtxPasteEmpty');
+    if (!rotaCellClipboard || !filled || !empty) {
+        emptyBtn.style.display = 'none';
+        return;
+    }
+    emptyBtn.style.display = '';
+    document.getElementById('rotaCtxPasteEmptyLabel').textContent = empty === 1
+        ? t('tickets.rota.ctx.paste_empty_one')
+        : t('tickets.rota.ctx.paste_empty', { count: empty });
+}
+
+/**
+ * Clear, across a column, a row or a selection (Ed). It counts the shifts
+ * that are actually there rather than the cells it was pointed at - "Clear 3
+ * shifts" on a column of seven is the number that matters, and offering
+ * Clear at all on a line with nothing in it is offering to do nothing.
+ */
+function rotaSetClearItem(targets) {
+    const filled = targets.filter(tg => rotaEntryAt(tg.analyst_id, tg.rota_date)).length;
+    const clearBtn = document.getElementById('rotaCtxClear');
+    if (!filled) {
+        clearBtn.style.display = 'none';
+        return;
+    }
+    clearBtn.style.display = '';
+    document.getElementById('rotaCtxClearLabel').textContent = filled === 1
+        ? t('tickets.rota.ctx.clear_one')
+        : t('tickets.rota.ctx.clear_many', { count: filled });
 }
 
 /** Show at the pointer, then nudge back inside the viewport. A cell in the
@@ -639,7 +803,6 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    if (rotaPasteChoiceResolve) { resolveRotaPasteChoice(null); return; }
     closeRotaCellMenu();
     clearRotaSelection();
 });
@@ -647,10 +810,21 @@ document.addEventListener('keydown', function (e) {
 async function rotaCtxAction(action) {
     const cell = rotaCtxCell;
     const line = rotaCtxLine;
+    const blocked = rotaPasteBlockedReason;
     closeRotaCellMenu();
 
-    if (action === 'paste' && line) {
-        await rotaPasteInto(line.targets);
+    // Clicking a Paste that the menu already said no to repeats the reason
+    // rather than doing nothing, for anybody who missed the tooltip.
+    if ((action === 'paste' || action === 'paste_empty') && blocked) {
+        showToast(blocked, 'error');
+        return;
+    }
+
+    if (line) {
+        if (action === 'clear')      await rotaClearCells(line.targets, line.label);
+        else if (action === 'copy')  copyRotaLine(line);
+        else if (rotaLineClipboard)  await pasteRotaLine(line);
+        else                         await rotaPasteInto(line.targets, action === 'paste_empty' ? 'empty' : 'all');
         return;
     }
     if (!cell) return;
@@ -661,17 +835,23 @@ async function rotaCtxAction(action) {
 
     if (action === 'copy') {
         if (!entry) return;
-        rotaCellClipboard = {
+        rotaSetClipboard({
             shift_id:    entry.shift_id,
             location_id: entry.location_id,
             is_on_call:  entry.is_on_call == 1 ? 1 : 0,
             shift_name:  entry.shift_name,
-        };
+        }, null);
         showToast(t('tickets.rota.copy.cell_copied', { shift: entry.shift_name }), 'success');
         return;
     }
 
     if (action === 'clear') {
+        // Across a selection this is the many-cell clear; on one cell it is
+        // the single delete it has always been.
+        if (rotaSelection.size > 1 && rotaSelection.has(rotaCellKey(analystId, date))) {
+            await rotaClearCells(rotaSelectionTargets(), t('tickets.rota.ctx.cells_selected', { count: rotaSelection.size }));
+            return;
+        }
         if (!entry) return;
         const ok = await showConfirm({ title: 'Confirm', message: t('tickets.rota.delete_confirm'), okLabel: 'OK', okClass: 'danger' });
         if (!ok) return;
@@ -679,26 +859,26 @@ async function rotaCtxAction(action) {
         return;
     }
 
-    if (action === 'paste') {
+    if (action === 'paste' || action === 'paste_empty') {
         // A selection the menu was opened inside is the target; otherwise the
         // one cell that was right-clicked.
         const targets = (rotaSelection.size > 1 && rotaSelection.has(rotaCellKey(analystId, date)))
             ? rotaSelectionTargets()
             : [{ analyst_id: analystId, rota_date: date }];
-        await rotaPasteInto(targets);
+        await rotaPasteInto(targets, action === 'paste_empty' ? 'empty' : 'all');
     }
 }
 
 /**
  * Paste the copied shift into one cell, or into many.
  *
- * The confirmation is different for the two because the useful sentence is
- * different. For one cell it can name both shifts and the person, which is
- * what makes a confirm worth reading. For thirty it has to be a count, and
- * the question stops being "are you sure" and becomes "which of these cells"
- * - two answers, so not showConfirm(), which only has one.
+ * `mode` is already decided by the time we get here - the menu offered both
+ * ways in plain words - so the only thing left to ask about is overwriting,
+ * and only when it is actually going to happen. The confirmation differs
+ * between one cell and many because the useful sentence differs: for one it
+ * can name both shifts and the person, for thirty it has to be a count.
  */
-async function rotaPasteInto(targets) {
+async function rotaPasteInto(targets, mode) {
     if (!rotaCellClipboard) { showToast(t('tickets.rota.copy.nothing_to_paste'), 'error'); return; }
     if (!targets.length) return;
 
@@ -735,11 +915,21 @@ async function rotaPasteInto(targets) {
         return;
     }
 
-    // Nothing in the way: no question to ask. Only overwriting earns a modal.
-    let mode = 'all';
-    if (filled.length) {
-        mode = await askRotaPasteMode(targets.length, filled.length);
-        if (!mode) return;
+    // Nothing is lost by filling the gaps, and nothing is lost when there was
+    // nothing there. Only an overwrite that will actually overwrite is worth
+    // stopping for, and the message says how many shifts go.
+    if (mode === 'all' && filled.length) {
+        const ok = await showConfirm({
+            title: t('tickets.rota.copy.overwrite_title'),
+            message: t('tickets.rota.copy.overwrite_confirm', {
+                shift: rotaCellClipboard.shift_name,
+                total: targets.length,
+                filled: filled.length,
+            }),
+            okLabel: t('tickets.rota.copy.overwrite_ok'),
+            okClass: 'danger',
+        });
+        if (!ok) return;
     }
 
     try {
@@ -774,34 +964,6 @@ async function rotaPasteInto(targets) {
     }
 }
 
-// ---- "All of them, or just the empty ones?" ---------------------------
-
-let rotaPasteChoiceResolve = null;
-
-/** Resolves to 'all', 'empty', or null for cancel. */
-function askRotaPasteMode(total, filled) {
-    const empty = total - filled;
-    document.getElementById('rotaPasteChoiceMsg').textContent =
-        t('tickets.rota.copy.mode_message', {
-            shift: rotaCellClipboard.shift_name,
-            total: total, filled: filled, empty: empty,
-        });
-
-    // With nothing empty, "Empty only" would report pasting into nothing.
-    const emptyBtn = document.getElementById('rotaPasteEmptyBtn');
-    emptyBtn.disabled = empty === 0;
-    emptyBtn.style.opacity = empty === 0 ? '0.5' : '';
-
-    document.getElementById('rotaPasteChoiceModal').classList.add('active');
-    return new Promise(resolve => { rotaPasteChoiceResolve = resolve; });
-}
-
-function resolveRotaPasteChoice(mode) {
-    document.getElementById('rotaPasteChoiceModal').classList.remove('active');
-    const resolve = rotaPasteChoiceResolve;
-    rotaPasteChoiceResolve = null;
-    if (resolve) resolve(mode);
-}
 
 /** POST, toast the outcome, reload the grid. Shared by every write above. */
 async function rotaPost(endpoint, body, okKey, failKey) {
@@ -822,6 +984,159 @@ async function rotaPost(endpoint, body, okKey, failKey) {
         showToast(t(failKey), 'error');
     }
     return null;
+}
+
+// ---- A whole column or a whole row (Ed) -------------------------------
+
+/**
+ * Copy every shift on a line.
+ *
+ * 🔑 What each entry is keyed BY is the whole design, and it differs by kind
+ * for the same reason the week clipboard stores a day offset rather than a
+ * date: the key has to be the part that survives the move.
+ *
+ *   - a COLUMN is one day across the team, so each entry keeps its ANALYST
+ *     and lands on the same person on a different day;
+ *   - a ROW is one analyst across the week, so each entry keeps its DAY
+ *     OFFSET and lands on the same day for a different person.
+ *
+ * Which is also why one cannot be pasted onto the other: their keys are not
+ * the same kind of thing.
+ */
+function copyRotaLine(line) {
+    const entries = [];
+    line.targets.forEach(tg => {
+        const entry = rotaEntryAt(tg.analyst_id, tg.rota_date);
+        if (!entry) return;
+        const base = {
+            shift_id:    entry.shift_id,
+            location_id: entry.location_id,
+            is_on_call:  entry.is_on_call == 1 ? 1 : 0,
+        };
+        if (line.kind === 'col') {
+            base.analyst_id = entry.analyst_id;
+        } else {
+            base.day_offset = Math.round(
+                (new Date(tg.rota_date + 'T00:00:00') - new Date(currentWeekStart + 'T00:00:00')) / 86400000);
+        }
+        entries.push(base);
+    });
+
+    if (!entries.length) {
+        showToast(t('tickets.rota.copy.line_empty'), 'error');
+        return;
+    }
+
+    rotaSetClipboard(null, {
+        kind: line.kind,
+        label: line.label,
+        count: entries.length,
+        entries: entries,
+        sourceDate: line.date,
+        sourceAnalyst: line.analystId,
+    });
+    showToast(line.kind === 'col'
+        ? t('tickets.rota.copy.col_copied', { count: entries.length, date: line.label })
+        : t('tickets.rota.copy.row_copied', { count: entries.length, analyst: line.label }), 'success');
+}
+
+/**
+ * Paste a copied line over another one of the same kind.
+ *
+ * Like a week paste this REPLACES - a merge would leave a day matching
+ * neither the one you copied nor the one you had - so the confirm names how
+ * much is going as well as how much is arriving.
+ */
+async function pasteRotaLine(line) {
+    if (!rotaLineClipboard || rotaLineClipboard.kind !== line.kind) return;
+
+    const existing = line.targets.filter(tg => rotaEntryAt(tg.analyst_id, tg.rota_date)).length;
+
+    const ok = await showConfirm({
+        title: t('tickets.rota.copy.line_confirm_title'),
+        message: existing
+            ? t('tickets.rota.copy.line_confirm', {
+                source: rotaLineClipboard.label, target: line.label,
+                incoming: rotaLineClipboard.count, existing: existing,
+            })
+            : t('tickets.rota.copy.line_confirm_empty', {
+                source: rotaLineClipboard.label, target: line.label,
+                incoming: rotaLineClipboard.count,
+            }),
+        okLabel: t('tickets.rota.ctx.paste_cell'),
+        okClass: existing ? 'danger' : 'primary',
+    });
+    if (!ok) return;
+
+    try {
+        const res = await fetch(ROTA_API + 'paste_rota_line.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                kind:       line.kind,
+                week_start: currentWeekStart,
+                date:       line.date,
+                analyst_id: line.analystId,
+                entries:    rotaLineClipboard.entries,
+            }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+            showToast(t('tickets.rota.toasts.error', { error: data.error }), 'error');
+            return;
+        }
+        showToast(t('tickets.rota.copy.line_pasted', { written: data.written, removed: data.removed }), 'success');
+        // Never silent: a shift retired between the copy and the paste drops
+        // those rows, and losing somebody's shift quietly is the worst thing
+        // this feature could do.
+        if (data.skipped > 0) {
+            showToast(t('tickets.rota.copy.week_skipped', { count: data.skipped }), 'error');
+        }
+        loadRota();
+    } catch (e) {
+        showToast(t('tickets.rota.copy.paste_failed'), 'error');
+    }
+}
+
+/**
+ * Empty a column, a row or a selection (Ed).
+ *
+ * This one only ever destroys, so the confirm always appears and names both
+ * what is being emptied and how many shifts go with it. `target` is the day,
+ * the analyst's name, or "9 cells selected" - whichever the menu was opened
+ * on, so the sentence matches the gesture that produced it.
+ */
+async function rotaClearCells(targets, target) {
+    const filled = targets.filter(tg => rotaEntryAt(tg.analyst_id, tg.rota_date));
+    if (!filled.length) return;
+
+    const ok = await showConfirm({
+        title: t('tickets.rota.copy.clear_title'),
+        message: filled.length === 1
+            ? t('tickets.rota.copy.clear_confirm_one', { target: target })
+            : t('tickets.rota.copy.clear_confirm', { target: target, count: filled.length }),
+        okLabel: t('common.delete'),
+        okClass: 'danger',
+    });
+    if (!ok) return;
+
+    try {
+        const res = await fetch(ROTA_API + 'clear_rota_cells.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targets: targets }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+            showToast(t('tickets.rota.toasts.error', { error: data.error }), 'error');
+            return;
+        }
+        showToast(t('tickets.rota.copy.cleared', { count: data.removed }), 'success');
+        clearRotaSelection();
+        loadRota();
+    } catch (e) {
+        showToast(t('tickets.rota.toasts.delete_failed'), 'error');
+    }
 }
 
 // ---- The whole week ---------------------------------------------------

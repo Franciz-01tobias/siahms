@@ -1771,8 +1771,34 @@ return [
             // Each says HOW MANY cells, because the whole point of these is
             // that one click fills more than one.
             'cells_selected' => '{count} cells selected',
-            'paste_cells'    => 'Paste into {count} cells',
             'paste_into'     => 'Paste into all {count}',
+            // Offered alongside the above whenever the target is a MIX of
+            // filled and empty cells, so the choice is made in the menu
+            // rather than in a dialogue after you have already committed.
+            'paste_empty'     => 'Paste into {count} empty cells',
+            'paste_empty_one' => 'Paste into the 1 empty cell',
+
+            // Copying a whole column or row, and clearing one.
+            'copy_line'     => 'Copy all {count} shifts',
+            'copy_line_one' => 'Copy the 1 shift',
+            'clear_many'    => 'Clear {count} shifts',
+            'clear_one'     => 'Clear 1 shift',
+            'paste_line'    => 'Paste {source}',
+
+            // 🔑 Why a paste is being refused. A day is one shift per analyst
+            // and an analyst's week is one shift per day, so there is no
+            // honest way to lay one over the other - and doing something
+            // plausible instead would be worse than saying no. Each of these
+            // says what you copied AND where it can go, because "you can't do
+            // that" without "here is where you can" is half a message.
+            'paste_col_onto_row'      => 'A day cannot go onto an analyst',
+            'paste_col_onto_row_why'  => 'You copied a whole day, which is one shift per analyst. It can only be pasted onto another day heading.',
+            'paste_row_onto_col'      => 'An analyst cannot go onto a day',
+            'paste_row_onto_col_why'  => 'You copied one analyst\'s week, which is one shift per day. It can only be pasted onto another analyst\'s name.',
+            'paste_line_nowhere'      => 'A whole line cannot go into a cell',
+            'paste_col_onto_cell_why' => 'You copied a whole day. Right-click a day heading to paste it.',
+            'paste_row_onto_cell_why' => 'You copied an analyst\'s whole week. Right-click an analyst\'s name to paste it.',
+            'paste_same_line'         => 'That is the one you copied - nothing to do',
         ],
         'copy' => [
             'week_btn'        => 'Copy week',
@@ -1796,15 +1822,30 @@ return [
             'week_confirm_empty'  => 'Paste {incoming} entries into this week?',
             'week_same'           => 'That is the week you copied - nothing to do',
 
-            // Pasting into many cells at once. The question is not "are you
-            // sure" - it is which of these cells, and there are two sensible
-            // answers, so it gets a modal with both rather than a confirm.
-            'mode_title'   => 'Some cells already have a shift',
-            // Phrased without a verb after the counts: "{filled} of them
-            // already have a shift" reads as "1 of them already have".
-            'mode_message' => 'Pasting {shift} into {total} cells - {filled} already filled, {empty} empty.',
-            'mode_empty'   => 'Empty only',
-            'mode_all'     => 'Overwrite all',
+            // Pasting over shifts that are already there. Which cells was
+            // chosen in the menu; all that is left to confirm is the loss,
+            // and the numbers are what make it worth reading.
+            'overwrite_title'   => 'Overwrite shifts that are already there?',
+            'overwrite_confirm' => 'Pasting {shift} into all {total} cells replaces the {filled} shifts already in them.',
+            'overwrite_ok'      => 'Overwrite',
+
+            // A whole column or row. Like a week paste this REPLACES, so the
+            // confirm names what arrives AND what goes.
+            'col_copied'          => 'Copied {count} shifts from {date}',
+            'row_copied'          => 'Copied {count} shifts from {analyst}',
+            'line_empty'          => 'There is nothing on it to copy',
+            'line_confirm_title'  => 'Replace what is already there?',
+            // No verb after the counts: "the {existing} currently there are
+            // removed" reads as "the 1 ... are removed".
+            'line_confirm'        => 'Pasting {source} onto {target} replaces it - {incoming} shifts in, {existing} removed.',
+            'line_confirm_empty'  => 'Paste the {incoming} shifts from {source} onto {target}?',
+            'line_pasted'         => 'Pasted - {written} shifts in, {removed} replaced',
+
+            // Clearing a column, a row or a selection.
+            'clear_title'       => 'Clear these shifts?',
+            'clear_confirm'     => 'This removes the {count} shifts on {target}. It cannot be undone.',
+            'clear_confirm_one' => 'This removes the 1 shift on {target}. It cannot be undone.',
+            'cleared'           => 'Cleared {count} shifts',
 
             'pasted'            => 'Pasted',
             'cells_pasted'      => 'Pasted into {count} cells',
@@ -2358,8 +2399,9 @@ return [
             'rota_step1'  => '<strong>View the rota grid</strong> &mdash; the rota displays analysts along one axis and days along the other, with shift blocks showing coverage at a glance.',
             'rota_step2'  => '<strong>Add or edit shifts</strong> &mdash; click on a cell to assign a shift type (e.g. Early, Late, Night, On-Call). Changes save immediately.',
             'rota_step3'  => '<strong>Plan ahead</strong> &mdash; navigate forward by week to build the rota in advance. This ensures adequate coverage during known busy periods, holidays, or training days.',
-            'rota_step4'  => '<strong>Fill several cells at once</strong> &mdash; <strong>right-click</strong> a cell and choose <em>Copy</em> to pick up the shift in it, then right-click another and <em>Paste</em>. For more than one cell, <strong>drag across a block</strong> of them (or ctrl-click cells one at a time) and paste into the lot. Hovering a <strong>day heading</strong> lights up that whole day, and hovering an <strong>analyst&rsquo;s name</strong> lights up their whole week &mdash; right-click either and paste into all of it. Where some of the cells already have a shift, you are asked whether to <strong>overwrite all</strong> of them or fill <strong>only the empty ones</strong>, with both counts on screen.',
-            'rota_step5'  => '<strong>Copy a whole week</strong> &mdash; <strong>Copy week</strong> and <strong>Paste week</strong> at the top right lift every shift in the week you are looking at and drop them onto another one, which is the fastest way to build a repeating rota. Pasting <em>replaces</em> the target week, so the confirmation tells you how many entries are about to be removed. It only ever touches the days and the people the grid is actually showing you.',
+            'rota_step4'  => '<strong>Fill several cells at once</strong> &mdash; <strong>right-click</strong> a cell and choose <em>Copy</em> to pick up the shift in it, then right-click another and <em>Paste</em>. For more than one cell, <strong>drag across a block</strong> of them (or ctrl-click cells one at a time) and paste into the lot. Hovering a <strong>day heading</strong> lights up that whole day, and hovering an <strong>analyst&rsquo;s name</strong> lights up their whole week &mdash; right-click either and paste into all of it. Where some of the cells already have a shift the menu offers both ways in plain words &mdash; <em>Paste into all 7</em> and <em>Paste into 6 empty cells</em> &mdash; so you choose before you commit rather than after. Overwriting asks you to confirm and says how many shifts it replaces; filling the gaps just happens, since nothing is lost. The same menus will also <strong>clear</strong> a day, a week or a selection, again after telling you how many shifts that removes.',
+            'rota_step5'  => '<strong>Copy a whole day or a whole week for one person</strong> &mdash; right-click a <strong>day heading</strong> and choose <em>Copy</em> to lift every shift on that day, or an <strong>analyst&rsquo;s name</strong> to lift their whole week. Pasting onto another day, or another analyst, makes it match: shifts the copy did not have are cleared, so you get the day you copied rather than a mixture of the two. A day can only be pasted onto another day and an analyst only onto another analyst &mdash; a day is one shift <em>per person</em> and a week is one shift <em>per day</em>, so there is no sensible way to lay one over the other. Try it and the menu says so, and says where it can go instead.',
+            'rota_step6'  => '<strong>Copy a whole week</strong> &mdash; <strong>Copy week</strong> and <strong>Paste week</strong> at the top right lift every shift in the week you are looking at and drop them onto another one, which is the fastest way to build a repeating rota. Pasting <em>replaces</em> the target week, so the confirmation tells you how many entries are about to be removed. It only ever touches the days and the people the grid is actually showing you.',
             'tip'         => 'Combine the calendar and rota together for effective capacity planning. If the calendar shows a spike in tickets every Monday morning, ensure the rota has extra coverage scheduled for that slot.',
         ],
         'settings' => [

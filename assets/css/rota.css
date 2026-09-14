@@ -273,28 +273,6 @@
     border-bottom: none;
 }
 
-/* "All of them, or just the empty ones?" — same padding and proportions as
-   the entry modal so the two don't look like they came from different pages. */
-#rotaPasteChoiceModal .modal-content {
-    padding: 30px;
-    max-width: 480px;
-}
-
-#rotaPasteChoiceModal .modal-header {
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 16px;
-    color: var(--text, #333);
-    padding: 0;
-    border-bottom: none;
-}
-
-#rotaPasteChoiceMsg {
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--text-muted, #555);
-}
-
 .btn-danger {
     background: var(--danger-accent, #d13438);
     color: #fff;

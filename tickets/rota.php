@@ -31,7 +31,7 @@ $translationNamespaces = ['common', 'tickets'];
     <title><?php echo htmlspecialchars(t('tickets.rota.page_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/rota.css?v=3">
+    <link rel="stylesheet" href="../assets/css/rota.css?v=4">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -102,22 +102,6 @@ $translationNamespaces = ['common', 'tickets'];
         </div>
     </div>
 
-    <?php /* Pasting into several cells at once, some of which already have a
-             shift. Not showConfirm(): that answers yes or no, and this
-             question has two useful answers plus cancel. The message counts
-             both halves so the choice is made on numbers, not on a guess. */ ?>
-    <div class="modal" id="rotaPasteChoiceModal">
-        <div class="modal-content" id="rotaPasteChoiceContent">
-            <div class="modal-header"><?php echo htmlspecialchars(t('tickets.rota.copy.mode_title')); ?></div>
-            <p id="rotaPasteChoiceMsg" style="margin: 0 0 24px;"></p>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="resolveRotaPasteChoice(null)"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
-                <button type="button" class="btn btn-primary" id="rotaPasteEmptyBtn" onclick="resolveRotaPasteChoice('empty')"><?php echo htmlspecialchars(t('tickets.rota.copy.mode_empty')); ?></button>
-                <button type="button" class="btn btn-danger" id="rotaPasteAllBtn" onclick="resolveRotaPasteChoice('all')"><?php echo htmlspecialchars(t('tickets.rota.copy.mode_all')); ?></button>
-            </div>
-        </div>
-    </div>
-
     <?php /* Right-click a cell to copy or paste one shift (Ed). Uses the shared
              .ticket-context-menu component from inbox.css, which this page
              already loads and which the ticket, asset, change and service
@@ -127,18 +111,26 @@ $translationNamespaces = ['common', 'tickets'];
         <div class="ticket-context-menu-header" id="rotaCtxHeader"><?php echo htmlspecialchars(t('tickets.rota.ctx.heading')); ?></div>
         <button class="ticket-context-menu-item" type="button" id="rotaCtxCopy" onclick="rotaCtxAction('copy')">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-            <span><?php echo htmlspecialchars(t('tickets.rota.ctx.copy_cell')); ?></span>
+            <span id="rotaCtxCopyLabel"><?php echo htmlspecialchars(t('tickets.rota.ctx.copy_cell')); ?></span>
         </button>
         <button class="ticket-context-menu-item" type="button" id="rotaCtxPaste" onclick="rotaCtxAction('paste')">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
             <span id="rotaCtxPasteLabel"><?php echo htmlspecialchars(t('tickets.rota.ctx.paste_cell')); ?></span>
         </button>
+        <?php /* When a column, row or selection has a mix of filled and empty
+                 cells, the choice between them belongs HERE, next to the thing
+                 it is a choice about — not in a modal that appears after you
+                 have already committed. Hidden whenever there is no mix. */ ?>
+        <button class="ticket-context-menu-item" type="button" id="rotaCtxPasteEmpty" onclick="rotaCtxAction('paste_empty')" style="display:none;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+            <span id="rotaCtxPasteEmptyLabel"></span>
+        </button>
         <button class="ticket-context-menu-item" type="button" id="rotaCtxClear" onclick="rotaCtxAction('clear')">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            <span><?php echo htmlspecialchars(t('tickets.rota.ctx.clear_cell')); ?></span>
+            <span id="rotaCtxClearLabel"><?php echo htmlspecialchars(t('tickets.rota.ctx.clear_cell')); ?></span>
         </button>
     </div>
 
-    <script src="../assets/js/rota.js?v=5"></script>
+    <script src="../assets/js/rota.js?v=7"></script>
 </body>
 </html>
