@@ -1200,7 +1200,11 @@ return [
                 'subject_help'        => '[SDREF:...] is added automatically for reply threading.',
                 'body'                => 'Body',
                 'body_placeholder'    => "Dear [requester_name],\n\nThank you for contacting us...",
-                'body_help'           => 'Merge codes: [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date]. On the <strong>Note shared with requester</strong> trigger, [note_text] is the note itself - leave it out and the email simply says there is an update. On the <strong>Ticket closed</strong> trigger, [ticket_closed_message] is a one-off note the analyst types as they close - add it and they are asked for one, leave it out and they are not. HTML is supported (e.g. styled buttons).',
+                // 🔴 TRANSLATORS: keep every [merge_code] EXACTLY as it is - they are
+                // matched literally at send time and a translated one silently
+                // never fills in. The two under "Only on some triggers" are listed
+                // separately on purpose: they were in prose and nobody could find them.
+                'body_help'           => '<strong>Always available:</strong> [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date].<br><br><strong>Only on some triggers:</strong><br>[note_text] &mdash; on <strong>Note shared with requester</strong>, the note itself. Leave it out and the email simply says there is an update.<br>[ticket_closed_message] &mdash; on <strong>Ticket closed</strong>, a one-off note the analyst types as they close. Add it and they are asked for one; leave it out and they are not.<br><br>HTML is supported (e.g. styled buttons).',
                 'display_order'       => 'Display order',
                 'active'              => 'Active',
                 'tab_edit'            => 'Edit',
