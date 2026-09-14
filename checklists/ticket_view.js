@@ -1,6 +1,19 @@
 /**
  * Ticket Checklists / SOP Module for FreeITSM
+ *
+ * 🔴 API PATHS ARE RELATIVE TO THE HOST PAGE, NEVER ROOT-ABSOLUTE.
+ *
+ * These calls used to be fetch('/api/tickets/ticket_checklists.php'), which
+ * resolves only when FreeITSM is installed AT the document root. On an install
+ * in a subdirectory every one of them 404s and the whole SOP panel silently
+ * does nothing — measured: /api/... returned 404 and /freeitsm-app/api/...
+ * returned 200 on the same machine.
+ *
+ * tickets/index.php already publishes window.API_BASE ('../api/tickets/'), which
+ * is derived from BASE_URL and therefore correct in both layouts. The fallback
+ * matches inbox.js's own, for a page that forgets to set it.
  */
+const CHK_API = (window.API_BASE || '../api/tickets/') + 'ticket_checklists.php';
 
 let ticketChecklistsData = [];
 let availableTemplatesCache = [];
@@ -34,7 +47,7 @@ async function loadTicketChecklists(ticketId) {
     if (!ticketId) return;
     currentViewingTicketId = ticketId;
     try {
-        const res = await fetch('/api/tickets/ticket_checklists.php?action=get_ticket_checklists&ticket_id=' + ticketId);
+        const res = await fetch(CHK_API + '?action=get_ticket_checklists&ticket_id=' + ticketId);
         const data = await res.json();
         if (!data.success) {
             console.error('Error fetching ticket checklists:', data.error);
@@ -406,7 +419,7 @@ function closeDataCaptureModal() {
 // 6. Execute Toggle Item in Backend
 async function executeToggleItem(ticketId, itemId, completed, responseValue, checklistTitle, stepTitle, reopenPopout) {
     try {
-        const res = await fetch('/api/tickets/ticket_checklists.php', {
+        const res = await fetch(CHK_API + '', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -424,7 +437,7 @@ async function executeToggleItem(ticketId, itemId, completed, responseValue, che
             }
             logStepNote(ticketId, checklistTitle, stepTitle, completed, responseValue);
         } else {
-            alert(data.error || 'Failed to update step');
+            showToast(data.error || 'Could not update the step', 'error');
         }
     } catch (e) {
         console.error('Error toggling step:', e);
@@ -462,9 +475,20 @@ async function logStepNote(ticketId, checklistTitle, stepTitle, completed, respo
 
 // 7. Remove Checklist from Ticket
 async function removeTicketChecklist(ticketId, checklistId) {
-    if (!confirm('Are you sure you want to remove this SOP checklist from the ticket?')) return;
+    const chk = (ticketChecklistsData || []).find(c => parseInt(c.id, 10) === parseInt(checklistId, 10));
+    const done = chk ? (chk.completed_items || 0) : 0;
+    const ok = await showConfirm({
+        title: 'Remove checklist',
+        // Say what is actually lost. Removing a part-completed checklist throws
+        // away who ticked what and when, which is the point of the feature.
+        message: done > 0
+            ? `Remove "${chk.title}" from this ticket? ${done} completed step${done === 1 ? '' : 's'} and their attribution go with it.`
+            : `Remove "${chk ? chk.title : 'this checklist'}" from this ticket?`,
+        okLabel: 'Remove', okClass: 'danger'
+    });
+    if (!ok) return;
     try {
-        const res = await fetch('/api/tickets/ticket_checklists.php', {
+        const res = await fetch(CHK_API + '', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -477,7 +501,7 @@ async function removeTicketChecklist(ticketId, checklistId) {
             await loadTicketChecklists(ticketId);
             openChecklistModal(ticketId);
         } else {
-            alert(data.error || 'Failed to remove checklist');
+            showToast(data.error || 'Could not remove the checklist', 'error');
         }
     } catch (e) {
         console.error('Error removing checklist:', e);
@@ -496,15 +520,15 @@ async function openAttachChecklistModal(ticketId) {
     }
 
     try {
-        const res = await fetch('/api/tickets/ticket_checklists.php?action=list_templates_for_ticket');
+        const res = await fetch(CHK_API + '?action=list_templates_for_ticket');
         const data = await res.json();
         if (!data.success) {
-            alert(data.error || 'Failed to load templates');
+            showToast(data.error || 'Could not load the templates', 'error');
             return;
         }
         availableTemplatesCache = data.templates || [];
     } catch (e) {
-        alert('Error loading templates');
+        showToast('Could not load the templates', 'error');
         return;
     }
 
@@ -573,7 +597,7 @@ function filterTemplatesList(ticketId) {
 
 async function attachSopToTicket(ticketId, templateId) {
     try {
-        const res = await fetch('/api/tickets/ticket_checklists.php', {
+        const res = await fetch(CHK_API + '', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -588,7 +612,7 @@ async function attachSopToTicket(ticketId, templateId) {
             await loadTicketChecklists(ticketId);
             openChecklistModal(ticketId);
         } else {
-            alert(data.error || 'Failed to attach SOP');
+            showToast(data.error || 'Could not attach the checklist', 'error');
         }
     } catch (e) {
         console.error('Error attaching SOP:', e);
