@@ -356,6 +356,11 @@ const WFE = (() => {
                 case 'send_email':          snippet = String(args.subject || ''); break;
                 case 'create_task':         snippet = String(args.title || ''); break;
                 case 'create_ticket':       snippet = String(args.subject || ''); break;
+                case 'attach_checklist': {
+                    const tpls = Array.isArray(args.template_ids) ? args.template_ids : (typeof args.template_ids === 'string' && args.template_ids !== '' ? args.template_ids.split(',') : []);
+                    snippet = '+ Attach ' + tpls.length + ' SOP(s)';
+                    break;
+                }
                 default: {
                     const first = Object.values(args).find(v => v != null && v !== '');
                     if (first != null) snippet = String(first);
@@ -777,6 +782,88 @@ const WFE = (() => {
                     if (String(currentVal) === String(v.id)) opt.selected = true;
                     ctrl.appendChild(opt);
                 });
+            } else if (norm.type === 'checklist_multiselect') {
+                ctrl = document.createElement('div');
+                ctrl.className = 'wf-checklist-multiselect-wrap';
+
+                const values = (window.WF_ACTION_LOOKUPS && window.WF_ACTION_LOOKUPS[norm.lookup]) || [];
+                let selectedIds = Array.isArray(currentVal) 
+                    ? currentVal.map(String) 
+                    : (typeof currentVal === 'string' && currentVal !== '') 
+                        ? currentVal.split(',').map(s => s.trim()) 
+                        : [];
+
+                const searchBox = document.createElement('input');
+                searchBox.type = 'text';
+                searchBox.className = 'form-input';
+                searchBox.placeholder = 'Search SOP checklists...';
+                searchBox.style.marginBottom = '6px';
+                searchBox.style.fontSize = '12px';
+                searchBox.style.padding = '5px 8px';
+
+                const listHost = document.createElement('div');
+                listHost.style.cssText = 'border: 1px solid var(--border, #ddd); border-radius: 4px; padding: 6px 8px; max-height: 160px; overflow-y: auto; background: var(--surface-2, #fafafa); display: flex; flex-direction: column; gap: 4px;';
+
+                function renderList(query = '') {
+                    listHost.innerHTML = '';
+                    const q = (query || '').trim();
+
+                    const scored = [];
+                    values.forEach(v => {
+                        if (typeof scoreChecklistTemplate === 'function') {
+                            const res = scoreChecklistTemplate(v, q);
+                            if (res.matched) {
+                                scored.push({ item: v, score: res.score });
+                            }
+                        } else {
+                            const haystack = `${v.label || ''} ${v.category || ''} ${v.keywords || ''}`.toLowerCase();
+                            if (!q || haystack.includes(q.toLowerCase())) {
+                                scored.push({ item: v, score: 0 });
+                            }
+                        }
+                    });
+
+                    if (scored.length === 0) {
+                        listHost.innerHTML = '<div style="font-size:12px; color:var(--text-dim, #888); padding:4px;">No matching checklists</div>';
+                        return;
+                    }
+
+                    // Sort by relevance score desc, then selected first, then alphabetical
+                    scored.sort((a, b) => {
+                        if (b.score !== a.score) return b.score - a.score;
+                        const aSel = selectedIds.includes(String(a.item.id)) ? 1 : 0;
+                        const bSel = selectedIds.includes(String(b.item.id)) ? 1 : 0;
+                        if (aSel !== bSel) return bSel - aSel;
+                        return (a.item.label || '').localeCompare(b.item.label || '');
+                    });
+
+                    scored.forEach(({ item: v }) => {
+                        const isChecked = selectedIds.includes(String(v.id));
+                        const lbl = document.createElement('label');
+                        lbl.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12.5px; cursor:pointer; padding:3px 0; color:var(--text, #333);';
+                        const catBadge = v.category ? `<small style="font-size:10px; color:#0d9488; background:rgba(13,148,136,0.1); padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:600;">${escAttr(v.category)}</small>` : '';
+                        lbl.innerHTML = `<input type="checkbox" value="${escAttr(v.id)}" ${isChecked ? 'checked' : ''} style="cursor:pointer;"> <span>${escAttr(v.label)}${catBadge}</span>`;
+                        
+                        lbl.querySelector('input').addEventListener('change', (e) => {
+                            const idStr = String(v.id);
+                            if (e.target.checked) {
+                                if (!selectedIds.includes(idStr)) selectedIds.push(idStr);
+                            } else {
+                                selectedIds = selectedIds.filter(x => x !== idStr);
+                            }
+                            n.args[argName] = selectedIds;
+                            if (n.el) n.el.innerHTML = renderNodeContent(n);
+                            markDirty();
+                        });
+                        listHost.appendChild(lbl);
+                    });
+                }
+
+                searchBox.addEventListener('input', () => renderList(searchBox.value));
+                renderList();
+
+                ctrl.appendChild(searchBox);
+                ctrl.appendChild(listHost);
             } else if (norm.type === 'select') {
                 // Fixed-option dropdown; options are [{value, label}] (or plain
                 // strings) supplied inline in the action's arg spec.
@@ -799,9 +886,11 @@ const WFE = (() => {
             ctrl.dataset.argName = argName;
             // Dropdowns/checkboxes fire 'change'; free-text fires 'input' for live updates.
             const evt = (norm.type === 'bool' || norm.type === 'lookup' || norm.type === 'select') ? 'change' : 'input';
-            ctrl.addEventListener(evt, () => {
-                updateActionArgFromControl(argName, norm.type, ctrl);
-            });
+            if (norm.type !== 'checklist_multiselect') {
+                ctrl.addEventListener(evt, () => {
+                    updateActionArgFromControl(argName, norm.type, ctrl);
+                });
+            }
             fg.appendChild(ctrl);
 
             if (norm.supports_vars) {

@@ -135,6 +135,11 @@ $modules = [
         'path' => 'process-mapper/',
         'icon' => '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>'
     ],
+    'checklists' => [
+        'name' => 'Checklists',
+        'path' => 'checklists/',
+        'icon' => '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="m9 14 2 2 4-4"></path>'
+    ],
     'tasks' => [
         'name' => t('common.modules.tasks.name'),
         'path' => 'tasks/',

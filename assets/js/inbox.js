@@ -2866,6 +2866,7 @@ ${classificationFields}
             </button>
         </div>
         <div class="email-body">
+            <div id="ticketChecklistContainer"></div>
             <div id="threadContainer">
                 ${emailBodyHost(email.body_content, 'email-body-content', email.body_type)}
             </div>
@@ -2879,6 +2880,7 @@ ${classificationFields}
     hydrateEmailBodies(readingPane);
 
     loadAiSummary(email.ticket_id);
+    if (typeof loadTicketChecklists === "function") loadTicketChecklists(email.ticket_id);
     // Load full correspondence thread, notes, attachments and linked CMDB objects after rendering
     loadCorrespondenceThread(email.ticket_id);
     loadNotes(email.ticket_id);
@@ -4408,6 +4410,28 @@ async function assignStatus() {
     // is the right way round — a warning that cannot be shown must not become a
     // block that cannot be cleared.
     const closing = ticketStatuses.some(s => s.name === status && s.is_closed);
+
+    if ((closing || status === "resolved" || status === "closed") && typeof getIncompleteMandatorySteps === "function") {
+        const pendingMandatory = getIncompleteMandatorySteps();
+        if (pendingMandatory.length > 0) {
+            select.value = oldValue;
+            const grouped = {};
+            pendingMandatory.forEach(m => {
+                const cName = m.checklist || "SOP Checklist";
+                if (!grouped[cName]) grouped[cName] = [];
+                grouped[cName].push(m.step);
+            });
+            const stepList = Object.entries(grouped).map(([cName, steps]) => {
+                return "✅ " + cName + ":\n" + steps.map(s => "    • " + s).join("\n");
+            }).join("\n\n");
+
+            alert("⚠️ Cannot close/resolve ticket.\n\nThe following mandatory SOP steps must be completed first:\n\n" + stepList);
+            if (typeof openChecklistModal === "function") {
+                openChecklistModal(currentEmail ? currentEmail.ticket_id : null);
+            }
+            return;
+        }
+    }
     const openTasks = (tasksForTicket || []).filter(tk => !tk.status_is_closed).length;
     if (closing && openTasks > 0) {
         const ok = await showConfirm({
@@ -5536,6 +5560,7 @@ function renderNotes() {
 
     html += '</div>';
     container.innerHTML = html;
+    if (typeof styleSopResponsesInNotes === 'function') styleSopResponsesInNotes();
 }
 
 // ===== Files chosen for the note being written (discussion #69) =============

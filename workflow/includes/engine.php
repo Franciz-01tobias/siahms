@@ -951,6 +951,7 @@ class WorkflowEngine
         'problem.priority_id'        => ['table' => 'problem_priorities','label_col' => 'name',      'where' => 'is_active = 1', 'order' => 'display_order, name'],
         'problem.assigned_analyst_id' => ['table' => 'analysts',         'label_col' => 'full_name', 'where' => 'is_active = 1', 'order' => 'full_name'],
         'object.class_id'            => ['table' => 'cmdb_classes',      'label_col' => 'name',      'where' => 'is_active = 1', 'order' => 'name'],
+        'checklist.template_id'      => ['table' => 'checklist_templates', 'label_col' => 'title', 'extra_cols' => ['category', 'keywords', 'description'], 'where' => 'is_active = 1', 'order' => 'category, title'],
     ];
 
     /**
@@ -1250,6 +1251,19 @@ class WorkflowEngine
                     'ticket_id'     => $ticketIdArg,
                 ],
             ],
+            'attach_checklist' => [
+                'label'       => 'Attach SOP Checklist(s)',
+                'description' => 'Attach one or more SOP checklist templates to the ticket. If an SOP is already attached, it safely skips it.',
+                'args'        => [
+                    'ticket_id'    => $ticketIdArg,
+                    'template_ids' => [
+                        'type'     => 'checklist_multiselect',
+                        'label'    => 'Checklist Templates',
+                        'lookup'   => 'checklist_template',
+                        'required' => true,
+                    ],
+                ],
+            ],
             'send_note_to_tracker' => [
                 'label'       => 'Send note to issue tracker',
                 'description' => 'Post a comment onto the issue this ticket is already linked to. Does nothing if there is no link yet.',
@@ -1281,6 +1295,7 @@ class WorkflowEngine
         // when the table is absent, so an install that has not run Database
         // Verification gets an empty dropdown rather than a broken editor.
         'integration_connection' => 'integration.connection_id',
+        'checklist_template'    => 'checklist.template_id',
         // Only ever an ACTION lookup, never a condition field: nothing dispatches
         // a mailbox id in a payload, so there would be nothing to compare against.
         'mailbox'                => 'email.mailbox_id',
@@ -1674,6 +1689,7 @@ class WorkflowEngine
             case 'send_webhook':        return self::action_send_webhook($args, $payload);
             case 'escalate_to_tracker':  return self::action_escalate_to_tracker($args, $payload);
             case 'send_note_to_tracker': return self::action_send_note_to_tracker($args, $payload);
+            case 'attach_checklist':    return self::action_attach_checklist($args, $payload);
             default:
                 throw new Exception("Unknown action type: {$type}");
         }
@@ -1889,6 +1905,72 @@ class WorkflowEngine
         if ($raw === null || $raw === '') return $default;
         $s = strtolower(trim((string)$raw));
         return !in_array($s, ['0', 'false', 'no', 'off'], true);
+    }
+
+    private static function action_attach_checklist(array $args, array $payload): array
+    {
+        $ticketId = self::argInt($args, 'ticket_id', $payload);
+        if (!$ticketId) throw new Exception('ticket_id is required');
+
+        $templateIds = $args['template_ids'] ?? [];
+        if (is_string($templateIds)) {
+            $templateIds = array_filter(array_map('trim', explode(',', $templateIds)));
+        }
+        if (!is_array($templateIds) || empty($templateIds)) {
+            return ['skipped' => true, 'reason' => 'No checklist templates selected', 'ticket_id' => $ticketId];
+        }
+
+        $conn = connectToDatabase();
+        $attached = [];
+
+        foreach ($templateIds as $tplIdRaw) {
+            $tplId = (int)$tplIdRaw;
+            if ($tplId <= 0) continue;
+
+            // Check if already attached to this ticket
+            $existsStmt = $conn->prepare("SELECT id FROM ticket_checklists WHERE ticket_id = ? AND template_id = ? LIMIT 1");
+            $existsStmt->execute([$ticketId, $tplId]);
+            if ($existsStmt->fetch()) {
+                continue; // Already attached, skip
+            }
+
+            // Fetch template
+            $tplStmt = $conn->prepare("SELECT title FROM checklist_templates WHERE id = ?");
+            $tplStmt->execute([$tplId]);
+            $tpl = $tplStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$tpl) continue;
+
+            // Insert ticket_checklists
+            $ins = $conn->prepare("INSERT INTO ticket_checklists (ticket_id, template_id, title, created_by_id, created_datetime) VALUES (?, ?, ?, 1, UTC_TIMESTAMP())");
+            $ins->execute([$ticketId, $tplId, $tpl['title']]);
+            $chkId = (int)$conn->lastInsertId();
+
+            // Fetch & insert template items
+            $itemsStmt = $conn->prepare("SELECT title, suggested_role, is_mandatory, requires_input, input_placeholder, sort_order FROM checklist_template_items WHERE template_id = ? ORDER BY sort_order ASC, id ASC");
+            $itemsStmt->execute([$tplId]);
+            $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $insItem = $conn->prepare("INSERT INTO ticket_checklist_items (ticket_checklist_id, title, suggested_role, is_mandatory, requires_input, input_placeholder, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            foreach ($items as $idx => $it) {
+                $insItem->execute([
+                    $chkId,
+                    $it['title'],
+                    $it['suggested_role'] ?? null,
+                    !empty($it['is_mandatory']) ? 1 : 0,
+                    !empty($it['requires_input']) ? 1 : 0,
+                    $it['input_placeholder'] ?? null,
+                    $it['sort_order'] ?? ($idx + 1)
+                ]);
+            }
+
+            $attached[] = $tpl['title'];
+        }
+
+        return [
+            'ticket_id'      => $ticketId,
+            'attached_count' => count($attached),
+            'checklists'     => $attached
+        ];
     }
 
     private static function action_log_message(array $args, array $payload): array
