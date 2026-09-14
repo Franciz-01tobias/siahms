@@ -1,0 +1,63 @@
+<?php
+/**
+ * People who have made a substantial contribution to FreeITSM.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * 🔑 THIS IS A CODE FILE ON PURPOSE, NOT A DATABASE TABLE.
+ *
+ * A table would need a migration, a schema entry, an admin screen to edit it,
+ * and permissions deciding who may — all so that a list which grows a handful
+ * of times a year can be changed without a deploy. It is also not an
+ * operator's data: it is part of what FreeITSM *is*, and it should read the
+ * same on every install rather than being something each site curates.
+ *
+ * So: add a person here, commit it, and it ships with the next release.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
+ * Each entry:
+ *   name     how they asked to be credited — use exactly what they gave you
+ *   github   username without the @, or null if they would rather not be linked
+ *   date     the contribution, YYYY-MM-DD. Displayed as a month and year.
+ *   what     two or three sentences. Say what they actually did and why it
+ *            mattered; "helped with the project" credits nobody.
+ *
+ * ⚠️ Ask before adding someone. A person's name and GitHub handle on a public
+ * product page is their decision, not ours — Sandy was asked in #138 and chose
+ * how he wanted to be credited.
+ *
+ * Newest first.
+ */
+
+/** @return array<int,array{name:string,github:?string,date:string,what:string}> */
+function getContributors(): array
+{
+    return [
+        [
+            'name'   => 'Santhosh Srinivasan (Sandy)',
+            'github' => 'srinivasansanthosh',
+            'date'   => '2026-09-14',
+            'what'   => 'Designed and built the entire Checklists & SOPs module — reusable procedure '
+                      . 'templates, mandatory-step gating, analyst input capture and workflow '
+                      . 'integration — and offered it to the project unprompted. It is the first '
+                      . 'whole module FreeITSM has received from the community, and it started with '
+                      . 'a careful argument about why neither Knowledge nor Tasks solved the problem.',
+        ],
+        [
+            'name'   => 'Abdul Aziz',
+            'github' => 'abdulaziz-git',
+            'date'   => '2026-06-20',
+            'what'   => 'FreeITSM\'s first external contribution. Fixed Google mailbox OAuth setup '
+                      . 'more thoroughly than the original patch did — the encrypted token columns '
+                      . 'were too small and were silently truncating — and added per-provider '
+                      . 'callback validation with a redirect-URI the setup screen fills in for you.',
+        ],
+        [
+            'name'   => 'chris18890',
+            'github' => 'chris18890',
+            'date'   => '2026-07-22',
+            'what'   => 'Raised two issues that turned into real work: defaulting TLS certificate '
+                      . 'verification to on, and a demo dataset with realistic roles and permissions '
+                      . 'rather than everyone being an administrator. Both shipped in full.',
+        ],
+    ];
+}

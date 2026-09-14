@@ -201,6 +201,16 @@ function getSystemAreas() {
             'keywords' => 'system.landing.routing_test_keywords',
             'requires' => 'multitenant',
         ],
+        // Last on purpose: it configures nothing. It is here rather than in the
+        // Help pages because the people listed are part of the product, and an
+        // administrator poking round System is who will actually come across it.
+        [
+            'icon'     => 'contributors',
+            'url'      => 'contributors/',
+            'title'    => 'system.landing.contributors_title',
+            'desc'     => 'system.landing.contributors_desc',
+            'keywords' => 'system.landing.contributors_keywords',
+        ],
     ];
 }
 
@@ -237,6 +247,10 @@ function systemAreaIcon($key) {
         'companies'   => '<path d="M3 21h18"></path><path d="M9 8h1"></path><path d="M9 12h1"></path><path d="M9 16h1"></path><path d="M14 8h1"></path><path d="M14 12h1"></path><path d="M14 16h1"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path>',
         'routing_test'=> '<rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>',
         'topology'    => '<rect x="9" y="3" width="6" height="5" rx="1"></rect><rect x="3" y="16" width="6" height="5" rx="1"></rect><rect x="15" y="16" width="6" height="5" rx="1"></rect><path d="M12 8v4M6 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>',
+        // An award ribbon — thanks, not administration. Deliberately not the
+        // same star used inside the cards, so the tile is not just a smaller
+        // copy of what it opens.
+        'contributors' => '<circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>',
         'orphaned'    => '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>',
         'search'      => '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
     ];

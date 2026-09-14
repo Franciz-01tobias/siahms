@@ -65,10 +65,21 @@ return [
         'run_d013'       => 'Show me exactly what to do',
     ],
 
+    // System -> Contributors. The list itself is in includes/contributors.php.
+    'contributors' => [
+        'title'   => 'Contributors',
+        'heading' => 'Contributors',
+        'lead'    => 'FreeITSM is free software, and some of it was written by people who did not have to. These are the contributions that changed the product rather than a line of it — with thanks.',
+        'none'    => 'No contributors are listed yet.',
+    ],
+
     'landing' => [
         'ai_title' => 'AI thinking',
         'ai_desc' => 'Whether each AI feature may use a model\'s extended thinking. Off is usually faster and no worse.',
         'ai_keywords' => 'ai reasoning thinking model tokens slow speed openrouter latency cost',
+        'contributors_title' => 'Contributors',
+        'contributors_desc' => 'The people who have made a substantial contribution to FreeITSM, and what they did.',
+        'contributors_keywords' => 'contributors thanks credit community github pull request open source volunteers acknowledgements',
         'heading'  => 'System Administration',
         'subtitle' => 'Configure system-level settings and access controls',
         'version'  => 'Version',
