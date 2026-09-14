@@ -109,6 +109,18 @@ function getHelpTopics() {
             ],
             'terms' => 'schema migration upgrade after update missing table column sql repair',
         ],
+        // Added with the screen in 2.0.0; it shipped without one.
+        'contributors' => [
+            'hero' => 'Contributors',
+            'sub'  => 'Thank-you cards for the people who have made a substantial contribution to FreeITSM - what they built, and when. The same on every install, because it is part of what FreeITSM is rather than something each site curates.',
+            'sections' => [
+                ['id' => 'overview',     'label' => 'Overview'],
+                ['id' => 'cards',        'label' => 'Reading a card'],
+                ['id' => 'adding',       'label' => 'Adding someone'],
+                ['id' => 'contributing', 'label' => 'Want to be on it?'],
+            ],
+            'terms' => 'thanks credit acknowledgement community pull request volunteer author contribute github',
+        ],
         'colours' => [
             'hero' => 'Module colours',
             'sub'  => 'Give each module its own colour so its icon and headers stand out at a glance across FreeITSM.',
@@ -128,9 +140,10 @@ function getHelpTopics() {
                 ['id' => 'logo',     'label' => 'Logo'],
                 ['id' => 'slots',    'label' => 'Header & footer text'],
                 ['id' => 'tokens',   'label' => 'Tokens'],
+                ['id' => 'screens',  'label' => 'The three sign-in screens'],
                 ['id' => 'save',     'label' => 'Saving & resetting'],
             ],
-            'terms' => 'logo brand company name letterhead export pdf watermark',
+            'terms' => 'logo brand company name letterhead export pdf watermark login screen background image portal home wallpaper sign-in',
         ],
         'security' => [
             'hero' => 'Security',

@@ -780,6 +780,10 @@ try {
                             <strong><?php echo t('tickets.help.settings.card_csat_title'); ?></strong>
                             <span><?php echo t('tickets.help.settings.card_csat_body'); ?></span>
                         </div>
+                        <div class="help-card">
+                            <strong><?php echo t('tickets.help.settings.card_checklists_title'); ?></strong>
+                            <span><?php echo t('tickets.help.settings.card_checklists_body'); ?></span>
+                        </div>
                     </div>
 
                     <p><?php echo t('tickets.help.settings.email_heading'); ?></p>
@@ -804,6 +808,13 @@ try {
                             </div>
                         </div>
                     </div>
+
+                    <?php /* #1694 - the one-off closing message. It is configured
+                             in a template, so it is documented beside templates,
+                             and it is the only merge code an analyst types. */ ?>
+                    <p style="margin-top: 24px;"><?php echo t('tickets.help.settings.closemsg_heading'); ?></p>
+                    <p><?php echo t('tickets.help.settings.closemsg_body'); ?></p>
+                    <p class="help-note"><?php echo t('tickets.help.settings.closemsg_note'); ?></p>
 
                     <!-- Categories, category at close, resolution codes (#1540-#1548) -->
                     <p style="margin-top: 24px;"><?php echo t('tickets.help.settings.cat_heading'); ?></p>

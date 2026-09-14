@@ -2427,6 +2427,11 @@ return [
             'card_custom_body'     => 'Add your own fields to tickets for data your organisation needs to capture that is not covered by the default field set',
             'card_templates_title' => 'Email templates',
             'card_templates_body'  => 'Configure the notification templates sent to end users when tickets are created, updated, resolved, or for the CSAT survey. Embed merge codes like [requester_name] and [csat_link]',
+            // The Checklists module (2.0.0) puts its close-gate here rather
+            // than in its own settings, because it is a rule about closing
+            // tickets and that is where somebody looks for it.
+            'card_checklists_title' => 'Checklists',
+            'card_checklists_body'  => 'Decide what happens when somebody closes a ticket that still has mandatory SOP steps outstanding: <strong>warn</strong> and record an internal note naming the steps and who closed it, or <strong>block</strong> the close until they are done. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
             'card_cleanup_title'   => 'Reply Cleanup AI',
             'card_cleanup_body'    => 'Anthropic key + model + tone for the ✨ Cleanup button on the reply editor. Separate key from other AI features for granular billing',
             'card_csat_title'      => 'CSAT',
@@ -2439,6 +2444,10 @@ return [
             'tip'           => 'Use email templates to maintain a professional, consistent tone in all end-user communications. Templates support dynamic placeholders for ticket reference, requester name, analyst name, and status.',
 
             // Categories, category at close, resolution codes (#1540-#1548).
+            // #1694 - the one-off closing message.
+            'closemsg_heading' => '<strong>A one-off message when you close a ticket</strong>',
+            'closemsg_body'    => 'Put <code>[ticket_closed_message]</code> anywhere in an active <strong>Ticket closed</strong> template and, from then on, setting a ticket to a closed status asks the analyst for a sentence - <em>&ldquo;the spare charger is on your desk&rdquo;</em>, <em>&ldquo;closing as agreed on the phone&rdquo;</em>. Whatever they type lands exactly where you put the placeholder, so you keep control of the wording around it. It is not a setting and nothing stores it: one note, one ticket, one email. Type nothing and the line simply is not there - no gap, no stray punctuation.',
+            'closemsg_note'    => '<strong>The prompt only appears when the placeholder is actually in the template.</strong> Without it, anything an analyst typed would be silently thrown away, and every desk that does not want this would gain a click on every single close. So it switches itself on when you configure it and stays out of the way when you have not.',
             'cat_heading' => '<strong>Categories, and the two fields beside them</strong>',
             'cat_body'    => 'A ticket <em>type</em> says what kind of thing this is; a <em>category</em> says what it is about. Build the list under <strong>Settings &rarr; Categories</strong>, along with the switches that decide whether any of it appears on a ticket at all.',
             'cat_card_one_title' => 'Category',

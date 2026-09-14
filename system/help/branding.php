@@ -72,6 +72,27 @@ require __DIR__ . '/_top.php';
 </div>
 
 <!-- 5. Saving & resetting -->
+<?php /* The three sign-in screens. This page documented only the logo and the
+         header/footer text for exported documents, and never mentioned the
+         designer that shares the same screen - so the background-image bug in
+         #137 landed on a feature with no documentation at all. */ ?>
+<div class="help-section" id="screens">
+    <div class="help-section-header"><?php echo helpSectionNum('screens'); ?>
+        <div>
+            <h3>The three sign-in screens</h3>
+            <p>Besides the logo, <strong>System &rarr; Branding</strong> designs the three pages people meet before they sign in. Each is configured on its own tab and each is entirely independent.</p>
+        </div>
+    </div>
+    <ul class="help-list">
+        <li><strong>Analyst login</strong> &mdash; <code>auth/login.php</code>, the page your team uses.</li>
+        <li><strong>Self-service portal</strong> &mdash; <code>self-service/login.php</code>, the page everybody else uses. This is the one your customers see, so it is usually the one worth spending time on.</li>
+        <li><strong>Home</strong> &mdash; the landing page at the root of the site, which can be set as the page people arrive at.</li>
+    </ul>
+    <p>For each you can set a <strong>background</strong> (a colour, a gradient, or an uploaded image), where the sign-in form sits, and how its panel is styled. The Home tab has no form on it, so it offers neither of those last two, and it keeps the theme's own background unless you tell it otherwise.</p>
+    <div class="help-note"><strong>Each tab keeps its own settings, including its own background image.</strong> Uploading a picture on the Self-Service Portal tab changes the portal and nothing else. Until 2.0.0 that was not true &mdash; every upload was written to the analyst login screen whichever tab you were on, so the portal's image replaced the analyst one and the portal showed nothing (<a href="https://github.com/edmozley/freeitsm/issues/137" target="_blank" rel="noopener">#137</a>, fixed by Santhosh Srinivasan).</div>
+    <p>Press <strong>Save</strong> before switching tabs. Each tab has its own file picker, so a picture chosen on one and left unsaved is not carried over to another.</p>
+</div>
+
 <div class="help-section" id="save">
     <div class="help-section-header"><?php echo helpSectionNum('save'); ?>
         <div>
