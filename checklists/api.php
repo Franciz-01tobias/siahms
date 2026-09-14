@@ -64,11 +64,20 @@ if ($action === 'save') {
         $catStmt->execute([$category]);
     }
 
-    // Replace items with suggested_role, mandatory, and data capture prompt
+    // 🔴 The steps INHERIT the template's is_demo flag.
+    //
+    // Editing a demo template rewrites its steps, and a freshly inserted row
+    // defaults to is_demo = 0 while the parent stays 1. Demo removal is
+    // `DELETE FROM <table> WHERE is_demo = 1` per table, so the template would
+    // go and its steps would be left behind pointing at nothing — which is
+    // exactly what happened to the seeded "Firewall rule change" the first time
+    // somebody edited it. Parent and children must agree or removal orphans.
+    $isDemo = (int)$conn->query("SELECT is_demo FROM checklist_templates WHERE id = " . (int)$id)->fetchColumn();
+
     $del = $conn->prepare("DELETE FROM checklist_template_items WHERE template_id = ?");
     $del->execute([$id]);
 
-    $ins = $conn->prepare("INSERT INTO checklist_template_items (template_id, title, suggested_role, is_mandatory, requires_input, input_placeholder, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $ins = $conn->prepare("INSERT INTO checklist_template_items (template_id, title, suggested_role, is_mandatory, requires_input, input_placeholder, sort_order, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     foreach ($items as $idx => $it) {
         $itTitle = is_string($it) ? trim($it) : trim($it['title'] ?? '');
         if ($itTitle === '') continue;
@@ -76,7 +85,7 @@ if ($action === 'save') {
         $role = is_array($it) ? trim($it['suggested_role'] ?? '') : '';
         $reqInput = !empty($it['requires_input']) ? 1 : 0;
         $placeholder = is_array($it) ? trim($it['input_placeholder'] ?? '') : '';
-        $ins->execute([$id, $itTitle, $role, $isMand, $reqInput, $placeholder, $idx + 1]);
+        $ins->execute([$id, $itTitle, $role, $isMand, $reqInput, $placeholder, $idx + 1, $isDemo]);
     }
 
     echo json_encode(['success' => true, 'id' => $id]);
