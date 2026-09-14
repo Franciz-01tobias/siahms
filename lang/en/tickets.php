@@ -1767,6 +1767,12 @@ return [
             // Shown in place of Paste when nothing has been copied yet, so the
             // menu explains itself rather than offering a dead option.
             'nothing_copied' => 'Nothing copied yet',
+            // Right-clicking a selection, a day heading or an analyst's name.
+            // Each says HOW MANY cells, because the whole point of these is
+            // that one click fills more than one.
+            'cells_selected' => '{count} cells selected',
+            'paste_cells'    => 'Paste into {count} cells',
+            'paste_into'     => 'Paste into all {count}',
         ],
         'copy' => [
             'week_btn'        => 'Copy week',
@@ -1790,7 +1796,20 @@ return [
             'week_confirm_empty'  => 'Paste {incoming} entries into this week?',
             'week_same'           => 'That is the week you copied - nothing to do',
 
-            'pasted'          => 'Pasted',
+            // Pasting into many cells at once. The question is not "are you
+            // sure" - it is which of these cells, and there are two sensible
+            // answers, so it gets a modal with both rather than a confirm.
+            'mode_title'   => 'Some cells already have a shift',
+            // Phrased without a verb after the counts: "{filled} of them
+            // already have a shift" reads as "1 of them already have".
+            'mode_message' => 'Pasting {shift} into {total} cells - {filled} already filled, {empty} empty.',
+            'mode_empty'   => 'Empty only',
+            'mode_all'     => 'Overwrite all',
+
+            'pasted'            => 'Pasted',
+            'cells_pasted'      => 'Pasted into {count} cells',
+            'cells_pasted_some' => 'Pasted into {written} cells - {skipped} left alone',
+            'cells_skipped'     => '{count} cells could not be pasted into',
             'week_pasted'     => 'Week pasted - {written} entries in, {removed} replaced',
             // Never silent. A shift or location deleted between the copy and
             // the paste drops those rows, and a paste that quietly loses two
@@ -2339,6 +2358,8 @@ return [
             'rota_step1'  => '<strong>View the rota grid</strong> &mdash; the rota displays analysts along one axis and days along the other, with shift blocks showing coverage at a glance.',
             'rota_step2'  => '<strong>Add or edit shifts</strong> &mdash; click on a cell to assign a shift type (e.g. Early, Late, Night, On-Call). Changes save immediately.',
             'rota_step3'  => '<strong>Plan ahead</strong> &mdash; navigate forward by week to build the rota in advance. This ensures adequate coverage during known busy periods, holidays, or training days.',
+            'rota_step4'  => '<strong>Fill several cells at once</strong> &mdash; <strong>right-click</strong> a cell and choose <em>Copy</em> to pick up the shift in it, then right-click another and <em>Paste</em>. For more than one cell, <strong>drag across a block</strong> of them (or ctrl-click cells one at a time) and paste into the lot. Hovering a <strong>day heading</strong> lights up that whole day, and hovering an <strong>analyst&rsquo;s name</strong> lights up their whole week &mdash; right-click either and paste into all of it. Where some of the cells already have a shift, you are asked whether to <strong>overwrite all</strong> of them or fill <strong>only the empty ones</strong>, with both counts on screen.',
+            'rota_step5'  => '<strong>Copy a whole week</strong> &mdash; <strong>Copy week</strong> and <strong>Paste week</strong> at the top right lift every shift in the week you are looking at and drop them onto another one, which is the fastest way to build a repeating rota. Pasting <em>replaces</em> the target week, so the confirmation tells you how many entries are about to be removed. It only ever touches the days and the people the grid is actually showing you.',
             'tip'         => 'Combine the calendar and rota together for effective capacity planning. If the calendar shows a spike in tickets every Monday morning, ensure the rota has extra coverage scheduled for that slot.',
         ],
         'settings' => [

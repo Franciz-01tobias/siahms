@@ -31,7 +31,7 @@ $translationNamespaces = ['common', 'tickets'];
     <title><?php echo htmlspecialchars(t('tickets.rota.page_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/rota.css?v=2">
+    <link rel="stylesheet" href="../assets/css/rota.css?v=3">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -102,6 +102,22 @@ $translationNamespaces = ['common', 'tickets'];
         </div>
     </div>
 
+    <?php /* Pasting into several cells at once, some of which already have a
+             shift. Not showConfirm(): that answers yes or no, and this
+             question has two useful answers plus cancel. The message counts
+             both halves so the choice is made on numbers, not on a guess. */ ?>
+    <div class="modal" id="rotaPasteChoiceModal">
+        <div class="modal-content" id="rotaPasteChoiceContent">
+            <div class="modal-header"><?php echo htmlspecialchars(t('tickets.rota.copy.mode_title')); ?></div>
+            <p id="rotaPasteChoiceMsg" style="margin: 0 0 24px;"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="resolveRotaPasteChoice(null)"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button type="button" class="btn btn-primary" id="rotaPasteEmptyBtn" onclick="resolveRotaPasteChoice('empty')"><?php echo htmlspecialchars(t('tickets.rota.copy.mode_empty')); ?></button>
+                <button type="button" class="btn btn-danger" id="rotaPasteAllBtn" onclick="resolveRotaPasteChoice('all')"><?php echo htmlspecialchars(t('tickets.rota.copy.mode_all')); ?></button>
+            </div>
+        </div>
+    </div>
+
     <?php /* Right-click a cell to copy or paste one shift (Ed). Uses the shared
              .ticket-context-menu component from inbox.css, which this page
              already loads and which the ticket, asset, change and service
@@ -123,6 +139,6 @@ $translationNamespaces = ['common', 'tickets'];
         </button>
     </div>
 
-    <script src="../assets/js/rota.js?v=4"></script>
+    <script src="../assets/js/rota.js?v=5"></script>
 </body>
 </html>

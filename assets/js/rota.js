@@ -149,10 +149,16 @@ function renderRotaGrid(weekStart) {
 
     let html = '';
 
-    // Header row - corner cell + day headers
+    // Header row - corner cell + day headers.
+    //
+    // 🔑 A day header carries the same data-date its cells carry, and an
+    // analyst name cell the same data-analyst. That is what makes hovering
+    // either of them light up the whole line with one attribute selector, and
+    // what lets the right-click menu paste down a column or across a row
+    // without the grid having to be re-walked.
     html += `<div class="rota-col-header" style="text-align: left; padding-left: 12px;">${analystHeader}</div>`;
-    days.forEach(day => {
-        html += `<div class="rota-col-header${day.isToday ? ' today' : ''}">
+    days.forEach((day, colIdx) => {
+        html += `<div class="rota-col-header rota-line-head${day.isToday ? ' today' : ''}" data-date="${day.date}" data-col="${colIdx}" oncontextmenu="return openRotaLineMenu(event, this, 'col');">
             <span class="day-name">${escapeHtml(day.name)}</span>
             <span class="day-date">${escapeHtml(day.dayNum)}</span>
         </div>`;
@@ -162,12 +168,12 @@ function renderRotaGrid(weekStart) {
     if (rotaAnalysts.length === 0) {
         html += `<div class="rota-empty" style="grid-column: 1 / -1;"><p>${escapeHtml(t('tickets.rota.no_analysts'))}</p></div>`;
     } else {
-        rotaAnalysts.forEach(analyst => {
+        rotaAnalysts.forEach((analyst, rowIdx) => {
             // Analyst name cell
-            html += `<div class="rota-analyst-name">${escapeHtml(analyst.full_name)}</div>`;
+            html += `<div class="rota-analyst-name rota-line-head" data-analyst="${analyst.id}" data-row="${rowIdx}" oncontextmenu="return openRotaLineMenu(event, this, 'row');">${escapeHtml(analyst.full_name)}</div>`;
 
             // Day cells
-            days.forEach(day => {
+            days.forEach((day, colIdx) => {
                 const entry = entryMap[analyst.id] && entryMap[analyst.id][day.date];
                 const todayClass = day.isToday ? ' today' : '';
 
@@ -176,7 +182,7 @@ function renderRotaGrid(weekStart) {
                 // was opened on, and reading it back off the element beats
                 // threading three arguments through an oncontextmenu string —
                 // where an analyst name with an apostrophe would break out.
-                const cellData = `data-analyst="${analyst.id}" data-date="${day.date}" oncontextmenu="return openRotaCellMenu(event, this);"`;
+                const cellData = `data-analyst="${analyst.id}" data-date="${day.date}" data-row="${rowIdx}" data-col="${colIdx}" oncontextmenu="return openRotaCellMenu(event, this);"`;
 
                 if (entry) {
                     const locStyle = entry.location_colour
@@ -203,6 +209,11 @@ function renderRotaGrid(weekStart) {
     }
 
     grid.innerHTML = html;
+
+    // The grid is rebuilt from scratch on every load, including the reload
+    // after a save somebody else's change triggered. Re-marking the selection
+    // keeps it alive across that instead of quietly losing it.
+    applyRotaSelection();
 }
 
 function fmtTime(t) {
@@ -352,6 +363,7 @@ async function deleteRotaEntry() {
 let rotaCellClipboard = null;   // { shift_id, location_id, is_on_call, shift_name }
 let rotaWeekClipboard = null;   // { week_start, entries: [...], count }
 let rotaCtxCell = null;         // the cell the context menu was opened on
+let rotaCtxLine = null;         // or the column / row it was opened on
 
 function rotaEntryAt(analystId, date) {
     return rotaEntries.find(e => e.analyst_id == analystId && e.rota_date === date) || null;
@@ -362,66 +374,285 @@ function rotaDateLabel(date) {
     return MODAL_DATE_FMT.format(new Date(date + 'T00:00:00'));
 }
 
+// ---- Selecting more than one cell -------------------------------------
+//
+// Three ways to aim a paste at several cells, because three different jobs
+// want different ones: drag a block when the shifts are scattered, hover a
+// column heading when everybody works the same day, hover an analyst's name
+// when one person works the same shift all week.
+//
+// 🔑 A plain click must still open the entry editor — that is what the grid
+// has always done and it is the common action. So selecting is a gesture the
+// editor can tell apart: a drag ACROSS cells, or ctrl/cmd-click. A press and
+// release inside one cell is never a selection.
+
+const rotaSelection = new Set();    // "analystId|YYYY-MM-DD"
+let rotaDragAnchor = null;          // the cell a drag started on
+let rotaDragMoved = false;          // ...and whether it ever left that cell
+let rotaSuppressClick = false;      // the click that ends a drag opens nothing
+let rotaHoverKey = '';              // the column / row currently lit up
+
+function rotaCellKey(analystId, date) {
+    return analystId + '|' + date;
+}
+
+function rotaSelectionTargets() {
+    return Array.from(rotaSelection).map(key => {
+        const parts = key.split('|');
+        return { analyst_id: parts[0], rota_date: parts[1] };
+    });
+}
+
+function applyRotaSelection() {
+    document.querySelectorAll('#rotaGrid .rota-cell').forEach(cell => {
+        cell.classList.toggle('selected',
+            rotaSelection.has(rotaCellKey(cell.dataset.analyst, cell.dataset.date)));
+    });
+}
+
+function clearRotaSelection() {
+    if (!rotaSelection.size) return;
+    rotaSelection.clear();
+    applyRotaSelection();
+}
+
+/** Every cell between two corners, inclusive - the spreadsheet rectangle. */
+function rotaSelectRect(from, to) {
+    const r1 = Math.min(+from.dataset.row, +to.dataset.row);
+    const r2 = Math.max(+from.dataset.row, +to.dataset.row);
+    const c1 = Math.min(+from.dataset.col, +to.dataset.col);
+    const c2 = Math.max(+from.dataset.col, +to.dataset.col);
+
+    rotaSelection.clear();
+    document.querySelectorAll('#rotaGrid .rota-cell').forEach(cell => {
+        const r = +cell.dataset.row, c = +cell.dataset.col;
+        if (r >= r1 && r <= r2 && c >= c1 && c <= c2) {
+            rotaSelection.add(rotaCellKey(cell.dataset.analyst, cell.dataset.date));
+        }
+    });
+    applyRotaSelection();
+}
+
+/** The day cells belonging to a column heading or an analyst name cell. */
+function rotaLineCells(head) {
+    const sel = head.dataset.date
+        ? `.rota-cell[data-date="${head.dataset.date}"]`
+        : `.rota-cell[data-analyst="${head.dataset.analyst}"]`;
+    return Array.from(document.querySelectorAll('#rotaGrid ' + sel));
+}
+
+function rotaHoverClear() {
+    rotaHoverKey = '';
+    document.querySelectorAll('#rotaGrid .line-hover').forEach(el => el.classList.remove('line-hover'));
+}
+
+/** Light up the whole column or row under the pointer. Pass null to unlight. */
+function rotaHoverSet(head) {
+    const key = !head ? ''
+        : (head.dataset.date ? 'c' + head.dataset.date : 'r' + head.dataset.analyst);
+    if (key === rotaHoverKey) return;
+    rotaHoverClear();
+    if (!head) return;
+    rotaHoverKey = key;
+    head.classList.add('line-hover');
+    rotaLineCells(head).forEach(el => el.classList.add('line-hover'));
+}
+
+(function wireRotaSelection() {
+    const grid = document.getElementById('rotaGrid');
+    if (!grid) return;
+
+    grid.addEventListener('mousedown', function (e) {
+        rotaSuppressClick = false;
+        if (e.button !== 0) return;
+        const cell = e.target.closest('.rota-cell');
+        if (!cell) return;
+
+        if (e.ctrlKey || e.metaKey) {
+            const key = rotaCellKey(cell.dataset.analyst, cell.dataset.date);
+            if (rotaSelection.has(key)) rotaSelection.delete(key);
+            else rotaSelection.add(key);
+            applyRotaSelection();
+            rotaSuppressClick = true;
+            e.preventDefault();
+            return;
+        }
+
+        rotaDragAnchor = cell;
+        rotaDragMoved = false;
+    });
+
+    grid.addEventListener('mouseover', function (e) {
+        rotaHoverSet(e.target.closest('.rota-line-head'));
+
+        if (!rotaDragAnchor) return;
+        const cell = e.target.closest('.rota-cell');
+        if (!cell || cell === rotaDragAnchor) return;
+        rotaDragMoved = true;
+        rotaSelectRect(rotaDragAnchor, cell);
+    });
+
+    // Leaving the grid unlights the hovered line - unless its menu is open,
+    // in which case the pointer is ON that menu and the line it is about to
+    // paste into needs to stay visible.
+    grid.addEventListener('mouseleave', function () {
+        if (!rotaCtxLine) rotaHoverClear();
+    });
+
+    // On the document, not the grid: a drag that runs off the edge still ends.
+    document.addEventListener('mouseup', function () {
+        if (rotaDragMoved) rotaSuppressClick = true;
+        rotaDragAnchor = null;
+        rotaDragMoved = false;
+    });
+
+    // Capture phase, so this runs BEFORE the cell's own onclick and can stop
+    // the event reaching it. A click that finished a drag, or picked a cell
+    // with ctrl held, must not also open the entry editor.
+    grid.addEventListener('click', function (e) {
+        if (rotaSuppressClick) {
+            rotaSuppressClick = false;
+            e.stopPropagation();
+            e.preventDefault();
+            return;
+        }
+        if (e.target.closest('.rota-cell')) clearRotaSelection();
+    }, true);
+})();
+
 // ---- The cell menu ----------------------------------------------------
 
 function openRotaCellMenu(event, cell) {
     event.preventDefault();
     rotaCtxCell = cell;
+    rotaCtxLine = null;
 
     const analystId = cell.dataset.analyst;
     const date      = cell.dataset.date;
     const entry     = rotaEntryAt(analystId, date);
     const analyst   = rotaAnalysts.find(a => a.id == analystId);
 
-    const menu = document.getElementById('rotaContextMenu');
-    document.getElementById('rotaCtxHeader').textContent =
-        (analyst ? analyst.full_name : '') + ' — ' + rotaDateLabel(date);
+    // Right-clicking inside a selection aims at the selection; right-clicking
+    // outside one means you have moved on, so the selection goes. Keeping it
+    // would leave a paste pointed somewhere other than where you clicked.
+    const inSelection = rotaSelection.size > 1 && rotaSelection.has(rotaCellKey(analystId, date));
+    if (!inSelection) clearRotaSelection();
 
-    // Copy and Clear only mean something on a cell that has a shift in it.
-    document.getElementById('rotaCtxCopy').style.display  = entry ? '' : 'none';
-    document.getElementById('rotaCtxClear').style.display = entry ? '' : 'none';
+    document.getElementById('rotaCtxHeader').textContent = inSelection
+        ? t('tickets.rota.ctx.cells_selected', { count: rotaSelection.size })
+        : (analyst ? analyst.full_name : '') + ' — ' + rotaDateLabel(date);
 
-    // Paste is always listed, but says why it cannot be used rather than
-    // sitting there as a dead option that appears to do nothing.
+    // Copy and Clear only mean something on a single cell that has a shift in
+    // it. Across a selection they would need their own confirmations and their
+    // own answers to "copy WHAT, exactly" - one shift is what a cell holds.
+    document.getElementById('rotaCtxCopy').style.display  = (entry && !inSelection) ? '' : 'none';
+    document.getElementById('rotaCtxClear').style.display = (entry && !inSelection) ? '' : 'none';
+
+    rotaSetPasteItem(inSelection
+        ? t('tickets.rota.ctx.paste_cells', { count: rotaSelection.size })
+        : t('tickets.rota.ctx.paste_cell') + (rotaCellClipboard ? ' — ' + rotaCellClipboard.shift_name : ''));
+
+    rotaPositionMenu(event);
+    return false;
+}
+
+/**
+ * The same menu, opened on a column heading or an analyst's name: paste one
+ * shift down a day or across a week. Copy and Clear are hidden - a line is a
+ * paste TARGET, and "clear the whole column" is a destructive action nobody
+ * asked for hidden behind a right-click.
+ */
+function openRotaLineMenu(event, head, kind) {
+    event.preventDefault();
+
+    const cells = rotaLineCells(head);
+    if (!cells.length) return false;
+
+    rotaCtxCell = null;
+    clearRotaSelection();
+
+    const label = kind === 'col'
+        ? rotaDateLabel(head.dataset.date)
+        : ((rotaAnalysts.find(a => a.id == head.dataset.analyst) || {}).full_name || '');
+
+    rotaCtxLine = {
+        label: label,
+        targets: cells.map(c => ({ analyst_id: c.dataset.analyst, rota_date: c.dataset.date })),
+    };
+
+    // The pointer is about to leave the grid for the menu, which would unlight
+    // the line. Setting it here, with rotaCtxLine already assigned, is what
+    // keeps the target visible for as long as the menu offering it is open.
+    rotaHoverSet(head);
+
+    document.getElementById('rotaCtxHeader').textContent = label;
+    document.getElementById('rotaCtxCopy').style.display  = 'none';
+    document.getElementById('rotaCtxClear').style.display = 'none';
+    rotaSetPasteItem(t('tickets.rota.ctx.paste_into', { count: cells.length }));
+
+    rotaPositionMenu(event);
+    return false;
+}
+
+/**
+ * Paste is always listed, but says why it cannot be used rather than sitting
+ * there as a dead option that appears to do nothing.
+ */
+function rotaSetPasteItem(label) {
     const pasteBtn = document.getElementById('rotaCtxPaste');
     const pasteLbl = document.getElementById('rotaCtxPasteLabel');
     if (rotaCellClipboard) {
         pasteBtn.disabled = false;
         pasteBtn.style.opacity = '';
-        pasteLbl.textContent = t('tickets.rota.ctx.paste_cell') + ' — ' + rotaCellClipboard.shift_name;
+        pasteLbl.textContent = label;
     } else {
         pasteBtn.disabled = true;
         pasteBtn.style.opacity = '0.5';
         pasteLbl.textContent = t('tickets.rota.ctx.nothing_copied');
     }
+}
 
-    // Position, then nudge back inside the viewport. A cell in the last column
-    // sits at the right-hand edge and the menu would otherwise open off screen.
+/** Show at the pointer, then nudge back inside the viewport. A cell in the
+ *  last column sits at the right-hand edge and the menu would open off screen. */
+function rotaPositionMenu(event) {
+    const menu = document.getElementById('rotaContextMenu');
     menu.classList.add('active');
     const r = menu.getBoundingClientRect();
     const x = Math.min(event.clientX, window.innerWidth  - r.width  - 8);
     const y = Math.min(event.clientY, window.innerHeight - r.height - 8);
     menu.style.left = Math.max(8, x) + 'px';
     menu.style.top  = Math.max(8, y) + 'px';
-    return false;
 }
 
 function closeRotaCellMenu() {
     const menu = document.getElementById('rotaContextMenu');
     if (menu) menu.classList.remove('active');
     rotaCtxCell = null;
+    if (rotaCtxLine) {
+        rotaCtxLine = null;
+        rotaHoverClear();
+    }
 }
 
 document.addEventListener('click', function (e) {
     if (!e.target.closest('#rotaContextMenu')) closeRotaCellMenu();
 });
 document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeRotaCellMenu();
+    if (e.key !== 'Escape') return;
+    if (rotaPasteChoiceResolve) { resolveRotaPasteChoice(null); return; }
+    closeRotaCellMenu();
+    clearRotaSelection();
 });
 
 async function rotaCtxAction(action) {
     const cell = rotaCtxCell;
+    const line = rotaCtxLine;
     closeRotaCellMenu();
+
+    if (action === 'paste' && line) {
+        await rotaPasteInto(line.targets);
+        return;
+    }
     if (!cell) return;
 
     const analystId = cell.dataset.analyst;
@@ -449,18 +680,40 @@ async function rotaCtxAction(action) {
     }
 
     if (action === 'paste') {
-        if (!rotaCellClipboard) { showToast(t('tickets.rota.copy.nothing_to_paste'), 'error'); return; }
+        // A selection the menu was opened inside is the target; otherwise the
+        // one cell that was right-clicked.
+        const targets = (rotaSelection.size > 1 && rotaSelection.has(rotaCellKey(analystId, date)))
+            ? rotaSelectionTargets()
+            : [{ analyst_id: analystId, rota_date: date }];
+        await rotaPasteInto(targets);
+    }
+}
 
-        // Overwriting is the case worth stopping for, and the message names
-        // both shifts — "are you sure?" on its own is a dialog people learn to
-        // click through without reading.
-        if (entry) {
+/**
+ * Paste the copied shift into one cell, or into many.
+ *
+ * The confirmation is different for the two because the useful sentence is
+ * different. For one cell it can name both shifts and the person, which is
+ * what makes a confirm worth reading. For thirty it has to be a count, and
+ * the question stops being "are you sure" and becomes "which of these cells"
+ * - two answers, so not showConfirm(), which only has one.
+ */
+async function rotaPasteInto(targets) {
+    if (!rotaCellClipboard) { showToast(t('tickets.rota.copy.nothing_to_paste'), 'error'); return; }
+    if (!targets.length) return;
+
+    const filled = targets.filter(tg => rotaEntryAt(tg.analyst_id, tg.rota_date));
+
+    if (targets.length === 1) {
+        const analystId = targets[0].analyst_id;
+        const date      = targets[0].rota_date;
+        if (filled.length) {
             const analyst = rotaAnalysts.find(a => a.id == analystId);
             const ok = await showConfirm({
                 title: t('tickets.rota.copy.cell_confirm_title'),
                 message: t('tickets.rota.copy.cell_confirm', {
                     analyst:  analyst ? analyst.full_name : '',
-                    existing: entry.shift_name,
+                    existing: rotaEntryAt(analystId, date).shift_name,
                     date:     rotaDateLabel(date),
                     incoming: rotaCellClipboard.shift_name,
                 }),
@@ -479,7 +732,75 @@ async function rotaCtxAction(action) {
             location_id: rotaCellClipboard.location_id,
             is_on_call:  rotaCellClipboard.is_on_call,
         }, 'tickets.rota.copy.pasted', 'tickets.rota.copy.paste_failed');
+        return;
     }
+
+    // Nothing in the way: no question to ask. Only overwriting earns a modal.
+    let mode = 'all';
+    if (filled.length) {
+        mode = await askRotaPasteMode(targets.length, filled.length);
+        if (!mode) return;
+    }
+
+    try {
+        const res = await fetch(ROTA_API + 'paste_rota_cells.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                shift_id:    rotaCellClipboard.shift_id,
+                location_id: rotaCellClipboard.location_id,
+                is_on_call:  rotaCellClipboard.is_on_call,
+                mode:        mode,
+                targets:     targets,
+            }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+            showToast(t('tickets.rota.toasts.error', { error: data.error }), 'error');
+            return;
+        }
+        showToast(data.skipped_filled
+            ? t('tickets.rota.copy.cells_pasted_some', { written: data.written, skipped: data.skipped_filled })
+            : t('tickets.rota.copy.cells_pasted', { count: data.written }), 'success');
+        // Never silent. A cell the server refused - a deactivated analyst, a
+        // day this grid does not draw - is a cell somebody expected to fill.
+        if (data.skipped_invalid > 0) {
+            showToast(t('tickets.rota.copy.cells_skipped', { count: data.skipped_invalid }), 'error');
+        }
+        clearRotaSelection();
+        loadRota();
+    } catch (e) {
+        showToast(t('tickets.rota.copy.paste_failed'), 'error');
+    }
+}
+
+// ---- "All of them, or just the empty ones?" ---------------------------
+
+let rotaPasteChoiceResolve = null;
+
+/** Resolves to 'all', 'empty', or null for cancel. */
+function askRotaPasteMode(total, filled) {
+    const empty = total - filled;
+    document.getElementById('rotaPasteChoiceMsg').textContent =
+        t('tickets.rota.copy.mode_message', {
+            shift: rotaCellClipboard.shift_name,
+            total: total, filled: filled, empty: empty,
+        });
+
+    // With nothing empty, "Empty only" would report pasting into nothing.
+    const emptyBtn = document.getElementById('rotaPasteEmptyBtn');
+    emptyBtn.disabled = empty === 0;
+    emptyBtn.style.opacity = empty === 0 ? '0.5' : '';
+
+    document.getElementById('rotaPasteChoiceModal').classList.add('active');
+    return new Promise(resolve => { rotaPasteChoiceResolve = resolve; });
+}
+
+function resolveRotaPasteChoice(mode) {
+    document.getElementById('rotaPasteChoiceModal').classList.remove('active');
+    const resolve = rotaPasteChoiceResolve;
+    rotaPasteChoiceResolve = null;
+    if (resolve) resolve(mode);
 }
 
 /** POST, toast the outcome, reload the grid. Shared by every write above. */
