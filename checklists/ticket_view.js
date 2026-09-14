@@ -533,15 +533,14 @@ async function openAttachChecklistModal(ticketId) {
     }
 
     modal.innerHTML = `
-        <div style="background: var(--surface, #ffffff); border-radius: 8px; width: 90%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b);">
+        <div class="chk-attach-dialog" style="background: var(--surface, #ffffff); border-radius: 8px; width: 90%; max-width: 560px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b);">
             <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="margin: 0; font-size: 15px; font-weight: 600;">Attach SOP Checklist</h4>
-                
+                <h4 style="margin: 0; font-size: 15px; font-weight: 600;">Attach a procedure</h4>
             </div>
             <div style="padding: 12px 18px 6px 18px;">
-                <input type="text" id="chkSearchInput" onkeyup="filterTemplatesList(${ticketId})" placeholder="Search standard procedures..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333);">
+                <input type="text" id="chkSearchInput" onkeyup="filterTemplatesList(${ticketId})" placeholder="Search procedures..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333);">
             </div>
-            <div id="chkTemplatesList" style="padding: 10px 18px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px;">
+            <div id="chkTemplatesList" class="chk-attach-list" style="padding: 10px 18px; display: flex; flex-direction: column; gap: 8px;">
             </div>
             <div style="padding: 10px 18px; border-top: 1px solid var(--border, #e2e8f0); display: flex; justify-content: flex-end;">
                 <button type="button" onclick="closeAttachModal()" style="padding: 6px 14px; font-size: 12px; cursor: pointer; border-radius: 4px; background: var(--surface-hover, #e2e8f0); color: var(--text, #333); border: none;">
@@ -552,6 +551,21 @@ async function openAttachChecklistModal(ticketId) {
     `;
     modal.style.display = 'flex';
     filterTemplatesList(ticketId);
+}
+
+/**
+ * A stable colour per category, derived from its name.
+ *
+ * Not random and not stored: the same category is always the same colour, on
+ * every install and every reload, without anybody having to pick one. Six hues
+ * is enough to tell a short list apart and few enough that none of them fight
+ * the teal the module already uses.
+ */
+function categoryPillClass(name) {
+    const s = String(name || 'General');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return 'chk-pill-c' + (h % 6);
 }
 
 function filterTemplatesList(ticketId) {
@@ -577,18 +591,22 @@ function filterTemplatesList(ticketId) {
 
     let html = '';
     scored.forEach(({ template: t }) => {
+        // Title and pill share the top row, pill hard right. Then the
+        // description on its own full-width line — it is a real sentence and
+        // deserves the width — then the action beneath it, left aligned under
+        // the text it belongs to. The old layout floated the button against the
+        // vertical centre, which pinched the description into a narrow column
+        // and left the button hanging beside nothing on a one-line entry.
         html += `
-            <div style="border: 1px solid var(--border, #e2e8f0); border-radius: 6px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; background: var(--surface-hover, #f8fafc);">
-                <div>
-                    <div style="font-weight: 600; font-size: 13px; color: var(--text, #1e293b);">${escapeHtml(t.title)}</div>
-                    <div style="font-size: 11px; color: var(--text-muted, #64748b); margin-top: 2px;">
-                        <span style="background: var(--border, #e2e8f0); padding: 1px 6px; border-radius: 3px; font-weight: 500;">${escapeHtml(t.category || 'General')}</span>
-                        ${t.description ? ' • ' + escapeHtml(t.description) : ''}
-                    </div>
+            <div class="chk-tpl-row">
+                <div class="chk-tpl-top">
+                    <span class="chk-tpl-title">${escapeHtml(t.title)}</span>
+                    <span class="chk-tpl-pill ${categoryPillClass(t.category)}">${escapeHtml(t.category || 'General')}</span>
                 </div>
-                <button type="button" onclick="attachSopToTicket(${ticketId}, ${t.id})" style="padding: 5px 12px; font-size: 12px; cursor: pointer; border-radius: 4px; background: var(--primary, #2563eb); color: #fff; border: none; font-weight: 500;">
-                    Attach
-                </button>
+                ${t.description ? `<p class="chk-tpl-desc">${escapeHtml(t.description)}</p>` : ''}
+                <div>
+                    <button type="button" onclick="attachSopToTicket(${ticketId}, ${t.id})" class="chk-tpl-attach">Attach</button>
+                </div>
             </div>
         `;
     });

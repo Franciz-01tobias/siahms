@@ -34,7 +34,7 @@ $translationNamespaces = ['common', 'tickets'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars(t('tickets.title')); ?> - <?php echo htmlspecialchars(t('tickets.nav.inbox')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
-    <link rel="stylesheet" href="../checklists/ticket_checklist.css?v=2">
+    <link rel="stylesheet" href="../checklists/ticket_checklist.css?v=3">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="../assets/css/mobile.css?v=139">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
@@ -950,7 +950,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/schedule.js?v=1"></script>
     <script src="../checklists/search_scoring.js?v=1"></script>
-    <script src="../checklists/ticket_view.js?v=4"></script>
+    <script src="../checklists/ticket_view.js?v=5"></script>
     <script src="../assets/js/inbox.js?v=127"></script>
     <script src="../assets/js/mobile.js?v=57"></script>
     <script>

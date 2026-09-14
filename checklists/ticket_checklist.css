@@ -120,3 +120,89 @@
 .chk-btn-attach:hover {
     background: #ccfbf1;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Attach-a-procedure modal
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* 🔑 A FIXED height, not max-height.
+   With `max-height: 80vh` the dialogue grew and shrank as the search filtered
+   the list, so the Cancel button and the whole frame jumped under the cursor
+   while typing. A constant height means only the list scrolls and nothing
+   below it moves. 68vh is clamped so it stays sane on a short laptop screen
+   and does not become a letterbox on a tall monitor. */
+.chk-attach-dialog {
+    height: clamp(420px, 68vh, 640px);
+}
+.chk-attach-list {
+    flex: 1 1 auto;
+    min-height: 0;          /* or the flex child refuses to shrink and scroll */
+    overflow-y: auto;
+}
+
+.chk-tpl-row {
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 6px;
+    padding: 10px 12px;
+    background: var(--surface-hover, #f8fafc);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.chk-tpl-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+.chk-tpl-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text, #1e293b);
+}
+.chk-tpl-desc {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-muted, #64748b);
+}
+.chk-tpl-attach {
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    background: #0d9488;                 /* the module's own accent, not --primary */
+    color: #fff;
+}
+.chk-tpl-attach:hover { background: #0f766e; }
+
+/* Category pill. Six fixed pairs rather than one generated colour, so each
+   stays legible in both themes — a hue computed at runtime cannot be checked
+   for contrast. categoryPillClass() picks one from a hash of the name, so a
+   category keeps the same colour everywhere without anybody choosing it. */
+.chk-tpl-pill {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.chk-pill-c0 { background: #e0f2fe; color: #0369a1; }
+.chk-pill-c1 { background: #dcfce7; color: #15803d; }
+.chk-pill-c2 { background: #f3e8ff; color: #7e22ce; }
+.chk-pill-c3 { background: #fef3c7; color: #a16207; }
+.chk-pill-c4 { background: #ffe4e6; color: #be123c; }
+.chk-pill-c5 { background: #e0e7ff; color: #4338ca; }
+
+/* Dark mode: the light fills above are unreadable on a dark card, so give each
+   pill a translucent wash of its own hue and lift the text instead. */
+[data-theme="dark"] .chk-pill-c0 { background: rgba(56,189,248,0.16);  color: #7dd3fc; }
+[data-theme="dark"] .chk-pill-c1 { background: rgba(74,222,128,0.16);  color: #86efac; }
+[data-theme="dark"] .chk-pill-c2 { background: rgba(192,132,252,0.16); color: #d8b4fe; }
+[data-theme="dark"] .chk-pill-c3 { background: rgba(251,191,36,0.16);  color: #fcd34d; }
+[data-theme="dark"] .chk-pill-c4 { background: rgba(251,113,133,0.16); color: #fda4af; }
+[data-theme="dark"] .chk-pill-c5 { background: rgba(129,140,248,0.16); color: #a5b4fc; }
