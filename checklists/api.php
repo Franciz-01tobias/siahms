@@ -88,8 +88,19 @@ if ($action === 'save') {
 if ($action === 'delete') {
     $id = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
     if ($id > 0) {
-        $stmt = $conn->prepare("DELETE FROM checklist_templates WHERE id = ?");
-        $stmt->execute([$id]);
+        // 🔴 Children first, explicitly - there is no FK on template_id, and a
+        // Database-Verification-grown install would not have one even if there were.
+        // Deleting the template alone stranded its steps permanently.
+        $conn->beginTransaction();
+        try {
+            $conn->prepare("DELETE FROM checklist_template_items WHERE template_id = ?")->execute([$id]);
+            $conn->prepare("DELETE FROM checklist_templates WHERE id = ?")->execute([$id]);
+            $conn->commit();
+        } catch (Throwable $e) {
+            $conn->rollBack();
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            exit;
+        }
         echo json_encode(['success' => true]);
         exit;
     }

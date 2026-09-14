@@ -48,26 +48,27 @@ try {
             $ticketId = (int)($_GET["ticket_id"] ?? 0);
             if ($ticketId <= 0) throw new Exception("ticket_id is required");
 
-            $stmt = $conn->prepare("SELECT id, template_id, title, 
-                                           COALESCE(created_datetime, created_at) AS created_datetime,
-                                           COALESCE(created_datetime, created_at) AS created_at
-                                    FROM ticket_checklists 
-                                    WHERE ticket_id = ? 
+            // 🔴 These used to read COALESCE(created_datetime, created_at). `created_at`
+            // is not created by the module bootstrap, by database/freeitsm.sql, or by
+            // includes/db_verify_schema.php - so on any install that did not grow from
+            // the author's earlier naming, MySQL raised "Unknown column 'created_at'"
+            // and this endpoint returned an error for every ticket. See the wiki:
+            // Checklists-Module-House-Style, "the fallback to a column that never existed".
+            $stmt = $conn->prepare("SELECT id, template_id, title, created_datetime
+                                    FROM ticket_checklists
+                                    WHERE ticket_id = ?
                                     ORDER BY id ASC");
             $stmt->execute([$ticketId]);
             $checklists = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($checklists as &$chk) {
+                // Same fix as above: completed_by and completed_at never existed either.
                 $itemStmt = $conn->prepare("SELECT id, title, suggested_role, is_mandatory, requires_input, input_placeholder,
-                                                   response_value, is_completed, 
-                                                   completed_by_id,
-                                                   COALESCE(completed_by_name, completed_by) AS completed_by_name,
-                                                   COALESCE(completed_by_name, completed_by) AS completed_by,
-                                                   COALESCE(completed_datetime, completed_at) AS completed_datetime,
-                                                   COALESCE(completed_datetime, completed_at) AS completed_at
+                                                   response_value, is_completed,
+                                                   completed_by_id, completed_by_name, completed_datetime
                                              FROM ticket_checklist_items
                                              WHERE ticket_checklist_id = ?
-                                             ORDER BY id ASC");
+                                             ORDER BY sort_order ASC, id ASC");
                 $itemStmt->execute([(int)$chk["id"]]);
                 $chk["items"] = $itemStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -204,42 +205,43 @@ try {
 
             if ($itemId <= 0) throw new Exception("item_id is required");
 
-            $now = date("Y-m-d H:i:s");
-
+            // 🔴 UTC at rest (GH #126). date() renders the SERVER's wall clock, so a
+            // step ticked at 09:00 in London was stored as 09:00 and then displayed
+            // through the viewer's timezone offset a second time. Every other write
+            // in api/tickets/ uses UTC_TIMESTAMP() - 54 of them against a single NOW().
             if ($completed) {
-                // Update with fallback for legacy or standard column names
-                $stmt = $conn->prepare("UPDATE ticket_checklist_items 
-                                        SET is_completed = 1, 
-                                            response_value = ?, 
-                                            completed_by_id = ?, 
-                                            completed_by_name = ?, 
-                                            completed_by = ?, 
-                                            completed_datetime = ?, 
-                                            completed_at = ? 
+                $stmt = $conn->prepare("UPDATE ticket_checklist_items
+                                        SET is_completed      = 1,
+                                            response_value    = ?,
+                                            completed_by_id   = ?,
+                                            completed_by_name = ?,
+                                            completed_datetime = UTC_TIMESTAMP()
                                         WHERE id = ?");
-                $stmt->execute([$responseValue, $analystId, $analystName, $analystName, $now, $now, $itemId]);
+                $stmt->execute([$responseValue, $analystId, $analystName, $itemId]);
             } else {
-                $stmt = $conn->prepare("UPDATE ticket_checklist_items 
-                                        SET is_completed = 0, 
-                                            response_value = NULL, 
-                                            completed_by_id = NULL, 
-                                            completed_by_name = NULL, 
-                                            completed_by = NULL, 
-                                            completed_datetime = NULL, 
-                                            completed_at = NULL 
+                $stmt = $conn->prepare("UPDATE ticket_checklist_items
+                                        SET is_completed      = 0,
+                                            response_value    = NULL,
+                                            completed_by_id   = NULL,
+                                            completed_by_name = NULL,
+                                            completed_datetime = NULL
                                         WHERE id = ?");
                 $stmt->execute([$itemId]);
             }
 
+            // Read the stored value back rather than echoing what we think we wrote:
+            // the column is the single source of truth for what the next GET will show.
+            $back = $conn->prepare("SELECT completed_datetime FROM ticket_checklist_items WHERE id = ?");
+            $back->execute([$itemId]);
+            $storedAt = $back->fetchColumn() ?: null;
+
             echo json_encode([
-                "success" => true,
-                "is_completed" => $completed,
-                "response_value" => $responseValue,
-                "completed_by_id" => $completed ? $analystId : null,
-                "completed_by_name" => $completed ? $analystName : null,
-                "completed_by" => $completed ? $analystName : null,
-                "completed_datetime" => $completed ? $now : null,
-                "completed_at" => $completed ? $now : null
+                "success"            => true,
+                "is_completed"       => $completed,
+                "response_value"     => $responseValue,
+                "completed_by_id"    => $completed ? $analystId : null,
+                "completed_by_name"  => $completed ? $analystName : null,
+                "completed_datetime" => $storedAt,
             ]);
             exit;
 
@@ -247,8 +249,24 @@ try {
             $chkId = (int)($_POST["checklist_id"] ?? 0);
             if ($chkId <= 0) throw new Exception("checklist_id is required");
 
-            $del = $conn->prepare("DELETE FROM ticket_checklists WHERE id = ?");
-            $del->execute([$chkId]);
+            // 🔴 Remove the children EXPLICITLY. There is no foreign key on
+            // ticket_checklist_items.ticket_checklist_id - none of the three schema
+            // definitions declares one, and tables created by Database Verification
+            // never get FKs at all, so a cascade cannot be relied on even where the
+            // fresh-install dump would have provided one. Deleting only the parent
+            // left the steps behind forever; two runs of the review harness stranded
+            // twelve rows. House rule: Database-Integrity, "delete children yourself".
+            $conn->beginTransaction();
+            try {
+                $delItems = $conn->prepare("DELETE FROM ticket_checklist_items WHERE ticket_checklist_id = ?");
+                $delItems->execute([$chkId]);
+                $del = $conn->prepare("DELETE FROM ticket_checklists WHERE id = ?");
+                $del->execute([$chkId]);
+                $conn->commit();
+            } catch (Throwable $e) {
+                $conn->rollBack();
+                throw $e;
+            }
             echo json_encode(["success" => true]);
             exit;
 

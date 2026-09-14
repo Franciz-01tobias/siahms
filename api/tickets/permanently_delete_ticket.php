@@ -92,7 +92,15 @@ try {
     // 5. Time entries
     $conn->prepare("DELETE FROM ticket_time_entries WHERE ticket_id = ?")->execute([$ticketId]);
 
-    // 6. The ticket itself (CASCADE/SET NULL children go with it)
+    // 6. SOP checklist steps, then the checklists themselves (grandchild first).
+    //    Neither table has a foreign key to the ticket, so nothing here is cascaded.
+    $conn->prepare(
+        "DELETE FROM ticket_checklist_items
+          WHERE ticket_checklist_id IN (SELECT id FROM ticket_checklists WHERE ticket_id = ?)"
+    )->execute([$ticketId]);
+    $conn->prepare("DELETE FROM ticket_checklists WHERE ticket_id = ?")->execute([$ticketId]);
+
+    // 7. The ticket itself (CASCADE/SET NULL children go with it)
     $conn->prepare("DELETE FROM tickets WHERE id = ?")->execute([$ticketId]);
 
     $conn->commit();

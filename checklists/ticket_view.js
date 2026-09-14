@@ -251,7 +251,9 @@ function openChecklistModal(ticketId) {
             (chk.items || []).forEach(it => {
                 const isChecked = (it.is_completed == 1 || it.is_completed === true || it.is_completed === '1');
                 const isMand = (it.is_mandatory == 1 || it.is_mandatory === true || it.is_mandatory === '1');
-                const completedDate = formatStepDatetime(it.completed_datetime || it.completed_at);
+                // `|| it.completed_at` was the client half of the same phantom-column
+                // fallback the API carried; there has never been a completed_at.
+                const completedDate = formatStepDatetime(it.completed_datetime);
                 const completedMeta = isChecked && it.completed_by_name ? `<div style="font-size: 11px; color: var(--text-muted, #64748b); margin-left: 24px;">Completed by ${escapeHtml(it.completed_by_name)}${completedDate ? ' on ' + escapeHtml(completedDate) : ''}</div>` : '';
                 const responseMeta = it.response_value ? `<div style="font-size: 11px; color: #3730a3; background: #eef2ff; padding: 3px 8px; border-radius: 4px; margin-left: 24px; margin-top: 2px; border-left: 2px solid #6366f1;"><strong>Input:</strong> ${escapeHtml(it.response_value)}</div>` : '';
                 const reqBadge = (!isChecked && it.requires_input == 1) ? `<span style="font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; margin-left: 6px;">📝 Note required</span>` : '';
