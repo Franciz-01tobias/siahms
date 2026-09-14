@@ -39,6 +39,7 @@ require_once __DIR__ . '/../ticket_numbering.php';
 require_once __DIR__ . '/../ticket_categories.php';   // category paths + depth cap (#1540)
 require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 require_once __DIR__ . '/../calendar_sync/push.php';   // scheduled work -> the owner's calendar (GH #75)
+require_once __DIR__ . '/checklists.php';              // mandatory SOP steps at closure (PR #141)
 
 class TicketsService
 {
@@ -605,6 +606,16 @@ class TicketsService
             }
         } catch (Exception $tplEx) {
             error_log('Template email error in TicketsService update: ' . $tplEx->getMessage());
+        }
+
+        // SOP checklists (PR #141): if this transition closed the ticket while
+        // mandatory steps were still outstanding, record the override. One call
+        // here covers every path that can close a ticket — the inbox, bulk
+        // actions, the v1 REST API and assign/schedule — because they all come
+        // through updateTicket(). The rule itself lives in ChecklistsService;
+        // this is only the hook, so tickets does not learn the checklist rules.
+        if ($newStatusId !== null && $newIsClosed && !$oldIsClosed) {
+            ChecklistsService::recordClosureOverride($conn, $ctx, $ticketId);
         }
 
         // Workflow dispatches — canonical post-update payload.

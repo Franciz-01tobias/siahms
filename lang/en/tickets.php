@@ -292,6 +292,17 @@ return [
 
     // Tasks on a ticket (discussion #83). One picker does both verbs, so the
     // strings distinguish creating from linking rather than the UI doing it.
+    // SOP checklists on a ticket (PR #141, Santhosh Srinivasan).
+    'checklists' => [
+        'default_name'                 => 'SOP checklist',
+        // 🔴 TRANSLATORS: this is a WARNING, not a refusal. The ticket does
+        // close; the outstanding steps are recorded against it. Do not render
+        // it as "you cannot close this" — that is the opposite of what happens.
+        'close_with_mandatory_title'   => 'Close with steps outstanding?',
+        'close_with_mandatory'         => 'This ticket has {count} mandatory SOP step(s) still outstanding. Closing it now records which steps were skipped, and who skipped them, in the ticket notes.',
+        'close_anyway'                 => 'Close anyway',
+    ],
+
     'tasks' => [
         'menu_item'          => 'Task',
         'search_placeholder' => 'Search tasks, or type a new one…',

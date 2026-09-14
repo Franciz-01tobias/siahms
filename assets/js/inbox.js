@@ -4411,25 +4411,38 @@ async function assignStatus() {
     // block that cannot be cleared.
     const closing = ticketStatuses.some(s => s.name === status && s.is_closed);
 
-    if ((closing || status === "resolved" || status === "closed") && typeof getIncompleteMandatorySteps === "function") {
+    // SOP checklists (PR #141): outstanding mandatory steps WARN and are
+    // recorded, they do not block — the same line the tasks check above draws,
+    // and for the same reason. As contributed this was a hard block with an
+    // alert(), which trapped any ticket whose remaining step had become
+    // impossible, and which the API ignored entirely. The server now writes an
+    // override note naming the skipped steps (ChecklistsService), so the
+    // exception is attributable instead of merely forbidden.
+    if (closing && typeof getIncompleteMandatorySteps === "function") {
         const pendingMandatory = getIncompleteMandatorySteps();
         if (pendingMandatory.length > 0) {
-            select.value = oldValue;
             const grouped = {};
             pendingMandatory.forEach(m => {
-                const cName = m.checklist || "SOP Checklist";
-                if (!grouped[cName]) grouped[cName] = [];
-                grouped[cName].push(m.step);
+                const cName = m.checklist || t('tickets.checklists.default_name');
+                (grouped[cName] = grouped[cName] || []).push(m.step);
             });
-            const stepList = Object.entries(grouped).map(([cName, steps]) => {
-                return "✅ " + cName + ":\n" + steps.map(s => "    • " + s).join("\n");
-            }).join("\n\n");
+            const stepList = Object.entries(grouped)
+                .map(([cName, steps]) => cName + "\n" + steps.map(s => "    • " + s).join("\n"))
+                .join("\n\n");
 
-            alert("⚠️ Cannot close/resolve ticket.\n\nThe following mandatory SOP steps must be completed first:\n\n" + stepList);
-            if (typeof openChecklistModal === "function") {
-                openChecklistModal(currentEmail ? currentEmail.ticket_id : null);
+            const ok = await showConfirm({
+                title: t('tickets.checklists.close_with_mandatory_title'),
+                message: t('tickets.checklists.close_with_mandatory', { count: pendingMandatory.length })
+                         + "\n\n" + stepList,
+                okLabel: t('tickets.checklists.close_anyway'), okClass: 'danger'
+            });
+            if (!ok) {
+                select.value = oldValue;   // or the dropdown shows a status never applied
+                if (typeof openChecklistModal === "function") {
+                    openChecklistModal(currentEmail ? currentEmail.ticket_id : null);
+                }
+                return;
             }
-            return;
         }
     }
     const openTasks = (tasksForTicket || []).filter(tk => !tk.status_is_closed).length;
