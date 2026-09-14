@@ -54,6 +54,24 @@ nothing.** Reserve it for that, and nothing else. Concretely, for this codebase:
 Being big is not enough. A whole new module is a MINOR - it asks nothing of anyone who
 does not want it. Renaming one environment variable is a MAJOR.
 
+### The one deliberate exception: 2.0.0
+
+**2.0.0 breaks none of the rules above, and was not a MAJOR by this scheme** - by the
+mechanical rule it was 1.10.0. Ed chose the number, knowingly, when FreeITSM received its
+first whole module from somebody outside the project:
+
+> *"I have the most amazing collaboration from a friendly internet stranger who has
+> proposed a new module... In his honour I would like to make the release 2.0. I know I
+> know it's not very orthodox but as the founder I can make up the rules hopefully!"*
+
+Recorded here because a reader meeting `2.0.0` in this list will otherwise assume a
+breaking change happened, go looking for it, and not find one. **It adds only, and its
+rollback is safe.** The notes say so in their opening paragraph, which is the part that
+matters: an operator must never have to guess whether a major number means danger.
+
+Do not treat it as a precedent. The next MAJOR is the next time the upgrade genuinely
+asks something of the operator.
+
 ### The mechanical rule
 
 `CHANGELOG.local.md` already types every entry. Take the rows added **since the previous
