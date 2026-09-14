@@ -225,7 +225,7 @@ function openChecklistModal(ticketId) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'ticketChecklistModal';
-        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 99999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 3500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
         document.body.appendChild(modal);
     }
 
@@ -353,7 +353,7 @@ function promptDataCapture(ticketId, item, checklistTitle, reopenPopout) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'chkDataCaptureModal';
-        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 3600; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
         document.body.appendChild(modal);
     }
 
@@ -515,7 +515,7 @@ async function openAttachChecklistModal(ticketId) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'ticketAttachChecklistModal';
-        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 3600; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
         document.body.appendChild(modal);
     }
 

@@ -950,7 +950,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/schedule.js?v=1"></script>
     <script src="../checklists/search_scoring.js?v=1"></script>
-    <script src="../checklists/ticket_view.js?v=2"></script>
+    <script src="../checklists/ticket_view.js?v=3"></script>
     <script src="../assets/js/inbox.js?v=127"></script>
     <script src="../assets/js/mobile.js?v=57"></script>
     <script>
