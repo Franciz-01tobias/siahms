@@ -1,0 +1,765 @@
+/**
+ * Ticket Checklists / SOP Module for FreeITSM
+ */
+
+let ticketChecklistsData = [];
+let availableTemplatesCache = [];
+let currentViewingTicketId = null;
+
+// Format exact server datetime as dd-mmm-yy HH:MM
+function formatStepDatetime(dtStr) {
+    if (!dtStr) return '';
+    try {
+        const parts = dtStr.split(/[\sT]+/);
+        if (parts.length >= 2) {
+            const dateParts = parts[0].split('-');
+            const timeParts = parts[1].split(':');
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const day = dateParts[2].padStart(2, '0');
+            const monthIdx = parseInt(dateParts[1], 10) - 1;
+            const mon = months[monthIdx] || dateParts[1];
+            const year = dateParts[0].slice(-2);
+            const hours = timeParts[0].padStart(2, '0');
+            const mins = timeParts[1].padStart(2, '0');
+            return `${day}-${mon}-${year} ${hours}:${mins}`;
+        }
+        return dtStr;
+    } catch (e) {
+        return dtStr;
+    }
+}
+
+// 1. Fetch & Render Checklists for a Ticket
+async function loadTicketChecklists(ticketId) {
+    if (!ticketId) return;
+    currentViewingTicketId = ticketId;
+    try {
+        const res = await fetch('/api/tickets/ticket_checklists.php?action=get_ticket_checklists&ticket_id=' + ticketId);
+        const data = await res.json();
+        if (!data.success) {
+            console.error('Error fetching ticket checklists:', data.error);
+            return;
+        }
+
+        ticketChecklistsData = data.checklists || [];
+        renderChecklistToolbarButton(ticketId);
+        renderTicketChecklistsInline(ticketId);
+    } catch (e) {
+        console.error('Failed to load checklists:', e);
+    }
+}
+
+function findChecklistItem(itemId) {
+    for (const chk of ticketChecklistsData) {
+        for (const it of (chk.items || [])) {
+            if (parseInt(it.id, 10) === parseInt(itemId, 10)) {
+                return { checklist: chk, item: it };
+            }
+        }
+    }
+    return null;
+}
+
+function getIncompleteMandatorySteps() {
+    const list = [];
+    (ticketChecklistsData || []).forEach(chk => {
+        (chk.items || []).forEach(it => {
+            const isMand = (it.is_mandatory == 1 || it.is_mandatory === true || it.is_mandatory === '1');
+            const isComp = (it.is_completed == 1 || it.is_completed === true || it.is_completed === '1');
+            if (isMand && !isComp) {
+                list.push({ checklist: chk.title, step: it.title });
+            }
+        });
+    });
+    return list;
+}
+
+// 2. Render Action Toolbar Button
+function renderChecklistToolbarButton(ticketId) {
+    const toolbar = document.querySelector('.action-toolbar');
+    if (!toolbar) return;
+
+    let btn = document.getElementById('btnSopChecklists');
+    let completedCount = 0;
+    let totalItems = 0;
+
+    ticketChecklistsData.forEach(c => {
+        totalItems += (c.total_items || 0);
+        completedCount += (c.completed_items || 0);
+    });
+
+    const badgeText = totalItems > 0 ? ` (${completedCount}/${totalItems})` : '';
+
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'btnSopChecklists';
+        btn.className = 'action-btn';
+        btn.type = 'button';
+        btn.onclick = () => openChecklistModal(ticketId);
+        toolbar.insertBefore(btn, toolbar.firstChild);
+    }
+
+    btn.innerHTML = `
+        <span class="action-btn-icon">✅</span>
+        <span>SOP Checklist${badgeText}</span>
+    `;
+}
+
+// 3. Render Inline SOP Card
+function renderTicketChecklistsInline(ticketId) {
+    let host = document.getElementById('ticketChecklistContainer');
+    if (!host) {
+        const emailBody = document.querySelector('.email-body');
+        if (!emailBody) return;
+        host = document.createElement('div');
+        host.id = 'ticketChecklistContainer';
+        host.style.marginBottom = '22px'; host.style.paddingBottom = '16px'; host.style.borderBottom = '1px solid var(--border-soft, #e2e8f0)';
+        emailBody.insertBefore(host, emailBody.firstChild);
+    }
+
+    if (!ticketChecklistsData || ticketChecklistsData.length === 0) {
+        host.innerHTML = `
+            <div id="sopEmptyStateHost_${ticketId}" style="background: var(--surface, #ffffff); border: 1px dashed var(--border, #cbd5e1); border-radius: 6px; padding: 8px 14px; margin: -15px 0 12px 0; display: flex; justify-content: space-between; align-items: center;">
+                <div style="color: var(--text-muted, #64748b); font-size: 13px;">
+                    <strong>SOP Checklist:</strong> None attached to this ticket.
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
+                    + Attach SOP
+                </button>
+            </div>
+        `;
+        checkAndShowSopSuggestion(ticketId);
+        return;
+    }
+
+    let html = `
+        <div style="background: var(--surface, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 6px; padding: 10px 14px; color: var(--text, #1e293b); box-shadow: 0 1px 2px var(--shadow, rgba(0,0,0,0.04)); margin: -15px 0 12px 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">✅</span>
+                    <strong style="font-size: 13px; color: var(--text, #1e293b);">SOP Next Steps</strong>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" onclick="openChecklistModal(${ticketId})" title="Pop out full checklist" style="padding: 3px 8px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333); display: flex; align-items: center; gap: 4px;">
+                        <span>⤢</span> Pop out
+                    </button>
+                    <button type="button" onclick="openAttachChecklistModal(${ticketId})" style="padding: 3px 8px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
+                        + Attach
+                    </button>
+                </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+    `;
+
+    ticketChecklistsData.forEach(chk => {
+        const items = chk.items || [];
+        const nextPendingItem = items.find(it => !(it.is_completed == 1 || it.is_completed === true || it.is_completed === '1'));
+        const percent = chk.percent || 0;
+        const allDone = !nextPendingItem && items.length > 0;
+
+        html += `
+            <div style="border: 1px solid var(--border, #f1f5f9); border-radius: 6px; padding: 8px 10px; background: var(--surface-hover, #f8fafc);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 12px; font-weight: 600; color: var(--text, #334155);">${escapeHtml(chk.title)}</span>
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted, #64748b);">
+                        <span style="font-weight: 600; color: ${allDone ? '#16a34a' : 'inherit'};">${percent}%</span>
+                        <div style="width: 50px; height: 5px; background: var(--border, #e2e8f0); border-radius: 3px; overflow: hidden;">
+                            <div style="width: ${percent}%; height: 100%; background: ${allDone ? '#16a34a' : 'var(--primary, #2563eb)'}; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                </div>
+        `;
+
+        if (allDone) {
+            html += `
+                <div style="font-size: 12px; color: #16a34a; display: flex; align-items: center; gap: 6px; padding: 2px 0;">
+                    <span>✓</span> All ${items.length} steps completed
+                </div>
+            `;
+        } else if (nextPendingItem) {
+            const isMand = (nextPendingItem.is_mandatory == 1 || nextPendingItem.is_mandatory === true || nextPendingItem.is_mandatory === '1');
+            const reqInputBadge = (nextPendingItem.requires_input == 1) ? `<span style="font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; margin-left: 6px;">📝 Note required</span>` : '';
+            const roleBadge = nextPendingItem.suggested_role ? `<span style="font-size: 10px; background: rgba(13,148,136,0.1); color: #0d9488; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; margin-left: 6px;" title="Suggested Role"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: -1px;"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${escapeHtml(nextPendingItem.suggested_role)}</span>` : '';
+            
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 2px 0;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; color: var(--text, #1e293b); flex: 1;">
+                        <input type="checkbox" onchange="handleStepCheckboxChange(${ticketId}, ${nextPendingItem.id}, this, false)" style="cursor: pointer; width: 15px; height: 15px; accent-color: var(--primary, #2563eb);">
+                        <span>
+                            <strong style="color: var(--text-muted, #64748b); font-weight: normal; margin-right: 4px;">Next:</strong>
+                            ${escapeHtml(nextPendingItem.title)}
+                            ${isMand ? '<span style="color: #ef4444; margin-left: 2px; font-weight: bold;" title="Mandatory">*</span>' : ''}
+                            ${roleBadge}
+                            ${reqInputBadge}
+                        </span>
+                    </label>
+                    <a href="javascript:void(0)" onclick="openChecklistModal(${ticketId})" style="font-size: 11px; color: var(--primary, #2563eb); text-decoration: none; white-space: nowrap; margin-left: 8px;">View all steps &raquo;</a>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+    });
+
+    html += `</div></div>`;
+    host.innerHTML = html;
+}
+
+// 4. Full Pop-out Checklist Modal
+function openChecklistModal(ticketId) {
+    if (!ticketId) ticketId = currentViewingTicketId;
+    let modal = document.getElementById('ticketChecklistModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ticketChecklistModal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 99999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
+        document.body.appendChild(modal);
+    }
+
+    let checklistsHtml = '';
+    if (!ticketChecklistsData || ticketChecklistsData.length === 0) {
+        checklistsHtml = `
+            <div style="text-align: center; padding: 30px; color: var(--text-muted, #64748b);">
+                <p style="margin-bottom: 12px;">No SOP checklists are attached to this ticket.</p>
+                <button type="button" class="btn btn-primary" onclick="closeChecklistModal(); openAttachChecklistModal(${ticketId});" style="padding: 6px 14px; font-size: 13px; cursor: pointer; border-radius: 4px; background: var(--primary, #2563eb); color: #fff; border: none;">
+                    + Attach an SOP Checklist
+                </button>
+            </div>
+        `;
+    } else {
+        ticketChecklistsData.forEach(chk => {
+            const percent = chk.percent || 0;
+            checklistsHtml += `
+                <div style="border: 1px solid var(--border, #e2e8f0); border-radius: 8px; margin-bottom: 16px; overflow: hidden; background: var(--surface, #ffffff);">
+                    <div style="padding: 10px 14px; background: var(--surface-hover, #f8fafc); border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size: 14px; color: var(--text, #1e293b);">${escapeHtml(chk.title)}</strong>
+                            <div style="font-size: 11px; color: var(--text-muted, #64748b); margin-top: 2px;">
+                                ${chk.completed_items || 0} of ${chk.total_items || 0} steps completed (${percent}%)
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <div style="width: 80px; height: 6px; background: var(--border, #e2e8f0); border-radius: 3px; overflow: hidden;">
+                                <div style="width: ${percent}%; height: 100%; background: ${percent === 100 ? '#16a34a' : 'var(--primary, #2563eb)'};"></div>
+                            </div>
+                            <button type="button" onclick="removeTicketChecklist(${ticketId}, ${chk.id})" title="Remove checklist" style="border: none; background: none; color: #ef4444; font-size: 16px; cursor: pointer; padding: 2px 6px;">&times;</button>
+                        </div>
+                    </div>
+                    <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;">
+            `;
+
+            (chk.items || []).forEach(it => {
+                const isChecked = (it.is_completed == 1 || it.is_completed === true || it.is_completed === '1');
+                const isMand = (it.is_mandatory == 1 || it.is_mandatory === true || it.is_mandatory === '1');
+                const completedDate = formatStepDatetime(it.completed_datetime || it.completed_at);
+                const completedMeta = isChecked && it.completed_by_name ? `<div style="font-size: 11px; color: var(--text-muted, #64748b); margin-left: 24px;">Completed by ${escapeHtml(it.completed_by_name)}${completedDate ? ' on ' + escapeHtml(completedDate) : ''}</div>` : '';
+                const responseMeta = it.response_value ? `<div style="font-size: 11px; color: #3730a3; background: #eef2ff; padding: 3px 8px; border-radius: 4px; margin-left: 24px; margin-top: 2px; border-left: 2px solid #6366f1;"><strong>Input:</strong> ${escapeHtml(it.response_value)}</div>` : '';
+                const reqBadge = (!isChecked && it.requires_input == 1) ? `<span style="font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; margin-left: 6px;">📝 Note required</span>` : '';
+                const roleBadge = it.suggested_role ? `<span style="font-size: 10px; background: rgba(13,148,136,0.1); color: #0d9488; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; margin-left: 6px;" title="Suggested Role"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: -1px;"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${escapeHtml(it.suggested_role)}</span>` : '';
+
+                checklistsHtml += `
+                    <div style="padding: 4px 0;">
+                        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13px; color: var(--text, #1e293b);">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="handleStepCheckboxChange(${ticketId}, ${it.id}, this, true)" style="cursor: pointer; width: 16px; height: 16px; margin-top: 2px; accent-color: var(--primary, #2563eb);">
+                            <div style="flex: 1;">
+                                <span style="${isChecked ? 'text-decoration: line-through; color: var(--text-muted, #94a3b8);' : ''}">
+                                    ${escapeHtml(it.title)}
+                                    ${isMand ? '<span style="color: #ef4444; font-weight: bold; margin-left: 2px;" title="Mandatory">*</span>' : ''}
+                                    ${roleBadge}
+                                    ${reqBadge}
+                                </span>
+                            </div>
+                        </label>
+                        ${responseMeta}
+                        ${completedMeta}
+                    </div>
+                `;
+            });
+
+            checklistsHtml += `</div></div>`;
+        });
+    }
+
+    modal.innerHTML = `
+        <div style="background: var(--surface, #ffffff); border-radius: 8px; width: 92%; max-width: 650px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b);">
+            <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">✅</span>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text, #1e293b);">SOP Checklists for Ticket #${ticketId}</h3>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="button" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
+                        + Attach Another SOP
+                    </button>
+                    <button type="button" onclick="closeChecklistModal()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-muted, #64748b); line-height: 1;">&times;</button>
+                </div>
+            </div>
+            <div style="padding: 16px 18px; overflow-y: auto; flex: 1;">
+                ${checklistsHtml}
+            </div>
+            <div style="padding: 10px 18px; border-top: 1px solid var(--border, #e2e8f0); display: flex; justify-content: flex-end;">
+                <button type="button" onclick="closeChecklistModal()" style="padding: 6px 16px; font-size: 13px; cursor: pointer; border-radius: 4px; background: var(--surface-hover, #e2e8f0); color: var(--text, #333); border: none;">
+                    Close
+                </button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+}
+
+function closeChecklistModal() {
+    const modal = document.getElementById('ticketChecklistModal');
+    if (modal) modal.style.display = 'none';
+}
+
+// 5. Handle Checkbox Click with Data Capture Prompt
+function handleStepCheckboxChange(ticketId, itemId, checkboxElem, reopenPopout) {
+    const isChecking = checkboxElem.checked;
+    const itemInfo = findChecklistItem(itemId);
+    if (!itemInfo) return;
+
+    const item = itemInfo.item;
+    const chk = itemInfo.checklist;
+
+    const needsInput = isChecking && (item.requires_input == 1 || item.requires_input === true || item.requires_input === '1');
+
+    if (needsInput) {
+        checkboxElem.checked = false;
+        promptDataCapture(ticketId, item, chk.title, reopenPopout);
+        return;
+    }
+
+    executeToggleItem(ticketId, itemId, isChecking ? 1 : 0, null, chk.title, item.title, reopenPopout);
+}
+
+// Prompt for note or data input (Rejects blank entries!)
+function promptDataCapture(ticketId, item, checklistTitle, reopenPopout) {
+    let modal = document.getElementById('chkDataCaptureModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'chkDataCaptureModal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
+        document.body.appendChild(modal);
+    }
+
+    const placeholder = item.input_placeholder || 'Enter step details, serial #, or note...';
+
+    modal.innerHTML = `
+        <div style="background: var(--surface, #ffffff); border-radius: 8px; width: 90%; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b); padding: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="margin: 0; font-size: 15px; font-weight: 600;">📝 Step Data Capture</h4>
+                <button type="button" onclick="closeDataCaptureModal()" style="border: none; background: none; font-size: 18px; cursor: pointer; color: #64748b;">&times;</button>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted, #64748b); margin: 0 0 10px 0;">
+                Step: <strong>${escapeHtml(item.title)}</strong>
+            </p>
+            <div style="margin-bottom: 14px;">
+                <label style="display: block; font-size: 12px; margin-bottom: 4px; font-weight: 500;">
+                    Details / Recorded Value: <span style="color: #ef4444;">*</span>
+                </label>
+                <input type="text" id="chkCaptureInput" style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333);" placeholder="${escapeHtml(placeholder)}" autofocus>
+                <div id="chkCaptureError" style="display: none; color: #ef4444; font-size: 11px; margin-top: 4px;">This step requires a value or note. Please enter details before completing.</div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" onclick="closeDataCaptureModal()" style="padding: 6px 12px; font-size: 12px; cursor: pointer; border-radius: 4px; background: var(--surface-hover, #e2e8f0); color: var(--text, #333); border: none;">
+                    Cancel
+                </button>
+                <button type="button" id="chkSaveCaptureBtn" style="padding: 6px 14px; font-size: 12px; cursor: pointer; border-radius: 4px; background: var(--primary, #2563eb); color: #fff; border: none;">
+                    Complete Step
+                </button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+
+    const input = document.getElementById('chkCaptureInput');
+    const err = document.getElementById('chkCaptureError');
+    input.focus();
+
+    const doSave = () => {
+        const val = input.value.trim();
+        if (!val) {
+            err.style.display = 'block';
+            input.style.borderColor = '#ef4444';
+            input.focus();
+            return;
+        }
+        closeDataCaptureModal();
+        executeToggleItem(ticketId, item.id, 1, val, checklistTitle, item.title, reopenPopout);
+    };
+
+    document.getElementById('chkSaveCaptureBtn').onclick = doSave;
+    input.onkeydown = (e) => { 
+        err.style.display = 'none';
+        input.style.borderColor = 'var(--border, #cbd5e1)';
+        if (e.key === 'Enter') doSave(); 
+    };
+}
+
+function closeDataCaptureModal() {
+    const modal = document.getElementById('chkDataCaptureModal');
+    if (modal) modal.style.display = 'none';
+}
+
+// 6. Execute Toggle Item in Backend
+async function executeToggleItem(ticketId, itemId, completed, responseValue, checklistTitle, stepTitle, reopenPopout) {
+    try {
+        const res = await fetch('/api/tickets/ticket_checklists.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'toggle_item',
+                item_id: itemId,
+                completed: completed,
+                response_value: responseValue
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            await loadTicketChecklists(ticketId);
+            if (reopenPopout) {
+                openChecklistModal(ticketId);
+            }
+            logStepNote(ticketId, checklistTitle, stepTitle, completed, responseValue);
+        } else {
+            alert(data.error || 'Failed to update step');
+        }
+    } catch (e) {
+        console.error('Error toggling step:', e);
+    }
+}
+
+async function logStepNote(ticketId, checklistTitle, stepTitle, completed, responseValue) {
+    let noteText = "";
+    if (completed) {
+        noteText = `✅ SOP Step Completed: [${checklistTitle}] "${stepTitle}"`;
+        if (responseValue) {
+            noteText += ` — Response: ${responseValue}`;
+        }
+    } else {
+        noteText = `↩️ SOP Step Reopened: [${checklistTitle}] "${stepTitle}" was marked incomplete`;
+    }
+
+    try {
+        await fetch("/api/tickets/save_note.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                ticket_id: ticketId,
+                note_text: noteText,
+                is_internal: true
+            })
+        });
+        if (typeof loadNotes === "function") {
+            loadNotes(ticketId);
+        }
+    } catch (e) {
+        console.warn("Could not log note for step action:", e);
+    }
+}
+
+// 7. Remove Checklist from Ticket
+async function removeTicketChecklist(ticketId, checklistId) {
+    if (!confirm('Are you sure you want to remove this SOP checklist from the ticket?')) return;
+    try {
+        const res = await fetch('/api/tickets/ticket_checklists.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'remove_checklist',
+                checklist_id: checklistId
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            await loadTicketChecklists(ticketId);
+            openChecklistModal(ticketId);
+        } else {
+            alert(data.error || 'Failed to remove checklist');
+        }
+    } catch (e) {
+        console.error('Error removing checklist:', e);
+    }
+}
+
+// 8. Attach SOP Modal
+async function openAttachChecklistModal(ticketId) {
+    if (!ticketId) ticketId = currentViewingTicketId;
+    let modal = document.getElementById('ticketAttachChecklistModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ticketAttachChecklistModal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);';
+        document.body.appendChild(modal);
+    }
+
+    try {
+        const res = await fetch('/api/tickets/ticket_checklists.php?action=list_templates_for_ticket');
+        const data = await res.json();
+        if (!data.success) {
+            alert(data.error || 'Failed to load templates');
+            return;
+        }
+        availableTemplatesCache = data.templates || [];
+    } catch (e) {
+        alert('Error loading templates');
+        return;
+    }
+
+    modal.innerHTML = `
+        <div style="background: var(--surface, #ffffff); border-radius: 8px; width: 90%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b);">
+            <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
+                <h4 style="margin: 0; font-size: 15px; font-weight: 600;">Attach SOP Checklist</h4>
+                <button type="button" onclick="closeAttachModal()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-muted, #64748b);">&times;</button>
+            </div>
+            <div style="padding: 12px 18px 6px 18px;">
+                <input type="text" id="chkSearchInput" onkeyup="filterTemplatesList(${ticketId})" placeholder="Search standard procedures..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333);">
+            </div>
+            <div id="chkTemplatesList" style="padding: 10px 18px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px;">
+            </div>
+            <div style="padding: 10px 18px; border-top: 1px solid var(--border, #e2e8f0); display: flex; justify-content: flex-end;">
+                <button type="button" onclick="closeAttachModal()" style="padding: 6px 14px; font-size: 12px; cursor: pointer; border-radius: 4px; background: var(--surface-hover, #e2e8f0); color: var(--text, #333); border: none;">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+    filterTemplatesList(ticketId);
+}
+
+function filterTemplatesList(ticketId) {
+    const list = document.getElementById('chkTemplatesList');
+    if (!list) return;
+    const q = (document.getElementById('chkSearchInput')?.value || '').trim();
+
+    const scored = [];
+    (availableTemplatesCache || []).forEach(t => {
+        const res = scoreChecklistTemplate(t, q);
+        if (res.matched) {
+            scored.push({ template: t, score: res.score });
+        }
+    });
+
+    if (scored.length === 0) {
+        list.innerHTML = `<div style="text-align: center; color: var(--text-muted, #64748b); padding: 20px; font-size: 13px;">No matching SOP checklists found.</div>`;
+        return;
+    }
+
+    // Sort by relevance score descending, then by title
+    scored.sort((a, b) => b.score - a.score || (a.template.title || '').localeCompare(b.template.title || ''));
+
+    let html = '';
+    scored.forEach(({ template: t }) => {
+        html += `
+            <div style="border: 1px solid var(--border, #e2e8f0); border-radius: 6px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; background: var(--surface-hover, #f8fafc);">
+                <div>
+                    <div style="font-weight: 600; font-size: 13px; color: var(--text, #1e293b);">${escapeHtml(t.title)}</div>
+                    <div style="font-size: 11px; color: var(--text-muted, #64748b); margin-top: 2px;">
+                        <span style="background: var(--border, #e2e8f0); padding: 1px 6px; border-radius: 3px; font-weight: 500;">${escapeHtml(t.category || 'General')}</span>
+                        ${t.description ? ' • ' + escapeHtml(t.description) : ''}
+                    </div>
+                </div>
+                <button type="button" onclick="attachSopToTicket(${ticketId}, ${t.id})" style="padding: 5px 12px; font-size: 12px; cursor: pointer; border-radius: 4px; background: var(--primary, #2563eb); color: #fff; border: none; font-weight: 500;">
+                    Attach
+                </button>
+            </div>
+        `;
+    });
+    list.innerHTML = html;
+}
+
+async function attachSopToTicket(ticketId, templateId) {
+    try {
+        const res = await fetch('/api/tickets/ticket_checklists.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'attach_template',
+                ticket_id: ticketId,
+                template_id: templateId
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeAttachModal();
+            await loadTicketChecklists(ticketId);
+            openChecklistModal(ticketId);
+        } else {
+            alert(data.error || 'Failed to attach SOP');
+        }
+    } catch (e) {
+        console.error('Error attaching SOP:', e);
+    }
+}
+
+function closeAttachModal() {
+    const modal = document.getElementById('ticketAttachChecklistModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#039;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Expose functions globally
+window.loadTicketChecklists = loadTicketChecklists;
+window.openChecklistModal = openChecklistModal;
+window.openAttachChecklistModal = openAttachChecklistModal;
+window.getIncompleteMandatorySteps = getIncompleteMandatorySteps;
+
+
+// ============================================================================
+
+
+// ============================================================================
+
+// ============================================================================
+// SOP Response Styling in Notes Timeline (Italics & Distinct Color)
+// ============================================================================
+function styleSopResponsesInNotes() {
+    const notesContainer = document.getElementById("notesContainer");
+    if (!notesContainer) return;
+
+    const noteTexts = notesContainer.querySelectorAll(".note-text");
+    noteTexts.forEach(el => {
+        if (el.dataset.sopStyled) return;
+        const text = el.innerText || el.textContent;
+        if (text.includes("Response:")) {
+            const formatted = el.innerHTML.replace(
+                /(Response:\s*)([^\n<]+)/g,
+                `<span style="color: #64748b; font-weight: 500;">$1</span><span style="font-style: italic; color: #2563eb; font-weight: 600; background: #eff6ff; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 2px;">$2</span>`
+            );
+            el.innerHTML = formatted;
+            el.dataset.sopStyled = "true";
+        }
+    });
+}
+
+// Observe notes container for changes
+if (typeof MutationObserver !== "undefined") {
+    const observer = new MutationObserver(() => {
+        styleSopResponsesInNotes();
+    });
+    const checkExist = setInterval(() => {
+        const container = document.getElementById("notesContainer");
+        if (container) {
+            observer.observe(container, { childList: true, subtree: true });
+            clearInterval(checkExist);
+        }
+    }, 500);
+}
+
+window.dismissedSuggestions = window.dismissedSuggestions || {};
+
+async function checkAndShowSopSuggestion(ticketId) {
+    if (window.dismissedSuggestions[ticketId]) return;
+    try {
+        const res = await fetch(`/api/tickets/ticket_checklists.php?action=suggest_template&ticket_id=${ticketId}`);
+        const data = await res.json();
+        const hostDiv = document.getElementById(`sopEmptyStateHost_${ticketId}`);
+        if (!hostDiv) return;
+
+        const list = (data.suggestions && data.suggestions.length > 0) 
+            ? data.suggestions 
+            : (data.suggested ? [data.suggested] : []);
+
+        if (list.length > 0) {
+            hostDiv.style.background = '#f0fdfa';
+            hostDiv.style.border = '1px solid #99f6e4';
+            hostDiv.style.borderRadius = '6px';
+            hostDiv.style.padding = '10px 14px';
+
+            const matchLabel = list.length === 1 
+                ? '💡 Suggested SOP for this Ticket (Best match):' 
+                : `💡 Suggested SOPs for this Ticket (Top ${list.length} matches):`;
+
+            let itemsHtml = '';
+            list.forEach((s, idx) => {
+                const borderBottom = (idx < list.length - 1) ? 'border-bottom: 1px dashed #ccfbf1;' : '';
+                const conf = s.confidence_percent || 75;
+                const confTooltip = `title="Confidence level: ${conf}% based on ticket content"`;
+                
+                // Target icon SVG
+                const targetIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-1px; margin-right:3px;"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>`;
+
+                itemsHtml += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; gap: 12px; ${borderBottom}">
+                        <!-- Left side: Title and Category badge (shrinks with ellipsis if space is constrained) -->
+                        <div style="min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; overflow: hidden;">
+                            <span style="font-weight: 600; color: #0f766e; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(s.title)}">
+                                ${escapeHtml(s.title)}
+                            </span>
+                            <span style="flex-shrink: 0; font-size: 11px; background: #ccfbf1; color: #0f766e; padding: 1px 6px; border-radius: 3px; white-space: nowrap;">
+                                ${escapeHtml(s.category || 'General')}
+                            </span>
+                        </div>
+
+                        <!-- Right side: Confidence pill directly before the Attach button (never shrinks) -->
+                        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 8px;">
+                            <span style="display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; background: #e6fffa; color: #0d9488; border: 1px solid #99f6e4; padding: 2px 8px; border-radius: 12px; white-space: nowrap; cursor: help;" ${confTooltip}>
+                                ${targetIcon}${conf}%
+                            </span>
+                            <button type="button" onclick="attachSopToTicket(${ticketId}, ${s.id})" style="background: #0d9488; color: #fff; border: none; padding: 4px 10px; font-size: 11px; border-radius: 4px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                                + Attach This SOP
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            hostDiv.innerHTML = `
+                <div style="display: flex; flex-direction: column; width: 100%; gap: 6px;">
+                    <!-- First row: Explicit matches count on left, Browse & Dismiss on right -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px; border-bottom: 1px solid #99f6e4;">
+                        <div style="font-size: 12px; font-weight: 700; color: #0f766e; display: flex; align-items: center; gap: 6px;">
+                            <span>${matchLabel}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="openAttachChecklistModal(${ticketId})" style="padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; border: 1px solid #99f6e4; background: #ffffff; color: #0f766e; font-weight: 500;">
+                                Browse All SOPs
+                            </button>
+                            <button type="button" onclick="dismissSopSuggestion(${ticketId})" style="background: none; border: none; color: #0f766e; font-size: 12px; cursor: pointer; padding: 2px 4px; opacity: 0.8;" title="Dismiss suggestions">
+                                ✕ Dismiss
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Second row and onward: List of suggested SOPs with right-aligned confidence pill & attach button -->
+                    <div style="display: flex; flex-direction: column; width: 100%;">
+                        ${itemsHtml}
+                    </div>
+                </div>
+            `;
+        } else {
+            hostDiv.innerHTML = `
+                <div style="color: var(--text-muted, #64748b); font-size: 13px;">
+                    <strong>SOP Checklist:</strong> None attached to this ticket. <span style="font-style: italic; opacity: 0.85;">(No suggestions found)</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
+                    + Attach SOP
+                </button>
+            `;
+        }
+    } catch (e) {
+        console.debug('SOP suggestion fetch skipped:', e);
+    }
+}
+
+function dismissSopSuggestion(ticketId) {
+    window.dismissedSuggestions[ticketId] = true;
+    const hostDiv = document.getElementById(`sopEmptyStateHost_${ticketId}`);
+    if (hostDiv) {
+        hostDiv.style.background = 'var(--surface, #ffffff)';
+        hostDiv.style.border = '1px dashed var(--border, #cbd5e1)';
+        hostDiv.style.padding = '8px 14px';
+        hostDiv.innerHTML = `
+            <div style="color: var(--text-muted, #64748b); font-size: 13px;">
+                <strong>SOP Checklist:</strong> None attached to this ticket.
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="openAttachChecklistModal(${ticketId})" style="padding: 4px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); background: var(--surface, #fff); color: var(--text, #333);">
+                + Attach SOP
+            </button>
+        `;
+    }
+}

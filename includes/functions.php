@@ -78,7 +78,7 @@ function connectToDatabase() {
 function getModuleRegistry(): array {
     $keys = ['watchtower','tickets','assets','knowledge','changes','problems','calendar',
              'morning-checks','reporting','software','forms','contracts','service-status',
-             'wiki','lms','process-mapper','tasks','cmdb','network-mapper','workflow','war-room'];
+             'war-room','wiki','lms','process-mapper','checklists','tasks','cmdb','network-mapper','workflow'];
     $out = [];
     foreach ($keys as $k) {
         $out[$k] = function_exists('t') ? t("common.modules.$k.name") : ucfirst($k);

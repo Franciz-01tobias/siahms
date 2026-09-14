@@ -392,6 +392,7 @@ foreach ($actionDefs as $actionKey => $def) {
             });
         };
     </script>
+    <script src="../checklists/search_scoring.js?v=1"></script>
     <script src="../assets/js/workflow-editor.js?v=18"></script>
     <script src="../assets/js/mobile.js?v=57"></script>
 </body>

@@ -34,6 +34,7 @@ $defaultModuleColors = [
     // accents inside the workflow module's own CSS).
     'workflow'       => ['#ea580c', '#c2410c'],
     'system'        => ['#546e7a', '#37474f'],
+    'checklists'    => ['#0d9488', '#0f766e'],
 ];
 
 function getModuleColors() {

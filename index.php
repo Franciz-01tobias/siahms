@@ -509,6 +509,19 @@ $translationNamespaces = ['common'];
             </a>
             <?php endif; ?>
 
+            <?php if ($allowed_modules === null || in_array('checklists', $allowed_modules)): ?>
+            <a href="checklists/" class="module-card checklists" title="SOP & Checklist Management">
+                <div class="module-icon checklists">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                        <path d="m9 14 2 2 4-4"></path>
+                    </svg>
+                </div>
+                <div class="module-name">Checklists</div>
+            </a>
+            <?php endif; ?>
+
             <?php if ($allowed_modules === null || in_array('tasks', $allowed_modules)): ?>
             <a href="tasks/" class="module-card tasks" title="<?php echo htmlspecialchars(t('common.modules.tasks.description')); ?>">
                 <div class="module-icon tasks">
