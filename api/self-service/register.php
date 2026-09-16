@@ -76,7 +76,10 @@ try {
     // credential the directory cannot revoke — and would strand the real owner
     // with a password that never works, because the login routes a pinned
     // account to its provider and never checks a local hash.
-    if ($existingUser && (int)($existingUser['auth_provider_id'] ?? 0) > 0) {
+    // (An address-book contact is linked but signs in here - it may register
+    // like any other passwordless account. See userSignsInElsewhere().)
+    require_once '../../includes/users.php';
+    if ($existingUser && userSignsInElsewhere($conn, $existingUser['auth_provider_id'] ?? 0)) {
         echo json_encode([
             'success' => false,
             'error'   => 'This account signs in with your work account. Please use those details on the sign-in page.',

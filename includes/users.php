@@ -151,6 +151,37 @@ const USER_SELF_EDITABLE_FIELDS = [
     'mobile',
 ];
 
+/**
+ * Does this person sign in through their linked provider rather than with a
+ * FreeITSM password?
+ *
+ * 🔴 `auth_provider_id > 0` IS NOT THE QUESTION. Five portal paths (sign-in,
+ * register, email confirmation, forgotten password, reset) used to treat any
+ * linked provider as "signs in elsewhere" - which was true while only LDAP and
+ * OIDC could be linked. A CardDAV address book is linked too, and it is a
+ * source of contact details, NOT a way to sign in. So every contact imported
+ * from an address book was told "this account signs in with single sign-on"
+ * and could never use the portal at all, whatever password they were given.
+ *
+ * Only a CardDAV link counts as local. Anything else - LDAP, OIDC, a provider
+ * this code does not recognise, or one that has since been deleted - keeps the
+ * old, safe answer: the person signs in elsewhere, and no local password may
+ * be planted on the account.
+ */
+function userSignsInElsewhere(PDO $conn, $providerId): bool
+{
+    $providerId = (int)$providerId;
+    if ($providerId <= 0) return false;
+    try {
+        $st = $conn->prepare("SELECT protocol FROM auth_providers WHERE id = ?");
+        $st->execute([$providerId]);
+        $protocol = $st->fetchColumn();
+    } catch (Throwable $e) {
+        return true;
+    }
+    return strtolower((string)$protocol) !== 'carddav';
+}
+
 // ─── What an administrator lets the portal offer ─────────────────────────────
 //
 // System → Portal profile. Two settings in system_settings:

@@ -11,6 +11,7 @@ session_start();
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/tenancy.php';
+require_once __DIR__ . '/../includes/users.php';   // userSignsInElsewhere()
 
 $ok = false;
 $heading = 'Link invalid or expired';
@@ -43,7 +44,7 @@ if ($token !== '' && preg_match('/^[0-9a-f]{64}$/i', $token)) {
             if ($existing && !empty($existing['password_hash'])) {
                 $heading = 'Already confirmed';
                 $message = 'This account is already set up. Please sign in.';
-            } elseif ($existing && (int)($existing['auth_provider_id'] ?? 0) > 0) {
+            } elseif ($existing && userSignsInElsewhere($conn, $existing['auth_provider_id'] ?? 0)) {
                 // The same guard register.php applies, repeated here because the
                 // token may have been issued BEFORE the account was linked to a
                 // directory — a token minted yesterday must not be able to plant

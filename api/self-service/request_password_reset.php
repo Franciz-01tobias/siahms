@@ -64,9 +64,11 @@ try {
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     // Every one of these is a silent success. Rule 1.
+    // Linked to an address book still counts as local - userSignsInElsewhere().
+    require_once '../../includes/users.php';
     $eligible = $user
         && (int)($user['is_active'] ?? 1) === 1
-        && (int)($user['auth_provider_id'] ?? 0) === 0;
+        && !userSignsInElsewhere($conn, $user['auth_provider_id'] ?? 0);
 
     if (!$eligible) {
         echo json_encode(['success' => true, 'message' => $generic]);

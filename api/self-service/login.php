@@ -28,6 +28,7 @@ session_start();
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/ldap.php';
+require_once '../../includes/users.php';   // userSignsInElsewhere()
 
 header('Content-Type: application/json');
 
@@ -75,7 +76,10 @@ try {
 
     $assignedProviderId = (int)($user['auth_provider_id'] ?? 0);
 
-    if ($user && $assignedProviderId > 0) {
+    // ⚠️ Linked is not the same as "signs in elsewhere": a contact imported
+    // from a CardDAV address book is linked to it and still signs in here with
+    // a FreeITSM password. See userSignsInElsewhere().
+    if ($user && userSignsInElsewhere($conn, $assignedProviderId)) {
         // (a) Pinned. ldapGetProvider() returns null for an OIDC provider, which
         // is how an SSO account is kept off this form.
         $assigned = ldapGetProvider($conn, $assignedProviderId);

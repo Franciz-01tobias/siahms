@@ -77,7 +77,11 @@ try {
             AND t.used = 0
             AND t.expires_at > UTC_TIMESTAMP()
             AND COALESCE(u.is_active, 1) = 1
-            AND COALESCE(u.auth_provider_id, 0) = 0
+            AND (COALESCE(u.auth_provider_id, 0) = 0
+                 -- an address book is a source of contact details, not a way
+                 -- to sign in (userSignsInElsewhere() in includes/users.php)
+                 OR EXISTS (SELECT 1 FROM auth_providers p
+                             WHERE p.id = u.auth_provider_id AND p.protocol = 'carddav'))
           LIMIT 1"
     );
     $stmt->execute([$tokenHash]);
