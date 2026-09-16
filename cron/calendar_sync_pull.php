@@ -12,6 +12,11 @@
  * expires. Plenty of FreeITSM installs are internal only and could never have
  * that. This is an ordinary outbound GET, so it works behind any firewall.
  *
+ * With a CalDAV server (#133) the same job reads each analyst's calendar with a
+ * sync-collection query, signed in as that analyst. CalDAV has no change
+ * notifications, so for those installs this job is the only way changes come
+ * back; the subscription step below skips them.
+ *
  * ⚠️ NOT RUNNING THIS COSTS YOU NOTHING YOU ALREADY HAD. Without it the sync is
  * one-way, exactly as it shipped. Deleting an event in Outlook then simply means
  * the next change to that ticket puts a fresh one back.

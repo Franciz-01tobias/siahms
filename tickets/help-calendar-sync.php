@@ -2,7 +2,7 @@
 /**
  * Tickets — Calendar Sync Guide
  * Standalone deep-dive linked from the main tickets help page (Calendar section).
- * Covers the two routes out (subscription link vs Microsoft 365), the admin
+ * Covers the three routes out (subscription link, Microsoft 365, CalDAV), the admin
  * connection, what each analyst turns on for themselves, changes coming back in,
  * the cron-vs-notifications choice, and troubleshooting.
  *
@@ -62,29 +62,32 @@ $translationNamespaces = ['common', 'tickets'];
         <a href="#connection" class="help-nav-link" data-section="connection">
             <span class="help-nav-num">4</span> Microsoft 365 connection
         </a>
+        <a href="#caldav" class="help-nav-link" data-section="caldav">
+            <span class="help-nav-num">5</span> A CalDAV server
+        </a>
         <a href="#mailboxes" class="help-nav-link" data-section="mailboxes">
-            <span class="help-nav-num">5</span> Which mailbox is whose
+            <span class="help-nav-num">6</span> Which mailbox is whose
         </a>
         <a href="#switch-on" class="help-nav-link" data-section="switch-on">
-            <span class="help-nav-num">6</span> Turning it on for yourself
+            <span class="help-nav-num">7</span> Turning it on for yourself
         </a>
         <a href="#tasks" class="help-nav-link" data-section="tasks">
-            <span class="help-nav-num">7</span> Tasks in your calendar
+            <span class="help-nav-num">8</span> Tasks in your calendar
         </a>
         <a href="#inbound" class="help-nav-link" data-section="inbound">
-            <span class="help-nav-num">8</span> Changes coming back
+            <span class="help-nav-num">9</span> Changes coming back
         </a>
         <a href="#cron-vs-notify" class="help-nav-link" data-section="cron-vs-notify">
-            <span class="help-nav-num">9</span> Scheduled job vs notifications
+            <span class="help-nav-num">10</span> Scheduled job vs notifications
         </a>
         <a href="#scheduling-the-job" class="help-nav-link" data-section="scheduling-the-job">
-            <span class="help-nav-num">10</span> Setting up the scheduled job
+            <span class="help-nav-num">11</span> Setting up the scheduled job
         </a>
         <a href="#health" class="help-nav-link" data-section="health">
-            <span class="help-nav-num">11</span> Is it working?
+            <span class="help-nav-num">12</span> Is it working?
         </a>
         <a href="#troubleshooting" class="help-nav-link" data-section="troubleshooting">
-            <span class="help-nav-num">12</span> Troubleshooting
+            <span class="help-nav-num">13</span> Troubleshooting
         </a>
     </div>
 
@@ -107,13 +110,15 @@ $translationNamespaces = ['common', 'tickets'];
                     </div>
                 </div>
                 <p>When you schedule a ticket &mdash; <strong>Schedule work</strong> in the inbox, or by dragging a job around <strong>Tickets &rarr; Calendar</strong> &mdash; FreeITSM records when you intend to do it. Calendar sync puts that same information into the calendar you use for everything else, so your day is in one place rather than two.</p>
-                <p>There are <strong>two routes out</strong>, and they are not alternatives so much as different levels of ambition:</p>
+                <p>There are <strong>three routes out</strong>, and they are not alternatives so much as different levels of ambition:</p>
                 <div class="help-list">
                     <div><strong>A subscription link</strong> &mdash; a private URL your calendar app reads. Works with Google, Apple, Outlook, Thunderbird, anything. Nothing to configure and no administrator involvement.</div>
                     <div><strong>Microsoft 365</strong> &mdash; FreeITSM writes real appointments into your Exchange mailbox using the Microsoft Graph API. Richer, faster, two-way, and it needs an administrator to connect it once.</div>
+                    <div><strong>A CalDAV server</strong> - the same real, two-way appointments in a calendar on Nextcloud, Baïkal, Radicale, iCloud, Fastmail or any other CalDAV server. An administrator enters the server's address once, and you sign in with your own calendar account.</div>
                 </div>
-                <p>Both are per analyst, and <strong>each analyst chooses for themselves</strong> under <strong>Preferences &rarr; General &rarr; My work calendar</strong>. An administrator sets up what is <em>possible</em>; they never switch it on for somebody else.</p>
-                <p class="help-note">In a hurry? If you are not a Microsoft 365 organisation, use the subscription link &mdash; it needs no setup at all. If you are, the Microsoft 365 route is worth the ten minutes.</p>
+                <p>An installation uses Microsoft 365 or a CalDAV server, not both.</p>
+                <p>All three are per analyst, and <strong>each analyst chooses for themselves</strong> under <strong>Preferences &rarr; General &rarr; My work calendar</strong>. An administrator sets up what is <em>possible</em>; they never switch it on for somebody else.</p>
+                <p class="help-note">In a hurry? The subscription link needs no setup at all. If your calendars are on Microsoft 365 or a CalDAV server, the direct route is worth the ten minutes.</p>
             </div>
 
             <!-- 2. Which route -->
@@ -122,20 +127,21 @@ $translationNamespaces = ['common', 'tickets'];
                     <span class="help-section-num">2</span>
                     <div>
                         <h3>Which route to use</h3>
-                        <p>Both are first-class. The difference is what your calendar can do with the result.</p>
+                        <p>All three are first-class. The difference is what your calendar can do with the result.</p>
                     </div>
                 </div>
 
                 <div class="help-table">
                 <table>
-                    <tr><th style="width:28%;"></th><th>Subscription link (iCalendar)</th><th>Microsoft 365 (Graph)</th></tr>
-                    <tr><td><strong>Works with</strong></td><td>Any calendar app</td><td>Exchange / Microsoft 365 mailboxes</td></tr>
-                    <tr><td><strong>Admin setup</strong></td><td>None</td><td>One connection, once</td></tr>
-                    <tr><td><strong>How fast</strong></td><td>Whenever your calendar app refreshes &mdash; often <strong>hours</strong>, and not under our control</td><td><strong>Immediately</strong> when the ticket changes</td></tr>
-                    <tr><td><strong>Marks you busy</strong></td><td>No &mdash; it is a read-only overlay</td><td>Yes &mdash; a real appointment</td></tr>
-                    <tr><td><strong>Direction</strong></td><td>Out of FreeITSM only</td><td>Both ways, if enabled</td></tr>
-                    <tr><td><strong>Edit in your calendar</strong></td><td>No</td><td>Yes &mdash; move it and the ticket follows</td></tr>
-                    <tr><td><strong>Needs internet access</strong></td><td>Only from your calendar app to FreeITSM</td><td>From FreeITSM out to Microsoft</td></tr>
+                    <tr><th style="width:22%;"></th><th>Subscription link (iCalendar)</th><th>Microsoft 365 (Graph)</th><th>CalDAV server</th></tr>
+                    <tr><td><strong>Works with</strong></td><td>Any calendar app</td><td>Exchange / Microsoft 365 mailboxes</td><td>Nextcloud, Baïkal, Radicale, iCloud, Fastmail and other CalDAV servers</td></tr>
+                    <tr><td><strong>Admin setup</strong></td><td>None</td><td>One connection, once</td><td>The server's address, once</td></tr>
+                    <tr><td><strong>Your setup</strong></td><td>Paste a link into your calendar</td><td>One click</td><td>Sign in with your calendar account and pick a calendar</td></tr>
+                    <tr><td><strong>How fast</strong></td><td>Whenever your calendar app refreshes &mdash; often <strong>hours</strong>, and not under our control</td><td><strong>Immediately</strong> when the ticket changes</td><td><strong>Immediately</strong> when the ticket changes</td></tr>
+                    <tr><td><strong>Marks you busy</strong></td><td>No &mdash; it is a read-only overlay</td><td>Yes &mdash; a real appointment</td><td>Yes - a real appointment</td></tr>
+                    <tr><td><strong>Direction</strong></td><td>Out of FreeITSM only</td><td>Both ways, if enabled</td><td>Both ways, if enabled</td></tr>
+                    <tr><td><strong>Edit in your calendar</strong></td><td>No</td><td>Yes &mdash; move it and the ticket follows</td><td>Yes - move it and the ticket follows, on the next scheduled check</td></tr>
+                    <tr><td><strong>Needs network access</strong></td><td>Only from your calendar app to FreeITSM</td><td>From FreeITSM out to Microsoft</td><td>From FreeITSM to your calendar server</td></tr>
                 </table>
                 </div>
 
@@ -221,15 +227,55 @@ $translationNamespaces = ['common', 'tickets'];
                 <p class="help-note">A calendar problem can never stop you scheduling a ticket. If Microsoft is unreachable the save still succeeds and the schedule is still recorded &mdash; the failure is reported on the settings screen rather than in your way.</p>
             </div>
 
-            <!-- 5. Mailboxes -->
-            <div class="help-section" id="mailboxes">
+            <!-- 5. CalDAV (#133) -->
+            <div class="help-section" id="caldav">
                 <div class="help-section-header">
                     <span class="help-section-num">5</span>
+                    <div>
+                        <h3>A CalDAV server</h3>
+                        <p>Nextcloud, Baïkal, Radicale, SOGo, iCloud, Fastmail: real appointments without Microsoft.</p>
+                    </div>
+                </div>
+                <p>An administrator chooses <strong>A CalDAV server</strong> at <strong>System &rarr; Calendar sync</strong> and enters the server's DAV address. That is all the administrator does: a CalDAV server has no way for one account to write into everybody's calendar, so <strong>FreeITSM signs in as you</strong>.</p>
+
+                <div class="help-steps">
+                    <div class="help-step">
+                        <div class="help-step-num">1</div>
+                        <div>Go to <strong>Preferences &rarr; General &rarr; My work calendar</strong> and choose <strong>Add to my calendar</strong>. A sign-in form opens.</div>
+                    </div>
+                    <div class="help-step">
+                        <div class="help-step-num">2</div>
+                        <div>Enter your calendar username and password and press <strong>Find</strong>. Use an <strong>app password</strong> if your calendar offers them (Nextcloud, iCloud and Fastmail all do): it can be withdrawn on its own without changing your main password.</div>
+                    </div>
+                    <div class="help-step">
+                        <div class="help-step-num">3</div>
+                        <div>Choose the calendar your scheduled work should go into and press <strong>Save</strong>. Anything you already have scheduled from the last week onwards is added straight away.</div>
+                    </div>
+                </div>
+
+                <div class="help-card">
+                    <span class="help-pill info">Only calendars you can already write to</span>
+                    <p>The list shows the calendars your own account can add events to, on the server your administrator entered. Task lists and read-only calendars are left out. Your password is stored encrypted and never shown again; leave the box blank later to keep it.</p>
+                </div>
+                <div class="help-card">
+                    <span class="help-pill info">Your own additions are kept</span>
+                    <p>Add a reminder or a note to one of these appointments in your calendar app and it stays there when the ticket changes. FreeITSM only rewrites the time, the title, the description and the link back to the ticket.</p>
+                </div>
+
+                <p><strong>Change</strong> moves your scheduled work to a different calendar or account: FreeITSM takes its appointments out of the old one first. <strong>Forget</strong> takes them all out, forgets your sign-in and switches this off. Switching to <strong>Off</strong> also takes them out, but keeps your sign-in so that turning it back on is one click.</p>
+                <p class="help-note">Changes you make in the calendar come back on the scheduled job, the same as with Microsoft 365. CalDAV servers do not send notifications, so there is no faster option; every five minutes is sensible.</p>
+            </div>
+
+            <!-- 6. Mailboxes -->
+            <div class="help-section" id="mailboxes">
+                <div class="help-section-header">
+                    <span class="help-section-num">6</span>
                     <div>
                         <h3>Which mailbox is whose</h3>
                         <p>The step that is easy to skip and then puzzling to debug.</p>
                     </div>
                 </div>
+                <p class="help-note">Microsoft 365 only. With a CalDAV server there is nothing to set here: each analyst signs in and chooses their own calendar (section 5).</p>
                 <p>By default FreeITSM assumes an analyst's calendar lives at the email address on their FreeITSM account. <strong>That is frequently wrong.</strong> An account created locally might be <code>admin@local</code>; a directory import might be keyed on a payroll address; a person's sign-in name and their mailbox are often simply different things.</p>
                 <p>So <strong>System &rarr; Calendar sync &rarr; Which mailbox each analyst syncs to</strong> lists every active analyst and lets you set the real one. Addresses FreeITSM is merely <em>assuming</em> are shown greyed out; ones somebody actually chose are shown normally. The distinction is the point &mdash; you can see at a glance which have been confirmed.</p>
                 <div class="help-card">
@@ -238,10 +284,10 @@ $translationNamespaces = ['common', 'tickets'];
                 </div>
             </div>
 
-            <!-- 6. Switch on -->
+            <!-- 7. Switch on -->
             <div class="help-section" id="switch-on">
                 <div class="help-section-header">
-                    <span class="help-section-num">6</span>
+                    <span class="help-section-num">7</span>
                     <div>
                         <h3>Turning it on for yourself</h3>
                         <p>The administrator makes it possible; you decide whether it happens.</p>
@@ -256,10 +302,10 @@ $translationNamespaces = ['common', 'tickets'];
                 <p><strong>From then on it follows the ticket.</strong> Move it to Thursday and the appointment moves. Hand it to a colleague and it <strong>leaves your calendar and appears in theirs</strong>. Close, delete or unschedule it and the appointment disappears &mdash; a calendar should say what you are <em>going</em> to do, not accumulate everything you have ever finished.</p>
             </div>
 
-            <!-- 7. Tasks -->
+            <!-- 8. Tasks -->
             <div class="help-section" id="tasks">
                 <div class="help-section-header">
-                    <span class="help-section-num">7</span>
+                    <span class="help-section-num">8</span>
                     <div>
                         <h3>Tasks in your calendar</h3>
                         <p>A task can put two different things in your diary, and they are not the same kind of fact.</p>
@@ -292,10 +338,10 @@ $translationNamespaces = ['common', 'tickets'];
 
                 <p class="help-note warn"><strong>Changes only come back if the scheduled job is running.</strong> This is the same job the rest of this page describes, and it is the commonest reason a change in Outlook appears not to have worked. See <a href="#scheduling-the-job">Setting up the scheduled job</a>.</p>
             </div>
-            <!-- 7. Inbound -->
+            <!-- 9. Inbound -->
             <div class="help-section" id="inbound">
                 <div class="help-section-header">
-                    <span class="help-section-num">8</span>
+                    <span class="help-section-num">9</span>
                     <div>
                         <h3>Changes coming back from your calendar</h3>
                         <p>Optional, and off until you set up the scheduled job.</p>
@@ -314,10 +360,10 @@ $translationNamespaces = ['common', 'tickets'];
                 </div>
             </div>
 
-            <!-- 8. Cron vs notifications -->
+            <!-- 10. Cron vs notifications -->
             <div class="help-section" id="cron-vs-notify">
                 <div class="help-section-header">
-                    <span class="help-section-num">9</span>
+                    <span class="help-section-num">10</span>
                     <div>
                         <h3>Scheduled job vs notifications</h3>
                         <p>Not either/or &mdash; the job is required, and notifications make it fast.</p>
@@ -344,10 +390,10 @@ $translationNamespaces = ['common', 'tickets'];
                 <p>If you do fill it in, it must be an HTTPS address Microsoft can reach from the internet, ending <code>/api/calendar/graph_notify.php</code>. The <strong>Use this address</strong> button offers the one you are currently browsing on as a starting point &mdash; check it, because behind a proxy or a tunnel that is routinely not the address Microsoft would use.</p>
             </div>
 
-            <!-- 9. Scheduling the job -->
+            <!-- 11. Scheduling the job -->
             <div class="help-section" id="scheduling-the-job">
                 <div class="help-section-header">
-                    <span class="help-section-num">10</span>
+                    <span class="help-section-num">11</span>
                     <div>
                         <h3>Setting up the scheduled job</h3>
                         <p>Every five minutes is sensible. It both reads changes and renews subscriptions.</p>
@@ -377,10 +423,10 @@ echo ===== %DATE% %TIME% ===== &gt;&gt; "%LOG%"
                 <p class="help-note">Not running the job at all costs you nothing you already had &mdash; the sync simply stays one-way, exactly as it works without it. Deleting an appointment in Outlook then just means the next change to that ticket puts a fresh one back.</p>
             </div>
 
-            <!-- 10. Health -->
+            <!-- 12. Health -->
             <div class="help-section" id="health">
                 <div class="help-section-header">
-                    <span class="help-section-num">11</span>
+                    <span class="help-section-num">12</span>
                     <div>
                         <h3>Is it working?</h3>
                         <p><strong>System &rarr; Calendar sync</strong> answers this at the top of <strong>Changes made in the calendar</strong>.</p>
@@ -398,10 +444,10 @@ echo ===== %DATE% %TIME% ===== &gt;&gt; "%LOG%"
                 </div>
             </div>
 
-            <!-- 11. Troubleshooting -->
+            <!-- 13. Troubleshooting -->
             <div class="help-section" id="troubleshooting">
                 <div class="help-section-header">
-                    <span class="help-section-num">12</span>
+                    <span class="help-section-num">13</span>
                     <div>
                         <h3>Troubleshooting</h3>
                         <p>The failures you are most likely to meet, and what each one actually means.</p>

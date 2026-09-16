@@ -75,9 +75,10 @@ function calendarSyncPullForAnalyst(PDO $conn, int $analystId): array
     if (!$connection) return $report;
 
     try {
-        $provider = calendarSyncProviderFor($connection);
+        $provider = calendarSyncProviderFor($connection, $enrolment);
         $provider->conn = $conn;
-        $result = $provider->pollChanges($enrolment['calendar_address'], $enrolment['delta_token'] ?: null);
+        if (empty($enrolment['calendar_address'])) return $report;   // CalDAV: no calendar chosen yet
+        $result = $provider->pollChanges($enrolment['calendar_address'], ($enrolment['delta_token'] ?? '') ?: null);
     } catch (Exception $e) {
         calendarSyncRecordError($conn, $analystId, $e->getMessage());
         $report['error'] = $e->getMessage();
@@ -385,22 +386,37 @@ function calendarSyncEnsureSubscription(PDO $conn, int $analystId): string
     $subId      = $enrolment['subscription_id'] ?? null;
     $connection = calendarSyncActiveConnection($conn);
 
+    // Only a provider that has notifications. CalDAV has no equivalent, so its
+    // changes arrive on the poll alone - asking would only record a failure on
+    // every run.
+    $canNotify = false;
+    if ($connection) {
+        try { $canNotify = calendarSyncProviderFor($connection)->supports(CalendarSyncProvider::CAP_NOTIFY); }
+        catch (Exception $e) { $canNotify = false; }
+    }
+
     $wanted = $notifyUrl !== ''
            && ($enrolment['mode'] ?? '') === CALENDAR_MODE_PUSH
            && !empty($enrolment['calendar_address'])
-           && $connection;
+           && $connection
+           && $canNotify;
 
     // Not wanted but present — an analyst opted out, or notifications were
     // switched off. Take it down rather than leaving Graph calling an endpoint
     // about somebody who is no longer syncing.
     if (!$wanted) {
-        if ($subId && $connection) {
-            try {
-                $p = calendarSyncProviderFor($connection); $p->conn = $conn;
-                $p->deleteSubscription($subId);
-            } catch (Exception $e) {
-                // Already gone, or unreachable. Either way we forget it below:
-                // keeping a row we cannot act on means retrying for ever.
+        if ($subId) {
+            // A provider without notifications (the install switched to CalDAV)
+            // cannot take down a Microsoft subscription, which lapses on its own
+            // within three days. Forget it either way.
+            if ($connection && $canNotify) {
+                try {
+                    $p = calendarSyncProviderFor($connection); $p->conn = $conn;
+                    $p->deleteSubscription($subId);
+                } catch (Exception $e) {
+                    // Already gone, or unreachable. Either way we forget it below:
+                    // keeping a row we cannot act on means retrying for ever.
+                }
             }
             calendarClearSubscription($conn, $analystId);
             return 'removed';

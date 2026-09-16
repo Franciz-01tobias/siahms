@@ -140,15 +140,47 @@ $translationNamespaces = ['common', 'system'];
                 <h2><?php echo htmlspecialchars(t('system.calsync.conn_heading')); ?></h2>
                 <p><?php echo t('system.calsync.conn_desc'); ?></p>
 
-                <div class="cs-warn">
-                    <span class="cs-warn-title"><?php echo htmlspecialchars(t('system.calsync.perm_title')); ?></span>
-                    <?php echo t('system.calsync.perm_body'); ?>
+                <?php /* Which calendar system. Microsoft writes with one app
+                         registration for everybody; CalDAV signs in as each
+                         analyst, so its connection is only an address. */ ?>
+                <div class="cs-field">
+                    <span><?php echo htmlspecialchars(t('system.calsync.provider_label')); ?></span>
+                </div>
+                <div class="cs-radio">
+                    <label><input type="radio" name="csProvider" value="microsoft" checked onchange="csProviderChanged()">
+                        <?php echo htmlspecialchars(t('system.calsync.provider_microsoft')); ?></label>
+                    <label><input type="radio" name="csProvider" value="caldav" onchange="csProviderChanged()">
+                        <?php echo htmlspecialchars(t('system.calsync.provider_caldav')); ?></label>
                 </div>
 
                 <label class="cs-field">
                     <span><?php echo htmlspecialchars(t('system.calsync.name')); ?></span>
                     <input type="text" id="csName" autocomplete="off" maxlength="100" value="Microsoft 365">
                 </label>
+
+                <div id="csCalDavBlock" style="display:none;">
+                    <p class="cs-note" style="margin:0 0 14px;"><?php echo t('system.calsync.caldav_desc'); ?></p>
+                    <label class="cs-field">
+                        <span><?php echo htmlspecialchars(t('system.calsync.server_url')); ?></span>
+                        <input type="url" id="csServerUrl" autocomplete="off" placeholder="https://dav.example.com/dav.php/">
+                    </label>
+                    <p class="cs-note" style="margin:-8px 0 14px;"><?php echo t('system.calsync.server_url_hint'); ?></p>
+                    <label class="cs-field">
+                        <span><?php echo htmlspecialchars(t('system.calsync.caldav_auth')); ?></span>
+                        <select id="csCalDavAuth">
+                            <option value="auto"><?php echo htmlspecialchars(t('system.calsync.auth_auto')); ?></option>
+                            <option value="digest"><?php echo htmlspecialchars(t('system.calsync.auth_digest')); ?></option>
+                            <option value="basic"><?php echo htmlspecialchars(t('system.calsync.auth_basic')); ?></option>
+                        </select>
+                    </label>
+                    <p class="cs-note" style="margin:-8px 0 14px;"><?php echo htmlspecialchars(t('system.calsync.caldav_auth_hint')); ?></p>
+                </div>
+
+                <div id="csMsBlock">
+                <div class="cs-warn">
+                    <span class="cs-warn-title"><?php echo htmlspecialchars(t('system.calsync.perm_title')); ?></span>
+                    <?php echo t('system.calsync.perm_body'); ?>
+                </div>
 
                 <div class="cs-radio">
                     <label><input type="radio" name="csSource" value="mailbox" checked onchange="csSource()">
@@ -176,6 +208,7 @@ $translationNamespaces = ['common', 'system'];
                         <input type="password" id="csSecret" autocomplete="new-password"></label>
                     <p class="cs-note"><?php echo htmlspecialchars(t('system.calsync.secret_note')); ?></p>
                 </div>
+                </div><!-- /#csMsBlock -->
 
                 <div class="cs-actions">
                     <button class="btn btn-primary" onclick="csSave()"><?php echo htmlspecialchars(t('common.save')); ?></button>
@@ -187,10 +220,22 @@ $translationNamespaces = ['common', 'system'];
                          answer: the token proves the credentials and the consent,
                          this proves one particular mailbox is reachable. They fail
                          for different reasons and need different fixes. */ ?>
-                <label class="cs-field" style="margin-top:16px;">
+                <label class="cs-field" style="margin-top:16px;" id="csProbeMs">
                     <span><?php echo htmlspecialchars(t('system.calsync.probe')); ?></span>
                     <input type="text" id="csProbe" autocomplete="off" placeholder="someone@yourdomain.com">
                 </label>
+
+                <?php /* CalDAV: a sign-in to try, used for the Test request only
+                         and never stored - the connection holds nobody's password. */ ?>
+                <div id="csProbeCalDav" style="display:none;margin-top:16px;">
+                    <div class="cs-field" style="margin-bottom:6px;"><span><?php echo htmlspecialchars(t('system.calsync.caldav_probe')); ?></span></div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;max-width:520px;">
+                        <input type="text" id="csProbeUser" autocomplete="off" placeholder="<?php echo htmlspecialchars(t('system.calsync.probe_user')); ?>"
+                               style="flex:1 1 180px;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--surface,#fff);color:var(--text,#333);font-size:13px;">
+                        <input type="password" id="csProbePass" autocomplete="new-password" placeholder="<?php echo htmlspecialchars(t('system.calsync.probe_pass')); ?>"
+                               style="flex:1 1 180px;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--surface,#fff);color:var(--text,#333);font-size:13px;">
+                    </div>
+                </div>
 
                 <div class="cs-result" id="csResult"></div>
 
@@ -218,6 +263,8 @@ $translationNamespaces = ['common', 'system'];
                              Blank = polling only, which is a perfectly good
                              answer and the only one available to an install the
                              internet cannot reach. */ ?>
+                    <p class="cs-note" id="csNotifyCalDav" style="display:none;margin-top:16px;"><?php echo htmlspecialchars(t('system.calsync.caldav_no_notify')); ?></p>
+                    <div id="csNotifyBlock">
                     <label class="cs-field" style="margin-top:16px;">
                         <span><?php echo htmlspecialchars(t('system.calsync.notify_url')); ?></span>
                         <input type="url" id="csNotifyUrl" autocomplete="off" placeholder="https://…/api/calendar/graph_notify.php">
@@ -228,6 +275,7 @@ $translationNamespaces = ['common', 'system'];
                         <button class="btn btn-secondary" onclick="csSuggestNotify()"><?php echo htmlspecialchars(t('system.calsync.notify_suggest')); ?></button>
                         <span class="cs-note" id="csSubCount"></span>
                     </div>
+                    </div><!-- /#csNotifyBlock -->
                 </div>
             </div>
 
@@ -238,7 +286,8 @@ $translationNamespaces = ['common', 'system'];
                      WHERE. */ ?>
             <div class="cs-card">
                 <h2><?php echo htmlspecialchars(t('system.calsync.people_heading')); ?></h2>
-                <p><?php echo t('system.calsync.people_desc'); ?></p>
+                <p id="csPeopleDescMs"><?php echo t('system.calsync.people_desc'); ?></p>
+                <p id="csPeopleDescCalDav" style="display:none;"><?php echo t('system.calsync.people_desc_caldav'); ?></p>
                 <table class="cs-people">
                     <thead>
                         <tr>
@@ -280,6 +329,35 @@ $translationNamespaces = ['common', 'system'];
             const own = document.querySelector('input[name="csSource"]:checked').value === 'own';
             document.getElementById('csOwnBlock').style.display     = own ? '' : 'none';
             document.getElementById('csMailboxBlock').style.display = own ? 'none' : '';
+        }
+
+        /** 'microsoft' or 'caldav', as chosen on the page. */
+        function csProvider() {
+            return (document.querySelector('input[name="csProvider"]:checked') || {}).value || 'microsoft';
+        }
+
+        /**
+         * Show the settings for the chosen calendar system and hide the other's.
+         * ⚠️ style.display throughout: several of these rows are flex, and
+         * `display:flex` beats the `hidden` attribute.
+         */
+        function csProviderChanged() {
+            const cal = csProvider() === 'caldav';
+            const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+            show('csCalDavBlock', cal);
+            show('csMsBlock', !cal);
+            show('csProbeMs', !cal);
+            show('csProbeCalDav', cal);
+            show('csNotifyBlock', !cal);
+            show('csNotifyCalDav', cal);
+            show('csPeopleDescMs', !cal);
+            show('csPeopleDescCalDav', cal);
+            // A default name that no longer describes the connection is replaced;
+            // one somebody typed is left alone.
+            const name = document.getElementById('csName');
+            if (cal && name.value === 'Microsoft 365') name.value = 'CalDAV';
+            if (!cal && name.value === 'CalDAV') name.value = 'Microsoft 365';
+            if (csState) csRenderPeople(csState.analysts || []);
         }
 
         function csShow(ok, html) {
@@ -328,7 +406,14 @@ $translationNamespaces = ['common', 'system'];
             if (d.connection) {
                 document.getElementById('csName').value = d.connection.name;
                 document.getElementById('csDeleteBtn').style.display = '';
-                if (d.connection.mailbox_id) {
+                const prov = d.connection.provider === 'caldav' ? 'caldav' : 'microsoft';
+                document.querySelector('input[name="csProvider"][value="' + prov + '"]').checked = true;
+                document.getElementById('csServerUrl').value  = d.connection.caldav_server_url || '';
+                document.getElementById('csCalDavAuth').value = d.connection.caldav_auth || 'auto';
+                csProviderChanged();
+                if (prov === 'caldav') {
+                    // nothing Microsoft-shaped to fill in
+                } else if (d.connection.mailbox_id) {
                     document.querySelector('input[name="csSource"][value="mailbox"]').checked = true;
                     sel.value = String(d.connection.mailbox_id);
                 } else if (d.connection.has_credentials) {
@@ -422,14 +507,45 @@ $translationNamespaces = ['common', 'system'];
          * inherited one is frequently wrong (a local account, an LDAP import
          * keyed on something else), which is the entire reason this screen exists.
          */
+        /**
+         * CalDAV: the calendar is the analyst's own choice, made signed in as
+         * themselves, so it is shown and never edited here. The last part of the
+         * web address is usually the calendar's short name.
+         */
+        function csCalendarLabel(url) {
+            if (!url) return '';
+            const parts = String(url).replace(/\/+$/, '').split('/');
+            try { return decodeURIComponent(parts[parts.length - 1] || url); } catch (e) { return parts[parts.length - 1] || url; }
+        }
+
         function csRenderPeople(people) {
             const tb = document.getElementById('csPeople');
+            const caldav = csProvider() === 'caldav'
+                && csState && csState.connection && csState.connection.provider === 'caldav';
             tb.innerHTML = people.map(p => {
                 const override  = p.calendar_address || '';
                 const inherited = !override;
                 const shown     = override || p.email || '';
                 const mode      = p.mode || 'off';
                 let pill = '<span class="cs-pill offp">' + escapeCs(t('system.calsync.mode_off')) + '</span>';
+                if (caldav) {
+                    if (mode === 'push') pill = '<span class="cs-pill on">' + escapeCs(t('system.calsync.mode_push')) + '</span>';
+                    if (mode === 'feed') pill = '<span class="cs-pill on">' + escapeCs(t('system.calsync.mode_feed')) + '</span>';
+                    if (p.last_error) {
+                        pill += ' <span class="cs-pill bad" title="' + escapeCs(p.last_error) + '">'
+                              + escapeCs(t('system.calsync.mode_error')) + '</span>';
+                    }
+                    const where = override
+                        ? '<span title="' + escapeCs(override) + '">' + escapeCs(csCalendarLabel(override)) + '</span>'
+                        : '<span class="cs-analyst-email">' + escapeCs(t('system.calsync.no_account')) + '</span>';
+                    return `<tr data-analyst="${p.id}">
+                        <td><div class="cs-analyst-name">${escapeCs(p.full_name)}</div>
+                            <div class="cs-analyst-email">${escapeCs(p.email)}</div></td>
+                        <td>${where}</td>
+                        <td>${pill}</td>
+                        <td></td>
+                    </tr>`;
+                }
                 if (mode === 'push') pill = '<span class="cs-pill on">' + escapeCs(t('system.calsync.mode_push')) + '</span>';
                 if (mode === 'feed') pill = '<span class="cs-pill on">' + escapeCs(t('system.calsync.mode_feed')) + '</span>';
                 // The failure carries WHAT failed. "Last sync failed" on its own
@@ -521,20 +637,35 @@ $translationNamespaces = ['common', 'system'];
             return r.json();
         }
 
-        async function csSave() {
+        async function csSave(confirmSwitch) {
             const source = document.querySelector('input[name="csSource"]:checked').value;
             const d = await csPost({
                 action: 'save',
+                provider: csProvider(),
                 name: document.getElementById('csName').value,
                 source: source,
                 mailbox_id: document.getElementById('csMailbox').value || '',
                 tenant_id: document.getElementById('csTenant').value,
                 client_id: document.getElementById('csClient').value,
                 client_secret: document.getElementById('csSecret').value,
-                feed_mode: document.getElementById('csFeedMode').value
+                server_url: document.getElementById('csServerUrl').value.trim(),
+                caldav_auth: document.getElementById('csCalDavAuth').value,
+                feed_mode: document.getElementById('csFeedMode').value,
+                confirm_switch: confirmSwitch ? '1' : ''
             });
+            // Switching calendar system takes FreeITSM's events back out of real
+            // calendars, so it is asked, with the numbers, before it happens.
+            if (d.needs_confirm) {
+                const ok = await showConfirm({
+                    title: t('system.calsync.switch_title'),
+                    message: t('system.calsync.switch_confirm', { mapped: d.mapped, pushing: d.pushing }),
+                    okLabel: t('system.calsync.switch_ok'), okClass: 'danger'
+                });
+                if (ok) return csSave(true);
+                return;
+            }
             if (!d.success) { csShow(false, escapeCs(d.error || '')); return; }
-            csShow(true, escapeCs(t('system.calsync.saved')));
+            csShow(true, escapeCs(t(d.reset ? 'system.calsync.switch_done' : 'system.calsync.saved')));
             document.getElementById('csSecret').value = '';
             await csLoad();
         }
@@ -575,6 +706,7 @@ $translationNamespaces = ['common', 'system'];
 
         async function csTest() {
             csShow(true, escapeCs(t('system.calsync.testing')));
+            if (csProvider() === 'caldav') return csTestCalDav();
             const d = await csPost({ action: 'test', probe: document.getElementById('csProbe').value.trim() });
             if (!d.success) {
                 csShow(false, '<strong>' + escapeCs(t('system.calsync.test_failed')) + '</strong><br><code>'
@@ -590,6 +722,40 @@ $translationNamespaces = ['common', 'system'];
                     : escapeCs(t('system.calsync.probe_bad', { addr: d.probe })));
             }
             csShow(!!(d.probe === undefined || d.probe_ok), html);
+        }
+
+        /**
+         * CalDAV: is it a calendar server, and - with a sign-in to try - which
+         * calendars would that person be offered. The sign-in is sent for this
+         * test only and is not stored.
+         */
+        async function csTestCalDav() {
+            const d = await csPost({
+                action: 'test',
+                probe_user: document.getElementById('csProbeUser').value.trim(),
+                probe_pass: document.getElementById('csProbePass').value
+            });
+            if (!d.success) {
+                csShow(false, '<strong>' + escapeCs(t('system.calsync.test_failed')) + '</strong><br><code>'
+                            + escapeCs(d.error || '') + '</code><br><br>'
+                            + escapeCs(t('system.calsync.caldav_test_failed_hint')));
+                return;
+            }
+            let html = '<strong>' + escapeCs(t('system.calsync.caldav_test_ok')) + '</strong>';
+            let good = true;
+            if (d.probe) {
+                if (!d.probe_ok) {
+                    good = false;
+                    html += '<br><br>' + escapeCs(t('system.calsync.caldav_probe_bad', { user: d.probe, error: d.probe_error || '' }));
+                } else if (!(d.calendars || []).length) {
+                    good = false;
+                    html += '<br><br>' + escapeCs(t('system.calsync.caldav_probe_none', { user: d.probe }));
+                } else {
+                    html += '<br><br>' + escapeCs(t('system.calsync.caldav_probe_ok', { user: d.probe, list: d.calendars.join(', ') }));
+                }
+                if (d.probe_auth) html += '<br>' + escapeCs(t('system.calsync.caldav_probe_auth', { auth: d.probe_auth }));
+            }
+            csShow(good, html);
         }
 
         async function csDelete() {

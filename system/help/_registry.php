@@ -303,10 +303,11 @@ function getHelpTopics() {
         ],
         'calendar-sync' => [
             'hero' => 'Calendar sync',
-            'sub'  => 'Put analysts\' scheduled tickets into the Outlook calendars they already use, optionally let changes made there come back, and decide whether they may publish a subscription link.',
+            'sub'  => 'Put analysts\' scheduled tickets into the calendars they already use - Outlook or any CalDAV server - optionally let changes made there come back, and decide whether they may publish a subscription link.',
             'sections' => [
                 ['id' => 'overview',   'label' => 'Two different things'],
                 ['id' => 'permission', 'label' => 'The permission'],
+                ['id' => 'caldav',     'label' => 'A CalDAV server instead'],
                 ['id' => 'connection', 'label' => 'The connection'],
                 ['id' => 'people',     'label' => 'Who syncs where'],
                 ['id' => 'inbound',    'label' => 'Changes in the calendar'],
@@ -316,7 +317,9 @@ function getHelpTopics() {
                      . ' calendars.readwrite application permission admin consent application access policy'
                      . ' ical ics subscribe feed secret link google apple thunderbird two way'
                      . ' cron calendar_sync_pull webhook notification url graph_notify client secret expired'
-                     . ' appointments scheduled work tasks unschedule deleted appointment',
+                     . ' appointments scheduled work tasks unschedule deleted appointment'
+                     . ' caldav webdav dav nextcloud baikal radicale sogo icloud fastmail sabredav sabre/dav'
+                     . ' app password digest basic sign-in own calendar per analyst switch provider',
         ],
         'ai' => [
             'hero' => 'AI thinking',

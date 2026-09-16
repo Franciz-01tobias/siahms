@@ -38,6 +38,7 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
             self::CAP_ALL_DAY,
             self::CAP_BODY_HTML,
             self::CAP_VERIFY_TARGET,
+            self::CAP_NOTIFY,
         ], true);
     }
 

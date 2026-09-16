@@ -98,7 +98,7 @@ function calendarSyncReconcileTicket(PDO $conn, int $ticketId, bool $gone = fals
         }
 
         try {
-            $provider = calendarSyncProviderFor($connection);
+            $provider = calendarSyncProviderFor($connection, $enrolment);
             $provider->conn = $conn;
 
             if ($mine) {
@@ -240,7 +240,7 @@ function calendarSyncReconcileTask(PDO $conn, int $taskId, bool $gone = false): 
             }
 
             try {
-                $provider = calendarSyncProviderFor($connection);
+                $provider = calendarSyncProviderFor($connection, $enrolment);
                 $provider->conn = $conn;
 
                 if ($mine) {
@@ -364,7 +364,9 @@ function calendarSyncRemoveRow(PDO $conn, array $row): void
             ? calendarSyncLoadConnection($conn, (int)$row['connection_id'])
             : calendarSyncActiveConnection($conn);
         if ($connection) {
-            $provider = calendarSyncProviderFor($connection);
+            // Whoever the event was written for - with CalDAV, only their own
+            // sign-in can take it back out of their calendar.
+            $provider = calendarSyncProviderFor($connection, calendarSyncEnrolment($conn, (int)$row['analyst_id']));
             $provider->conn = $conn;
             // An already-gone event counts as success — see the provider.
             $provider->deleteEvent($row['remote_calendar'], $row['remote_event_id']);

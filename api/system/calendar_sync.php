@@ -4,8 +4,14 @@
  *
  *   GET                 -> current connection (WITHOUT secrets) + feed policy +
  *                          the Microsoft mailboxes whose credentials can be borrowed
- *   POST action=save    -> create/update the connection and the feed policy
- *   POST action=test    -> mint a token and prove the permission was granted
+ *   POST action=save    -> create/update the connection and the feed policy.
+ *                          provider=microsoft|caldav. Changing provider, or the
+ *                          CalDAV server, answers needs_confirm first (it takes
+ *                          every event back); resend with confirm_switch=1.
+ *   POST action=test    -> Microsoft: mint a token and prove the permission was
+ *                          granted. CalDAV: check the address is a DAV server,
+ *                          and with probe_user/probe_pass list that person's
+ *                          calendars (the sign-in is not stored).
  *   POST action=delete  -> remove the connection
  *
  * ⚠️ SECRETS ARE NEVER RETURNED. The GET reports has_credentials as a boolean and
@@ -51,6 +57,14 @@ try {
             }
         }
 
+        // CalDAV keeps no secret on the connection - only where the server is and
+        // how to sign in to it - so those two are safe to hand back.
+        $caldav = ['server_url' => '', 'auth' => 'auto'];
+        if ($row && $row['provider'] === 'caldav') {
+            $c = calendarSyncDecodeCredentials($row['credentials'] ?? null);
+            $caldav = ['server_url' => (string)($c['server_url'] ?? ''), 'auth' => (string)($c['auth'] ?? 'auto')];
+        }
+
         echo json_encode([
             'success'   => true,
             'connection' => $row ? [
@@ -61,6 +75,8 @@ try {
                 'is_active'  => (int)$row['is_active'] === 1,
                 // A boolean and nothing more. See the header.
                 'has_credentials'     => !empty($row['credentials']),
+                'caldav_server_url'   => $caldav['server_url'],
+                'caldav_auth'         => $caldav['auth'],
                 'last_error'          => $row['last_error'],
                 'last_error_datetime' => $row['last_error_datetime'],
             ] : null,
@@ -105,7 +121,7 @@ try {
             // most needs to fix is the one who is invisible.
             'analysts'   => $conn->query(
                 "SELECT a.id, a.full_name, a.email, e.calendar_address, e.mode, e.task_mode, e.last_error,
-                        e.subscription_id,
+                        e.subscription_id, (e.credentials IS NOT NULL) AS has_account,
                         TIMESTAMPDIFF(HOUR, UTC_TIMESTAMP(), e.subscription_expires) AS sub_hours,
                         TIMESTAMPDIFF(MINUTE, e.delta_synced_datetime, UTC_TIMESTAMP()) AS checked_minutes
                    FROM analysts a
@@ -158,8 +174,30 @@ try {
 
         $existing = $conn->query("SELECT * FROM calendar_connections ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC);
 
+        $provider = (string)($_POST['provider'] ?? 'microsoft');
+        if (!in_array($provider, CALENDAR_PROVIDERS, true)) {
+            echo json_encode(['success' => false, 'error' => 'Unknown calendar provider.']);
+            exit;
+        }
+
         $credentials = null;   // null = leave whatever is stored alone
-        if ($source === 'own') {
+        $newOrigin   = '';
+        if ($provider === 'caldav') {
+            require_once '../../includes/calendar_sync/CalDavCalendarProvider.php';
+            $serverUrl = trim((string)($_POST['server_url'] ?? ''));
+            $auth      = (string)($_POST['caldav_auth'] ?? 'auto');
+            if (!in_array($auth, ['auto', 'digest', 'basic'], true)) $auth = 'auto';
+            if (!preg_match('#^https?://[^/\s]+#i', $serverUrl)) {
+                echo json_encode(['success' => false, 'error' => 'Enter the address of the calendar server, starting with http:// or https://.']);
+                exit;
+            }
+            // No passwords here. Each analyst signs in with their own, under
+            // Preferences - a CalDAV server has no way for one account to write
+            // into everybody's calendar.
+            $credentials = calendarSyncEncodeCredentials(['server_url' => rtrim($serverUrl, '/') . '/', 'auth' => $auth]);
+            $newOrigin   = rtrim($serverUrl, '/') . '/';
+            $mailboxId   = null;
+        } elseif ($source === 'own') {
             $tenant = trim((string)($_POST['tenant_id'] ?? ''));
             $client = trim((string)($_POST['client_id'] ?? ''));
             $secret = (string)($_POST['client_secret'] ?? '');
@@ -185,26 +223,74 @@ try {
             $credentials = '';               // '' = explicitly clear, so borrowing takes effect
         }
 
+        // 🔴 CHANGING WHERE THE EVENTS LIVE. Switching between Microsoft and
+        // CalDAV, or pointing CalDAV at a different server, leaves every event
+        // FreeITSM has written somewhere the new connection cannot reach - and
+        // every stored calendar address, sign-in and change token meaningless.
+        // So the old events are taken back first, while the old connection is
+        // still in place to do it, and everyone's calendar choice is reset.
+        // Nobody's feed link is touched: that does not depend on the connection.
+        //
+        // Asked first, because it removes appointments from real calendars.
+        $resetting = false;
+        if ($existing) {
+            if ((string)$existing['provider'] !== $provider) {
+                $resetting = true;
+            } elseif ($provider === 'caldav') {
+                $oldServer = (string)(calendarSyncDecodeCredentials($existing['credentials'] ?? null)['server_url'] ?? '');
+                $resetting = $oldServer === '' || !CalDavCalendarProvider::sameOrigin($oldServer, $newOrigin);
+            }
+        }
+        if ($resetting) {
+            $mapped  = (int)$conn->query("SELECT COUNT(*) FROM calendar_sync_events")->fetchColumn();
+            $pushing = (int)$conn->query("SELECT COUNT(*) FROM calendar_enrolments WHERE mode = 'push'")->fetchColumn();
+            if (($mapped || $pushing) && ($_POST['confirm_switch'] ?? '') !== '1') {
+                echo json_encode(['success' => false, 'needs_confirm' => true,
+                                  'mapped' => $mapped, 'pushing' => $pushing]);
+                exit;
+            }
+            require_once '../../includes/calendar_sync/push.php';
+            foreach ($conn->query("SELECT DISTINCT analyst_id FROM calendar_sync_events")->fetchAll(PDO::FETCH_COLUMN) as $aid) {
+                calendarSyncRemoveAllForAnalyst($conn, (int)$aid);
+            }
+            // Microsoft subscriptions lapse by themselves within three days, but
+            // one we can still remove is better removed.
+            if ((string)$existing['provider'] === 'microsoft') {
+                $old = calendarSyncLoadConnection($conn, (int)$existing['id']);
+                foreach ($conn->query("SELECT subscription_id FROM calendar_enrolments WHERE subscription_id IS NOT NULL")->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+                    try { if ($old) calendarSyncProviderFor($old)->deleteSubscription((string)$sid); } catch (Exception $e) {}
+                }
+            }
+            $conn->exec(
+                "UPDATE calendar_enrolments
+                    SET mode = IF(mode = 'push', 'off', mode),
+                        calendar_address = NULL, credentials = NULL,
+                        delta_token = NULL, delta_synced_datetime = NULL,
+                        subscription_id = NULL, subscription_expires = NULL, subscription_secret = NULL,
+                        last_error = NULL, updated_datetime = UTC_TIMESTAMP()"
+            );
+        }
+
         if ($existing) {
             $conn->prepare(
                 "UPDATE calendar_connections
-                    SET name = ?, provider = 'microsoft', mailbox_id = ?, credentials = ?,
+                    SET name = ?, provider = ?, mailbox_id = ?, credentials = ?,
                         last_error = NULL, last_error_datetime = NULL,
                         token_data = NULL, updated_datetime = UTC_TIMESTAMP()
                   WHERE id = ?"
-            )->execute([$name, $mailboxId, ($credentials === '' ? null : $credentials), (int)$existing['id']]);
+            )->execute([$name, $provider, $mailboxId, ($credentials === '' ? null : $credentials), (int)$existing['id']]);
             $id = (int)$existing['id'];
         } else {
             $conn->prepare(
                 "INSERT INTO calendar_connections (name, provider, mailbox_id, credentials, created_by)
-                 VALUES (?, 'microsoft', ?, ?, ?)"
-            )->execute([$name, $mailboxId, ($credentials === '' ? null : $credentials), (int)$_SESSION['analyst_id']]);
+                 VALUES (?, ?, ?, ?, ?)"
+            )->execute([$name, $provider, $mailboxId, ($credentials === '' ? null : $credentials), (int)$_SESSION['analyst_id']]);
             $id = (int)$conn->lastInsertId();
         }
         // token_data is cleared above on purpose: a cached token minted with the
         // OLD credentials would keep working for up to an hour and make a broken
         // change look fine until long after the admin walked away.
-        echo json_encode(['success' => true, 'id' => $id, 'feed_mode' => $feedMode]);
+        echo json_encode(['success' => true, 'id' => $id, 'feed_mode' => $feedMode, 'reset' => $resetting]);
         exit;
     }
 
@@ -214,6 +300,38 @@ try {
 
         $connection = calendarSyncLoadConnection($conn, (int)$row['id']);
         if (!$connection) { echo json_encode(['success' => false, 'error' => 'The connection is not active.']); exit; }
+
+        // CalDAV: two separate questions again. Is that address a calendar
+        // server at all (asked without signing in - the connection holds nobody's
+        // password), and, when the admin types a sign-in to try, which calendars
+        // would that person be offered. The sign-in is used for this request
+        // only and never stored.
+        if ($connection['provider'] === 'caldav') {
+            try {
+                $provider = calendarSyncProviderFor($connection);
+                $provider->verifyConnection();
+                $result = ['success' => true, 'caldav' => true];
+                $user = trim((string)($_POST['probe_user'] ?? ''));
+                if ($user !== '') {
+                    $found = $provider->withAccount(['username' => $user, 'password' => (string)($_POST['probe_pass'] ?? '')])
+                                      ->discoverCalendars();
+                    $result['probe']      = $user;
+                    $result['probe_ok']   = $found['ok'];
+                    $result['probe_auth'] = $found['auth'];
+                    $result['calendars']  = array_column($found['calendars'], 'name');
+                    if (!$found['ok']) $result['probe_error'] = $found['error'];
+                }
+                $conn->prepare("UPDATE calendar_connections SET last_error = NULL, last_error_datetime = NULL WHERE id = ?")
+                     ->execute([(int)$row['id']]);
+                echo json_encode($result);
+            } catch (Exception $e) {
+                $msg = substr($e->getMessage(), 0, 500);
+                $conn->prepare("UPDATE calendar_connections SET last_error = ?, last_error_datetime = UTC_TIMESTAMP() WHERE id = ?")
+                     ->execute([$msg, (int)$row['id']]);
+                echo json_encode(['success' => false, 'error' => $msg]);
+            }
+            exit;
+        }
 
         $creds = $connection['credentials'] ?? [];
         if (empty($creds['tenant_id']) || empty($creds['client_id']) || empty($creds['client_secret'])) {
@@ -261,6 +379,14 @@ try {
         $analystId = (int)($_POST['analyst_id'] ?? 0);
         $address   = trim((string)($_POST['calendar_address'] ?? ''));
         if (!$analystId) { echo json_encode(['success' => false, 'error' => 'Unknown analyst.']); exit; }
+
+        // With CalDAV the calendar belongs to the analyst's own account and is
+        // chosen by them, signed in as themselves. An administrator cannot pick
+        // it: they do not have the password that would reach it.
+        if (calendarSyncActiveProviderName($conn) === 'caldav') {
+            echo json_encode(['success' => false, 'error' => 'With a CalDAV server, each analyst chooses their own calendar under Preferences.']);
+            exit;
+        }
 
         if ($address !== '' && !filter_var($address, FILTER_VALIDATE_EMAIL)) {
             echo json_encode(['success' => false, 'error' => 'That is not a valid email address.']);

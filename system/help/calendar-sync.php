@@ -22,14 +22,14 @@ require __DIR__ . '/_top.php';
     <div class="help-cards">
         <div class="help-card">
             <h4>Calendar sync (push)</h4>
-            <p>FreeITSM writes appointments <strong>into the analyst's own mailbox calendar</strong> through Microsoft Graph. Needs an app registration and a permission. Can be made two-way, so moving the appointment moves the ticket.</p>
+            <p>FreeITSM writes appointments <strong>into the analyst's own calendar</strong>: an Exchange mailbox through Microsoft Graph, or a calendar on any <strong>CalDAV server</strong> (Nextcloud, Baïkal, Radicale, iCloud, Fastmail). Can be made two-way, so moving the appointment moves the ticket.</p>
         </div>
         <div class="help-card">
             <h4>Subscription links (feed)</h4>
             <p>The analyst publishes a <strong>secret link</strong> that any calendar app can subscribe to — Google, Apple, Outlook, anything. No app registration, no Microsoft. Read-only.</p>
         </div>
     </div>
-    <div class="help-note"><strong>You can run either, both, or neither</strong>, and analysts opt in individually. If your analysts are not on Microsoft 365, the subscription link is the whole answer and you can ignore the Connection section entirely.</div>
+    <div class="help-note"><strong>You can run either, both, or neither</strong>, and analysts opt in individually. If your calendars are on neither Microsoft 365 nor a CalDAV server, the subscription link is the whole answer and you can ignore the Connection section entirely.</div>
     <div class="help-note warn"><strong>"A database update is needed first."</strong> Run <a href="db-verify.php">Database Verification</a>, then come back. The page says this rather than offering settings it cannot store.</div>
 </div>
 
@@ -44,6 +44,32 @@ require __DIR__ . '/_top.php';
     <p>The app registration needs <strong>Calendars.ReadWrite</strong> as an <strong>Application</strong> permission — not Delegated, which is a separate list in Azure and a common wrong turn — with admin consent granted.</p>
     <div class="help-note warn"><strong>Be aware what that permission actually allows.</strong> An Application-level Calendars.ReadWrite lets FreeITSM write to <strong>every mailbox in the tenant</strong>, not only your analysts'. It is the only shape of permission that lets a background service write to somebody's calendar without that person being signed in, which is why it is what this needs — but you should know you are granting it.</div>
     <div class="help-note ok"><strong>If that is more than you want to grant</strong>, scope the app to a mail-enabled security group containing your analysts, using an <strong>Application Access Policy</strong> in Exchange Online. The app then physically cannot reach any other mailbox. This is the recommended setup for anyone who has to justify the permission to a security team.</div>
+</div>
+
+<!-- CalDAV (#133) -->
+<div class="help-section" id="caldav">
+    <div class="help-section-header"><?php echo helpSectionNum('caldav'); ?>
+        <div>
+            <h3>A CalDAV server instead</h3>
+            <p>For calendars that are not on Microsoft 365. Nextcloud, Baïkal, Radicale, SOGo, iCloud, Fastmail and anything else that speaks CalDAV.</p>
+        </div>
+    </div>
+    <p>Choose <strong>A CalDAV server</strong> under Calendar system and enter the server's <strong>DAV address</strong>, which is not the same as its web page:</p>
+    <div class="help-table"><table>
+        <thead><tr><th>Server</th><th>Address to enter</th></tr></thead>
+        <tbody>
+            <tr><td>Baïkal</td><td><code>https://server/dav.php/</code></td></tr>
+            <tr><td>Nextcloud</td><td><code>https://server/remote.php/dav/</code></td></tr>
+            <tr><td>Radicale</td><td><code>https://server/</code></td></tr>
+        </tbody>
+    </table></div>
+    <div class="help-note"><strong>🔑 There is no password on this page, on purpose.</strong> Microsoft lets one approved app write into everybody's calendar. A CalDAV server has no such thing, because each calendar belongs to its owner, so FreeITSM signs in <strong>as each analyst</strong>. Each analyst enters their own username and password (an app password, where the server offers them) under <strong>Preferences → My work calendar</strong>, presses <strong>Find</strong>, chooses a calendar and saves. The password is stored encrypted and never shown again.</div>
+    <p>That changes who chooses the calendar. With Microsoft only an administrator can; with CalDAV only the analyst can, because only they have the password that reaches it. They can only pick calendars <strong>on the server you entered</strong>, and only ones that can hold events.</p>
+    <p><strong>Test</strong> checks the address is a calendar server. Type a username and password into the optional sign-in boxes and it also lists the calendars that person would be offered. The sign-in is used for that test only and is not saved.</p>
+    <div class="help-note"><strong>Sign-in method.</strong> Leave it on Automatic. A standard Baïkal wants Digest rather than Basic, and a server that is sent the wrong one answers exactly as if the password were wrong.</div>
+    <div class="help-note ok"><strong>Everything else is the same</strong> as with Microsoft: scheduled tickets and tasks, two-way with the scheduled job, the deletion setting and its safeguards. The one difference is that CalDAV servers do not send change notifications, so changes made in a calendar arrive when the job runs.</div>
+    <div class="help-note warn"><strong>Switching between Microsoft and CalDAV</strong>, or moving to a different CalDAV server, first takes FreeITSM's events back out of everyone's calendars and switches calendar sync off for everybody, so each analyst sets it up again. The page tells you how many events that is and asks before doing it. Subscription links are not affected.</div>
+    <p>If an analyst adds a reminder or a note to one of these appointments in their own calendar app, FreeITSM keeps it when the ticket changes. It only rewrites the time, the title, the description and the link.</p>
 </div>
 
 <!-- 3. The connection -->

@@ -164,16 +164,60 @@ function calendarSyncActiveConnection(PDO $conn): ?array
  * ⚠️ Throws on an unknown provider rather than returning null. A connection row
  * naming a provider this build does not have is a misconfiguration, and pushing
  * silently to nowhere is the worst possible response to it.
+ *
+ * @param array|null $enrolment the enrolment of the analyst whose calendar is
+ *        being touched. Microsoft ignores it; CalDAV signs in with the
+ *        credentials on it (see CalendarSyncProvider::$account). Pass it
+ *        whenever an analyst is involved - a CalDAV provider built without one
+ *        refuses every call with an explanation rather than guessing.
  */
-function calendarSyncProviderFor(array $connection): CalendarSyncProvider
+function calendarSyncProviderFor(array $connection, ?array $enrolment = null): CalendarSyncProvider
 {
     switch ($connection['provider'] ?? '') {
         case 'microsoft':
             require_once __DIR__ . '/MicrosoftCalendarProvider.php';
             return new MicrosoftCalendarProvider($connection);
+        case 'caldav':
+            require_once __DIR__ . '/CalDavCalendarProvider.php';
+            $p = new CalDavCalendarProvider($connection);
+            return $enrolment ? $p->withAccount(calendarSyncAccount($enrolment)) : $p;
         default:
             throw new Exception('Unknown calendar provider: ' . ($connection['provider'] ?? '?'));
     }
+}
+
+/** Providers FreeITSM can use. The list the admin screen offers and the save accepts. */
+const CALENDAR_PROVIDERS = ['microsoft', 'caldav'];
+
+/**
+ * An analyst's own calendar sign-in, decrypted: ['username' => …, 'password' => …].
+ * Empty when they have not saved one. Never returned to a browser.
+ */
+function calendarSyncAccount(array $enrolment): array
+{
+    $creds = calendarSyncDecodeCredentials($enrolment['credentials'] ?? null);
+    return [
+        'username' => (string)($creds['username'] ?? ''),
+        'password' => (string)($creds['password'] ?? ''),
+    ];
+}
+
+/**
+ * Which provider the active connection uses, or '' when there is none.
+ * Cached for the request: it is asked for every enrolment that is read.
+ */
+function calendarSyncActiveProviderName(PDO $conn): string
+{
+    static $name = null;
+    if ($name !== null) return $name;
+    try {
+        $name = (string)($conn->query(
+            "SELECT provider FROM calendar_connections WHERE is_active = 1 ORDER BY id LIMIT 1"
+        )->fetchColumn() ?: '');
+    } catch (Exception $e) {
+        $name = '';
+    }
+    return $name;
 }
 
 /**
@@ -202,6 +246,13 @@ function calendarSyncEnrolment(PDO $conn, int $analystId): array
     } catch (Exception $e) {
         // Falls through as null — an unknown address is reported honestly rather
         // than the caller being handed a guess.
+    }
+    // 🔴 NOT FOR CALDAV. There the address is the web address of a calendar the
+    // analyst chose themselves, and an email address in its place would be a
+    // target that looks set and can never work. Until they choose one, there is
+    // none.
+    if (calendarSyncActiveProviderName($conn) === 'caldav') {
+        $email = null;
     }
 
     $off = [

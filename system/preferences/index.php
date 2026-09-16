@@ -562,6 +562,39 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     <div id="workCalPushPanel" style="display:none;margin-top:12px;">
                         <p class="pref-hint" style="color:var(--text-muted,#666);font-size:12px;" id="workCalPushInfo"></p>
 
+                        <?php /* CalDAV (#133). The analyst signs in as themselves
+                                 and chooses their own calendar: a CalDAV server has
+                                 no way for FreeITSM to write into everybody's, and
+                                 nobody else has the password that reaches theirs.
+                                 Shown only when the system's connection is CalDAV. */ ?>
+                        <div id="calDavPanel" style="display:none;margin-top:12px;max-width:560px;">
+                            <p class="pref-hint" id="calDavIntro" style="color:var(--text-muted,#666);font-size:12px;"></p>
+
+                            <div id="calDavCurrent" style="display:none;margin:8px 0 12px;">
+                                <span id="calDavCurrentText" style="font-size:13px;"></span>
+                                <button type="button" class="sig-btn sig-btn-secondary" id="calDavChange" style="margin-left:8px;"><?php echo htmlspecialchars(t('system.preferences.caldav_change')); ?></button>
+                                <button type="button" class="sig-btn sig-btn-danger" id="calDavForget" style="margin-left:4px;"><?php echo htmlspecialchars(t('system.preferences.caldav_forget')); ?></button>
+                            </div>
+
+                            <div id="calDavForm" style="display:none;">
+                                <div class="sig-details-grid">
+                                    <label><span><?php echo htmlspecialchars(t('system.preferences.caldav_username')); ?></span>
+                                        <input type="text" id="calDavUser" autocomplete="username" maxlength="190"></label>
+                                    <label><span><?php echo htmlspecialchars(t('system.preferences.caldav_password')); ?></span>
+                                        <input type="password" id="calDavPass" autocomplete="current-password"></label>
+                                </div>
+                                <p class="pref-hint" style="color:var(--text-muted,#666);font-size:12px;margin-top:0;"><?php echo htmlspecialchars(t('system.preferences.caldav_password_hint')); ?></p>
+                                <button type="button" class="sig-btn sig-btn-secondary" id="calDavFind"><?php echo htmlspecialchars(t('system.preferences.caldav_find')); ?></button>
+
+                                <div id="calDavPick" style="display:none;margin-top:12px;">
+                                    <div style="font-size:13px;margin-bottom:6px;"><?php echo htmlspecialchars(t('system.preferences.caldav_choose')); ?></div>
+                                    <select id="calDavCal" class="pref-language-select"></select>
+                                    <button type="button" class="sig-btn sig-btn-primary" id="calDavSave" style="margin-left:8px;"><?php echo htmlspecialchars(t('common.save')); ?></button>
+                                </div>
+                            </div>
+                            <p class="pref-hint" id="calDavMsg" style="display:none;margin-top:10px;font-size:12px;"></p>
+                        </div>
+
                         <?php /* Tasks (#75). Deliberately INSIDE the push panel:
                                  task events are real appointments, so the choice
                                  is meaningless until the direct route is chosen,
@@ -1389,12 +1422,19 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 why.textContent = window.t('system.preferences.workcal_push_none');
                 why.style.display = '';
             }
-            if (d.address) {
+            workCalState = d;
+            if (d.provider === 'caldav') {
+                // The calendar is named rather than addressed: a web address means
+                // nothing to most people, the calendar's own name does.
+                document.getElementById('workCalPushInfo').textContent = (d.caldav && d.caldav.calendar_url)
+                    ? window.t('system.preferences.workcal_push_caldav_where', { name: d.caldav.calendar_name || d.caldav.calendar_url })
+                    : '';
+                paintCalDav(d);
+            } else if (d.address) {
                 document.getElementById('workCalPushInfo').textContent =
                     window.t('system.preferences.workcal_push_where', { addr: d.address });
-
-                paintTaskCal(d.task_mode);
             }
+            paintTaskCal(d.task_mode);
             paintWorkCal(d.mode || 'off');
             if (d.mode === 'feed') await loadWorkCalDetail();
             return d;
@@ -1437,6 +1477,130 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 }
             });
         })();
+        // ── CalDAV: the analyst's own sign-in and calendar (#133) ───────────
+        let workCalState = null;
+        let calDavPrevMode = 'off';     // what the toggle said before "push" was pressed
+
+        function calDavMsg(text, bad) {
+            const el = document.getElementById('calDavMsg');
+            if (!el) return;
+            el.textContent = text || '';
+            el.style.color = bad ? 'var(--danger-text,#721c24)' : 'var(--text-muted,#666)';
+            el.style.display = text ? '' : 'none';
+        }
+
+        /** Show what is saved, or the form when nothing is. */
+        function paintCalDav(d, forceForm) {
+            const panel = document.getElementById('calDavPanel');
+            if (!panel) return;
+            const c = d.caldav || {};
+            panel.style.display = '';
+            document.getElementById('calDavIntro').textContent =
+                window.t('system.preferences.caldav_intro', { server: c.server_url || '' });
+            const saved = !!c.calendar_url;
+            document.getElementById('calDavCurrent').style.display = (saved && !forceForm) ? '' : 'none';
+            document.getElementById('calDavForm').style.display    = (!saved || forceForm) ? '' : 'none';
+            document.getElementById('calDavCurrentText').textContent = saved
+                ? window.t('system.preferences.caldav_current', { user: c.username || '', name: c.calendar_name || c.calendar_url })
+                : '';
+            const user = document.getElementById('calDavUser');
+            if (!user.value) user.value = c.username || '';
+            document.getElementById('calDavPass').placeholder = c.has_password
+                ? window.t('system.preferences.caldav_password_saved') : '';
+        }
+
+        async function calDavPost(body) {
+            const r = await fetch(ENROL_API, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(body)
+            });
+            return r.json().catch(() => ({ success: false }));
+        }
+
+        (function initCalDav() {
+            if (!document.getElementById('calDavPanel')) return;
+
+            document.getElementById('calDavFind').addEventListener('click', async function () {
+                calDavMsg(window.t('system.preferences.caldav_finding'));
+                this.disabled = true;
+                const d = await calDavPost({
+                    action: 'caldav_discover',
+                    username: document.getElementById('calDavUser').value.trim(),
+                    password: document.getElementById('calDavPass').value
+                });
+                this.disabled = false;
+                const pick = document.getElementById('calDavPick');
+                if (!d.success) { pick.style.display = 'none'; calDavMsg(d.error || window.t('system.preferences.save_failed'), true); return; }
+                if (!(d.calendars || []).length) { pick.style.display = 'none'; calDavMsg(window.t('system.preferences.caldav_none'), true); return; }
+                const sel = document.getElementById('calDavCal');
+                const current = (workCalState && workCalState.caldav && workCalState.caldav.calendar_url) || '';
+                sel.innerHTML = '';
+                d.calendars.forEach(c => {
+                    const o = document.createElement('option');
+                    o.value = c.url; o.textContent = c.name;
+                    if (c.url === current) o.selected = true;
+                    sel.appendChild(o);
+                });
+                pick.style.display = '';
+                calDavMsg('');
+            });
+
+            document.getElementById('calDavSave').addEventListener('click', async function () {
+                const active = document.querySelector('#workCalToggle .anim-option.active');
+                const turnOn = !!(active && active.dataset.workcal === 'push');
+                this.disabled = true;
+                const d = await calDavPost({
+                    action: 'caldav_save',
+                    username: document.getElementById('calDavUser').value.trim(),
+                    password: document.getElementById('calDavPass').value,
+                    calendar_url: document.getElementById('calDavCal').value,
+                    turn_on: turnOn ? '1' : ''
+                });
+                this.disabled = false;
+                if (!d.success) { calDavMsg(d.error || window.t('system.preferences.save_failed'), true); return; }
+                document.getElementById('calDavPass').value = '';
+                document.getElementById('calDavPick').style.display = 'none';
+                // Switching from the subscribe link to this REVOKES the link, the
+                // same as the toggle does: a secret URL that still works after you
+                // moved away from it is not what anybody means.
+                if (turnOn && calDavPrevMode === 'feed') {
+                    await fetch(WORKCAL_API, {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'action=revoke'
+                    });
+                    FreeITSMSubscribe.forget('workCal');
+                }
+                calDavPrevMode = d.mode || calDavPrevMode;
+                await loadWorkCalState();
+                // A first write that failed is said here, where it was caused,
+                // rather than only on an administrator's screen.
+                calDavMsg(d.last_error
+                    ? window.t('system.preferences.caldav_saved_error', { error: d.last_error })
+                    : window.t('system.preferences.caldav_saved', { name: d.calendar_name || '' }), !!d.last_error);
+            });
+
+            document.getElementById('calDavChange').addEventListener('click', function () {
+                if (workCalState) paintCalDav(workCalState, true);
+            });
+
+            document.getElementById('calDavForget').addEventListener('click', async function () {
+                const ok = await showConfirm({
+                    title: window.t('system.preferences.caldav_forget_title'),
+                    message: window.t('system.preferences.caldav_forget_confirm'),
+                    okLabel: window.t('system.preferences.caldav_forget'), okClass: 'danger'
+                });
+                if (!ok) return;
+                const d = await calDavPost({ action: 'caldav_forget' });
+                if (!d.success) { calDavMsg(d.error || window.t('system.preferences.save_failed'), true); return; }
+                document.getElementById('calDavUser').value = '';
+                document.getElementById('calDavPick').style.display = 'none';
+                calDavMsg('');
+                await loadWorkCalState();
+            });
+        })();
+
         /** Paint the task choice (#75). */
         function paintTaskCal(taskMode) {
             const root = document.getElementById('taskCalToggle');
@@ -1503,6 +1667,16 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     body: new URLSearchParams({ mode: mode })
                 });
                 const d = await r.json();
+                // CalDAV with nothing saved yet: not a refusal but the next step.
+                // Keep "Add to my calendar" showing and open the sign-in form;
+                // saving it is what switches this on.
+                if (!d.success && d.needs_account && workCalState) {
+                    calDavPrevMode = previous ? previous.dataset.workcal : 'off';
+                    paintCalDav(workCalState, true);
+                    calDavMsg(d.error || window.t('system.preferences.caldav_needs'), false);
+                    document.getElementById('workCalPushWhy').style.display = 'none';
+                    return;
+                }
                 if (!d.success) {
                     // Put the control back where it was: leaving it on a state the
                     // server rejected would be a lie about what is happening.

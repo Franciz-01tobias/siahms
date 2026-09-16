@@ -50,9 +50,35 @@ abstract class CalendarSyncProvider
     const CAP_ALL_DAY       = 'all_day';        // real all-day events, not 00:00-23:59
     const CAP_BODY_HTML     = 'body_html';      // rich body rather than plain text
     const CAP_VERIFY_TARGET = 'verify_target';  // can answer "does this mailbox exist?"
+    const CAP_NOTIFY        = 'notify';         // change notifications (subscriptions)
+    const CAP_PER_ANALYST   = 'per_analyst';    // signs in AS each analyst - see $account
 
     /** @var array decrypted calendar_connections row */
     protected $connection;
+
+    /**
+     * The analyst this provider is acting for, when the provider signs in as
+     * them rather than as an application: their decrypted
+     * calendar_enrolments.credentials. Empty for Microsoft, whose app-only
+     * token reaches every mailbox by itself.
+     *
+     * 🔑 WHY THIS EXISTS. Microsoft lets one administrator-approved app write
+     * into everyone's calendar, so a provider could be built from the
+     * connection alone. A CalDAV server has no such thing: each calendar
+     * belongs to its owner's account. So the caller hands over the enrolment of
+     * whoever the event belongs to, and a provider that needs it refuses to act
+     * without it rather than guessing.
+     *
+     * @var array
+     */
+    protected $account = [];
+
+    /** Act as this analyst. Returns $this so it chains off the factory. */
+    public function withAccount(array $account): self
+    {
+        $this->account = $account;
+        return $this;
+    }
 
     /**
      * Optional database handle, for a provider that caches something across

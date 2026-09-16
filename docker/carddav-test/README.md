@@ -87,6 +87,28 @@ What gets seeded, and why each one is there:
 | `ITSM` | `itsm` | a **`KIND:group`** card whose `MEMBER` properties point at the others |
 | Dora Nkemelu | `default` | 🔑 **outside** the `itsm` book. If she ever turns up in FreeITSM, the scoping is not working |
 
+## Calendars (CalDAV)
+
+The same script seeds calendars for **calendar sync**, which signs in as each
+analyst rather than as one shared account:
+
+| User | Password | Calendars |
+|---|---|---|
+| `itsm` | `itsm` | **Work** (events) and **To-do** (tasks only - the calendar picker must leave it out) |
+| `tech2` | `tech2` | **Work** |
+
+Two users, so a ticket reassigned from one analyst to another can be seen
+leaving one account's calendar and arriving in the other's.
+
+| | |
+|---|---|
+| **Server address** for System → Calendar sync | `http://localhost:8092/dav.php/` |
+| ...from FreeITSM running in Docker | `http://host.docker.internal:8092/dav.php/` |
+
+```bash
+php tests/caldav-provider.php   # 45 checks against this server, no database
+```
+
 ## 🔴 "Scope it to one group" is not one question
 
 The reporter asked for the sync to be limited to an `itsm` group. **CardDAV has

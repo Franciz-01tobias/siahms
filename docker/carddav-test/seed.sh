@@ -138,3 +138,37 @@ curl -sS -u "$USER:$PASS" --digest -X PROPFIND -H 'Depth: 1' \
      --data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>' \
      "$BASE/dav.php/addressbooks/$USER/" \
   | grep -o '<d:href>[^<]*</d:href>' | sed 's/<[^>]*>//g' | sed 's/^/  /'
+
+# --- calendars (CalDAV, #133) ------------------------------------------------
+# Two users, each with a "Work" calendar, so calendar sync can be tested the
+# way it is used: FreeITSM signs in AS each analyst, and a ticket reassigned
+# from one to the other has to leave one account's calendar and arrive in the
+# other's. `itsm` also gets a second, TASKS-ONLY calendar, which the calendar
+# picker must leave out because it cannot hold events.
+docker exec "$C" php -r '
+$db = new PDO("sqlite:/var/www/baikal/Specific/db/db.sqlite");
+$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$realm = $argv[1];
+$user = "tech2";
+$q = $db->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+$q->execute([$user]);
+if (!$q->fetchColumn()) {
+    $db->prepare("INSERT INTO users (username, digesta1) VALUES (?, ?)")
+       ->execute([$user, md5("$user:$realm:$user")]);
+    $db->prepare("INSERT INTO principals (uri, email, displayname) VALUES (?, ?, ?)")
+       ->execute(["principals/$user", "$user@carddav.test", "Second technician"]);
+    echo "created user $user\n";
+}
+' "$REALM"
+
+mkcal() {
+    local user="$1" uri="$2" name="$3" comp="$4"
+    curl -sS -u "$user:$user" --digest -X MKCALENDAR -H 'Content-Type: application/xml' \
+        --data "<?xml version=\"1.0\"?><c:mkcalendar xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:set><d:prop><d:displayname>$name</d:displayname><c:supported-calendar-component-set><c:comp name=\"$comp\"/></c:supported-calendar-component-set></d:prop></d:set></c:mkcalendar>" \
+        "$BASE/dav.php/calendars/$user/$uri/" \
+        -o /dev/null -w "  calendars/$user/$uri  http=%{http_code} (201 created, 405 already there)\n"
+}
+# itsm's password is itsm, and tech2's is tech2.
+mkcal itsm  work   "Work"   VEVENT
+mkcal itsm  todo   "To-do"  VTODO
+mkcal tech2 work   "Work"   VEVENT
