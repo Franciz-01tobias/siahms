@@ -85,16 +85,25 @@ function calendarSyncReconcileTicket(PDO $conn, int $ticketId, bool $gone = fals
         if ($wantAnalyst === null) return;
 
         // ── Create or update the one that should ────────────────────────────
-        $connection = calendarSyncActiveConnection($conn);
+        // The analyst's OWN connection - an install can have several.
+        $enrolment  = calendarSyncEnrolment($conn, $wantAnalyst);
+        $connection = calendarSyncConnectionFor($conn, $enrolment);
         if (!$connection) return;                      // nothing to push through
 
-        $enrolment = calendarSyncEnrolment($conn, $wantAnalyst);
         $address   = $enrolment['calendar_address'];
         $event     = calendarSyncEventFromTicket($ticket);
 
         $mine = null;
         foreach ($rows as $row) {
             if ((int)$row['analyst_id'] === $wantAnalyst) { $mine = $row; break; }
+        }
+        // Written through a different connection or into a different calendar
+        // than the analyst uses now: take it out of the old one and write afresh.
+        // Changing connection takes events back already; this is the backstop.
+        if ($mine && (((int)$mine['connection_id'] && (int)$mine['connection_id'] !== (int)$connection['id'])
+                      || (string)$mine['remote_calendar'] !== (string)$address)) {
+            calendarSyncRemoveRow($conn, $mine);
+            $mine = null;
         }
 
         try {
@@ -222,10 +231,10 @@ function calendarSyncReconcileTask(PDO $conn, int $taskId, bool $gone = false): 
         }
         if ($wantAnalyst === null) return;
 
-        $connection = calendarSyncActiveConnection($conn);
+        $enrolment  = calendarSyncEnrolment($conn, $wantAnalyst);
+        $connection = calendarSyncConnectionFor($conn, $enrolment);
         if (!$connection) return;
 
-        $enrolment = calendarSyncEnrolment($conn, $wantAnalyst);
         $address   = $enrolment['calendar_address'];
 
         foreach ($wantKinds as $kind) {
@@ -237,6 +246,12 @@ function calendarSyncReconcileTask(PDO $conn, int $taskId, bool $gone = false): 
                 if ((int)$row['analyst_id'] === $wantAnalyst && (string)$row['kind'] === $kind) {
                     $mine = $row; break;
                 }
+            }
+            // Same backstop as tickets: a different connection or calendar now.
+            if ($mine && (((int)$mine['connection_id'] && (int)$mine['connection_id'] !== (int)$connection['id'])
+                          || (string)$mine['remote_calendar'] !== (string)$address)) {
+                calendarSyncRemoveRow($conn, $mine);
+                $mine = null;
             }
 
             try {
@@ -360,9 +375,11 @@ function calendarSyncEventFromTask(array $t, string $kind): ?array
 function calendarSyncRemoveRow(PDO $conn, array $row): void
 {
     try {
+        // The connection that WROTE it - which is not necessarily the one the
+        // analyst uses now.
         $connection = $row['connection_id']
             ? calendarSyncLoadConnection($conn, (int)$row['connection_id'])
-            : calendarSyncActiveConnection($conn);
+            : calendarSyncOnlyConnection($conn);
         if ($connection) {
             // Whoever the event was written for - with CalDAV, only their own
             // sign-in can take it back out of their calendar.

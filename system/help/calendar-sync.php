@@ -50,11 +50,11 @@ require __DIR__ . '/_top.php';
 <div class="help-section" id="caldav">
     <div class="help-section-header"><?php echo helpSectionNum('caldav'); ?>
         <div>
-            <h3>A CalDAV server instead</h3>
+            <h3>A CalDAV server, instead or as well</h3>
             <p>For calendars that are not on Microsoft 365. Nextcloud, Baïkal, Radicale, SOGo, iCloud, Fastmail and anything else that speaks CalDAV.</p>
         </div>
     </div>
-    <p>Choose <strong>A CalDAV server</strong> under Calendar system and enter the server's <strong>DAV address</strong>, which is not the same as its web page:</p>
+    <p>Press <strong>Add</strong> under Connections, choose <strong>A CalDAV server</strong> under Calendar system and enter the server's <strong>DAV address</strong>, which is not the same as its web page:</p>
     <div class="help-table"><table>
         <thead><tr><th>Server</th><th>Address to enter</th></tr></thead>
         <tbody>
@@ -68,7 +68,8 @@ require __DIR__ . '/_top.php';
     <p><strong>Test</strong> checks the address is a calendar server. Type a username and password into the optional sign-in boxes and it also lists the calendars that person would be offered. The sign-in is used for that test only and is not saved.</p>
     <div class="help-note"><strong>Sign-in method.</strong> Leave it on Automatic. A standard Baïkal wants Digest rather than Basic, and a server that is sent the wrong one answers exactly as if the password were wrong.</div>
     <div class="help-note ok"><strong>Everything else is the same</strong> as with Microsoft: scheduled tickets and tasks, two-way with the scheduled job, the deletion setting and its safeguards. The one difference is that CalDAV servers do not send change notifications, so changes made in a calendar arrive when the job runs.</div>
-    <div class="help-note warn"><strong>Switching between Microsoft and CalDAV</strong>, or moving to a different CalDAV server, first takes FreeITSM's events back out of everyone's calendars and switches calendar sync off for everybody, so each analyst sets it up again. The page tells you how many events that is and asks before doing it. Subscription links are not affected.</div>
+    <div class="help-note ok"><strong>You can have as many connections as you need</strong> - Microsoft 365 for most people and a Nextcloud for a few, several CalDAV servers, or several Microsoft tenants. Each analyst chooses which one their work goes to under <strong>Preferences → My work calendar</strong>; with only one connection there is nothing to choose. The analyst table shows who is on which.</div>
+    <div class="help-note warn"><strong>Changing a connection between Microsoft and CalDAV</strong>, moving it to a different CalDAV server, or deleting it, first takes that connection's events back out of calendars and switches calendar sync off for the analysts using it, so each sets it up again. The page tells you how many events and analysts that is and asks before doing it. Analysts on other connections, and subscription links, are not affected.</div>
     <p>If an analyst adds a reminder or a note to one of these appointments in their own calendar app, FreeITSM keeps it when the ticket changes. It only rewrites the time, the title, the description and the link.</p>
 </div>
 
@@ -76,8 +77,8 @@ require __DIR__ . '/_top.php';
 <div class="help-section" id="connection">
     <div class="help-section-header"><?php echo helpSectionNum('connection'); ?>
         <div>
-            <h3>Setting up the connection</h3>
-            <p>One connection, used by everybody who opts in. Two ways to give it credentials.</p>
+            <h3>Setting up a Microsoft 365 connection</h3>
+            <p>Press <strong>Add</strong> under Connections (or <strong>Edit</strong> on an existing one). Two ways to give it credentials.</p>
         </div>
     </div>
     <div class="help-steps">
@@ -98,7 +99,8 @@ require __DIR__ . '/_top.php';
             <p>🔑 Analysts choose <em>whether</em> their work is synced. Only an administrator chooses <em>where</em> it goes.</p>
         </div>
     </div>
-    <p>By default FreeITSM uses the email address on the analyst's account — which is <strong>often not their mailbox</strong>. A local account with a made-up address, or a directory import keyed on something other than email, both produce an address that looks plausible and has no calendar behind it. Override it here.</p>
+    <p>The <strong>Connection</strong> column shows which connection each analyst uses. A muted name is the only connection there is, used without choosing; <strong>Not chosen yet</strong> means there are several and they have not picked one. For an analyst on a CalDAV connection the <strong>Calendar</strong> column names the calendar they chose, and there is nothing to set here.</p>
+    <p>For Microsoft, by default FreeITSM uses the email address on the analyst's account — which is <strong>often not their mailbox</strong>. A local account with a made-up address, or a directory import keyed on something other than email, both produce an address that looks plausible and has no calendar behind it. Override it here.</p>
     <p>The <strong>Chosen by the analyst</strong> column is a read-out of what that person set in their own Preferences, not something you can click:</p>
     <div class="help-table"><table>
         <thead><tr><th>Shows</th><th>Meaning</th></tr></thead>

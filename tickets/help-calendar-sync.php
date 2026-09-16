@@ -116,7 +116,7 @@ $translationNamespaces = ['common', 'tickets'];
                     <div><strong>Microsoft 365</strong> &mdash; FreeITSM writes real appointments into your Exchange mailbox using the Microsoft Graph API. Richer, faster, two-way, and it needs an administrator to connect it once.</div>
                     <div><strong>A CalDAV server</strong> - the same real, two-way appointments in a calendar on Nextcloud, Baïkal, Radicale, iCloud, Fastmail or any other CalDAV server. An administrator enters the server's address once, and you sign in with your own calendar account.</div>
                 </div>
-                <p>An installation uses Microsoft 365 or a CalDAV server, not both.</p>
+                <p>A system can have both, and more than one of each. If yours has more than one, you choose which your work goes to.</p>
                 <p>All three are per analyst, and <strong>each analyst chooses for themselves</strong> under <strong>Preferences &rarr; General &rarr; My work calendar</strong>. An administrator sets up what is <em>possible</em>; they never switch it on for somebody else.</p>
                 <p class="help-note">In a hurry? The subscription link needs no setup at all. If your calendars are on Microsoft 365 or a CalDAV server, the direct route is worth the ten minutes.</p>
             </div>
@@ -236,12 +236,12 @@ $translationNamespaces = ['common', 'tickets'];
                         <p>Nextcloud, Baïkal, Radicale, SOGo, iCloud, Fastmail: real appointments without Microsoft.</p>
                     </div>
                 </div>
-                <p>An administrator chooses <strong>A CalDAV server</strong> at <strong>System &rarr; Calendar sync</strong> and enters the server's DAV address. That is all the administrator does: a CalDAV server has no way for one account to write into everybody's calendar, so <strong>FreeITSM signs in as you</strong>.</p>
+                <p>An administrator adds <strong>A CalDAV server</strong> at <strong>System &rarr; Calendar sync</strong> and enters the server's DAV address. That is all the administrator does: a CalDAV server has no way for one account to write into everybody's calendar, so <strong>FreeITSM signs in as you</strong>.</p>
 
                 <div class="help-steps">
                     <div class="help-step">
                         <div class="help-step-num">1</div>
-                        <div>Go to <strong>Preferences &rarr; General &rarr; My work calendar</strong> and choose <strong>Add to my calendar</strong>. A sign-in form opens.</div>
+                        <div>Go to <strong>Preferences &rarr; General &rarr; My work calendar</strong> and choose <strong>Add to my calendar</strong>. If your system has more than one calendar connection, pick yours under <strong>Which calendar</strong>. A sign-in form opens.</div>
                     </div>
                     <div class="help-step">
                         <div class="help-step-num">2</div>
@@ -260,6 +260,10 @@ $translationNamespaces = ['common', 'tickets'];
                 <div class="help-card">
                     <span class="help-pill info">Your own additions are kept</span>
                     <p>Add a reminder or a note to one of these appointments in your calendar app and it stays there when the ticket changes. FreeITSM only rewrites the time, the title, the description and the link back to the ticket.</p>
+                </div>
+                <div class="help-card">
+                    <span class="help-pill info">Moving to another calendar connection</span>
+                    <p>Pick a different one under <strong>Which calendar</strong>. FreeITSM takes your appointments out of the old calendar and, once the new one is set up, puts them into it. A Microsoft 365 connection moves straight away; a CalDAV one waits until you have signed in there.</p>
                 </div>
 
                 <p><strong>Change</strong> moves your scheduled work to a different calendar or account: FreeITSM takes its appointments out of the old one first. <strong>Forget</strong> takes them all out, forgets your sign-in and switches this off. Switching to <strong>Off</strong> also takes them out, but keeps your sign-in so that turning it back on is one click.</p>

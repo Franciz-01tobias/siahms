@@ -71,7 +71,7 @@ function calendarSyncPullForAnalyst(PDO $conn, int $analystId): array
     $enrolment = calendarSyncEnrolment($conn, $analystId);
     if (($enrolment['mode'] ?? '') !== CALENDAR_MODE_PUSH) return $report;
 
-    $connection = calendarSyncActiveConnection($conn);
+    $connection = calendarSyncConnectionFor($conn, $enrolment);
     if (!$connection) return $report;
 
     try {
@@ -384,7 +384,7 @@ function calendarSyncEnsureSubscription(PDO $conn, int $analystId): string
     $notifyUrl  = calendarNotifyUrl($conn);
     $enrolment  = calendarSyncEnrolment($conn, $analystId);
     $subId      = $enrolment['subscription_id'] ?? null;
-    $connection = calendarSyncActiveConnection($conn);
+    $connection = calendarSyncConnectionFor($conn, $enrolment);
 
     // Only a provider that has notifications. CalDAV has no equivalent, so its
     // changes arrive on the poll alone - asking would only record a failure on

@@ -145,17 +145,68 @@ function calendarSyncLoadConnection(PDO $conn, int $connectionId): ?array
     return $row;
 }
 
-/** The single active connection, or null when nobody has configured one. */
-function calendarSyncActiveConnection(PDO $conn): ?array
+// ─── Which connection ────────────────────────────────────────────────────────
+//
+// 🔑 ANY NUMBER OF CONNECTIONS, AND EACH ANALYST USES ONE. An organisation can
+// have most people on Microsoft 365 and a few on Nextcloud, or an MSP several
+// tenants, or one person on iCloud. So there is no "the" connection: the
+// analyst's enrolment names theirs (calendar_enrolments.connection_id), and
+// every event remembers the one that wrote it (calendar_sync_events.connection_id).
+
+/** The ids of every active connection, oldest first. */
+function calendarSyncConnectionIds(PDO $conn): array
 {
-    if (!calendarSyncSchemaReady($conn)) return null;
+    if (!calendarSyncSchemaReady($conn)) return [];
     try {
-        $id = $conn->query("SELECT id FROM calendar_connections WHERE is_active = 1 ORDER BY id LIMIT 1")
-                   ->fetchColumn();
+        return array_map('intval', $conn->query(
+            "SELECT id FROM calendar_connections WHERE is_active = 1 ORDER BY id"
+        )->fetchAll(PDO::FETCH_COLUMN));
     } catch (Exception $e) {
-        return null;
+        return [];
     }
-    return $id ? calendarSyncLoadConnection($conn, (int)$id) : null;
+}
+
+/**
+ * The connection when the install has exactly one, else null.
+ *
+ * Only a fallback now: it keeps an enrolment that names no connection working
+ * on a single-connection install - one made before connections could be
+ * chosen, or left behind when its connection was deleted and a new one added -
+ * without ever guessing between two.
+ */
+function calendarSyncOnlyConnection(PDO $conn): ?array
+{
+    $ids = calendarSyncConnectionIds($conn);
+    return count($ids) === 1 ? calendarSyncLoadConnection($conn, $ids[0]) : null;
+}
+
+/** The connection this analyst's calendar work goes through, or null. */
+function calendarSyncConnectionFor(PDO $conn, array $enrolment): ?array
+{
+    if (!empty($enrolment['connection_id'])) {
+        return calendarSyncLoadConnection($conn, (int)$enrolment['connection_id']);
+    }
+    return calendarSyncOnlyConnection($conn);
+}
+
+/**
+ * A connection's provider name, or '' when it does not exist. Cached per
+ * request, because it is asked for every enrolment that is read.
+ */
+function calendarSyncConnectionProvider(PDO $conn, ?int $connectionId): string
+{
+    static $cache = [];
+    if (!$connectionId) return '';
+    if (!array_key_exists($connectionId, $cache)) {
+        try {
+            $st = $conn->prepare("SELECT provider FROM calendar_connections WHERE id = ? AND is_active = 1");
+            $st->execute([$connectionId]);
+            $cache[$connectionId] = (string)($st->fetchColumn() ?: '');
+        } catch (Exception $e) {
+            $cache[$connectionId] = '';
+        }
+    }
+    return $cache[$connectionId];
 }
 
 /**
@@ -203,24 +254,6 @@ function calendarSyncAccount(array $enrolment): array
 }
 
 /**
- * Which provider the active connection uses, or '' when there is none.
- * Cached for the request: it is asked for every enrolment that is read.
- */
-function calendarSyncActiveProviderName(PDO $conn): string
-{
-    static $name = null;
-    if ($name !== null) return $name;
-    try {
-        $name = (string)($conn->query(
-            "SELECT provider FROM calendar_connections WHERE is_active = 1 ORDER BY id LIMIT 1"
-        )->fetchColumn() ?: '');
-    } catch (Exception $e) {
-        $name = '';
-    }
-    return $name;
-}
-
-/**
  * One analyst's enrolment, or a synthetic "off" row when they have never chosen.
  *
  * ⚠️ NEVER returns null for a real analyst. A missing row means "has not decided
@@ -250,17 +283,21 @@ function calendarSyncEnrolment(PDO $conn, int $analystId): array
     // 🔴 NOT FOR CALDAV. There the address is the web address of a calendar the
     // analyst chose themselves, and an email address in its place would be a
     // target that looks set and can never work. Until they choose one, there is
-    // none.
-    if (calendarSyncActiveProviderName($conn) === 'caldav') {
-        $email = null;
-    }
+    // none. Decided by the analyst's OWN connection - or, when they have none
+    // yet, by the install's only one.
+    $isCalDav = function (?array $row) use ($conn): bool {
+        $cid = $row && !empty($row['connection_id']) ? (int)$row['connection_id'] : null;
+        if ($cid) return calendarSyncConnectionProvider($conn, $cid) === 'caldav';
+        $ids = calendarSyncConnectionIds($conn);
+        return count($ids) === 1 && calendarSyncConnectionProvider($conn, $ids[0]) === 'caldav';
+    };
 
     $off = [
         'analyst_id'       => $analystId,
         'mode'             => CALENDAR_MODE_OFF,
         'task_mode'        => TASK_CAL_OFF,
         'connection_id'    => null,
-        'calendar_address' => $email,
+        'calendar_address' => $isCalDav(null) ? null : $email,
         'last_error'       => null,
     ];
     if (!calendarSyncSchemaReady($conn)) return $off;
@@ -275,7 +312,7 @@ function calendarSyncEnrolment(PDO $conn, int $analystId): array
     if (!$row) return $off;
 
     if (empty($row['calendar_address'])) {
-        $row['calendar_address'] = $email;
+        $row['calendar_address'] = $isCalDav($row) ? null : $email;
     }
     if (!calendarModeIsValid((string)$row['mode'])) {
         $row['mode'] = CALENDAR_MODE_OFF;      // a value we do not recognise is not a licence to push

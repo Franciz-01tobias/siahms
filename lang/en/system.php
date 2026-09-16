@@ -694,13 +694,29 @@ return [
         'needs_db_desc' => 'Run System → Database Verification, then come back to this page.',
 
         'conn_heading' => 'Connection',
-        'conn_desc'    => 'How FreeITSM writes events into an analyst&rsquo;s own mailbox calendar. One connection, used by everyone who opts in.',
+        // Any number of connections (#133): Microsoft 365 and CalDAV servers side
+        // by side, and each analyst picks one under Preferences.
+        'conns_heading' => 'Connections',
+        'conns_desc'    => 'How FreeITSM writes events into analysts&rsquo; own calendars. Add as many as you need - Microsoft 365, one or more CalDAV servers, or both. Each analyst chooses which one their work goes to under <strong>Preferences &rarr; My work calendar</strong>.',
+        'conns_none'    => 'No connections yet. Subscription links still work without one.',
+        'conn_add'      => 'Add',
+        'conn_edit'     => 'Edit',
+        'conn_new'      => 'New connection',
+        'conn_editing'  => 'Edit “{name}”',
+        'conn_users'    => '{n} analyst(s) using it',
+        'conn_borrowed' => 'Borrows the app registration from a mailbox',
+        'conn_own'      => 'Its own app registration',
+        'conn_failing'  => 'Failing',
+        'col_connection' => 'Connection',
+        'col_calendar'   => 'Calendar',
+        'not_chosen'     => 'Not chosen yet',
 
         // CalDAV (#133). The connection holds only the server's address: each
         // analyst signs in as themselves, under Preferences.
         'provider_label'     => 'Calendar system',
         'provider_microsoft' => 'Microsoft 365 / Exchange',
-        'provider_caldav'    => 'A CalDAV server (Nextcloud, Baïkal, Radicale, iCloud, Fastmail…)',
+        'provider_caldav_short' => 'CalDAV',
+        'provider_caldav'    =>'A CalDAV server (Nextcloud, Baïkal, Radicale, iCloud, Fastmail…)',
         'caldav_desc'        => 'FreeITSM writes each analyst&rsquo;s scheduled work into a calendar on your CalDAV server, <strong>signed in as that analyst</strong>. A CalDAV server has no way for one account to write into everybody&rsquo;s calendar, so there is no password here: each analyst signs in and chooses their calendar under <strong>Preferences &rarr; My work calendar</strong>.',
         'server_url'         => 'Server address',
         'server_url_hint'    => 'The server&rsquo;s DAV address, not its web page. Baïkal: <code>https://server/dav.php/</code> &middot; Nextcloud: <code>https://server/remote.php/dav/</code> &middot; Radicale: <code>https://server/</code>. Analysts can only choose calendars on this server.',
@@ -721,10 +737,10 @@ return [
         'caldav_no_notify'   => 'CalDAV servers do not send change notifications, so changes made in a calendar arrive when the scheduled job runs.',
         'people_desc_caldav' => 'Each analyst signs in to the CalDAV server and chooses their own calendar under Preferences. An administrator cannot choose it for them, because only the analyst has the password that reaches it.',
         'no_account'         => 'Not signed in',
-        'switch_title'       => 'Switch calendar system?',
-        'switch_confirm'     => 'Switching takes back the {mapped} event(s) FreeITSM has put in analysts’ calendars, and turns calendar sync off for the {pushing} analyst(s) using it, so each can set it up again on the new system. Subscription links are not affected.',
-        'switch_ok'          => 'Switch',
-        'switch_done'        => 'Saved. Everyone’s calendar sync has been reset for the new connection.',
+        'switch_title'       => 'Change where this connection writes?',
+        'switch_confirm'     => 'This takes back the {mapped} event(s) this connection has put in analysts’ calendars, and turns calendar sync off for the {pushing} analyst(s) using it, so each can set it up again. Analysts on other connections, and subscription links, are not affected.',
+        'switch_ok'          => 'Change',
+        'switch_done'        => 'Saved. Calendar sync has been reset for the analysts on this connection.',
 
         'perm_title' => 'Before this will work',
         'perm_body'  => 'The app registration needs <strong>Calendars.ReadWrite</strong> as an <strong>Application</strong> permission (not Delegated — they are separate lists in Azure), with admin consent granted. Be aware that this permission lets FreeITSM write to <strong>every mailbox in the tenant</strong>. If that is more than you want to grant, scope the app to a mail-enabled security group of your analysts using an Application Access Policy in Exchange Online.',
@@ -752,12 +768,14 @@ return [
         'probe_ok'         => '{addr} has a calendar FreeITSM can write to.',
         'probe_bad'        => 'No calendar found for {addr}. Check the address is a real mailbox in this tenant — an analyst’s FreeITSM email address is not always their mailbox address.',
 
-        'delete_confirm' => 'Remove this connection? Analysts who opted in will keep their choice but nothing will be written to their calendars.',
+        'conn_delete_confirm' => 'Delete “{name}”?',
+        'conn_delete_title'   => 'Delete this connection?',
+        'conn_delete_used'    => 'FreeITSM takes back the {mapped} event(s) this connection has put in analysts’ calendars, and turns calendar sync off for the {pushing} analyst(s) using it. Analysts on other connections are not affected.',
+        'conn_deleted'        => 'Connection deleted',
 
         'people_heading' => 'Which mailbox each analyst syncs to',
         'people_desc'    => 'By default FreeITSM uses the email address on the analyst&rsquo;s account, which is often not their mailbox &mdash; a local account, or a directory import keyed on something else. Override it here. Analysts choose <em>whether</em> their work is synced; only an administrator chooses <em>where</em> it goes.',
         'col_analyst' => 'Analyst',
-        'col_mailbox' => 'Mailbox',
         // Named for what it IS — a read-out of what the analyst chose in their own
         // Preferences — rather than 'Status', which sitting beside a button read
         // as something an administrator could click. Ed looked at it and expected
@@ -865,6 +883,9 @@ return [
         'workcal_push_noaddr' => 'We do not know which mailbox is yours. Ask an administrator to set it on System → Calendar sync.',
         // CalDAV (#133). Shown as plain text by the page, so real characters,
         // not HTML entities.
+        'workcal_conn'        => 'Which calendar',
+        'workcal_conn_choose' => 'Choose…',
+        'workcal_conn_needed' => 'Choose which calendar your scheduled work should go into.',
         'workcal_push_caldav_where' => 'Your scheduled tickets will be written into your calendar “{name}”.',
         'caldav_intro'          => 'Sign in to your calendar on {server} and choose which calendar your scheduled work should go into. FreeITSM signs in as you, so it can only reach calendars you can.',
         'caldav_username'       => 'Username',

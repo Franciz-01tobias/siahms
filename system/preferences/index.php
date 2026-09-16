@@ -560,6 +560,14 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     <p class="pref-hint" id="workCalPushWhy" style="display:none;margin-top:8px;color:var(--text-muted,#666);font-size:12px;"></p>
 
                     <div id="workCalPushPanel" style="display:none;margin-top:12px;">
+                        <?php /* Which connection (#133), when the system has more
+                                 than one: Microsoft 365 and a CalDAV server side
+                                 by side, say. Hidden when there is only one - a
+                                 choice of one is not a choice. */ ?>
+                        <div id="workCalConnRow" style="display:none;margin-bottom:10px;">
+                            <div style="font-size:13px;margin-bottom:6px;"><?php echo htmlspecialchars(t('system.preferences.workcal_conn')); ?></div>
+                            <select id="workCalConn" class="pref-language-select"></select>
+                        </div>
                         <p class="pref-hint" style="color:var(--text-muted,#666);font-size:12px;" id="workCalPushInfo"></p>
 
                         <?php /* CalDAV (#133). The analyst signs in as themselves
@@ -1423,17 +1431,27 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 why.style.display = '';
             }
             workCalState = d;
-            if (d.provider === 'caldav') {
-                // The calendar is named rather than addressed: a web address means
-                // nothing to most people, the calendar's own name does.
-                document.getElementById('workCalPushInfo').textContent = (d.caldav && d.caldav.calendar_url)
-                    ? window.t('system.preferences.workcal_push_caldav_where', { name: d.caldav.calendar_name || d.caldav.calendar_url })
-                    : '';
-                paintCalDav(d);
-            } else if (d.address) {
-                document.getElementById('workCalPushInfo').textContent =
-                    window.t('system.preferences.workcal_push_where', { addr: d.address });
+
+            // The chooser. Several connections and none chosen yet starts on
+            // "Choose…" rather than quietly on the first: switching on writes
+            // real events, and they should go where the analyst meant.
+            const conns = d.connections || [];
+            const sel   = document.getElementById('workCalConn');
+            sel.innerHTML = '';
+            if (!d.connection_id) {
+                const o = document.createElement('option');
+                o.value = ''; o.textContent = window.t('system.preferences.workcal_conn_choose');
+                sel.appendChild(o);
             }
+            conns.forEach(c => {
+                const o = document.createElement('option');
+                o.value = String(c.id); o.textContent = c.name;
+                sel.appendChild(o);
+            });
+            sel.value = d.connection_id ? String(d.connection_id) : '';
+            document.getElementById('workCalConnRow').style.display = conns.length > 1 ? '' : 'none';
+
+            paintPushTarget();
             paintTaskCal(d.task_mode);
             paintWorkCal(d.mode || 'off');
             if (d.mode === 'feed') await loadWorkCalDetail();
@@ -1509,7 +1527,55 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 ? window.t('system.preferences.caldav_password_saved') : '';
         }
 
+        /** The connection picked on the screen: the chooser, else the only one. */
+        function workCalTarget() {
+            const conns = (workCalState && workCalState.connections) || [];
+            if (conns.length === 1) return conns[0];
+            const id = Number(document.getElementById('workCalConn').value || 0);
+            return conns.find(c => c.id === id) || null;
+        }
+
+        /**
+         * What the push panel says for the picked connection. The one already in
+         * use shows where the work goes; a different one shows what setting it
+         * up needs - a CalDAV sign-in form, fresh, since a sign-in belongs to
+         * one server.
+         */
+        function paintPushTarget() {
+            const d = workCalState;
+            if (!d) return;
+            const c = workCalTarget();
+            const current = !!c && c.id === d.connection_id;
+            const info = document.getElementById('workCalPushInfo');
+            const panel = document.getElementById('calDavPanel');
+            info.textContent = '';
+            if (panel) panel.style.display = 'none';
+            if (!c) {
+                if ((d.connections || []).length > 1) info.textContent = window.t('system.preferences.workcal_conn_needed');
+                return;
+            }
+            if (c.provider === 'caldav') {
+                if (current) {
+                    // The calendar is named rather than addressed: a web address
+                    // means nothing to most people, the calendar's own name does.
+                    info.textContent = (d.caldav && d.caldav.calendar_url)
+                        ? window.t('system.preferences.workcal_push_caldav_where', { name: d.caldav.calendar_name || d.caldav.calendar_url })
+                        : '';
+                    paintCalDav(d);
+                } else {
+                    document.getElementById('calDavUser').value = '';
+                    document.getElementById('calDavPass').value = '';
+                    document.getElementById('calDavPick').style.display = 'none';
+                    paintCalDav({ caldav: { server_url: c.server_url } }, true);
+                }
+            } else if (current && d.address) {
+                info.textContent = window.t('system.preferences.workcal_push_where', { addr: d.address });
+            }
+        }
+
         async function calDavPost(body) {
+            const target = workCalTarget();
+            if (target) body.connection_id = target.id;
             const r = await fetch(ENROL_API, {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1650,6 +1716,19 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             FreeITSMSubscribe.mount('workCal', WORKCAL_API);
             loadWorkCalState();
 
+            // Picking another connection. A CalDAV one needs a sign-in first, so
+            // it only shows the form; a Microsoft one moves straight away when
+            // "Add to my calendar" is on - it is the same request as pressing it.
+            document.getElementById('workCalConn').addEventListener('change', function () {
+                paintPushTarget();
+                const c = workCalTarget();
+                const active = root.querySelector('.anim-option.active');
+                if (c && c.provider !== 'caldav' && active && active.dataset.workcal === 'push'
+                    && c.id !== (workCalState && workCalState.connection_id)) {
+                    document.getElementById('workCalPushBtn').click();
+                }
+            });
+
             root.addEventListener('click', async function (e) {
                 const btn = e.target.closest('.anim-option');
                 if (!btn || btn.disabled) return;
@@ -1661,18 +1740,31 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 // mailbox before accepting 'push' — so a refusal here is the
                 // honest answer rather than a switch that appears on and never
                 // does anything.
+                const body = { mode: mode };
+                const target = workCalTarget();
+                if (mode === 'push' && target) body.connection_id = target.id;
                 const r = await fetch(ENROL_API, {
                     method: 'POST', credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ mode: mode })
+                    body: new URLSearchParams(body)
                 });
                 const d = await r.json();
+                // Several connections and none picked: open the chooser rather
+                // than refusing.
+                if (!d.success && d.needs_connection) {
+                    calDavPrevMode = previous ? previous.dataset.workcal : 'off';
+                    paintPushTarget();
+                    document.getElementById('workCalPushWhy').style.display = 'none';
+                    return;
+                }
                 // CalDAV with nothing saved yet: not a refusal but the next step.
                 // Keep "Add to my calendar" showing and open the sign-in form;
                 // saving it is what switches this on.
                 if (!d.success && d.needs_account && workCalState) {
                     calDavPrevMode = previous ? previous.dataset.workcal : 'off';
-                    paintCalDav(workCalState, true);
+                    const c = workCalTarget();
+                    if (c && c.id === workCalState.connection_id) paintCalDav(workCalState, true);
+                    else paintPushTarget();
                     calDavMsg(d.error || window.t('system.preferences.caldav_needs'), false);
                     document.getElementById('workCalPushWhy').style.display = 'none';
                     return;
@@ -1681,6 +1773,12 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     // Put the control back where it was: leaving it on a state the
                     // server rejected would be a lie about what is happening.
                     paintWorkCal(previous ? previous.dataset.workcal : 'off');
+                    // And the chooser back to the connection still in use: the
+                    // move did not happen.
+                    if (workCalState) {
+                        document.getElementById('workCalConn').value = workCalState.connection_id ? String(workCalState.connection_id) : '';
+                        paintPushTarget();
+                    }
                     const why = document.getElementById('workCalPushWhy');
                     why.textContent = d.bad_address
                         ? window.t('system.preferences.workcal_push_bad', { addr: d.address })
@@ -1689,6 +1787,8 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     return;
                 }
                 document.getElementById('workCalPushWhy').style.display = 'none';
+                // The connection and address may have moved with it.
+                if (mode === 'push') await loadWorkCalState();
 
                 if (mode === 'feed') {
                     await loadWorkCalDetail();

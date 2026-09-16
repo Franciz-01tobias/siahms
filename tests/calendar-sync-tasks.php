@@ -137,10 +137,13 @@ try {
     // there is no calendar it could ever reach, whatever anyone has chosen.
     $st = $conn->query("SELECT id FROM task_statuses WHERE COALESCE(is_closed,0)=0 ORDER BY id LIMIT 1");
     $openStatus = (int)$st->fetchColumn();
+    // created_by_id is NOT NULL in the schema; only a non-strict server let
+    // this insert through without it. Somebody made it - nobody holds it.
+    $creator = (int)$conn->query("SELECT id FROM analysts ORDER BY id LIMIT 1")->fetchColumn();
     $conn->prepare(
-        "INSERT INTO tasks (title, status_id, due_date, assigned_analyst_id, created_datetime, updated_datetime)
-         VALUES ('ZZCAL harness task', ?, '2026-09-10', NULL, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
-    )->execute([$openStatus]);
+        "INSERT INTO tasks (title, status_id, due_date, assigned_analyst_id, created_by_id, created_datetime, updated_datetime)
+         VALUES ('ZZCAL harness task', ?, '2026-09-10', NULL, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+    )->execute([$openStatus, $creator]);
     $tid = (int)$conn->lastInsertId();
 
     $before = (int)$conn->query("SELECT COUNT(*) FROM calendar_sync_events")->fetchColumn();

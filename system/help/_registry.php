@@ -307,8 +307,8 @@ function getHelpTopics() {
             'sections' => [
                 ['id' => 'overview',   'label' => 'Two different things'],
                 ['id' => 'permission', 'label' => 'The permission'],
-                ['id' => 'caldav',     'label' => 'A CalDAV server instead'],
-                ['id' => 'connection', 'label' => 'The connection'],
+                ['id' => 'caldav',     'label' => 'CalDAV servers'],
+                ['id' => 'connection', 'label' => 'A Microsoft 365 connection'],
                 ['id' => 'people',     'label' => 'Who syncs where'],
                 ['id' => 'inbound',    'label' => 'Changes in the calendar'],
                 ['id' => 'feeds',      'label' => 'Subscription links'],
@@ -318,6 +318,7 @@ function getHelpTopics() {
                      . ' ical ics subscribe feed secret link google apple thunderbird two way'
                      . ' cron calendar_sync_pull webhook notification url graph_notify client secret expired'
                      . ' appointments scheduled work tasks unschedule deleted appointment'
+                     . ' multiple connections several both microsoft and caldav which calendar'
                      . ' caldav webdav dav nextcloud baikal radicale sogo icloud fastmail sabredav sabre/dav'
                      . ' app password digest basic sign-in own calendar per analyst switch provider',
         ],

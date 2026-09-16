@@ -4,7 +4,9 @@
  *
  * Two things an administrator decides, on one screen because they are the same
  * subject:
- *   1. the CONNECTION that writes scheduled work into analysts' own calendars;
+ *   1. the CONNECTIONS that write scheduled work into analysts' own calendars -
+ *      any number, Microsoft 365 and CalDAV side by side (#133), each analyst
+ *      choosing one under Preferences;
  *   2. whether analysts may publish a subscribe (.ics) link at all.
  *
  * The second stands alone: an install with no supported calendar provider still
@@ -118,6 +120,18 @@ $translationNamespaces = ['common', 'system'];
         .cs-inbound { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border-soft, #eee); }
         .cs-inbound h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; color: var(--text, #333); }
         .cs-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; margin: 10px 0 2px; }
+
+        /* The connections list, and the one editor that opens beneath it. */
+        .cs-conn-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+        .cs-conn { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px;
+                   border: 1px solid var(--border, #e0e0e0); border-radius: 6px; background: var(--surface-2, #f8f9fa); }
+        .cs-conn.editing { border-color: var(--accent); }
+        .cs-conn-main { flex: 1 1 260px; min-width: 0; }
+        .cs-conn-name { font-weight: 600; color: var(--text, #333); font-size: 13.5px; }
+        .cs-conn-detail { font-size: 12px; color: var(--text-muted, #888); overflow-wrap: anywhere; }
+        .cs-conn-btns { display: flex; gap: 6px; }
+        .cs-editor { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft, #eee); }
+        .cs-editor h3 { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: var(--text, #333); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
     <link rel="stylesheet" href="../../assets/css/mobile.css?v=139">
@@ -137,8 +151,20 @@ $translationNamespaces = ['common', 'system'];
 
         <div id="csMain" style="display:none;">
             <div class="cs-card">
-                <h2><?php echo htmlspecialchars(t('system.calsync.conn_heading')); ?></h2>
-                <p><?php echo t('system.calsync.conn_desc'); ?></p>
+                <h2><?php echo htmlspecialchars(t('system.calsync.conns_heading')); ?></h2>
+                <p><?php echo t('system.calsync.conns_desc'); ?></p>
+
+                <?php /* Any number of connections (#133). The list, then ONE
+                         editor that opens for whichever row is being edited or
+                         added - the form is long, and several open copies of it
+                         would be a page nobody could read. */ ?>
+                <div id="csConnList" class="cs-conn-list"></div>
+                <div class="cs-actions" id="csAddRow">
+                    <button class="btn btn-primary" onclick="csEdit(0)"><?php echo htmlspecialchars(t('system.calsync.conn_add')); ?></button>
+                </div>
+
+                <div id="csEditor" class="cs-editor" style="display:none;">
+                <h3 id="csEditorTitle"></h3>
 
                 <?php /* Which calendar system. Microsoft writes with one app
                          registration for everybody; CalDAV signs in as each
@@ -212,8 +238,8 @@ $translationNamespaces = ['common', 'system'];
 
                 <div class="cs-actions">
                     <button class="btn btn-primary" onclick="csSave()"><?php echo htmlspecialchars(t('common.save')); ?></button>
-                    <button class="btn btn-secondary" onclick="csTest()"><?php echo htmlspecialchars(t('system.calsync.test')); ?></button>
-                    <button class="btn btn-secondary" id="csDeleteBtn" onclick="csDelete()" style="display:none;"><?php echo htmlspecialchars(t('common.delete')); ?></button>
+                    <button class="btn btn-secondary" id="csTestBtn" onclick="csTest()"><?php echo htmlspecialchars(t('system.calsync.test')); ?></button>
+                    <button class="btn btn-secondary" onclick="csCloseEditor()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
                 </div>
 
                 <?php /* The probe is what turns "it doesn't work" into a specific
@@ -236,6 +262,7 @@ $translationNamespaces = ['common', 'system'];
                                style="flex:1 1 180px;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--surface,#fff);color:var(--text,#333);font-size:13px;">
                     </div>
                 </div>
+                </div><!-- /#csEditor -->
 
                 <div class="cs-result" id="csResult"></div>
 
@@ -288,17 +315,18 @@ $translationNamespaces = ['common', 'system'];
                 <h2><?php echo htmlspecialchars(t('system.calsync.people_heading')); ?></h2>
                 <p id="csPeopleDescMs"><?php echo t('system.calsync.people_desc'); ?></p>
                 <p id="csPeopleDescCalDav" style="display:none;"><?php echo t('system.calsync.people_desc_caldav'); ?></p>
-                <table class="cs-people">
+                <div style="overflow-x:auto;"><table class="cs-people">
                     <thead>
                         <tr>
                             <th><?php echo htmlspecialchars(t('system.calsync.col_analyst')); ?></th>
-                            <th><?php echo htmlspecialchars(t('system.calsync.col_mailbox')); ?></th>
+                            <th><?php echo htmlspecialchars(t('system.calsync.col_connection')); ?></th>
+                            <th><?php echo htmlspecialchars(t('system.calsync.col_calendar')); ?></th>
                             <th><?php echo htmlspecialchars(t('system.calsync.col_status')); ?></th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody id="csPeople"></tbody>
-                </table>
+                </table></div>
             </div>
 
             <div class="cs-card">
@@ -348,16 +376,113 @@ $translationNamespaces = ['common', 'system'];
             show('csMsBlock', !cal);
             show('csProbeMs', !cal);
             show('csProbeCalDav', cal);
-            show('csNotifyBlock', !cal);
-            show('csNotifyCalDav', cal);
-            show('csPeopleDescMs', !cal);
-            show('csPeopleDescCalDav', cal);
             // A default name that no longer describes the connection is replaced;
             // one somebody typed is left alone.
             const name = document.getElementById('csName');
             if (cal && name.value === 'Microsoft 365') name.value = 'CalDAV';
             if (!cal && name.value === 'CalDAV') name.value = 'Microsoft 365';
-            if (csState) csRenderPeople(csState.analysts || []);
+        }
+
+        /** The connection being edited: null = editor closed, 0 = a new one. */
+        let csEditingId = null;
+
+        function csConns() { return (csState && csState.connections) || []; }
+
+        /**
+         * The connection an analyst's work goes through: their own, or the
+         * install's only one when they have not chosen. The same rule as
+         * calendarSyncConnectionFor() on the server.
+         */
+        function csEffective(p) {
+            const list = csConns();
+            if (p.connection_id) return list.find(c => c.id === Number(p.connection_id)) || null;
+            return list.length === 1 ? list[0] : null;
+        }
+
+        function csRenderConns() {
+            const list = csConns();
+            const box = document.getElementById('csConnList');
+            if (!list.length) {
+                box.innerHTML = '<p class="cs-note" style="margin:0;">' + escapeCs(t('system.calsync.conns_none')) + '</p>';
+                return;
+            }
+            const mailboxName = id => ((csState.mailboxes || []).find(m => m.id === id) || {}).name || '';
+            box.innerHTML = list.map(c => {
+                const caldav = c.provider === 'caldav';
+                let detail = caldav ? c.caldav_server_url
+                    : (c.mailbox_id ? t('system.calsync.conn_borrowed') + (mailboxName(c.mailbox_id) ? ': ' + mailboxName(c.mailbox_id) : '')
+                                    : t('system.calsync.conn_own'));
+                let pills = '<span class="cs-pill offp">' + escapeCs(t(caldav ? 'system.calsync.provider_caldav_short' : 'system.calsync.provider_microsoft')) + '</span>';
+                if (c.pushing) pills += ' <span class="cs-pill on">' + escapeCs(t('system.calsync.conn_users', { n: c.pushing })) + '</span>';
+                if (c.last_error) pills += ' <span class="cs-pill bad" title="' + escapeCs(c.last_error) + '">' + escapeCs(t('system.calsync.conn_failing')) + '</span>';
+                return `<div class="cs-conn${csEditingId === c.id ? ' editing' : ''}">
+                    <div class="cs-conn-main">
+                        <div class="cs-conn-name">${escapeCs(c.name)}</div>
+                        <div class="cs-conn-detail">${escapeCs(detail)}</div>
+                    </div>
+                    <div>${pills}</div>
+                    <div class="cs-conn-btns">
+                        <button class="btn btn-secondary btn-sm" onclick="csEdit(${c.id})">${escapeCs(t('system.calsync.conn_edit'))}</button>
+                        <button class="btn btn-secondary btn-sm" onclick="csDelete(${c.id})">${escapeCs(t('common.delete'))}</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        /** Open the editor on one connection, or on a blank one (id 0). */
+        function csEdit(id) {
+            const c = id ? csConns().find(x => x.id === id) : null;
+            if (id && !c) return;
+            csEditingId = id;
+            document.getElementById('csResult').style.display = 'none';
+            document.getElementById('csEditorTitle').textContent = c
+                ? t('system.calsync.conn_editing', { name: c.name }) : t('system.calsync.conn_new');
+
+            const prov = c && c.provider === 'caldav' ? 'caldav' : 'microsoft';
+            document.querySelector('input[name="csProvider"][value="' + prov + '"]').checked = true;
+            document.getElementById('csName').value = c ? c.name : 'Microsoft 365';
+            document.getElementById('csServerUrl').value  = c ? (c.caldav_server_url || '') : '';
+            document.getElementById('csCalDavAuth').value = c ? (c.caldav_auth || 'auto') : 'auto';
+            document.getElementById('csTenant').value = '';
+            document.getElementById('csClient').value = '';
+            document.getElementById('csSecret').value = '';
+            document.getElementById('csSecret').placeholder = '';
+            ['csProbe', 'csProbeUser', 'csProbePass'].forEach(f => { document.getElementById(f).value = ''; });
+
+            const noMailboxes = !(csState.mailboxes || []).length;
+            let source = noMailboxes ? 'own' : 'mailbox';
+            if (c && prov === 'microsoft') {
+                if (c.mailbox_id) {
+                    source = 'mailbox';
+                    document.getElementById('csMailbox').value = String(c.mailbox_id);
+                } else if (c.has_credentials) {
+                    source = 'own';
+                    // The secret is never sent back, so show that one IS stored and
+                    // let a blank field mean "leave it alone".
+                    document.getElementById('csSecret').placeholder = '••••••••  (unchanged)';
+                }
+            }
+            document.querySelector('input[name="csSource"][value="' + source + '"]').checked = true;
+            csSource();
+            csProviderChanged();
+
+            // Test asks about what is SAVED, so there is nothing to test yet.
+            document.getElementById('csTestBtn').style.display = id ? '' : 'none';
+            document.getElementById('csEditor').style.display = '';
+            document.getElementById('csAddRow').style.display = 'none';
+            csRenderConns();
+            if (c && c.last_error) {
+                csShow(false, escapeCs(t('system.calsync.last_error')) + ' <code>' + escapeCs(c.last_error) + '</code>');
+            }
+            document.getElementById('csEditor').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        function csCloseEditor() {
+            csEditingId = null;
+            document.getElementById('csEditor').style.display = 'none';
+            document.getElementById('csAddRow').style.display = '';
+            document.getElementById('csResult').style.display = 'none';
+            csRenderConns();
         }
 
         function csShow(ok, html) {
@@ -388,10 +513,8 @@ $translationNamespaces = ['common', 'system'];
             // dropdown that looks broken.
             const none = !(d.mailboxes || []).length;
             document.getElementById('csNoMailboxes').style.display = none ? '' : 'none';
-            if (none) {
-                document.querySelector('input[name="csSource"][value="own"]').checked = true;
-                csSource();
-            }
+            const radios = document.querySelectorAll('input[name="csSource"]');
+            if (none) radios[0].disabled = true;
 
             document.getElementById('csFeedMode').value = d.feed_mode || 'full';
             document.getElementById('csAcceptDeletes').checked = !!d.accept_deletes;
@@ -401,33 +524,25 @@ $translationNamespaces = ['common', 'system'];
                 ? t('system.calsync.notify_active', { n: d.subscriptions }) : '';
             csNotifyOn = !!(d.notify_url || '').trim();
             csRenderHealth(d);
-            csRenderPeople(d.analysts || []);
 
-            if (d.connection) {
-                document.getElementById('csName').value = d.connection.name;
-                document.getElementById('csDeleteBtn').style.display = '';
-                const prov = d.connection.provider === 'caldav' ? 'caldav' : 'microsoft';
-                document.querySelector('input[name="csProvider"][value="' + prov + '"]').checked = true;
-                document.getElementById('csServerUrl').value  = d.connection.caldav_server_url || '';
-                document.getElementById('csCalDavAuth').value = d.connection.caldav_auth || 'auto';
-                csProviderChanged();
-                if (prov === 'caldav') {
-                    // nothing Microsoft-shaped to fill in
-                } else if (d.connection.mailbox_id) {
-                    document.querySelector('input[name="csSource"][value="mailbox"]').checked = true;
-                    sel.value = String(d.connection.mailbox_id);
-                } else if (d.connection.has_credentials) {
-                    document.querySelector('input[name="csSource"][value="own"]').checked = true;
-                    // The secret is never sent back, so show that one IS stored and
-                    // let a blank field mean "leave it alone".
-                    document.getElementById('csSecret').placeholder = '••••••••  (unchanged)';
-                }
-                csSource();
-                if (d.connection.last_error) {
-                    csShow(false, escapeCs(t('system.calsync.last_error')) + ' <code>'
-                                + escapeCs(d.connection.last_error) + '</code>');
-                }
-            }
+            // What applies depends on which KINDS of connection exist. Change
+            // notifications are Microsoft's alone; the "each analyst signs in"
+            // explanation is CalDAV's. With no connection yet, the Microsoft
+            // settings are shown, as they always were.
+            const kinds = csConns().map(c => c.provider);
+            const anyCalDav = kinds.includes('caldav');
+            const anyMs = kinds.includes('microsoft') || !kinds.length;
+            const show = (id, on) => { document.getElementById(id).style.display = on ? '' : 'none'; };
+            show('csNotifyBlock', anyMs);
+            show('csNotifyCalDav', anyCalDav);
+            show('csPeopleDescMs', anyMs);
+            show('csPeopleDescCalDav', anyCalDav);
+
+            csRenderPeople(d.analysts || []);
+            // A connection deleted elsewhere closes its editor rather than
+            // leaving a form that saves into nothing.
+            if (csEditingId && !csConns().some(c => c.id === csEditingId)) csCloseEditor();
+            else csRenderConns();
         }
 
         function escapeCs(s) {
@@ -520,14 +635,33 @@ $translationNamespaces = ['common', 'system'];
 
         function csRenderPeople(people) {
             const tb = document.getElementById('csPeople');
-            const caldav = csProvider() === 'caldav'
-                && csState && csState.connection && csState.connection.provider === 'caldav';
+            const anyMs = csConns().some(c => c.provider === 'microsoft') || !csConns().length;
             tb.innerHTML = people.map(p => {
                 const override  = p.calendar_address || '';
                 const inherited = !override;
                 const shown     = override || p.email || '';
                 const mode      = p.mode || 'off';
+                const eff       = csEffective(p);
+                const caldav    = !!eff && eff.provider === 'caldav';
+                // Their own choice in full; the install's only connection, which
+                // they get without choosing, muted; otherwise nothing yet.
+                const connCell = p.connection_id && eff
+                    ? escapeCs(eff.name)
+                    : '<span class="cs-analyst-email">' + escapeCs(eff ? eff.name : t('system.calsync.not_chosen')) + '</span>';
                 let pill = '<span class="cs-pill offp">' + escapeCs(t('system.calsync.mode_off')) + '</span>';
+                // Neither a CalDAV connection nor any Microsoft one to set a
+                // mailbox for: nothing to show or change here.
+                if (!eff && !anyMs) {
+                    if (mode === 'feed') pill = '<span class="cs-pill on">' + escapeCs(t('system.calsync.mode_feed')) + '</span>';
+                    return `<tr data-analyst="${p.id}">
+                        <td><div class="cs-analyst-name">${escapeCs(p.full_name)}</div>
+                            <div class="cs-analyst-email">${escapeCs(p.email)}</div></td>
+                        <td>${connCell}</td>
+                        <td></td>
+                        <td>${pill}</td>
+                        <td></td>
+                    </tr>`;
+                }
                 if (caldav) {
                     if (mode === 'push') pill = '<span class="cs-pill on">' + escapeCs(t('system.calsync.mode_push')) + '</span>';
                     if (mode === 'feed') pill = '<span class="cs-pill on">' + escapeCs(t('system.calsync.mode_feed')) + '</span>';
@@ -541,6 +675,7 @@ $translationNamespaces = ['common', 'system'];
                     return `<tr data-analyst="${p.id}">
                         <td><div class="cs-analyst-name">${escapeCs(p.full_name)}</div>
                             <div class="cs-analyst-email">${escapeCs(p.email)}</div></td>
+                        <td>${connCell}</td>
                         <td>${where}</td>
                         <td>${pill}</td>
                         <td></td>
@@ -573,7 +708,7 @@ $translationNamespaces = ['common', 'system'];
                 // no address configured means nobody is subscribed by design, and
                 // flagging that on every row would report a feature not in use as
                 // though it were a fault.
-                if (csNotifyOn && mode === 'push') {
+                if (csNotifyOn && mode === 'push' && eff) {
                     const sh = (p.sub_hours === null || p.sub_hours === undefined) ? null : Number(p.sub_hours);
                     if (!p.subscription_id) {
                         // Enrolled, an address is set, and yet Microsoft has
@@ -592,6 +727,7 @@ $translationNamespaces = ['common', 'system'];
                 return `<tr data-analyst="${p.id}">
                     <td><div class="cs-analyst-name">${escapeCs(p.full_name)}</div>
                         <div class="cs-analyst-email">${escapeCs(p.email)}</div></td>
+                    <td>${connCell}</td>
                     <td><input type="email" class="${inherited ? 'cs-inherited' : ''}"
                                value="${escapeCs(shown)}"
                                placeholder="${escapeCs(p.email || '')}"
@@ -638,9 +774,11 @@ $translationNamespaces = ['common', 'system'];
         }
 
         async function csSave(confirmSwitch) {
+            if (csEditingId === null) return;
             const source = document.querySelector('input[name="csSource"]:checked').value;
             const d = await csPost({
                 action: 'save',
+                id: csEditingId,
                 provider: csProvider(),
                 name: document.getElementById('csName').value,
                 source: source,
@@ -650,11 +788,10 @@ $translationNamespaces = ['common', 'system'];
                 client_secret: document.getElementById('csSecret').value,
                 server_url: document.getElementById('csServerUrl').value.trim(),
                 caldav_auth: document.getElementById('csCalDavAuth').value,
-                feed_mode: document.getElementById('csFeedMode').value,
                 confirm_switch: confirmSwitch ? '1' : ''
             });
-            // Switching calendar system takes FreeITSM's events back out of real
-            // calendars, so it is asked, with the numbers, before it happens.
+            // Changing where a connection writes takes its events back out of
+            // real calendars, so it is asked, with the numbers, before it happens.
             if (d.needs_confirm) {
                 const ok = await showConfirm({
                     title: t('system.calsync.switch_title'),
@@ -665,9 +802,10 @@ $translationNamespaces = ['common', 'system'];
                 return;
             }
             if (!d.success) { csShow(false, escapeCs(d.error || '')); return; }
-            csShow(true, escapeCs(t(d.reset ? 'system.calsync.switch_done' : 'system.calsync.saved')));
-            document.getElementById('csSecret').value = '';
             await csLoad();
+            // Stays open on what was saved, so Test is one click away.
+            csEdit(d.id);
+            csShow(true, escapeCs(t(d.reset ? 'system.calsync.switch_done' : 'system.calsync.saved')));
         }
 
         let csNotifyDefault = '';
@@ -707,7 +845,7 @@ $translationNamespaces = ['common', 'system'];
         async function csTest() {
             csShow(true, escapeCs(t('system.calsync.testing')));
             if (csProvider() === 'caldav') return csTestCalDav();
-            const d = await csPost({ action: 'test', probe: document.getElementById('csProbe').value.trim() });
+            const d = await csPost({ action: 'test', id: csEditingId, probe: document.getElementById('csProbe').value.trim() });
             if (!d.success) {
                 csShow(false, '<strong>' + escapeCs(t('system.calsync.test_failed')) + '</strong><br><code>'
                             + escapeCs(d.error || '') + '</code><br><br>'
@@ -732,6 +870,7 @@ $translationNamespaces = ['common', 'system'];
         async function csTestCalDav() {
             const d = await csPost({
                 action: 'test',
+                id: csEditingId,
                 probe_user: document.getElementById('csProbeUser').value.trim(),
                 probe_pass: document.getElementById('csProbePass').value
             });
@@ -758,10 +897,35 @@ $translationNamespaces = ['common', 'system'];
             csShow(good, html);
         }
 
-        async function csDelete() {
-            if (!confirm(t('system.calsync.delete_confirm'))) return;
-            const d = await csPost({ action: 'delete' });
-            if (d.success) location.reload();
+        /**
+         * Delete one connection. Asked once; asked again, with the numbers, when
+         * analysts are using it - their events come back out of real calendars.
+         */
+        async function csDelete(id, confirmed) {
+            const c = csConns().find(x => x.id === id);
+            if (!c) return;
+            if (!confirmed) {
+                const ok = await showConfirm({
+                    title: t('system.calsync.conn_delete_title'),
+                    message: t('system.calsync.conn_delete_confirm', { name: c.name }),
+                    okLabel: t('common.delete'), okClass: 'danger'
+                });
+                if (!ok) return;
+            }
+            const d = await csPost({ action: 'delete', id: id, confirm: confirmed ? '1' : '' });
+            if (d.needs_confirm) {
+                const ok = await showConfirm({
+                    title: t('system.calsync.conn_delete_title'),
+                    message: t('system.calsync.conn_delete_used', { mapped: d.mapped, pushing: d.pushing }),
+                    okLabel: t('common.delete'), okClass: 'danger'
+                });
+                if (ok) return csDelete(id, true);
+                return;
+            }
+            if (!d.success) { csShow(false, escapeCs(d.error || '')); return; }
+            if (csEditingId === id) csCloseEditor();
+            await csLoad();
+            csShow(true, escapeCs(t('system.calsync.conn_deleted')));
         }
 
         csLoad();

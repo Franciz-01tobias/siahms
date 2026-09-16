@@ -2,13 +2,18 @@
 /**
  * API: an analyst's OWN calendar choice (GH #75, CalDAV #133).
  *
- *   GET            -> my mode, where my work would go, and what is on offer
- *   POST mode=off|push|feed
+ *   GET            -> my mode, my connection, where my work would go, and what is on offer
+ *   POST mode=off|push|feed [connection_id]
  *
  * CalDAV only - the analyst signs in as themselves, so they also choose where:
- *   POST action=caldav_discover  username, password      -> the calendars that sign-in can write to
- *   POST action=caldav_save      username, password, calendar_url[, turn_on=1]
+ *   POST action=caldav_discover  connection_id, username, password -> the calendars that sign-in can write to
+ *   POST action=caldav_save      connection_id, username, password, calendar_url[, turn_on=1]
  *   POST action=caldav_forget                            -> take our events back, forget the sign-in
+ *
+ * 🔑 ANY NUMBER OF CONNECTIONS. An install can have Microsoft 365 and one or
+ * more CalDAV servers side by side, and each analyst picks the one their work
+ * goes to. connection_id may be left out while there is only one, or to mean
+ * "the one I already use".
  *
  * 🔴 WITH MICROSOFT THIS ENDPOINT CANNOT SET AN ADDRESS. Only mode. The
  * application permission behind that push can write to any mailbox in the
@@ -105,6 +110,55 @@ function enrolReconcileTasks(PDO $conn, int $analystId): void
     }
 }
 
+/**
+ * Move an analyst onto another connection. Returns true when anything moved.
+ *
+ * 🔴 THE OLD CONNECTION TAKES ITS EVENTS BACK FIRST. Each event is removed
+ * through the connection that wrote it (calendarSyncRemoveRow), so this has to
+ * happen before the enrolment forgets it. Everything tied to the old
+ * connection goes with it: the sign-in, the change token, a Microsoft
+ * subscription, and the calendar address whenever either side is CalDAV (a
+ * CalDAV address is a web address that means nothing to Microsoft, and the
+ * other way round). A push that was on is switched off here; the caller
+ * switches it back on once the new connection has been checked.
+ */
+function enrolSwitchConnection(PDO $conn, int $analystId, array $enrolment, ?array $current, array $target): bool
+{
+    if ($current && (int)$current['id'] === (int)$target['id']) {
+        // Already there - but an enrolment that only implied it now names it,
+        // so it survives a second connection being added.
+        if (empty($enrolment['connection_id'])) {
+            $conn->prepare("UPDATE calendar_enrolments SET connection_id = ? WHERE analyst_id = ?")
+                 ->execute([(int)$target['id'], $analystId]);
+        }
+        return false;
+    }
+    require_once __DIR__ . '/../../includes/calendar_sync/push.php';
+    calendarSyncRemoveAllForAnalyst($conn, $analystId);
+
+    if (!empty($enrolment['subscription_id']) && $current && $current['provider'] === 'microsoft') {
+        try {
+            $p = calendarSyncProviderFor($current, $enrolment);
+            $p->conn = $conn;
+            $p->deleteSubscription((string)$enrolment['subscription_id']);
+        } catch (Exception $e) {
+            // It lapses by itself within three days.
+        }
+    }
+
+    $clearAddress = ($current && $current['provider'] === 'caldav') || $target['provider'] === 'caldav';
+    $conn->prepare(
+        "UPDATE calendar_enrolments
+            SET connection_id = ?, mode = IF(mode = 'push', 'off', mode),
+                calendar_address = IF(? = 1, NULL, calendar_address), credentials = NULL,
+                delta_token = NULL, delta_synced_datetime = NULL,
+                subscription_id = NULL, subscription_expires = NULL, subscription_secret = NULL,
+                last_error = NULL, updated_datetime = UTC_TIMESTAMP()
+          WHERE analyst_id = ?"
+    )->execute([(int)$target['id'], $clearAddress ? 1 : 0, $analystId]);
+    return true;
+}
+
 try {
     $conn = connectToDatabase();
 
@@ -119,21 +173,37 @@ try {
         exit;
     }
 
+    // $connection is the one this analyst uses now: their own, or the
+    // install's only one when they have not chosen. $target (below) is the one
+    // this request is about: the one they picked on the screen, else the same.
     $enrolment  = calendarSyncEnrolment($conn, $analystId);
-    $connection = calendarSyncActiveConnection($conn);
+    $connection = calendarSyncConnectionFor($conn, $enrolment);
     $isCalDav   = $connection && $connection['provider'] === 'caldav';
     $account    = calendarSyncAccount($enrolment);
     $saved      = calendarSyncDecodeCredentials($enrolment['credentials'] ?? null);
 
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        $connections = [];
+        foreach (calendarSyncConnectionIds($conn) as $cid) {
+            $c = calendarSyncLoadConnection($conn, $cid);
+            if (!$c) continue;
+            $connections[] = [
+                'id'         => $cid,
+                'name'       => $c['name'],
+                'provider'   => $c['provider'],
+                'server_url' => $c['provider'] === 'caldav' ? (string)($c['credentials']['server_url'] ?? '') : '',
+            ];
+        }
         echo json_encode([
             'success'        => true,
             'mode'           => $enrolment['mode'],
             'task_mode'      => $enrolment['task_mode'] ?? TASK_CAL_OFF,
             'address'        => $enrolment['calendar_address'],
-            'push_available' => (bool)$connection,
+            'push_available' => count($connections) > 0,
             'feed_available' => scheduleFeedAllowed($conn),
             'last_error'     => $enrolment['last_error'] ?? null,
+            'connections'    => $connections,
+            'connection_id'  => $connection ? (int)$connection['id'] : null,
             'provider'       => $connection ? $connection['provider'] : null,
             // CalDAV: who they sign in as and which calendar - never the password.
             'caldav'         => $isCalDav ? [
@@ -147,22 +217,54 @@ try {
         exit;
     }
 
+    $target = $connection;
+    if ((int)($_POST['connection_id'] ?? 0) > 0) {
+        $target = calendarSyncLoadConnection($conn, (int)$_POST['connection_id']);
+        if (!$target) {
+            echo json_encode(['success' => false, 'error' => 'That calendar connection is no longer available.']);
+            exit;
+        }
+    }
+    $switching = $target && (!$connection || (int)$connection['id'] !== (int)$target['id']);
+
     $action = (string)($_POST['action'] ?? '');
 
     // ── CalDAV: the analyst's own sign-in and calendar ──────────────────────
+    if ($action === 'caldav_forget') {
+        // Take back what we put there while the sign-in still works, then
+        // forget it. Leaving events FreeITSM can no longer update is the
+        // worst of both worlds. The connection they chose stays chosen.
+        require_once '../../includes/calendar_sync/push.php';
+        calendarSyncRemoveAllForAnalyst($conn, $analystId);
+        $conn->prepare(
+            "UPDATE calendar_enrolments
+                SET mode = IF(mode = 'push', 'off', mode), calendar_address = NULL, credentials = NULL,
+                    delta_token = NULL, delta_synced_datetime = NULL, last_error = NULL,
+                    updated_datetime = UTC_TIMESTAMP()
+              WHERE analyst_id = ?"
+        )->execute([$analystId]);
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
     if ($action !== '') {
-        if (!$isCalDav) {
-            echo json_encode(['success' => false, 'error' => 'This system is not connected to a CalDAV server.']);
+        if (!$target) {
+            echo json_encode(['success' => false, 'error' => 'Choose which calendar connection to use.']);
+            exit;
+        }
+        if ($target['provider'] !== 'caldav') {
+            echo json_encode(['success' => false, 'error' => 'That connection is not a CalDAV server.']);
             exit;
         }
         require_once '../../includes/calendar_sync/push.php';
 
         // A blank password means "the one I saved", so somebody changing
-        // calendars does not have to type it again. Only for the same username:
-        // a new username with the old password is not what anybody means.
+        // calendars does not have to type it again. Only for the same username
+        // on the same connection: a new username, or another server, with the
+        // old password is not what anybody means.
         $typedUser = trim((string)($_POST['username'] ?? ''));
         $typedPass = (string)($_POST['password'] ?? '');
-        if ($typedPass === '' && $typedUser === $account['username']) {
+        if ($typedPass === '' && !$switching && $typedUser === $account['username']) {
             $typedPass = $account['password'];
         }
 
@@ -171,7 +273,7 @@ try {
                 echo json_encode(['success' => false, 'error' => 'Enter your calendar username.']);
                 exit;
             }
-            $found = calendarSyncProviderFor($connection)
+            $found = calendarSyncProviderFor($target)
                 ->withAccount(['username' => $typedUser, 'password' => $typedPass])
                 ->discoverCalendars();
             if (!$found['ok']) {
@@ -188,7 +290,7 @@ try {
                 echo json_encode(['success' => false, 'error' => 'Sign in and choose a calendar first.']);
                 exit;
             }
-            $provider = calendarSyncProviderFor($connection)
+            $provider = calendarSyncProviderFor($target)
                 ->withAccount(['username' => $typedUser, 'password' => $typedPass]);
             try {
                 $check = $provider->checkCalendar($url);
@@ -209,15 +311,20 @@ try {
                 exit;
             }
 
-            // Moving to a different calendar or account: take our events out of
-            // the old one first, signed in as the old account, while we still can.
-            $wasUrl  = (string)($enrolment['calendar_address'] ?? '');
-            $moving  = $wasUrl !== '' && ($wasUrl !== $url || $account['username'] !== $typedUser);
-            if ($moving) calendarSyncRemoveAllForAnalyst($conn, $analystId);
-
+            // Only now, with the new calendar proven, does anything move.
             $wasPushing = ($enrolment['mode'] ?? '') === CALENDAR_MODE_PUSH;
-            $turnOn     = !empty($_POST['turn_on']);
-            $mode       = ($wasPushing || $turnOn) ? CALENDAR_MODE_PUSH : (string)$enrolment['mode'];
+            $moved      = enrolSwitchConnection($conn, $analystId, $enrolment, $connection, $target);
+
+            // A different calendar or account on the same server: take our
+            // events out of the old one first, signed in as the old account,
+            // while we still can. (A move of connection already did.)
+            $wasUrl = $moved ? '' : (string)($enrolment['calendar_address'] ?? '');
+            $moving = $wasUrl !== '' && ($wasUrl !== $url || $account['username'] !== $typedUser);
+            if ($moving) calendarSyncRemoveAllForAnalyst($conn, $analystId);
+            $moving = $moving || $moved;
+
+            $turnOn = !empty($_POST['turn_on']);
+            $mode   = ($wasPushing || $turnOn) ? CALENDAR_MODE_PUSH : (string)$enrolment['mode'];
 
             $conn->prepare(
                 "INSERT INTO calendar_enrolments (analyst_id, mode, connection_id, calendar_address, credentials)
@@ -228,7 +335,7 @@ try {
                                          delta_token = IF(? = 1, NULL, delta_token),
                                          last_error = NULL, updated_datetime = UTC_TIMESTAMP()"
             )->execute([
-                $analystId, $mode, (int)$connection['id'], $url,
+                $analystId, $mode, (int)$target['id'], $url,
                 calendarSyncEncodeCredentials([
                     'username' => $typedUser, 'password' => $typedPass, 'calendar_name' => $check['name'],
                 ]),
@@ -243,23 +350,8 @@ try {
             }
             $after = calendarSyncEnrolment($conn, $analystId);
             echo json_encode(['success' => true, 'mode' => $mode, 'calendar_name' => $check['name'],
+                              'connection_id' => (int)$target['id'],
                               'last_error' => $after['last_error'] ?? null]);
-            exit;
-        }
-
-        if ($action === 'caldav_forget') {
-            // Take back what we put there while the sign-in still works, then
-            // forget it. Leaving events FreeITSM can no longer update is the
-            // worst of both worlds.
-            calendarSyncRemoveAllForAnalyst($conn, $analystId);
-            $conn->prepare(
-                "UPDATE calendar_enrolments
-                    SET mode = IF(mode = 'push', 'off', mode), calendar_address = NULL, credentials = NULL,
-                        delta_token = NULL, delta_synced_datetime = NULL, last_error = NULL,
-                        updated_datetime = UTC_TIMESTAMP()
-                  WHERE analyst_id = ?"
-            )->execute([$analystId]);
-            echo json_encode(['success' => true]);
             exit;
         }
 
@@ -279,20 +371,34 @@ try {
     }
 
     if ($mode === CALENDAR_MODE_PUSH) {
-        if (!$connection) {
-            echo json_encode(['success' => false, 'error' => 'No calendar connection has been set up on this system yet.']);
+        if (!$target) {
+            $none = !calendarSyncConnectionIds($conn);
+            echo json_encode(['success' => false, 'needs_connection' => !$none, 'error' => $none
+                ? 'No calendar connection has been set up on this system yet.'
+                : 'Choose which calendar connection to use.']);
             exit;
         }
-        $address = $enrolment['calendar_address'] ?? '';
+        $targetCalDav = $target['provider'] === 'caldav';
 
         // CalDAV: nothing to switch on until they have signed in and chosen a
-        // calendar. Said as its own answer so the screen can show the form.
-        if ($isCalDav && ($account['username'] === '' || $address === '' || $address === null)) {
+        // calendar on that server. Said as its own answer so the screen can
+        // show the form - and nothing moves until they have.
+        if ($targetCalDav && ($switching || $account['username'] === ''
+                              || empty($enrolment['calendar_address']))) {
             echo json_encode(['success' => false, 'needs_account' => true,
                 'error' => 'Sign in to your calendar and choose one first.']);
             exit;
         }
-        if ($address === '' || $address === null) {
+
+        // Where it would go. Moving onto Microsoft from CalDAV drops the CalDAV
+        // address, so it is their own email address again.
+        $address = (string)($enrolment['calendar_address'] ?? '');
+        if ($switching && $connection && $connection['provider'] === 'caldav') {
+            $aStmt = $conn->prepare("SELECT email FROM analysts WHERE id = ?");
+            $aStmt->execute([$analystId]);
+            $address = (string)($aStmt->fetchColumn() ?: '');
+        }
+        if ($address === '') {
             echo json_encode(['success' => false, 'no_address' => true,
                 'error' => 'We do not know which mailbox is yours.']);
             exit;
@@ -306,11 +412,12 @@ try {
         // ⚠️ And it must be checked SOMEWHERE. Ed's own FreeITSM address is
         // admin@localhost, which is not a mailbox at all — switching this on and
         // discovering nothing ever appeared, with no explanation, is the failure
-        // this prevents.
+        // this prevents. Checked BEFORE a move, so a bad address does not cost
+        // the analyst the calendar they had.
         try {
-            $provider = calendarSyncProviderFor($connection, $enrolment);
+            $provider = calendarSyncProviderFor($target, $enrolment);
             $provider->conn = $conn;
-            if ($isCalDav) {
+            if ($targetCalDav) {
                 $check = $provider->checkCalendar($address);
                 if (!$check['ok']) {
                     echo json_encode(['success' => false, 'needs_account' => true, 'error' => $check['error']]);
@@ -324,6 +431,12 @@ try {
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'error' => $e->getMessage()]);
             exit;
+        }
+
+        // A move switches any old push off, so what follows sees a push being
+        // switched on afresh: the new calendar gets the backfill.
+        if (enrolSwitchConnection($conn, $analystId, $enrolment, $connection, $target)) {
+            $enrolment = calendarSyncEnrolment($conn, $analystId);
         }
     }
 
@@ -339,14 +452,17 @@ try {
         exit;
     }
 
+    // connection_id is only ever SET here, never cleared: switching push off
+    // keeps the connection (and a CalDAV sign-in on it) so switching back on
+    // is one click.
     $conn->prepare(
         "INSERT INTO calendar_enrolments (analyst_id, mode, task_mode, connection_id)
          VALUES (?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE mode = VALUES(mode), task_mode = VALUES(task_mode),
-                                 connection_id = VALUES(connection_id),
+                                 connection_id = COALESCE(VALUES(connection_id), connection_id),
                                  last_error = NULL, updated_datetime = UTC_TIMESTAMP()"
     )->execute([$analystId, $mode, $taskMode,
-                ($mode === CALENDAR_MODE_PUSH && $connection) ? (int)$connection['id'] : null]);
+                ($mode === CALENDAR_MODE_PUSH && $target) ? (int)$target['id'] : null]);
 
     // 🔑 TURNING IT OFF TAKES BACK WHAT WE PUT THERE. Leaving events behind in
     // somebody's calendar that FreeITSM has stopped tracking is the worst of both
@@ -370,8 +486,10 @@ try {
         enrolReconcileTasks($conn, $analystId);
     }
 
+    $after = calendarSyncEnrolment($conn, $analystId);
     echo json_encode(['success' => true, 'mode' => $mode, 'task_mode' => $taskMode,
-                      'address' => $enrolment['calendar_address']]);
+                      'address' => $after['calendar_address'],
+                      'connection_id' => $after['connection_id'] ? (int)$after['connection_id'] : null]);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
