@@ -910,11 +910,20 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-document.getElementById('ssAccountModal').addEventListener('click', function(e) {
-    if (e.target === this) ssCloseAccountModal();
-});
-
-document.getElementById('ssMfaModal').addEventListener('click', function(e) {
-    if (e.target === this) ssCloseMfaModal();
-});
+/* Close on a click on the backdrop - but only a click that STARTED there.
+   🔴 A browser reports mousedown-inside + mouseup-outside as a `click` on the
+   nearest common ancestor, which is the backdrop. So selecting text in a field
+   and letting go past the edge of the dialog used to close it, and lose
+   whatever was being typed. Same idiom as the contracts screens. */
+function ssBackdropClose(modalId, close) {
+    const modal = document.getElementById(modalId);
+    let downOnBackdrop = false;
+    modal.addEventListener('mousedown', function (e) { downOnBackdrop = e.target === modal; });
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal && downOnBackdrop) close();
+        downOnBackdrop = false;
+    });
+}
+ssBackdropClose('ssAccountModal', ssCloseAccountModal);
+ssBackdropClose('ssMfaModal', ssCloseMfaModal);
 </script>
