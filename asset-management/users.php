@@ -34,6 +34,7 @@ $translationNamespaces = ['common', 'asset-management'];
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/address-book-add.js?v=1"></script>
     <!-- Neither was loaded here before: the page had no action that could fail,
          so it needed neither a toast nor a confirmation. Both self-guard against
          being loaded twice. -->
@@ -391,6 +392,15 @@ async function selectPerson(id) {
         const d = await (await fetch(API + 'get_user_assets.php?user_id=' + encodeURIComponent(id))).json();
         if (!d.success) throw new Error(d.error || 'error');
         renderDetail(d.user, d.assets || []);
+        // "Add to address book" - only asked for somebody linked to nothing; the
+        // server decides whether anything is offered.
+        if (!d.user.source_name && window.AddressBookAdd) {
+            AddressBookAdd.mount(document.getElementById('addToBookHost'), d.user.id,
+                d.user.name || d.user.email || '', '../api/tickets/', async () => {
+                    await loadPeople(document.getElementById('auSearch').value.trim());
+                    selectPerson(d.user.id);
+                });
+        }
     } catch (e) {
         panel.innerHTML = '<div class="au-empty">' + esc(window.t('asset-management.users.load_failed')) + '</div>';
     }
@@ -474,6 +484,7 @@ function renderDetail(user, assets) {
                 <div class="au-detail-sub">${esc(window.t('asset-management.users.holding', { n: assets.length }))}</div>
             </div>
             <div class="au-actions">
+                <span id="addToBookHost" data-user-id="${user.id}" data-btn-class="au-btn" style="display:contents;"></span>
                 <button type="button" class="au-btn" onclick="openPerson(${user.id})">
                     ${esc(window.t('asset-management.users.edit'))}
                 </button>

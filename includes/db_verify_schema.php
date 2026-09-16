@@ -188,6 +188,12 @@ return [
         // actually holds the privilege — see the note there on why the server is
         // asked rather than a list of known-good products kept.
         'carddav_write_back'     => 'TINYINT(1) NOT NULL DEFAULT 0',
+        // Whether an analyst may ADD a person to this address book (a new card),
+        // as opposed to correcting one that is already there. Off by default and
+        // a separate decision from write-back: being in the address book is, for
+        // some organisations, the record that they may hold somebody's details.
+        // Meaningless unless write-back is on; the save forces it off otherwise.
+        'carddav_allow_create'   => 'TINYINT(1) NOT NULL DEFAULT 0',
 
         'sync_last_run_datetime' => 'DATETIME NULL',
         'sync_last_count'        => 'INT NULL',

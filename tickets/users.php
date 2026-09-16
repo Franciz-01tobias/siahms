@@ -32,6 +32,7 @@ $translationNamespaces = ['common', 'tickets'];
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/address-book-add.js?v=1"></script>
     <style>
         .users-container {
             display: flex;
@@ -1004,7 +1005,8 @@ $translationNamespaces = ['common', 'tickets'];
                             <h2 class="user-detail-name">${escapeHtml(user.display_name || unknownName)}</h2>
                             <div class="user-detail-email">${escapeHtml(user.email || user.username || '')}</div>
                         </div>
-                        <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                        <div style="display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end;">
+                            <span id="addToBookHost" data-user-id="${user.id}" style="display:contents;"></span>
                             <button class="btn btn-secondary" onclick="openUserModal(${user.id})">${escapeHtml(t('common.edit'))}</button>
                             <button class="btn btn-secondary" onclick="deleteUser(${user.id})">${escapeHtml(t('common.delete'))}</button>
                         </div>
@@ -1044,6 +1046,16 @@ $translationNamespaces = ['common', 'tickets'];
 
             // Load user's tickets
             loadUserTickets(userId);
+
+            // "Add to address book" - only asked for somebody linked to nothing;
+            // the server decides whether anything is offered.
+            if (!user.source_name && window.AddressBookAdd) {
+                AddressBookAdd.mount(document.getElementById('addToBookHost'), user.id,
+                    user.display_name || user.email || '', API_BASE, async () => {
+                        await loadUsers(document.getElementById('userSearch').value);
+                        selectUser(user.id);
+                    });
+            }
         }
 
         // Load tickets for selected user

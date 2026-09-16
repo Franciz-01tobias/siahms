@@ -200,7 +200,7 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
         table.runs th { text-align: left; padding: 7px 9px; color: var(--text-dim, #888); font-weight: 600; border-bottom: 1px solid var(--border-soft, #eee); white-space: nowrap; }
         table.runs td { padding: 7px 9px; border-bottom: 1px solid var(--border-soft, #f4f4f4); color: var(--text, #444); white-space: nowrap; }
         .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-        .pill.ok { background: var(--success-bg, #e8f5e9); color: var(--success-text, #2e7d32); }
+        .pill.ok, .pill.created { background: var(--success-bg, #e8f5e9); color: var(--success-text, #2e7d32); }
         .pill.stopped { background: var(--warning-bg, #fff4ce); color: var(--warning-text, #6b5900); }
         .pill.failed, .pill.running { background: var(--danger-bg, #ffebee); color: var(--danger-text, #c62828); }
         /* 🔑 `conflict` borrows the WARNING colour, the same one `stopped` uses,
@@ -320,6 +320,17 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
                 <div class="hint" id="writeBackWarn" style="margin-top:8px;"<?php echo !empty($p['carddav_write_back']) ? '' : ' hidden'; ?>>
                     <?php echo htmlspecialchars(t('system.sso.carddav_write_warning')); ?>
                 </div>
+                <?php /* Adding NEW people is a second, separate decision: being in
+                         this address book may be how an organisation records that
+                         it may hold someone's details. Only possible while
+                         write-back is on, so it is disabled until then. */ ?>
+                <label class="chk" style="display:flex; gap:8px; align-items:flex-start; margin-top:12px;">
+                    <input type="checkbox" id="fAllowCreate" style="margin-top:3px;"
+                        <?php echo !empty($p['carddav_allow_create']) ? ' checked' : ''; ?>
+                        <?php echo empty($p['carddav_write_back']) ? ' disabled' : ''; ?>>
+                    <span><?php echo htmlspecialchars(t('system.sso.carddav_allow_create')); ?></span>
+                </label>
+                <div class="hint" style="margin-top:6px;"><?php echo htmlspecialchars(t('system.sso.carddav_allow_create_hint')); ?></div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
                     <button class="btn btn-test" id="checkWriteBtn" type="button"><?php echo htmlspecialchars(t('system.sso.carddav_write_check')); ?></button>
                 </div>
@@ -770,7 +781,8 @@ $('saveBtn').addEventListener('click', async function () {
                 // No `enabled`: this page has no switch for it, and sending 1
                 // turned a source somebody had disabled in the dialog back on.
                 // The server keeps what is stored for anything not sent.
-                carddav_write_back: $('fWriteBack').checked ? 1 : 0
+                carddav_write_back: $('fWriteBack').checked ? 1 : 0,
+                carddav_allow_create: ($('fWriteBack').checked && $('fAllowCreate').checked) ? 1 : 0
             })
         });
         const d = await r.json();
@@ -785,6 +797,10 @@ $('saveBtn').addEventListener('click', async function () {
    something the operator just did. */
 $('fWriteBack').addEventListener('change', function () {
     $('writeBackWarn').hidden = !this.checked;
+    // Adding people needs write-back; unticking it unticks this too, which is
+    // also what the server does whatever the page sends.
+    $('fAllowCreate').disabled = !this.checked;
+    if (!this.checked) $('fAllowCreate').checked = false;
 });
 
 /* 🔑 Ask the SERVER whether this account may write, rather than keeping a list

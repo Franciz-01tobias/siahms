@@ -33,7 +33,7 @@ try {
                 p.ldap_group_base_dn, p.ldap_group_filter, p.ldap_analyst_group, p.ldap_user_group,
                 p.carddav_url, p.carddav_username, p.carddav_password,
                 p.carddav_addressbook, p.carddav_auth,
-                p.carddav_scope, p.carddav_scope_value, p.carddav_write_back
+                p.carddav_scope, p.carddav_scope_value, p.carddav_write_back, p.carddav_allow_create
            FROM auth_providers p
            LEFT JOIN tenants t ON t.id = p.tenant_id
           ORDER BY p.sort_order, p.display_name"
@@ -84,6 +84,7 @@ try {
             'carddav_scope'       => $r['carddav_scope'],
             'carddav_scope_value' => $r['carddav_scope_value'],
             'carddav_write_back'  => (int)$r['carddav_write_back'] === 1,
+            'carddav_allow_create' => (int)($r['carddav_allow_create'] ?? 0) === 1,
             // ⚠️ And the same rule again for the third secret. The encrypted
             // value is selected above only so this flag can be computed — it
             // must not be added to the response, here or later.

@@ -110,7 +110,7 @@ $LDAP_EMPTY = [
     'attr_phone' => null, 'attr_mobile' => null, 'attr_employee_id' => null, 'attr_manager' => null,
 ];
 $CARDDAV_EMPTY = ['url' => null, 'username' => null, 'addressbook' => null, 'auth' => 'auto',
-                  'scope' => 'all', 'scope_value' => null, 'write_back' => 0];
+                  'scope' => 'all', 'scope_value' => null, 'write_back' => 0, 'allow_create' => 0];
 
 $carddav          = $CARDDAV_EMPTY;
 $cardDavSecretIn  = '';
@@ -168,6 +168,9 @@ if ($protocol === 'carddav') {
         // switch, so treating its silence as "off" turned write-back off every
         // time somebody renamed the source.
         'write_back'  => !empty($data['carddav_write_back']) ? 1 : 0,
+        // Adding NEW people to the address book. Off unless asked, like
+        // write-back; and see below, forced off whenever write-back is off.
+        'allow_create' => !empty($data['carddav_allow_create']) ? 1 : 0,
     ];
     $cardDavSecretIn = $data['carddav_password'] ?? '';
     // ⚠️ Both of these MUST be set, even though a CardDAV provider has neither
@@ -302,7 +305,7 @@ try {
              'ldap_attr_job_title', 'ldap_attr_department', 'ldap_attr_office',
              'ldap_attr_phone', 'ldap_attr_mobile', 'ldap_attr_employee_id', 'ldap_attr_manager',
              'carddav_url', 'carddav_username', 'carddav_addressbook', 'carddav_auth',
-             'carddav_scope', 'carddav_scope_value', 'carddav_write_back'];
+             'carddav_scope', 'carddav_scope_value', 'carddav_write_back', 'carddav_allow_create'];
     $vals = [$displayName, $protocol, $issuerUrl, $clientId, $scopes,
              $enabled, $autoCreate, $requireVerified,
              $defaultModules, $sortOrder, $tenantId,
@@ -315,7 +318,7 @@ try {
              $ldap['attr_job_title'], $ldap['attr_department'], $ldap['attr_office'],
              $ldap['attr_phone'], $ldap['attr_mobile'], $ldap['attr_employee_id'], $ldap['attr_manager'],
              $carddav['url'], $carddav['username'], $carddav['addressbook'], $carddav['auth'],
-             $carddav['scope'], $carddav['scope_value'], $carddav['write_back']];
+             $carddav['scope'], $carddav['scope_value'], $carddav['write_back'], $carddav['allow_create']];
 
     // 🔴 ON UPDATE, A SETTING THE REQUEST DOES NOT MENTION KEEPS ITS STORED VALUE.
     //
@@ -364,6 +367,13 @@ try {
             }
         }
     }
+
+    // Adding new people only makes sense while FreeITSM may write at all. Worked
+    // out AFTER the keep-stored step, so a write-back switched off here also
+    // switches this off, whether or not the request mentioned it.
+    $iWb = array_search('carddav_write_back', $cols, true);
+    $iAc = array_search('carddav_allow_create', $cols, true);
+    if ((int)$vals[$iWb] !== 1) $vals[$iAc] = 0;
 
     // A blank/masked secret on update = keep what is stored.
     $writeSecret        = !isMaskedNoChangeValue($secretInput);

@@ -312,6 +312,15 @@ require __DIR__ . '/_top.php';
             <tr><td><strong>Nothing to send</strong></td><td>The card already matched — usually a save where none of the five details actually changed.</td><td>Nothing. It is logged separately so a write-back that is doing nothing cannot look busy.</td></tr>
         </tbody>
     </table></div>
+    <h4>Adding people who are not in the address book yet</h4>
+    <p>Somebody who emailed in exists in FreeITSM but not in your address book. Tick <strong>Let analysts add people to this address book</strong> (it needs write-back on, and is off by default) and they get an <strong>Add to address book</strong> button on that person in <strong>Tickets → Users</strong> and <strong>Assets → Users</strong>. It creates their contact card and links them, so there is no second copy to type in elsewhere.</p>
+    <ul>
+        <li><strong>It asks first</strong>, showing which details go on the card.</li>
+        <li><strong>No duplicates.</strong> If any card in the book already has their email address, nothing is written; run the import instead and it links that card. FreeITSM's own record is linked, never copied.</li>
+        <li><strong>It lands where the import looks.</strong> If the address book only imports one tag or group, the new card gets that tag or joins that group. Then FreeITSM reads the book back and asks the import's own rules whether the card would be picked up; if not, it removes the card again and links nobody. Without this, the next imports would not see the person and would eventually mark them as having left.</li>
+        <li>Each addition shows in the write log as <strong>Added</strong>.</li>
+    </ul>
+    <div class="help-note warn"><strong>Being in your address book may mean something.</strong> Some organisations treat it as the list of people they may hold details about. Switch this on only if analysts should be able to add to that list. And if you later narrow an address book to one tag or group, people added before then are treated like any other card without it.</div>
     <div class="help-note"><strong>"Refused" is not a fault.</strong> It is the safety net working. If you find yourself trying to stop refusals happening, step back — each one is protecting a value somebody else entered deliberately. A refusal is also <em>per detail</em>: if an analyst changed the mobile and somebody else changed the job title, the mobile still goes through.</div>
 </div>
 

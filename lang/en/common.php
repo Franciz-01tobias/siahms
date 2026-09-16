@@ -17,6 +17,27 @@ return [
         'reset_confirm' => 'Every device already subscribed will stop updating until you give it the new link. Continue?',
         'reset_done'    => 'Link reset — the old one no longer works',
     ],
+    // "Add to address book" on a person - Tickets → Users and Assets → Users (#133).
+    'address_book_add' => [
+        'button'        => 'Add to address book',
+        'button_named'  => 'Add to {name}',
+        'title'         => 'Add to {name}?',
+        'intro'         => 'FreeITSM will create a new contact for {person} in {name} and link them to it. From then on {name} is in charge of their contact details.',
+        'will_write'    => 'The card will have: {fields}.',
+        'will_tag'      => 'It will be tagged "{value}", which is what this address book imports.',
+        'will_group'    => 'It will be added to the group "{value}", which is what this address book imports.',
+        'checks'        => 'If the address book already has this email address, or the new card would not be picked up by the next import, nothing is kept.',
+        'ok'            => 'Add',
+        'added'         => 'Added to {name} and linked',
+        'failed'        => 'Not added: {error}',
+        'field_display_name' => 'name',
+        'field_email'        => 'email',
+        'field_job_title'    => 'job title',
+        'field_department'   => 'department',
+        'field_office'       => 'office',
+        'field_phone'        => 'phone',
+        'field_mobile'       => 'mobile',
+    ],
     // Left-panel visibility preference — shared labels reused by every module
     // that has a left panel (settings pages + System → Preferences). Only the
     // identical strings live here; per-module intro/description copy stays in

@@ -188,6 +188,9 @@ CREATE TABLE IF NOT EXISTS `auth_providers` (
     -- surprise. Only set after the server has confirmed the account holds the
     -- write privilege.
     `carddav_write_back`     TINYINT(1) NOT NULL DEFAULT 0,
+    -- May an analyst ADD a person to this address book (a new card)? Off by
+    -- default and separate from write-back; only honoured while write-back is on.
+    `carddav_allow_create`   TINYINT(1) NOT NULL DEFAULT 0,
 
     `sync_last_run_datetime` DATETIME NULL,
     -- People found by the last SUCCESSFUL run. The number the brake compares

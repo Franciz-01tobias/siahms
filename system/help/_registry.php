@@ -194,6 +194,7 @@ function getHelpTopics() {
                      . ' categories tags kind group member digest basic phone number job title department office'
                      . ' write back writeback two-way two way send changes back update the address book'
                      . ' read-only permission privilege etag conflict changed since'
+                     . ' add to address book new contact create card not in address book link person'
                      . ' log logging troubleshoot diagnose health check drift compare d015 d016'
                      . ' not writing failed unreachable server response refused',
         ],
