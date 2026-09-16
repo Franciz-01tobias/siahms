@@ -494,6 +494,13 @@ $translationNamespaces = ['common', 'tickets'];
                     <button class="add-btn" id="paneAddBtn" onclick="paneAdd()"><?php echo htmlspecialchars(t('common.add')); ?></button>
                 </div>
                 <input type="text" class="search-box" id="userSearch" placeholder="<?php echo htmlspecialchars(t('tickets.users.search_placeholder')); ?>" oninput="searchUsers()">
+                <?php /* Where people's details come from. Hidden until at least one
+                         person is linked to a directory or address book - on an
+                         install with none, every option would show everybody. */ ?>
+                <select class="search-box" id="userSource" style="margin-top:8px;" hidden
+                        onchange="loadUsers(document.getElementById('userSearch').value)">
+                    <option value=""><?php echo htmlspecialchars(t('tickets.users.source_all')); ?></option>
+                </select>
                 <div class="user-count" id="userCount"></div>
             </div>
             <div class="users-list" id="usersList">
@@ -824,15 +831,52 @@ $translationNamespaces = ['common', 'tickets'];
             if (note) note.hidden = editingOwnedFields.length === 0;
         }
 
+        /** "Baikal (address book)" - a source by name and by what kind it is. */
+        function userSourceLabel(name, protocol) {
+            return t('tickets.users.info.source_named', {
+                name: name,
+                kind: t('tickets.users.info.kind_' + (protocol || 'ldap'))
+            });
+        }
+
+        /**
+         * The Source filter's options, kept in step with what exists. The
+         * current choice survives a refresh; a source that has gone (its last
+         * person unlinked) falls back to everyone rather than a blank select.
+         */
+        function paintUserSources(sources) {
+            const sel = document.getElementById('userSource');
+            const keep = sel.value;
+            sel.innerHTML = '';
+            const add = (value, label) => {
+                const o = document.createElement('option');
+                o.value = value; o.textContent = label;
+                sel.appendChild(o);
+            };
+            add('', t('tickets.users.source_all'));
+            if (sources.length) {
+                add('local', t('tickets.users.source_local'));
+                sources.forEach(s => add(String(s.id), t('tickets.users.source_option', {
+                    name: s.name, kind: t('tickets.users.info.kind_' + s.protocol), n: s.people
+                })));
+            }
+            sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : '';
+            sel.hidden = paneTab === 'groups' || (!sources.length && sel.value === '');
+        }
+
         // Load users from API
         async function loadUsers(search = '') {
             try {
-                const url = search ? `${API_BASE}get_users.php?search=${encodeURIComponent(search)}` : API_BASE + 'get_users.php';
+                const source = document.getElementById('userSource').value;
+                const url = API_BASE + 'get_users.php?include_sources=1'
+                          + (search ? '&search=' + encodeURIComponent(search) : '')
+                          + (source ? '&source=' + encodeURIComponent(source) : '');
                 const response = await fetch(url);
                 const data = await response.json();
 
                 if (data.success) {
                     users = data.users;
+                    paintUserSources(data.sources || []);
                     renderUsersList();
                 } else {
                     console.error('Error loading users:', data.error);
@@ -927,7 +971,13 @@ $translationNamespaces = ['common', 'tickets'];
 
             // Says WHO owns these values, so an analyst who finds the fields
             // greyed out in the editor already knows why before opening it.
-            if (Number(user.is_managed) === 1) {
+            // By NAME: with two address books, "a directory" could not tell
+            // them apart. A person linked but not imported (they only sign in
+            // through it) says so differently.
+            if (user.source_name) {
+                add(Number(user.is_managed) === 1 ? 'tickets.users.info.source' : 'tickets.users.info.signs_in_with',
+                    userSourceLabel(user.source_name, user.managed_protocol));
+            } else if (Number(user.is_managed) === 1) {
                 rows.push(`
                     <div class="info-item">
                         <span class="info-label">${escapeHtml(t('tickets.users.info.source'))}</span>
@@ -1247,6 +1297,8 @@ $translationNamespaces = ['common', 'tickets'];
             // a worse answer than not offering it.
             const addBtn = document.getElementById('paneAddBtn');
             addBtn.style.display = (tab === 'groups' && !canManageGroups) ? 'none' : '';
+            // People only; loadUsers() shows it again when there is anything to filter.
+            if (tab === 'groups') document.getElementById('userSource').hidden = true;
 
             const detail = document.getElementById('userDetail');
             if (tab === 'groups') {

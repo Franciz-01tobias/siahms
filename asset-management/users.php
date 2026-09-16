@@ -236,6 +236,11 @@ $translationNamespaces = ['common', 'asset-management'];
                 <option value="everyone"><?php echo htmlspecialchars(t('asset-management.users.scope_everyone')); ?></option>
                 <option value="holding"><?php echo htmlspecialchars(t('asset-management.users.scope_holding')); ?></option>
             </select>
+            <?php /* Where people's details come from. Hidden until anybody is
+                     linked to a directory or address book. */ ?>
+            <select id="auSource" hidden onchange="loadPeople(document.getElementById('auSearch').value.trim())">
+                <option value=""><?php echo htmlspecialchars(t('asset-management.users.source_all')); ?></option>
+            </select>
         </div>
         <div class="au-list" id="auList"></div>
     </div>
@@ -279,16 +284,69 @@ function fmtDate(d) {
     return isNaN(dt) ? '—' : fmtDate(dt);
 }
 
+/** "Baikal (address book)" - a source by name and by what kind it is. */
+function sourceKind(protocol) {
+    return window.t('asset-management.users.kind_' + (protocol || 'ldap'));
+}
+
+/**
+ * Where this person's details come from, by name, and what that means for
+ * editing. The "cannot be edited" half only when something actually is locked:
+ * an address book with write-back on locks nothing, and saying otherwise sent
+ * people to the address book for a change they could have made here.
+ */
+function sourceNote(p) {
+    if (!p.source_name && !p.is_managed) return '';
+    let text = '';
+    if (p.source_name) {
+        text = window.t(p.is_managed ? 'asset-management.users.source_line' : 'asset-management.users.signs_in_line',
+                        { name: p.source_name, kind: sourceKind(p.managed_protocol) });
+    }
+    if (p.is_managed) {
+        const locked = (p.managed_fields || []).length > 0;
+        // The long note names "your directory" itself, so it is only for a
+        // source whose name is unknown (a provider since deleted).
+        text += (text ? ' ' : '') + window.t(!locked
+            ? 'asset-management.users.managed_note_book'
+            : (p.source_name ? 'asset-management.users.managed_locked' : 'asset-management.users.managed_note'));
+    }
+    return '<div class="au-managed-note">' + esc(text) + '</div>';
+}
+
+/** The Source filter's options, kept in step with what exists. */
+function paintSources(sources) {
+    const sel = document.getElementById('auSource');
+    const keep = sel.value;
+    sel.innerHTML = '';
+    const add = (value, label) => {
+        const o = document.createElement('option');
+        o.value = value; o.textContent = label;
+        sel.appendChild(o);
+    };
+    add('', window.t('asset-management.users.source_all'));
+    if (sources.length) {
+        add('local', window.t('asset-management.users.source_local'));
+        sources.forEach(s => add(String(s.id), window.t('asset-management.users.source_option', {
+            name: s.name, kind: sourceKind(s.protocol), n: s.people
+        })));
+    }
+    sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : '';
+    sel.hidden = !sources.length && sel.value === '';
+}
+
 async function loadPeople(search) {
     const list = document.getElementById('auList');
     list.innerHTML = '<div class="au-empty">' + esc(window.t('asset-management.users.loading')) + '</div>';
     try {
         const scope = document.getElementById('auScope').value;
-        const url = API + 'get_people.php?scope=' + encodeURIComponent(scope)
-                  + (search ? '&search=' + encodeURIComponent(search) : '');
+        const source = document.getElementById('auSource').value;
+        const url = API + 'get_people.php?include_sources=1&scope=' + encodeURIComponent(scope)
+                  + (search ? '&search=' + encodeURIComponent(search) : '')
+                  + (source ? '&source=' + encodeURIComponent(source) : '');
         const d = await (await fetch(url)).json();
         if (!d.success) throw new Error(d.error || 'error');
         people = d.users || [];
+        paintSources(d.sources || []);
         renderPeople();
     } catch (e) {
         list.innerHTML = '<div class="au-empty">' + esc(window.t('asset-management.users.load_failed')) + '</div>';
@@ -307,7 +365,12 @@ function renderPeople() {
                 <div class="au-person-name">${esc(p.name)}${
                     p.is_active ? '' : '<span class="au-flag left">' + esc(window.t('asset-management.users.flag_left')) + '</span>'
                 }${
-                    p.is_managed ? '<span class="au-flag managed">' + esc(window.t('asset-management.users.flag_managed')) + '</span>' : ''
+                    // "Address book" or "Directory" - they are not the same thing,
+                    // and the name is in the tooltip.
+                    p.is_managed ? '<span class="au-flag managed" title="' + esc(p.source_name || '') + '">'
+                        + esc(window.t(p.managed_protocol === 'carddav'
+                            ? 'asset-management.users.flag_carddav'
+                            : 'asset-management.users.flag_managed')) + '</span>' : ''
                 }</div>
                 <div class="au-person-email">${esc(p.email || p.username || p.directory_username || '')}</div>
             </div>
@@ -424,7 +487,7 @@ function renderDetail(user, assets) {
         </div>
         ${facts ? '<div class="au-facts">' + facts + '</div>' : ''}
         ${reportsBlock}
-        ${p.is_managed ? '<div class="au-managed-note">' + esc(window.t('asset-management.users.managed_note')) + '</div>' : ''}
+        ${sourceNote(p)}
         ${(p.is_active === false && assets.length)
             ? '<div class="au-managed-note" style="background:#fff4ce;color:#6b5900;border-left-color:#b45309;">'
               + esc(window.t('asset-management.users.leaver_holding', { n: assets.length })) + '</div>'

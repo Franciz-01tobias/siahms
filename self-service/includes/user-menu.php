@@ -344,7 +344,7 @@ if (count($_um_parts) > 1) {
             <span class="ss-mfa-badge disabled" id="ssMfaBadge"><?php echo htmlspecialchars(t('self-service.menu.mfa_off')); ?></span>
         </button>
         <div class="ss-menu-divider"></div>
-        <button class="ss-menu-item logout-item" onclick="if(confirm(window.t('self-service.menu.logout_confirm'))) window.location.href='logout.php';">
+        <button class="ss-menu-item logout-item" onclick="ssConfirmLogout()">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
             <span><?php echo htmlspecialchars(t('self-service.menu.logout')); ?></span>
         </button>
@@ -919,6 +919,26 @@ document.addEventListener('keydown', function(e) {
         ssCloseMfaModal();
     }
 });
+
+/* Sign out, after the same confirm dialog the rest of FreeITSM uses. Falls
+   back to the browser's own only if confirm.js failed to load, so the button
+   can never become one that does nothing. */
+async function ssConfirmLogout() {
+    ssCloseMenu();
+    let ok;
+    if (typeof window.showConfirm === 'function') {
+        ok = await window.showConfirm({
+            title:       window.t('self-service.menu.logout'),
+            message:     window.t('self-service.menu.logout_confirm'),
+            okLabel:     window.t('self-service.menu.logout'),
+            cancelLabel: window.t('common.cancel'),
+            okClass:     'primary'
+        });
+    } else {
+        ok = confirm(window.t('self-service.menu.logout_confirm'));
+    }
+    if (ok) window.location.href = 'logout.php';
+}
 
 /* Close on a click on the backdrop - but only a click that STARTED there.
    🔴 A browser reports mousedown-inside + mouseup-outside as a `click` on the

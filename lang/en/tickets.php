@@ -1927,6 +1927,10 @@ return [
         'page_title'            => 'Service Desk - Users',
         'list_title'            => 'Users',
         'search_placeholder'    => 'Search users...',
+        // The Source filter: where a person's details come from.
+        'source_all'            => 'All sources',
+        'source_local'          => 'Added in FreeITSM',
+        'source_option'         => '{name} - {kind} ({n})',
         'count'                 => '{count} users',
         'ticket_count'          => '{count} tickets',
         'unknown_name'          => 'Unknown',
@@ -1956,6 +1960,12 @@ return [
             'manager'          => 'Manager',
             'source'           => 'Details from',
             'source_directory' => 'A directory, not editable here',
+            // The source by name: "Baikal (address book)".
+            'source_named'     => '{name} - {kind}',
+            'signs_in_with'    => 'Signs in with',
+            'kind_carddav'     => 'address book',
+            'kind_ldap'        => 'directory',
+            'kind_oidc'        => 'single sign-on',
         ],
         'table' => [
             'ticket_number' => 'Ticket #',
@@ -2419,7 +2429,7 @@ return [
             'add_details' => '<strong>Job title, department, office, phone, mobile, employee ID and manager</strong> &mdash; all optional, and all describing the <em>person</em> rather than the login. Worth filling in: <strong>office</strong> tells you which site somebody is at before you go looking for them, <strong>manager</strong> records the reporting line, and <strong>employee ID</strong> is the join key when you reconcile against a payroll system that has never heard of an email address. Where you import from a directory, all of these arrive filled in. A CardDAV address book fills in everything except employee ID and manager, which a contact card has nowhere to store.',
 
             'managed_heading' => '<strong>People maintained somewhere else</strong>',
-            'managed_body'    => 'Where a person was imported &mdash; from LDAP or Active Directory, or from a CardDAV address book &mdash; the details that source owns are <strong>read-only</strong> and the modal greys them out. Whatever they came from is the source of truth, and the next import would overwrite anything typed here, so the save is refused outright rather than accepted and quietly reverted an hour later. <strong>Which</strong> details depends on the source: a directory owns all seven, while an address book owns five &mdash; it has nowhere to keep an employee number or a reporting line, so those two stay yours to fill in. And if the address book has <em>write changes back</em> switched on, none of them are locked: what you type is sent to the contact card, so there is nothing for the next import to revert. Everything else on the record, including their company and password, is always editable.',
+            'managed_body'    => 'Where a person was imported &mdash; from LDAP or Active Directory, or from a CardDAV address book &mdash; the details that source owns are <strong>read-only</strong> and the modal greys them out. Whatever they came from is the source of truth, and the next import would overwrite anything typed here, so the save is refused outright rather than accepted and quietly reverted an hour later. <strong>Which</strong> details depends on the source: a directory owns all seven, while an address book owns five &mdash; it has nowhere to keep an employee number or a reporting line, so those two stay yours to fill in. And if the address book has <em>write changes back</em> switched on, none of them are locked: what you type is sent to the contact card, so there is nothing for the next import to revert. Everything else on the record, including their company and password, is always editable. <strong>Which</strong> source a person comes from is named in their details, and the <strong>Source</strong> filter above the list shows only the people from one directory or address book, or only the ones added in FreeITSM.',
             'edit_heading' => '<strong>Edit user</strong>',
             'edit_body'    => 'Select a user from the list, then click <strong>Edit</strong> in the detail header. Same modal, pre-filled. Saving without a password leaves the existing hash untouched; supplying one resets it.',
             'delete_heading' => '<strong>Delete user</strong>',

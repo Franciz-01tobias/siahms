@@ -84,6 +84,9 @@ try {
                 -- below and userDirectoryOwnedFields() in includes/users.php.
                 ap.protocol AS managed_protocol,
                 ap.carddav_write_back AS managed_write_back,
+                -- The source BY NAME, for the Details-from line and the Source
+                -- filter. Null when the person is linked to nothing.
+                ap.id AS source_id, ap.display_name AS source_name,
                 -- Deliberately NOT a join to users for the manager's name: manager_id
                 -- is not tenant-scoped, so `LEFT JOIN users mgr` would hand an analyst
                 -- scoped to one company the name of somebody in another. The name is
@@ -103,6 +106,11 @@ try {
     // company. Precedence is the whole guard here.
     $sql .= " WHERE 1=1" . $uSql;
     $params = array_merge($params, $uParams);
+
+    // Source: everyone, only people added here, or one directory/address book.
+    list($srcSql, $srcParams) = userSourceFilter($_GET['source'] ?? '');
+    $sql .= $srcSql;
+    $params = array_merge($params, $srcParams);
 
     if (!empty($search)) {
         // Username is searched too: a directory requester with no mailbox has
@@ -147,10 +155,13 @@ try {
     }
     unset($u);
 
-    echo json_encode([
-        'success' => true,
-        'users' => $users
-    ]);
+    $out = ['success' => true, 'users' => $users];
+    // What the Source filter offers - only when asked, so the requester picker,
+    // which calls this on every keystroke, does not pay for it.
+    if (!empty($_GET['include_sources'])) {
+        $out['sources'] = userSourcesInScope($conn, $uSql, $uParams);
+    }
+    echo json_encode($out);
 
 } catch (Exception $e) {
     echo json_encode([

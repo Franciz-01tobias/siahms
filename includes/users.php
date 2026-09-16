@@ -182,6 +182,57 @@ function userSignsInElsewhere(PDO $conn, $providerId): bool
     return strtolower((string)$protocol) !== 'carddav';
 }
 
+// ─── Where a person comes from ───────────────────────────────────────────────
+//
+// "Source" on the people screens: the directory, address book or sign-in
+// provider a person is linked to (users.auth_provider_id), by NAME. The screens
+// used to say only "a directory", which could not tell two address books apart
+// and called an address book a directory.
+
+/**
+ * The SQL for the Source filter. Expects auth_providers joined as `ap`.
+ *
+ * @param mixed $source '' = everyone, 'local' = linked to nothing, or a provider id
+ * @return array{0:string,1:array}
+ */
+function userSourceFilter($source): array
+{
+    $source = trim((string)$source);
+    // `ap.id`, not `u.auth_provider_id`: a person pointing at a provider that no
+    // longer exists belongs with the unlinked, which is how every screen shows them.
+    if ($source === 'local') return [' AND ap.id IS NULL', []];
+    if (ctype_digit($source) && (int)$source > 0) return [' AND ap.id = ?', [(int)$source]];
+    return ['', []];
+}
+
+/**
+ * Every source the people in scope are linked to, with how many - what the
+ * Source filter offers. Counted inside the caller's company scope, so the list
+ * never reveals how many people another company has in a shared directory.
+ *
+ * @param string $tenantSql  activeTenantFilter() for alias `u`
+ */
+function userSourcesInScope(PDO $conn, string $tenantSql, array $tenantArgs): array
+{
+    try {
+        $st = $conn->prepare(
+            "SELECT ap.id, ap.display_name AS name, ap.protocol, COUNT(*) AS people
+               FROM users u
+               JOIN auth_providers ap ON ap.id = u.auth_provider_id
+              WHERE 1=1 $tenantSql
+           GROUP BY ap.id, ap.display_name, ap.protocol
+           ORDER BY ap.display_name"
+        );
+        $st->execute($tenantArgs);
+        return array_map(function ($r) {
+            return ['id' => (int)$r['id'], 'name' => $r['name'],
+                    'protocol' => $r['protocol'], 'people' => (int)$r['people']];
+        }, $st->fetchAll(PDO::FETCH_ASSOC));
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 // ─── What an administrator lets the portal offer ─────────────────────────────
 //
 // System → Portal profile. Two settings in system_settings:

@@ -38,6 +38,11 @@ $pageData    = $pageData ?? [];
          confirmations look and behave exactly like the rest of FreeITSM instead
          of each page inventing its own little message strip. -->
     <script src="../assets/js/toast.js"></script>
+    <!-- The same OK/Cancel dialog as the rest of FreeITSM, for the same reason:
+         the browser's own confirm() looks like a different application, and
+         cannot be themed or translated beyond its message. Guards against a
+         second load, so a page that also includes it (course.php) is fine. -->
+    <script src="../assets/js/confirm.js?v=4"></script>
     <?php if (!empty($needsFormLogic)): ?>
     <!-- Field types + conditional visibility for catalogue forms. Shared with the
          analyst side (forms/fill.php, the builder preview) and mirroring

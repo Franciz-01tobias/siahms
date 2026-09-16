@@ -557,7 +557,7 @@ class AssetsService
      * otherwise somebody who holds nothing would fall outside the filter and
      * silently vanish from the directory.
      */
-    public static function people(PDO $conn, ActorContext $ctx, string $search = '', string $scope = 'current', int $limit = 500): array
+    public static function people(PDO $conn, ActorContext $ctx, string $search = '', string $scope = 'current', int $limit = 500, string $source = ''): array
     {
         [$tenantSql, $tenantArgs] = activeTenantFilter($conn, $ctx->actorId, 'u');
 
@@ -591,12 +591,18 @@ class AssetsService
         elseif ($scope === 'current')  $where .= " AND u.is_active = 1";
         if ($scope === 'holding')      $where .= " AND EXISTS (SELECT 1 FROM users_assets ua WHERE ua.user_id = u.id)";
 
+        // Source: only people added here, or one directory / address book.
+        [$srcSql, $srcArgs] = userSourceFilter($source);
+        $where .= $srcSql;
+        $args = array_merge($args, $srcArgs);
+
         $limit = max(1, min($limit, 1000));
         $sql = "SELECT u.id, u.email, u.username, u.display_name, u.preferred_name,
                        u.job_title, u.department, u.office, u.phone, u.mobile,
                        u.employee_id, u.manager_id, u.is_active, u.is_managed,
                        u.directory_username, u.last_seen_in_source, u.deactivated_datetime,
                        u.tenant_id, ap.protocol AS managed_protocol, ap.carddav_write_back AS managed_write_back,
+                       ap.id AS source_id, ap.display_name AS source_name,
                        m.display_name AS manager_name,
                        (SELECT COUNT(*) FROM users_assets ua2 WHERE ua2.user_id = u.id) AS asset_count
                   FROM users u
@@ -660,6 +666,7 @@ class AssetsService
                     u.employee_id, u.manager_id, u.is_active, u.is_managed,
                     u.directory_username, u.deactivated_datetime,
                     ap.protocol AS managed_protocol, ap.carddav_write_back AS managed_write_back,
+                    ap.id AS source_id, ap.display_name AS source_name,
                     m.display_name AS manager_name
                FROM users u
           LEFT JOIN users m ON m.id = u.manager_id $mgrTenantSql

@@ -31,13 +31,22 @@ if (!in_array($scope, ['current', 'leavers', 'everyone', 'holding'], true)) $sco
 
 try {
     $conn = connectToDatabase();
+    $ctx = ActorContext::fromSession($conn);
     $people = AssetsService::people(
         $conn,
-        ActorContext::fromSession($conn),
+        $ctx,
         (string)($_GET['search'] ?? ''),
-        $scope
+        $scope,
+        500,
+        (string)($_GET['source'] ?? '')
     );
-    echo json_encode(['success' => true, 'users' => $people, 'scope' => $scope]);
+    $out = ['success' => true, 'users' => $people, 'scope' => $scope];
+    // What the Source filter offers, counted inside the same company scope.
+    if (!empty($_GET['include_sources'])) {
+        [$tSql, $tArgs] = activeTenantFilter($conn, $ctx->actorId, 'u');
+        $out['sources'] = userSourcesInScope($conn, $tSql, $tArgs);
+    }
+    echo json_encode($out);
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
