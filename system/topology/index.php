@@ -18,6 +18,7 @@ I18n::initFromSession();
 Tz::init();
 
 $current_page = 'topology';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix = '../../';
 $translationNamespaces = ['common', 'system'];
 

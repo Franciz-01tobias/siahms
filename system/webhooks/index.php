@@ -29,6 +29,7 @@ require_once '../../includes/encryption.php';   // settingsGetDecrypted() for th
 require_once '../../includes/theme.php';
 
 $current_page = 'webhooks';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix  = '../../';
 $translationNamespaces = ['common', 'system'];
 

@@ -31,6 +31,7 @@ if (!isset($_SESSION['analyst_id'])) {
 
 $path_prefix = '../../';
 $current_page = 'help';
+require_once __DIR__ . '/../includes/page_gate.php';
 
 $multiTenant = false;
 try { $multiTenant = isMultiTenant(connectToDatabase()); } catch (Exception $e) {}

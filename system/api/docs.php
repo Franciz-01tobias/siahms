@@ -17,6 +17,7 @@ require_once '../../includes/functions.php';
 require_once '../../includes/theme.php';
 
 $current_page = 'api';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix = '../../';
 $translationNamespaces = ['common', 'system'];
 

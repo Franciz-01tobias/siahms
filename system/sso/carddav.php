@@ -40,6 +40,7 @@ require_once '../../includes/carddav.php';               // cardDavScopeList()
 require_once '../../includes/settings_manifest.php';     // renderSettingsTabBar()
 
 $current_page = 'sso';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix  = '../../';
 $translationNamespaces = ['common', 'system'];
 

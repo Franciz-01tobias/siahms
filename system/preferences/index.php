@@ -12,6 +12,7 @@ I18n::initFromSession();
 Tz::init();
 
 $current_page = 'preferences';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix = '../../';
 // ⚠️ 'watchtower' is here for ONE section — the "Mine" view's handling of cards
 // with no owner (#58). The setting is a personal preference, so it lives on this

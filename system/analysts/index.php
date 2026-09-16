@@ -26,6 +26,7 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 $current_page = 'analysts';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix = '../../';
 $translationNamespaces = ['common', 'tickets'];
 ?>

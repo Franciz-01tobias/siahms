@@ -18,6 +18,7 @@ require_once '../../includes/i18n.php';
 I18n::initFromSession();
 
 $current_page = 'calendar-sync';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix = '../../';
 $translationNamespaces = ['common', 'system'];
 ?>

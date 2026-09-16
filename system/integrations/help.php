@@ -31,6 +31,7 @@ require_once '../../includes/tenancy.php';
 require_once '../../includes/integrations/integrations.php';
 
 $current_page   = 'integrations';
+require_once __DIR__ . '/../includes/page_gate.php';
 $current_module = 'system';
 
 // ⚠️ FILESYSTEM-relative, and it must stay that way: system/includes/header.php

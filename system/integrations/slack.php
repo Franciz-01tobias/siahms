@@ -29,6 +29,7 @@ require_once '../../includes/integrations/integrations.php';
 require_once '../../includes/messaging/messaging.php';
 
 $current_page = 'integrations';
+require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix  = '../../';
 $translationNamespaces = ['common', 'system'];
 

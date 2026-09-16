@@ -41,6 +41,7 @@ $systemAreas = array_filter(getSystemAreas(), function ($area) use ($isMultiTena
 });
 
 $current_page = 'system';
+require_once __DIR__ . '/includes/page_gate.php';
 $path_prefix = '../';
 $translationNamespaces = ['common', 'system'];
 ?>

@@ -52,6 +52,7 @@ if (!isset($_SESSION['analyst_id'])) {
 
 $path_prefix  = '../../';
 $current_page = 'help';
+require_once __DIR__ . '/../includes/page_gate.php';
 
 /**
  * The number badge for a section, derived from the page's registry entry.
