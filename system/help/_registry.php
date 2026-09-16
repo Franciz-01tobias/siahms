@@ -286,6 +286,18 @@ function getHelpTopics() {
                      . ' external update resolved uptime downtime service health portal'
                      . ' customers can see incidents should i turn this on',
         ],
+        'portal-profile' => [
+            'hero' => 'Portal profile',
+            'sub'  => 'Which of their own contact details people may change in the self-service portal, and whether a customer from your address book may change theirs there too.',
+            'sections' => [
+                ['id' => 'overview',  'label' => 'What this decides'],
+                ['id' => 'fields',    'label' => 'What people may change'],
+                ['id' => 'directory', 'label' => 'Directories and address books'],
+            ],
+            'terms' => 'self-service portal my account profile own details contact details job title office location'
+                     . ' phone mobile department employee id manager email edit read-only greyed out'
+                     . ' gdpr article 16 rectification carddav address book write back customers update themselves',
+        ],
         'search' => [
             'hero' => 'Search',
             'sub'  => 'What the search index holds, why a particular document or short word is not being found, and when a rebuild is actually needed.',

@@ -74,6 +74,15 @@ function getSystemAreas() {
             'desc'     => 'system.landing.status_portal_desc',
             'keywords' => 'system.landing.status_portal_keywords',
         ],
+        // What people may change about THEMSELVES in the portal (#133). Beside
+        // the status portal: both decide what the portal lets end users do.
+        [
+            'icon'     => 'portal_profile',
+            'url'      => 'portal-profile/',
+            'title'    => 'system.landing.portal_profile_title',
+            'desc'     => 'system.landing.portal_profile_desc',
+            'keywords' => 'system.landing.portal_profile_keywords',
+        ],
         [
             'icon'     => 'search',
             'url'      => 'search/',
@@ -222,6 +231,8 @@ function getSystemAreas() {
 function systemAreaIcon($key) {
     $icons = [
         'status_portal' => '<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"></path><path d="M16 9a4 4 0 0 1 0 6"></path><path d="M19 6.5a8 8 0 0 1 0 11"></path>',
+        // A person with a pencil - "what they may edit about themselves".
+        'portal_profile' => '<circle cx="9" cy="7" r="4"></circle><path d="M2 21v-2a4 4 0 0 1 4-4h5"></path><path d="M18.4 12.6a1.9 1.9 0 0 1 2.7 2.7L15 21.4l-3.6.9.9-3.6z"></path>',
         'encryption'  => '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
         'modules'     => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
         'analysts'    => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="15 11 17 13 21 9"></polyline>',

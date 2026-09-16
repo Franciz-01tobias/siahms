@@ -151,6 +151,111 @@ const USER_SELF_EDITABLE_FIELDS = [
     'mobile',
 ];
 
+// ─── What an administrator lets the portal offer ─────────────────────────────
+//
+// System → Portal profile. Two settings in system_settings:
+//
+//  - which of USER_SELF_EDITABLE_FIELDS a person may change about themselves.
+//    Only ever NARROWS that list: the constant is the ceiling, and a field the
+//    constant leaves out (manager, employee ID, department) cannot be switched
+//    on from a setting, because the reasons it is out do not depend on anyone's
+//    preference.
+//  - whether a person whose record comes from a CardDAV address book with
+//    write-back on may change those fields too, their change being sent to the
+//    address book (GDPR Art. 16, #133). Off by default: it lets customers write
+//    into the operator's address book, which is the operator's decision.
+
+const PORTAL_PROFILE_FIELDS_SETTING       = 'portal_profile_fields';
+const PORTAL_PROFILE_ADDRESS_BOOK_SETTING = 'portal_profile_address_book';
+
+/** A raw system_settings value, or null when it has never been saved. */
+function portalProfileSettingRaw(PDO $conn, string $key): ?string
+{
+    try {
+        $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
+        $st->execute([$key]);
+        $v = $st->fetchColumn();
+        return $v === false ? null : (string)$v;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/**
+ * The fields a portal user may change about themselves, in the constant's order.
+ *
+ * 🔑 NEVER SAVED means all of them, which is what the portal did before this
+ * setting existed - an upgrade must not quietly take a field away. SAVED EMPTY
+ * means none: an administrator unticking everything meant exactly that.
+ */
+function portalProfileEditableFields(PDO $conn): array
+{
+    $raw = portalProfileSettingRaw($conn, PORTAL_PROFILE_FIELDS_SETTING);
+    if ($raw === null) return USER_SELF_EDITABLE_FIELDS;
+    $chosen = array_filter(array_map('trim', explode(',', $raw)));
+    // Intersect with the constant, never the other way round: a value in the
+    // setting that the constant does not hold is ignored, not honoured.
+    return array_values(array_intersect(USER_SELF_EDITABLE_FIELDS, $chosen));
+}
+
+/** May an address-book contact change those fields, their change being sent back? */
+function portalProfileAddressBookWrites(PDO $conn): bool
+{
+    return portalProfileSettingRaw($conn, PORTAL_PROFILE_ADDRESS_BOOK_SETTING) === '1';
+}
+
+/**
+ * How the portal treats one person's contact details. One answer, used by both
+ * the read and the save, so the form and the endpoint cannot disagree.
+ *
+ * @return array|null null when the person does not exist. Otherwise:
+ *   fields       - what the portal offers them (the administrator's choice)
+ *   locked       - of those, the ones they may not change: a directory owns them
+ *   address_book - their changes are sent to an address book, and only saved
+ *                  here once it has accepted them
+ *   managed      - a directory keeps this record up to date at all
+ *   row          - the record's current values, for the save's three-way merge
+ */
+function portalProfileAccess(PDO $conn, int $userId): ?array
+{
+    $cols = implode(', ', array_map(function ($f) { return 'u.' . $f; }, USER_PERSON_FIELDS));
+    $st = $conn->prepare(
+        "SELECT u.is_managed, u.display_name, p.protocol, p.carddav_write_back, $cols
+           FROM users u
+      LEFT JOIN auth_providers p ON p.id = u.auth_provider_id
+          WHERE u.id = ?"
+    );
+    $st->execute([$userId]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if ($row === false) return null;
+
+    $fields  = portalProfileEditableFields($conn);
+    $managed = (int)($row['is_managed'] ?? 0) === 1;
+    $isCardDav = strtolower((string)($row['protocol'] ?? '')) === 'carddav';
+
+    // 🔴 Write-back on the address book is NOT enough on its own. That switch
+    // is about ANALYSTS' edits; letting customers write too is a separate
+    // decision, made on System → Portal profile.
+    $addressBook = $managed && $isCardDav
+        && (int)($row['carddav_write_back'] ?? 0) === 1
+        && portalProfileAddressBookWrites($conn);
+
+    // `false` for write-back when working out what is locked, deliberately: when
+    // the address book is not taking the customer's change, the next import
+    // would put the old value back, so the field must be refused.
+    $locked = ($managed && !$addressBook)
+        ? array_values(array_intersect($fields, userDirectoryOwnedFields($row['protocol'] ?? null, false)))
+        : [];
+
+    return [
+        'fields'       => $fields,
+        'locked'       => $locked,
+        'address_book' => $addressBook,
+        'managed'      => $managed,
+        'row'          => $row,
+    ];
+}
+
 /**
  * Normalise one incoming person field.
  *

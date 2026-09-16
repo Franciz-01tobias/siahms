@@ -528,12 +528,13 @@ const SS_CONTACT_ELS = {
     mobile:    'ssMobile',
 };
 
-/* Does a directory own this record? Set from the server on every load, never
-   assumed. ⚠️ It starts as TRUE, not false: an unloaded boolean must not read
+/* Which contact fields this person may change: offered by the administrator
+   (System → Portal profile) and not owned by a directory. Set from the server on
+   every load, never assumed. ⚠️ It starts EMPTY: an unloaded list must not read
    as "editable", because the user would then type into a form whose Save is
    going to be refused — or worse, on a future code path, accepted. Pessimistic
    until the server says otherwise. */
-let ssProfileManaged = true;
+let ssEditableFields = [];
 
 async function ssLoadProfile() {
     const note = document.getElementById('ssManagedNote');
@@ -545,7 +546,8 @@ async function ssLoadProfile() {
         // Every field would read as "blank" and Save would write those blanks
         // over real values the user never saw. Lock it and say so instead.
         if (!data.success) {
-            ssSetContactEnabled(false);
+            ssEditableFields = [];
+            ssSetContactEnabled([]);
             note.style.display = '';
             note.className = 'ss-msg error';
             note.textContent = window.t('self-service.account.load_failed');
@@ -554,26 +556,38 @@ async function ssLoadProfile() {
 
         document.getElementById('ssPreferredName').value = data.preferred_name || '';
 
-        // Drive the form from the server's list, so a field added to
-        // USER_SELF_EDITABLE_FIELDS appears here without a second edit and one
-        // removed from it stops being posted.
-        (data.fields || Object.keys(SS_CONTACT_ELS)).forEach(function (key) {
-            const el = document.getElementById(SS_CONTACT_ELS[key]);
-            if (el) el.value = data[key] || '';
+        // Drive the form from the server's list: a field the administrator has
+        // switched off (System → Portal profile) is not shown at all, and is
+        // never posted.
+        const offered = Array.isArray(data.fields) ? data.fields : [];
+        const locked  = Array.isArray(data.locked) ? data.locked : [];
+        Object.entries(SS_CONTACT_ELS).forEach(function ([key, id]) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const group = el.closest('.ss-form-group');
+            if (group) group.style.display = offered.includes(key) ? '' : 'none';
+            el.value = offered.includes(key) ? (data[key] || '') : '';
         });
+        document.getElementById('ssContactBlock').style.display = offered.length ? '' : 'none';
 
-        ssProfileManaged = data.is_managed === true;
-        ssSetContactEnabled(!ssProfileManaged);
-        if (ssProfileManaged) {
+        ssEditableFields = offered.filter(function (k) { return !locked.includes(k); });
+        ssSetContactEnabled(ssEditableFields);
+        if (locked.length) {
             // ⚠️ `.ss-msg info`, not `.ss-msg`. The base class is display:none.
             note.className = 'ss-msg info';
             note.style.display = '';
             note.textContent = window.t('self-service.account.managed_note');
+        } else if (data.address_book) {
+            // Somebody else's system is being written to - say so before they save.
+            note.className = 'ss-msg info';
+            note.style.display = '';
+            note.textContent = window.t('self-service.account.address_book_note');
         } else {
             note.style.display = 'none';
         }
     } catch (e) {
-        ssSetContactEnabled(false);
+        ssEditableFields = [];
+        ssSetContactEnabled([]);
         note.style.display = '';
         note.className = 'ss-msg error';
         note.textContent = window.t('self-service.account.load_failed');
@@ -582,10 +596,10 @@ async function ssLoadProfile() {
 
 /* `disabled` rather than `readonly`: read-only still looks typeable and still
    submits, and the point is that these values are the directory's to change. */
-function ssSetContactEnabled(on) {
-    Object.values(SS_CONTACT_ELS).forEach(function (id) {
+function ssSetContactEnabled(editable) {
+    Object.entries(SS_CONTACT_ELS).forEach(function ([key, id]) {
         const el = document.getElementById(id);
-        if (el) el.disabled = !on;
+        if (el) el.disabled = !editable.includes(key);
     });
 }
 
@@ -636,17 +650,14 @@ async function ssSavePreferredName() {
 
     const payload = { preferred_name: document.getElementById('ssPreferredName').value.trim() };
 
-    // ⚠️ The contact fields are omitted WHOLESALE on a directory-owned record.
-    // update_profile.php refuses the whole save if a managed body mentions any
-    // of them, so posting them would turn "I changed my preferred name" into an
-    // error about a job title — the preferred name is NOT directory-owned and
-    // must stay editable for everybody.
-    if (!ssProfileManaged) {
-        Object.entries(SS_CONTACT_ELS).forEach(function ([key, id]) {
-            const el = document.getElementById(id);
-            if (el) payload[key] = el.value.trim();
-        });
-    }
+    // ⚠️ Only the fields this person may change are posted. update_profile.php
+    // refuses the whole save if a body mentions a locked or switched-off one,
+    // so posting them would turn "I changed my preferred name" into an error
+    // about a job title — the preferred name must stay editable for everybody.
+    ssEditableFields.forEach(function (key) {
+        const el = document.getElementById(SS_CONTACT_ELS[key]);
+        if (el) payload[key] = el.value.trim();
+    });
 
     try {
         const resp = await fetch(_ssApi + 'update_profile.php', {
@@ -662,6 +673,14 @@ async function ssSavePreferredName() {
             // Re-read rather than arguing with a stale page.
             ssShowAcctMsg(window.t('self-service.account.managed_note'), 'error');
             ssLoadProfile();
+        } else if (data.error === 'not_offered') {
+            ssShowAcctMsg(window.t('self-service.account.not_offered'), 'error');
+            ssLoadProfile();
+        } else if (data.error === 'address_book') {
+            // Nothing was saved, here or there - see update_profile.php.
+            ssShowAcctMsg(window.t(data.conflict
+                ? 'self-service.account.address_book_conflict'
+                : 'self-service.account.address_book_failed'), 'error');
         } else if (data.error === 'too_long') {
             ssShowAcctMsg(window.t('self-service.account.too_long', { max: data.max }), 'error');
         } else {

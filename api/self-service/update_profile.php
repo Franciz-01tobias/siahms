@@ -3,18 +3,27 @@
  * API: Update self-service user profile
  *
  * POST - preferred name, plus the contact details a person may maintain about
- * themselves (USER_SELF_EDITABLE_FIELDS: job title, office, phone, mobile).
+ * themselves: the ones an administrator allows on System → Portal profile
+ * (portalProfileEditableFields(), never wider than USER_SELF_EDITABLE_FIELDS).
  *
  * 🔴 THIS ENDPOINT IS REACHED BY A CUSTOMER, NOT AN ANALYST. It writes to
  * `users`, the same table the analyst screens and directory sync write, so the
- * field list is taken from the constant and NEVER from the request body. A
+ * field list is taken from the server and NEVER from the request body. A
  * portal user posting {"manager_id":…} or {"employee_id":…} has those keys
  * ignored, not honoured — see includes/users.php for why those three are out.
+ *
+ * 🔑 A contact from an address book, where the administrator allows it, has
+ * their change SENT TO THE ADDRESS BOOK FIRST and saved here only once it was
+ * accepted. The analyst screens do it the other way round (save, then report
+ * the push), and that is right for them: an analyst is told, and can act. A
+ * customer cannot, and a local save the address book refused would be reverted
+ * by the next import - an edit that silently vanishes overnight, which is the
+ * one outcome this feature exists to prevent.
  */
 session_start();
 require_once '../../config.php';
 require_once '../../includes/functions.php';
-require_once '../../includes/users.php';   // USER_SELF_EDITABLE_FIELDS, userDirectoryOwnedFields()
+require_once '../../includes/users.php';   // portalProfileAccess(), userPersonFieldValue()
 
 header('Content-Type: application/json');
 
@@ -42,46 +51,16 @@ if (strlen($preferredName) > 100) {
 
 try {
     $conn = connectToDatabase();
+    $userId = (int)$_SESSION['ss_user_id'];
 
-    // Is a directory the source of truth for this person? Same rule as the
-    // analyst screens: refuse rather than accept and let the next sync revert
-    // it. A save that silently does nothing is worse than one that says no —
-    // and for a customer correcting their own phone number, an edit that
-    // vanishes overnight is exactly the experience this feature exists to fix.
-    $mStmt = $conn->prepare(
-        "SELECT u.is_managed, p.protocol
-           FROM users u
-      LEFT JOIN auth_providers p ON p.id = u.auth_provider_id
-          WHERE u.id = ?"
-    );
-    $mStmt->execute([$_SESSION['ss_user_id']]);
-    $managedRow = $mStmt->fetch(PDO::FETCH_ASSOC);
-
-    // ⚠️ `false` from fetch means NO ROW, which is not the same as
-    // is_managed = 0. The session can outlive the record. Without this the
-    // UPDATE below would match nothing and still report success.
-    if ($managedRow === false) {
+    // ⚠️ null means NO ROW, which is not the same as an unmanaged person. The
+    // session can outlive the record. Without this the UPDATE below would match
+    // nothing and still report success.
+    $access = portalProfileAccess($conn, $userId);
+    if ($access === null) {
         echo json_encode(['success' => false, 'error' => 'Account not found']);
         exit;
     }
-    $isManaged = (int)($managedRow['is_managed'] ?? 0) === 1;
-
-    // Which fields the directory owns depends on WHICH directory.
-    //
-    // 🔴 `false` FOR WRITE-BACK, DELIBERATELY, AND DO NOT "FIX" IT. On the
-    // analyst screens that argument is passed through, because an edit there is
-    // pushed to the contact card and so survives the next import. **This endpoint
-    // pushes nothing.** Passing the provider's real setting here would unlock
-    // these fields for a portal user the moment write-back was switched on, their
-    // correction would be saved locally, and the next import would quietly revert
-    // it — which is precisely the failure the whole managed-record rule exists to
-    // prevent, arriving through the door built to prevent it.
-    //
-    // ⬜ Letting a customer's own correction reach the address book is the GDPR
-    // Article 16 case from #133 and is a genuinely wanted thing. It needs the push
-    // wiring here plus a decision about a customer writing to the operator's
-    // address book — not a one-character change to this line.
-    $ownedFields = userDirectoryOwnedFields($managedRow['protocol'] ?? null, false);
 
     // 🔴 "Absent means don't touch", and preferred_name had to join that rule.
     //
@@ -101,17 +80,22 @@ try {
         $args[] = $preferredName !== '' ? $preferredName : null;
     }
 
-    // The contact details. Iterating the CONSTANT rather than the request body
-    // is the whole guard: an unexpected key in the payload can never become a
-    // column name. Absent keys are left alone, so a caller sending only
+    // The contact details. Iterating the SERVER'S list rather than the request
+    // body is the whole guard: an unexpected key in the payload can never become
+    // a column name. Absent keys are left alone, so a caller sending only
     // preferred_name does not blank somebody's telephone number.
+    $changed = [];   // field => new value, only where it actually differs
     foreach (USER_SELF_EDITABLE_FIELDS as $f) {
         if (!array_key_exists($f, $input)) continue;
-        if ($isManaged && in_array($f, $ownedFields, true)) {
-            echo json_encode([
-                'success' => false,
-                'error'   => 'managed',
-            ]);
+        // Switched off by an administrator since the form was drawn. Refused
+        // rather than ignored: a save that quietly drops part of what the
+        // person typed is worse than one that says so.
+        if (!in_array($f, $access['fields'], true)) {
+            echo json_encode(['success' => false, 'error' => 'not_offered', 'field' => $f]);
+            exit;
+        }
+        if (in_array($f, $access['locked'], true)) {
+            echo json_encode(['success' => false, 'error' => 'managed']);
             exit;
         }
         $v = userPersonFieldValue($f, $input[$f]);
@@ -131,12 +115,36 @@ try {
         }
         $sets[] = "$f = ?";
         $args[] = $v;
+        if (trim((string)($access['row'][$f] ?? '')) !== trim((string)$v)) {
+            $changed[$f] = $v;
+        }
+    }
+
+    // --- the address book first, when it is taking this person's changes ---
+    //
+    // Only what actually changed is sent: the form posts every field on every
+    // save, and pushing unchanged values would fill the address book's write
+    // log with "nothing to send" for each preferred-name edit.
+    if ($access['address_book'] && $changed) {
+        require_once '../../includes/carddav_write.php';
+        $push = cardDavPushPersonChanges($conn, $userId, $changed, $access['row'], null, true);
+        if (empty($push['attempted']) || empty($push['ok'])) {
+            // Nothing saved here either - see the header. The detail goes to
+            // the address book's write log for an administrator; the person
+            // gets a sentence they can act on.
+            echo json_encode([
+                'success'  => false,
+                'error'    => 'address_book',
+                'conflict' => !empty($push['conflict']),
+            ]);
+            exit;
+        }
     }
 
     // Nothing to write is a success, not an error: a save with no changed field
     // is a no-op, and an empty SET would be a syntax error.
     if ($sets) {
-        $args[] = $_SESSION['ss_user_id'];
+        $args[] = $userId;
         $conn->prepare("UPDATE users SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
     }
 
@@ -149,15 +157,16 @@ try {
         } else {
             // Fall back to display_name or email
             $userStmt = $conn->prepare("SELECT display_name, email FROM users WHERE id = ?");
-            $userStmt->execute([$_SESSION['ss_user_id']]);
+            $userStmt->execute([$userId]);
             $user = $userStmt->fetch(PDO::FETCH_ASSOC);
             $_SESSION['ss_user_name'] = $user['display_name'] ?: $user['email'];
         }
     }
 
     echo json_encode([
-        'success' => true,
-        'display_name' => $_SESSION['ss_user_name']
+        'success'      => true,
+        'display_name' => $_SESSION['ss_user_name'],
+        'address_book' => $access['address_book'] && (bool)$changed,
     ]);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);

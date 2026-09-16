@@ -629,8 +629,14 @@ function cardDavLogWrite(PDO $conn, int $providerId, ?int $userId, string $displ
  * they cannot do anything about. Every outcome is returned for the UI to
  * mention, and none of them is an exception.
  *
+ * ⚠️ Except for the self-service portal, which calls this BEFORE its save and
+ * saves only on success (api/self-service/update_profile.php says why). The
+ * function itself is the same either way; `$fromPortal` only changes what the
+ * write log says about who made the change.
+ *
  * @param array $changes  field => the value just saved
  * @param array $previous field => the value FreeITSM held BEFORE this save
+ * @param bool  $fromPortal the person changed it themselves, in the portal
  *
  * @return array ['attempted'=>bool, 'ok'=>bool, 'changed'=>string[],
  *                'conflict'=>bool, 'error'=>string, 'reason'=>string]
@@ -638,7 +644,7 @@ function cardDavLogWrite(PDO $conn, int $providerId, ?int $userId, string $displ
  *               for every person who is not a CardDAV contact.
  */
 function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array $previous,
-                                  ?int $analystId = null): array
+                                  ?int $analystId = null, bool $fromPortal = false): array
 {
     $out = ['attempted' => false, 'ok' => false, 'changed' => [],
             'conflict' => false, 'error' => '', 'reason' => ''];
@@ -724,7 +730,7 @@ function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array 
             );
             cardDavLogWrite($conn, $pid, $userId, $name, 'conflict', [$field], null, '',
                             sprintf('Refused: the card has %s = "%s", FreeITSM last saw "%s", '
-                                    . 'and the analyst set "%s".',
+                                    . 'and ' . ($fromPortal ? 'the person set, in the self-service portal,' : 'the analyst set') . ' "%s".',
                                     str_replace('_', ' ', $field), $theirs, $ours, $want),
                             $analystId);
             return $out;
@@ -766,6 +772,7 @@ function cardDavPushPersonChanges(PDO $conn, int $userId, array $changes, array 
         $put['ok']
             ? 'Wrote ' . implode(', ', array_map(function ($f) { return str_replace('_', ' ', $f); },
                                                  $edited['changed'])) . ' to the contact card.'
+              . ($fromPortal ? ' Changed by the person themselves, in the self-service portal.' : '')
             : $put['error'],
         $analystId
     );
