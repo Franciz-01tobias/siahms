@@ -204,6 +204,9 @@ final class Cap
     // What happens when a ticket is closed with mandatory SOP steps still
     // outstanding — warn and record, or refuse (PR #141).
     const TICKETS_CHECKLISTS      = 'tickets.checklists';
+    // Which ticket fields must be filled before a ticket may close, and what
+    // happens when they are not - warn, warn and email, or refuse.
+    const TICKETS_MANDATORY_FIELDS = 'tickets.mandatory_fields';
     const TICKETS_STATUSES        = 'tickets.statuses';
     const TICKETS_PRIORITIES      = 'tickets.priorities';
     const TICKETS_SLA             = 'tickets.sla';

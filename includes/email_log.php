@@ -34,6 +34,8 @@ const EMAIL_LOG_ROUTES = [
     'template'       => 'Ticket template',
     'workflow'       => 'Workflow action',
     'sla'            => 'SLA alert',
+    // A ticket closed with mandatory fields empty, under "warn and notify".
+    'closure_alert'  => 'Closure alert',
     'portal'         => 'Portal / system',
     'password_reset' => 'Password reset',
     'share_kb'       => 'Knowledge article shared',

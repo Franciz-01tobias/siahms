@@ -101,6 +101,26 @@ return [
             ],
         ],
         [
+            // The third close gate, beside the checklist one: which ticket fields
+            // must be filled before a ticket may close. Its own tab and its own
+            // capability because it can email people outside the service desk.
+            // Saved by its own endpoint; the keys are declared here so the
+            // setting-key map and this tab cannot disagree about who owns them.
+            'id'        => 'mandatory-fields',
+            'cap'       => Cap::TICKETS_MANDATORY_FIELDS,
+            'label_key' => 'tickets.settings.tabs.mandatory_fields',
+            'grant'     => 'Choose which fields must be filled before a ticket can close, and who is emailed when they are not',
+            // It sends ticket details to any address typed into it, and decides
+            // what the audit trail records.
+            'sensitive' => true,
+            'setting_keys' => [
+                'ticket_mandatory_fields',
+                'ticket_mandatory_mode',
+                'ticket_mandatory_notify',
+                'ticket_mandatory_record',
+            ],
+        ],
+        [
             'id'        => 'statuses',
             'cap'       => Cap::TICKETS_STATUSES,
             'label_key' => 'tickets.settings.tabs.statuses',

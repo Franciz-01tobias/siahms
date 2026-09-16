@@ -40,6 +40,7 @@ require_once __DIR__ . '/../ticket_categories.php';   // category paths + depth 
 require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 require_once __DIR__ . '/../calendar_sync/push.php';   // scheduled work -> the owner's calendar (GH #75)
 require_once __DIR__ . '/checklists.php';              // mandatory SOP steps at closure (PR #141)
+require_once __DIR__ . '/mandatory_fields.php';        // mandatory ticket fields at closure
 
 class TicketsService
 {
@@ -577,6 +578,22 @@ class TicketsService
             return; // idempotent
         }
 
+        // Mandatory fields at closure. Checked HERE - after every field above has
+        // been resolved, before anything is written - and against the ticket as it
+        // will be once this save lands, so a resolution code picked in the same
+        // request that closes the ticket counts, and a category the type change
+        // above has just cleared does not.
+        // The company comes from the same row, so a ticket moved to another
+        // company in this save is judged by that company's rules.
+        $closing      = $newStatusId !== null && $newIsClosed && !$oldIsClosed;
+        $afterRow     = self::rowAfterUpdates($current, $updates, $args);
+        $closeTenant  = ($afterRow['tenant_id'] ?? null) !== null ? (int)$afterRow['tenant_id'] : null;
+        $emptyOnClose = [];
+        if ($closing) {
+            $emptyOnClose = MandatoryFieldsService::missing($conn, $closeTenant, $afterRow);
+            MandatoryFieldsService::assertClosureAllowed($conn, $closeTenant, $emptyOnClose);
+        }
+
         $updates[] = 'updated_datetime = UTC_TIMESTAMP()';
         $args[]    = $ticketId;
         $conn->prepare('UPDATE tickets SET ' . implode(', ', $updates) . ' WHERE id = ?')->execute($args);
@@ -638,6 +655,9 @@ class TicketsService
         // this is only the hook, so tickets does not learn the checklist rules.
         if ($newStatusId !== null && $newIsClosed && !$oldIsClosed) {
             ChecklistsService::recordClosureOverride($conn, $ctx, $ticketId);
+            // Same hook, same reasoning: the note and the email for a close that
+            // went ahead with mandatory fields empty.
+            MandatoryFieldsService::afterClosure($conn, $ctx, $ticketId, $closeTenant, $emptyOnClose);
         }
 
         // Workflow dispatches — canonical post-update payload.
@@ -932,6 +952,34 @@ class TicketsService
     // ======================================================================
     //  Internals
     // ======================================================================
+
+    /**
+     * The ticket row as it will be once an UPDATE built by updateTicket() lands.
+     *
+     * Read back out of the SET list rather than re-derived from the input, so it
+     * includes what the service decides on its own - the category a type change
+     * clears, the owner written alongside the analyst - and cannot drift from what
+     * is actually written. Entries with no placeholder (closed_datetime =
+     * UTC_TIMESTAMP()) consume no argument.
+     *
+     * @param string[] $updates  "column = ?" / "column = <expr>" fragments
+     * @param array    $args     the placeholder values, in order
+     */
+    private static function rowAfterUpdates(array $current, array $updates, array $args): array
+    {
+        $row = $current;
+        $i = 0;
+        foreach ($updates as $frag) {
+            if (preg_match('/^\s*([a-z_]+)\s*=\s*\?\s*$/', $frag, $m)) {
+                $row[$m[1]] = $args[$i] ?? null;
+                $i++;
+            } else {
+                // Any other shape: skip its value, but keep the arguments aligned.
+                $i += substr_count($frag, '?');
+            }
+        }
+        return $row;
+    }
 
     /**
      * Load the joined ticket row, enforcing the actor's company scope; 404 otherwise.

@@ -577,6 +577,87 @@ function templateSendViaGraph(string $accessToken, array $message, string $graph
 }
 
 /**
+ * Send an internal notification ABOUT a ticket to staff addresses - an SLA alert,
+ * a closure with fields missing - from the ticket's own mailbox, or the first
+ * active mailbox when the ticket has none (a ticket raised by hand or through the
+ * API never touched one).
+ *
+ * Not saved to the ticket's conversation and not saved to Sent Items: these go to
+ * staff, not to the requester. Every recipient is written to the email send log
+ * under $route, failures included.
+ *
+ * Every recipient is attempted even when one fails - one mistyped address on an
+ * escalation list must not stop the rest hearing about it - and the first failure
+ * is thrown once they have all been tried.
+ *
+ * @param string[] $recipients
+ * @throws Exception when no mailbox can send, or when any recipient failed
+ */
+function internalTicketEmail(PDO $conn, int $ticketId, array $recipients, string $subject, string $bodyHtml, string $route): void {
+    $mailbox = templateGetMailboxForTicket($conn, $ticketId);
+    if (!$mailbox) {
+        $row = $conn->query("SELECT * FROM target_mailboxes WHERE is_active = 1 ORDER BY id ASC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        $mailbox = $row ? decryptMailboxRow($row) : null;
+    }
+    if (!$mailbox) {
+        throw new Exception('no mailbox available to send from');
+    }
+
+    $provider    = $mailbox['provider'] ?? 'microsoft';
+    $accessToken = null;
+    $graphBase   = '/me';
+    if ($provider === 'imap') {
+        // Basic IMAP sends via SMTP - no OAuth token to validate or refresh.
+        require_once __DIR__ . '/mailbox_imap.php';
+    } elseif ($provider === 'google') {
+        $tokenData = json_decode(preg_replace('/[\x00-\x1F\x7F]/', '', $mailbox['token_data'] ?? ''), true);
+        if (!$tokenData || !isset($tokenData['access_token'])) {
+            throw new Exception("invalid token data on mailbox {$mailbox['id']}");
+        }
+        require_once __DIR__ . '/gmail.php';
+        $accessToken = gmailGetValidAccessToken($conn, $mailbox, $tokenData);
+        if (!$accessToken) {
+            throw new Exception("failed to refresh access token for mailbox {$mailbox['id']}");
+        }
+    } else {
+        // Microsoft: auth_mode decides both the token source and the send endpoint.
+        $graph = templateGraphContext($conn, $mailbox);
+        if (!$graph) {
+            throw new Exception("failed to obtain an access token for mailbox {$mailbox['id']}");
+        }
+        $accessToken = $graph['token'];
+        $graphBase   = $graph['base'];
+    }
+
+    $firstError = null;
+    foreach ($recipients as $to) {
+        try {
+            if ($provider === 'imap') {
+                imapSmtpSend($mailbox, $to, '', $subject, $bodyHtml);
+            } elseif ($provider === 'google') {
+                gmailSendEmail($accessToken, $to, $subject, $bodyHtml, $mailbox['target_mailbox'] ?? '');
+            } else {
+                templateSendViaGraph($accessToken, [
+                    'message' => [
+                        'subject'      => $subject,
+                        'body'         => ['contentType' => 'HTML', 'content' => $bodyHtml],
+                        'toRecipients' => [['emailAddress' => ['address' => $to]]],
+                    ],
+                    'saveToSentItems' => false,   // internal notification, don't clutter Sent Items
+                ], $graphBase);
+            }
+            emailLogSent($conn, $mailbox, $route, $to, $subject, $ticketId);
+        } catch (Exception $e) {
+            emailLogFailed($conn, $mailbox, $route, $to, $subject, $e->getMessage(), $ticketId);
+            $firstError = $firstError ?? $e;
+        }
+    }
+    if ($firstError) {
+        throw $firstError;
+    }
+}
+
+/**
  * Save the sent template email to the emails table.
  */
 function templateSaveSentEmail(PDO $conn, int $ticketId, array $mailbox, string $to, string $subject, string $body): void {

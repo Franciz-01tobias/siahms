@@ -35,6 +35,11 @@ $activeTabId      = settingsFirstTabId($visibleTabs);
 require_once '../../includes/tenant_settings.php';
 $checklistClosureMode = ticketChecklistClosureMode($conn, null);
 
+// Mandatory fields at closure — the same reason: the tab opens on what is in force.
+require_once '../../includes/service_context.php';
+require_once '../../includes/services/mandatory_fields.php';
+$mandatoryCfg = MandatoryFieldsService::settings($conn, null);
+
 // Row display (discussion #61) — what this analyst's own ticket rows show.
 // Resolved server-side so the tab opens on the values actually in force, rather
 // than on the shipped defaults with the real ones arriving a moment later.
@@ -782,9 +787,11 @@ $translationNamespaces = ['common', 'tickets'];
         <!-- Statuses Tab -->
         <?php endif; ?>
 
-        <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
+        <?php if (settingsTabVisible($visibleTabs, 'checklists')): ?>
         <!-- Checklists: what happens when a ticket with outstanding mandatory
-             SOP steps is closed (PR #141). -->
+             SOP steps is closed (PR #141). Had been inside the Statuses tab's
+             visibility check, so a role granted Checklists but not Statuses got
+             the tab button and an empty panel. -->
         <div class="tab-content<?php echo $activeTabId === 'checklists' ? ' active' : ''; ?>" id="checklists-tab" data-capability="<?php echo Cap::TICKETS_CHECKLISTS; ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.checklists')); ?></h2>
@@ -816,7 +823,64 @@ $translationNamespaces = ['common', 'tickets'];
                 <button class="add-btn" id="chkClosureSave"><?php echo htmlspecialchars(t('common.save')); ?></button>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (settingsTabVisible($visibleTabs, 'mandatory-fields')): ?>
+        <!-- Mandatory fields: which ticket properties must be filled before a
+             ticket may close, and what happens when they are not. Rendered from
+             the stored values, so there is nothing to load - only to save. -->
+        <div class="tab-content<?php echo $activeTabId === 'mandatory-fields' ? ' active' : ''; ?>" id="mandatory-fields-tab" data-capability="<?php echo Cap::TICKETS_MANDATORY_FIELDS; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('tickets.settings.headings.mandatory_fields')); ?></h2>
+            </div>
+            <p style="margin-bottom: 20px; color: var(--text-muted, #666); max-width: 720px;"><?php echo htmlspecialchars(t('tickets.settings.intros.mandatory_fields')); ?></p>
+
+            <h3 style="font-size: 14px; margin: 0 0 10px; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.mandatory.when_heading')); ?></h3>
+            <div style="display: flex; flex-direction: column; gap: 14px; max-width: 720px;">
+                <?php foreach (['warn', 'notify', 'block'] as $mfMode): ?>
+                <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                    <input type="radio" name="mfMode" value="<?php echo $mfMode; ?>" style="margin-top: 3px;"<?php echo $mandatoryCfg['mode'] === $mfMode ? ' checked' : ''; ?>>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.mandatory.' . $mfMode . '_title')); ?></div>
+                        <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.mandatory.' . $mfMode . '_desc')); ?></div>
+                    </div>
+                </label>
+                <?php if ($mfMode === 'notify'): ?>
+                <!-- Outside the option's <label>: a label may not contain another. -->
+                <div id="mfNotifyWrap" class="form-group" style="margin: -6px 0 0 28px; max-width: 480px;">
+                    <label for="mfNotify"><?php echo htmlspecialchars(t('tickets.settings.mandatory.notify_label')); ?></label>
+                    <input type="text" id="mfNotify" value="<?php echo htmlspecialchars(implode(', ', $mandatoryCfg['notify'])); ?>" placeholder="<?php echo htmlspecialchars(t('tickets.settings.mandatory.notify_placeholder')); ?>" autocomplete="off" spellcheck="false">
+                </div>
+                <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+
+            <label id="mfRecordRow" style="display: flex; align-items: flex-start; gap: 12px; margin-top: 18px; max-width: 720px; cursor: pointer;">
+                <input type="checkbox" id="mfRecord" style="margin-top: 3px;"<?php echo $mandatoryCfg['record'] ? ' checked' : ''; ?>>
+                <div>
+                    <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.mandatory.record_title')); ?></div>
+                    <div style="font-size: 12px; color: var(--text-muted, #64748b);" id="mfRecordDesc"><?php echo htmlspecialchars(t('tickets.settings.mandatory.record_desc')); ?></div>
+                </div>
+            </label>
+
+            <h3 style="font-size: 14px; margin: 24px 0 6px; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.mandatory.fields_heading')); ?></h3>
+            <p style="font-size: 12px; color: var(--text-muted, #64748b); margin: 0 0 10px; max-width: 720px;"><?php echo htmlspecialchars(t('tickets.settings.mandatory.fields_hint')); ?></p>
+            <div class="mf-field-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 20px; max-width: 720px;">
+                <?php foreach (array_keys(MandatoryFieldsService::FIELDS) as $mfKey): ?>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px;">
+                    <input type="checkbox" class="mf-field" value="<?php echo $mfKey; ?>"<?php echo in_array($mfKey, $mandatoryCfg['fields'], true) ? ' checked' : ''; ?>>
+                    <span><?php echo htmlspecialchars(t('tickets.settings.mandatory.fields.' . $mfKey)); ?></span>
+                </label>
+                <?php endforeach; ?>
+            </div>
+
+            <div style="margin-top: 22px;">
+                <button class="add-btn" id="mfSave"><?php echo htmlspecialchars(t('common.save')); ?></button>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
         <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo Cap::TICKETS_STATUSES; ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.statuses')); ?></h2>
@@ -8229,30 +8293,6 @@ $translationNamespaces = ['common', 'tickets'];
                 this.disabled = !loaded;
             });
 
-            // ── Checklists: closing with mandatory steps outstanding (PR #141) ──
-            // The radios are rendered already checked from the stored value, so
-            // there is nothing to load — only to save.
-            const chkSaveBtn = document.getElementById('chkClosureSave');
-            if (chkSaveBtn) {
-                chkSaveBtn.addEventListener('click', async function () {
-                    const picked = document.querySelector('input[name="chkClosureMode"]:checked');
-                    if (!picked) { showToast('Choose an option first', 'error'); return; }
-                    this.disabled = true;
-                    try {
-                        const r = await fetch(API_BASE + 'save_checklist_settings.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ mode: picked.value })
-                        });
-                        const d = await r.json();
-                        showToast(d.success ? T.settingsSaved : (d.error || 'Failed'), d.success ? 'success' : 'error');
-                    } catch (e) {
-                        showToast('Failed', 'error');
-                    }
-                    this.disabled = false;
-                });
-            }
-
             // ── The category dialog ──────────────────────────────────────────
             function parentOptions(excludeId) {
                 // A category may only be a parent if a child of it would still fit
@@ -8414,6 +8454,106 @@ $translationNamespaces = ['common', 'tickets'];
             });
 
             load();
+        })();
+
+        /* Close-gate settings: the SOP checklist mode and mandatory fields.
+           Their own block, NOT inside the categories one above: that block
+           returns early when the Categories tab is absent, so a role granted
+           Checklists or Mandatory fields but not Categories got a Save button
+           that did nothing. */
+        (function () {
+            const T = <?php echo json_encode([
+                'settingsSaved'   => t('tickets.settings.categories.settings_saved'),
+                'mfChooseMode'    => t('tickets.settings.mandatory.choose_mode'),
+                'mfNeedAddress'   => t('tickets.settings.mandatory.need_address'),
+                'mfRecordBlocked' => t('tickets.settings.mandatory.record_blocked'),
+            ], JSON_UNESCAPED_UNICODE); ?>;
+
+            // ── Checklists: closing with mandatory steps outstanding (PR #141) ──
+            // The radios are rendered already checked from the stored value, so
+            // there is nothing to load — only to save.
+            const chkSaveBtn = document.getElementById('chkClosureSave');
+            if (chkSaveBtn) {
+                chkSaveBtn.addEventListener('click', async function () {
+                    const picked = document.querySelector('input[name="chkClosureMode"]:checked');
+                    if (!picked) { showToast('Choose an option first', 'error'); return; }
+                    this.disabled = true;
+                    try {
+                        const r = await fetch(API_BASE + 'save_checklist_settings.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ mode: picked.value })
+                        });
+                        const d = await r.json();
+                        showToast(d.success ? T.settingsSaved : (d.error || 'Failed'), d.success ? 'success' : 'error');
+                    } catch (e) {
+                        showToast('Failed', 'error');
+                    }
+                    this.disabled = false;
+                });
+            }
+
+            // ── Mandatory fields at closure ──────────────────────────────────
+            // Rendered from the stored values; only the dependent controls need
+            // wiring. The address box only means something under "warn and
+            // notify", and recording only means something while the ticket can
+            // actually close - under "block" it never does, so there is nothing
+            // to record and the switch is greyed out rather than hidden.
+            const mfSave = document.getElementById('mfSave');
+            if (mfSave) {
+                const mfNotifyWrap = document.getElementById('mfNotifyWrap');
+                const mfNotify     = document.getElementById('mfNotify');
+                const mfRecord     = document.getElementById('mfRecord');
+                const mfRecordRow  = document.getElementById('mfRecordRow');
+                const mfMode = () => (document.querySelector('input[name="mfMode"]:checked') || {}).value || '';
+                const mfSync = () => {
+                    const m = mfMode();
+                    mfNotifyWrap.hidden = m !== 'notify';
+                    mfRecord.disabled = m === 'block';
+                    mfRecordRow.style.opacity = m === 'block' ? '0.5' : '';
+                    mfRecordRow.title = m === 'block' ? T.mfRecordBlocked : '';
+                };
+                document.querySelectorAll('input[name="mfMode"]').forEach(r => r.addEventListener('change', () => {
+                    mfSync();
+                    if (mfMode() === 'notify' && !mfNotify.value.trim()) mfNotify.focus();
+                }));
+                mfSync();
+
+                mfSave.addEventListener('click', async function () {
+                    const mode = mfMode();
+                    if (!mode) { showToast(T.mfChooseMode, 'error'); return; }
+                    if (mode === 'notify' && !mfNotify.value.trim()) {
+                        showToast(T.mfNeedAddress, 'error');
+                        mfNotify.focus();
+                        return;
+                    }
+                    this.disabled = true;
+                    try {
+                        const r = await fetch(API_BASE + 'save_mandatory_fields_settings.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                mode: mode,
+                                // Kept even when another mode is chosen, so switching
+                                // back does not mean typing the list again.
+                                notify: mfNotify.value,
+                                record: mfRecord.checked,
+                                fields: Array.from(document.querySelectorAll('.mf-field:checked')).map(c => c.value)
+                            })
+                        });
+                        const d = await r.json();
+                        if (d.success && d.settings) {
+                            // Show what was stored, tidied (duplicates dropped).
+                            mfNotify.value = (d.settings.notify || []).join(', ');
+                        }
+                        showToast(d.success ? T.settingsSaved : (d.error || 'Failed'), d.success ? 'success' : 'error');
+                    } catch (e) {
+                        showToast('Failed', 'error');
+                    }
+                    this.disabled = false;
+                });
+            }
+
         })();
 
     </script>

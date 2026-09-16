@@ -314,6 +314,20 @@ return [
         'close_anyway'                 => 'Close anyway',
     ],
 
+    // Closing a ticket with mandatory fields empty (Tickets → Settings →
+    // Mandatory fields). 🔴 TRANSLATORS: warn_* is a WARNING - the ticket does
+    // close. block_* is the refusal. The field names follow on their own lines.
+    'mandatory_close' => [
+        'warn_title'    => 'Close with fields empty?',
+        'warn_message'  => 'These fields should be filled in before this ticket is closed:',
+        'warn_recorded' => 'Closing it now records which fields were empty, and who closed it, in the ticket notes.',
+        'warn_notified' => 'Closing it now also emails the people your administrator chose.',
+        'close_anyway'  => 'Close anyway',
+        'block_title'   => 'Fill these in first',
+        'block_message' => 'This ticket cannot be closed until these fields are filled in:',
+        'block_ok'      => 'OK',
+    ],
+
     'tasks' => [
         'menu_item'          => 'Task',
         'search_placeholder' => 'Search tasks, or type a new one…',
@@ -732,6 +746,7 @@ return [
             'ticket_origins'  => 'Ticket origins',
             'categories'      => 'Categories',
             'checklists'      => 'Checklists',
+            'mandatory_fields' => 'Mandatory fields',
             'statuses'        => 'Statuses',
             'priorities'      => 'Priorities',
             'sla'             => 'SLA',
@@ -755,6 +770,7 @@ return [
         // different phrasings where natural.
         'headings' => [
             'checklists'       => 'Closing with steps outstanding',
+            'mandatory_fields' => 'Closing with fields empty',
             'departments'      => 'Departments',
             'teams'            => 'Teams',
             'ticket_types'     => 'Ticket types',
@@ -1421,8 +1437,48 @@ return [
             'always_recorded'  => 'Either way, closing with steps outstanding writes an internal note naming the skipped steps, who closed it and through which interface. The setting decides whether it is allowed, never whether it is logged.',
         ],
 
+        // Mandatory fields at closure. 🔴 TRANSLATORS: the first two options are
+        // NOT refusals - the ticket closes under both. Only "Refuse the close"
+        // prevents it.
+        'mandatory' => [
+            'when_heading'       => 'When a ticket is closed with a ticked field empty',
+            'warn_title'         => 'Warn',
+            'warn_desc'          => 'The analyst is told which fields are empty and can close anyway.',
+            'notify_title'       => 'Warn, and email someone',
+            'notify_desc'        => 'The same, and the people below get an email naming the ticket, the empty fields and who closed it - a service delivery manager, for example.',
+            'notify_label'       => 'Send the email to',
+            'notify_placeholder' => 'name@example.com, another@example.com',
+            'block_title'        => 'Refuse the close',
+            'block_desc'         => 'The ticket cannot reach a closed status until every ticked field is filled in.',
+            'record_title'       => 'Record it on the ticket',
+            'record_desc'        => 'Writes an internal note naming the empty fields, who closed the ticket and how. Only applies to the two warning options - a refused close changes nothing, so there is nothing to record.',
+            'record_blocked'     => 'Nothing is recorded when the close is refused, because the ticket does not close.',
+            'fields_heading'     => 'Must be filled in before closing',
+            'fields_hint'        => 'A field that is switched off for a ticket\'s company, or a Team field on an install with no teams, is skipped for that ticket - nobody is asked to fill in something they cannot see. Merging tickets never triggers this.',
+            'choose_mode'        => 'Choose what happens when fields are empty.',
+            'need_address'       => 'Add at least one address to email.',
+            // One label per property. Keep them matching what the ticket screen
+            // calls each field, so an analyst told "Origin is empty" can find it.
+            'fields' => [
+                'priority'         => 'Priority',
+                'ticket_type'      => 'Type',
+                'department'       => 'Department',
+                'category'         => 'Category',
+                'closure_category' => 'Category at close',
+                'resolution_code'  => 'Resolution code',
+                'team'             => 'Team',
+                'owner'            => 'Owner',
+                'requester'        => 'Requester',
+                'origin'           => 'Origin',
+                'first_time_fix'   => 'First time fix',
+                'it_training'      => 'IT training provided',
+                'work_start'       => 'Scheduled work',
+            ],
+        ],
+
         'intros' => [
             'checklists'      => 'An SOP checklist can mark steps as mandatory. This decides what happens if somebody closes a ticket before those steps are ticked.',
+            'mandatory_fields' => 'Choose which ticket fields must be filled in before a ticket is closed, and what happens when somebody closes one with any of them empty. The rule applies everywhere a ticket can be closed: the ticket screen, bulk actions, the REST API and workflows.',
             'departments'     => 'Departments group and route tickets to the right area of your organisation — create the ones your service desk uses to categorise and assign work.',
             'teams'           => 'Teams determine which departments analysts can access. Assign departments to teams, then assign analysts to teams to control their access.',
             'ticket_types'    => 'Ticket types classify what a request is (e.g. Incident, Service Request) — define the types analysts can set on a ticket.',
@@ -2432,6 +2488,8 @@ return [
             // tickets and that is where somebody looks for it.
             'card_checklists_title' => 'Checklists',
             'card_checklists_body'  => 'Decide what happens when somebody closes a ticket that still has mandatory SOP steps outstanding: <strong>warn</strong> and record an internal note naming the steps and who closed it, or <strong>block</strong> the close until they are done. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
+            'card_mandatory_title' => 'Mandatory fields',
+            'card_mandatory_body'  => 'Tick the fields that must be filled in before a ticket can close - category, resolution code, owner and so on. Then choose what happens when somebody closes one with a field empty: <strong>warn</strong>, <strong>warn and email</strong> someone such as a service delivery manager, or <strong>refuse</strong> the close. A separate switch records it on the ticket as an internal note. A field switched off for a company is never required, and merging tickets never triggers it. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
             'card_cleanup_title'   => 'Reply Cleanup AI',
             'card_cleanup_body'    => 'Anthropic key + model + tone for the ✨ Cleanup button on the reply editor. Separate key from other AI features for granular billing',
             'card_csat_title'      => 'CSAT',

@@ -182,6 +182,19 @@ function ticketChecklistClosureMode(PDO $conn, ?int $tenantId): string
     return $v === 'block' ? 'block' : 'warn';
 }
 
+// ---------------------------------------------------------------------------
+// Mandatory fields at closure. Which ticket properties must hold a value before
+// a ticket may close, and what happens when they do not. The rule itself lives
+// in includes/services/mandatory_fields.php; these are only the stored answers.
+//
+// Same shape as the checklist closure mode above: install-wide today, read
+// through tenantSetting() so a per-company column can be added to the tab later
+// without touching the reading side.
+const SETTING_TICKET_MANDATORY_FIELDS = 'ticket_mandatory_fields';   // comma-separated field keys
+const SETTING_TICKET_MANDATORY_MODE   = 'ticket_mandatory_mode';     // warn | notify | block
+const SETTING_TICKET_MANDATORY_NOTIFY = 'ticket_mandatory_notify';   // comma-separated addresses
+const SETTING_TICKET_MANDATORY_RECORD = 'ticket_mandatory_record';   // '1' | '0'
+
 /** Should the "reported as" category field show on a ticket for this company? */
 function ticketCategoryOn(PDO $conn, ?int $tenantId): bool
 {

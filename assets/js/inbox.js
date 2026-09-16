@@ -4440,6 +4440,40 @@ async function assignStatus() {
 
     // Answered once per page load, not once per close: an operator does not
     // edit the email template between two closes, and asking again on every
+    // Mandatory fields (Tickets → Settings → Mandatory fields). Asked of the
+    // server rather than worked out here: the rule, the company's switches and
+    // which fields exist all live there, and the server enforces it again on the
+    // close itself. If the question fails, say nothing and let the close go to
+    // the server - a check that cannot run must not become a refusal.
+    if (closing && currentEmail && currentEmail.ticket_id) {
+        const mf = await mandatoryFieldsCheck(currentEmail.ticket_id);
+        if (mf && Array.isArray(mf.missing) && mf.missing.length > 0) {
+            const fieldList = mf.missing.map(m => '    • ' + m.label).join('\n');
+            if (mf.mode === 'block') {
+                await showConfirm({
+                    title: t('tickets.mandatory_close.block_title'),
+                    message: t('tickets.mandatory_close.block_message') + '\n\n' + fieldList,
+                    okLabel: t('tickets.mandatory_close.block_ok'), okClass: 'primary'
+                });
+                select.value = oldValue;   // or the dropdown shows a status never applied
+                return;
+            }
+            const after = [];
+            if (mf.record) after.push(t('tickets.mandatory_close.warn_recorded'));
+            if (mf.mode === 'notify') after.push(t('tickets.mandatory_close.warn_notified'));
+            const ok = await showConfirm({
+                title: t('tickets.mandatory_close.warn_title'),
+                message: t('tickets.mandatory_close.warn_message') + '\n\n' + fieldList
+                         + (after.length ? '\n\n' + after.join(' ') : ''),
+                okLabel: t('tickets.mandatory_close.close_anyway'), okClass: 'danger'
+            });
+            if (!ok) {
+                select.value = oldValue;
+                return;
+            }
+        }
+    }
+
     // SOP checklists (PR #141): outstanding mandatory steps WARN and are
     // recorded, they do not block — the same line the tasks check above draws,
     // and for the same reason. As contributed this was a hard block with an
@@ -4530,10 +4564,26 @@ async function assignStatus() {
             loadEmails();
         } else {
             showToast('Error assigning status: ' + data.error, 'error');
+            // A refused close must not leave the dropdown showing a status the
+            // ticket does not have.
+            select.value = oldValue;
         }
     } catch (error) {
         console.error('Error:', error);
         showToast('Failed to assign status', 'error');
+        select.value = oldValue;
+    }
+}
+
+// Which mandatory fields would be empty if this ticket closed now, or null when
+// the question could not be answered (see assignStatus()).
+async function mandatoryFieldsCheck(ticketId) {
+    try {
+        const r = await fetch(API_BASE + 'get_mandatory_fields_check.php?ticket_id=' + encodeURIComponent(ticketId));
+        const d = await r.json();
+        return d && d.success ? d : null;
+    } catch (e) {
+        return null;
     }
 }
 

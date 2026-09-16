@@ -120,20 +120,32 @@ class ChecklistsService
 
         $who  = $ctx->actorName !== '' ? $ctx->actorName : ('analyst #' . $ctx->actorId);
         $via  = $ctx->source === 'api' ? 'the API' : 'the web interface';
+        $by   = $ctx->source === 'workflow' ? 'Closed by a workflow.' : "Closed by {$who} via {$via}.";
         $list = implode("\n", array_map(
             fn($r) => '  • ' . $r['checklist'] . ' — ' . $r['step'],
             $outstanding
         ));
         $note = "⚠️ Ticket closed with " . count($outstanding) . " mandatory SOP step(s) outstanding.\n"
-              . "Closed by {$who} via {$via}.\n\n{$list}";
+              . "{$by}\n\n{$list}";
 
         // An internal note, because that is where this module already writes its
         // audit trail and where an auditor will look. UTC at rest (GH #126).
+        //
+        // A workflow has no analyst, and ticket_notes.analyst_id is NOT NULL with a
+        // foreign key, so a workflow close writes a 'Workflow Note' audit entry
+        // instead - the same place the workflow engine's own notes go.
         try {
-            $conn->prepare(
-                "INSERT INTO ticket_notes (ticket_id, analyst_id, note_text, is_internal, created_datetime)
-                 VALUES (?, ?, ?, 1, UTC_TIMESTAMP())"
-            )->execute([$ticketId, $ctx->actorId, $note]);
+            if ($ctx->actorId > 0) {
+                $conn->prepare(
+                    "INSERT INTO ticket_notes (ticket_id, analyst_id, note_text, is_internal, created_datetime)
+                     VALUES (?, ?, ?, 1, UTC_TIMESTAMP())"
+                )->execute([$ticketId, $ctx->actorId, $note]);
+            } else {
+                $conn->prepare(
+                    "INSERT INTO ticket_audit (ticket_id, analyst_id, field_name, old_value, new_value, created_datetime)
+                     VALUES (?, NULL, 'Workflow Note', NULL, ?, UTC_TIMESTAMP())"
+                )->execute([$ticketId, $note]);
+            }
         } catch (Throwable $e) {
             // A failed audit note must not block the close it is describing, but
             // it must not pass silently either.

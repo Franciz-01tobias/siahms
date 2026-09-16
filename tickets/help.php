@@ -784,6 +784,10 @@ try {
                             <strong><?php echo t('tickets.help.settings.card_checklists_title'); ?></strong>
                             <span><?php echo t('tickets.help.settings.card_checklists_body'); ?></span>
                         </div>
+                        <div class="help-card">
+                            <strong><?php echo t('tickets.help.settings.card_mandatory_title'); ?></strong>
+                            <span><?php echo t('tickets.help.settings.card_mandatory_body'); ?></span>
+                        </div>
                     </div>
 
                     <p><?php echo t('tickets.help.settings.email_heading'); ?></p>

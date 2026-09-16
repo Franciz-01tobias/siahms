@@ -1991,6 +1991,32 @@ class WorkflowEngine
         $sLookup->execute([$statusId]);
         $sRow = $sLookup->fetch(PDO::FETCH_ASSOC);
         if (!$sRow) throw new Exception("Unknown status_id: {$statusId}");
+
+        // The closure rules. This action writes the status itself rather than
+        // going through TicketsService::updateTicket(), so the two close gates
+        // that live there - mandatory SOP steps and mandatory fields - have to be
+        // called here too, or a workflow closes tickets an analyst could not.
+        // Under 'block' the action fails with the reason, and the run records it.
+        $cur = $conn->prepare(
+            "SELECT t.*, ts.is_closed AS status_is_closed
+               FROM tickets t LEFT JOIN ticket_statuses ts ON ts.id = t.status_id
+              WHERE t.id = ?"
+        );
+        $cur->execute([$ticketId]);
+        $curRow = $cur->fetch(PDO::FETCH_ASSOC);
+        if (!$curRow) throw new Exception("Unknown ticket_id: {$ticketId}");
+        $closing = (int)$sRow['is_closed'] === 1 && (int)($curRow['status_is_closed'] ?? 0) !== 1;
+        $closeTenant = $curRow['tenant_id'] !== null ? (int)$curRow['tenant_id'] : null;
+        $emptyOnClose = [];
+        if ($closing) {
+            require_once dirname(__DIR__, 2) . '/includes/service_context.php';
+            require_once dirname(__DIR__, 2) . '/includes/services/mandatory_fields.php';
+            require_once dirname(__DIR__, 2) . '/includes/services/checklists.php';
+            ChecklistsService::assertClosureAllowed($conn, $ticketId, $closeTenant);
+            $emptyOnClose = MandatoryFieldsService::missing($conn, $closeTenant, $curRow);
+            MandatoryFieldsService::assertClosureAllowed($conn, $closeTenant, $emptyOnClose);
+        }
+
         // Mirror assign_ticket.php's closure handling — when the new status
         // is_closed, stamp closed_datetime if it's not already set; when
         // reopening, clear it. Idempotent if the status hasn't actually
@@ -2004,6 +2030,14 @@ class WorkflowEngine
         }
         $params[] = $ticketId;
         $conn->prepare('UPDATE tickets SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($params);
+
+        if ($closing) {
+            // No analyst is acting: actor 0, which the two services record as a
+            // 'Workflow Note' audit entry rather than an analyst's internal note.
+            $wfCtx = new ActorContext(0, null, 'workflow');
+            ChecklistsService::recordClosureOverride($conn, $wfCtx, $ticketId);
+            MandatoryFieldsService::afterClosure($conn, $wfCtx, $ticketId, $closeTenant, $emptyOnClose);
+        }
         return ['ticket_id' => $ticketId, 'status_id' => $statusId, 'status_name' => $sRow['name']];
     }
 

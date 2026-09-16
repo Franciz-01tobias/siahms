@@ -289,40 +289,6 @@ function sla_send_breach_email(PDO $conn, int $ticketId, array $state, string $t
         throw new Exception("could not build merge data for ticket $ticketId");
     }
 
-    $mailbox = templateGetMailboxForTicket($conn, $ticketId);
-    if (!$mailbox) {
-        $mailbox = sla_get_first_active_mailbox($conn);
-    }
-    if (!$mailbox) {
-        throw new Exception("no mailbox available to send from");
-    }
-
-    $provider = $mailbox['provider'] ?? 'microsoft';
-    $accessToken = null;
-    $graphBase = '/me';
-    if ($provider === 'imap') {
-        // Basic IMAP sends via SMTP — no OAuth token to validate/refresh.
-        require_once __DIR__ . '/mailbox_imap.php';
-    } elseif ($provider === 'google') {
-        $tokenData = json_decode(preg_replace('/[\x00-\x1F\x7F]/', '', $mailbox['token_data'] ?? ''), true);
-        if (!$tokenData || !isset($tokenData['access_token'])) {
-            throw new Exception("invalid token data on mailbox {$mailbox['id']}");
-        }
-        require_once __DIR__ . '/gmail.php';
-        $accessToken = gmailGetValidAccessToken($conn, $mailbox, $tokenData);
-        if (!$accessToken) {
-            throw new Exception("failed to refresh access token for mailbox {$mailbox['id']}");
-        }
-    } else {
-        // Microsoft: auth_mode decides both the token source and the send endpoint.
-        $graph = templateGraphContext($conn, $mailbox);
-        if (!$graph) {
-            throw new Exception("failed to obtain an access token for mailbox {$mailbox['id']}");
-        }
-        $accessToken = $graph['token'];
-        $graphBase   = $graph['base'];
-    }
-
     $target = $state[$targetType];
     $priority = $state['priority']['name'] ?? '';
     $ticketRef = $merge['ticket_reference'];
@@ -340,32 +306,11 @@ function sla_send_breach_email(PDO $conn, int $ticketId, array $state, string $t
 
     $body = sla_build_breach_email_body($merge, $target, $targetLabel, $headline, $trigger);
 
-    foreach ($recipients as $to) {
-        // Logged per recipient: one address failing (a typo in an escalation list,
-        // say) should not read as the whole alert having failed, or vice versa.
-        try {
-            if ($provider === 'imap') {
-                imapSmtpSend($mailbox, $to, '', $subject, $body);
-            } elseif ($provider === 'google') {
-                $from = $mailbox['target_mailbox'] ?? '';
-                gmailSendEmail($accessToken, $to, $subject, $body, $from);
-            } else {
-                $message = [
-                    'message' => [
-                        'subject' => $subject,
-                        'body' => ['contentType' => 'HTML', 'content' => $body],
-                        'toRecipients' => [['emailAddress' => ['address' => $to]]],
-                    ],
-                    'saveToSentItems' => false, // Internal notification, don't clutter sent items
-                ];
-                templateSendViaGraph($accessToken, $message, $graphBase);
-            }
-            emailLogSent($conn, $mailbox, 'sla', $to, $subject, $ticketId);
-        } catch (Exception $e) {
-            emailLogFailed($conn, $mailbox, 'sla', $to, $subject, $e->getMessage(), $ticketId);
-            throw $e;
-        }
-    }
+    // Mailbox choice, token refresh, the three providers and the per-recipient
+    // send log live in internalTicketEmail(), shared with the mandatory-fields
+    // closure alert. Logged per recipient: one address failing (a typo in an
+    // escalation list, say) should not read as the whole alert having failed.
+    internalTicketEmail($conn, $ticketId, $recipients, $subject, $body, 'sla');
 }
 
 /**
