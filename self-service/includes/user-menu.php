@@ -205,6 +205,16 @@ if (count($_um_parts) > 1) {
         color: var(--text, #333);
     }
     .ss-form-input:focus { outline: none; border-color: var(--accent, #0078d4); }
+    /* A locked field must LOOK locked. Without this a directory-owned detail
+       rendered exactly like an editable one - most visibly in the dark theme -
+       and the only clue was the note above it. */
+    .ss-form-input:disabled {
+        background: var(--surface-2, #f0f0f0);
+        color: var(--text-muted, #777);
+        border-style: dashed;
+        cursor: not-allowed;
+        opacity: .75;
+    }
     .ss-form-hint {
         font-size: 11px;
         color: var(--text-dim, #999);
