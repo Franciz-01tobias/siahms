@@ -45,7 +45,7 @@ $translationNamespaces = ['common', 'system'];
         .page-subtitle { font-size: 13px; color: var(--text-muted, #888); margin: 0 0 24px 0; line-height: 1.5; }
 
         .cs-card { background: var(--surface, #fff); border-radius: 8px; padding: 24px;
-                   box-shadow: 0 2px 8px var(--shadow, rgba(0,0,0,0.08)); margin-bottom: 20px; max-width: 820px; }
+                   box-shadow: 0 2px 8px var(--shadow, rgba(0,0,0,0.08)); margin-bottom: 20px; }
         .cs-card h2 { font-size: 16px; font-weight: 600; margin: 0 0 6px; color: var(--text, #333); }
         .cs-card > p { font-size: 13px; color: var(--text-muted, #666); margin: 0 0 18px; line-height: 1.55; }
 
