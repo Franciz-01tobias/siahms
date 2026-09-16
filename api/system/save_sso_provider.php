@@ -138,7 +138,8 @@ if ($protocol === 'carddav') {
         bail('The CardDAV address must start with http:// or https://');
     }
 
-    $authIn = $data['carddav_auth'] ?? 'auto';
+    $authIn  = $data['carddav_auth'] ?? 'auto';
+    $scopeIn = $data['carddav_scope'] ?? 'all';
     $carddav = [
         'url'         => $url,
         'username'    => trim($data['carddav_username'] ?? ''),
@@ -150,13 +151,22 @@ if ($protocol === 'carddav') {
         // unexpected value degrades to 'all' rather than being stored and later
         // matching nothing — a scope nothing matches is an import that silently
         // brings in zero people.
-        'scope'       => in_array(($data['carddav_scope'] ?? 'all'), ['all', 'group', 'category'], true)
-                       ? $data['carddav_scope'] : 'all',
+        //
+        // 🔴 $scopeIn, read once above. This used to test `$data['carddav_scope']
+        // ?? 'all'` and then return `$data['carddav_scope']` itself - so when the
+        // key was absent (the Add dialog never sends it; the book and scope are
+        // chosen afterwards on carddav.php) the test passed on the default and
+        // the value returned was undefined: a PHP warning printed before the
+        // JSON, then NULL into a NOT NULL column. Nobody could add a CardDAV
+        // source at all.
+        'scope'       => in_array($scopeIn, ['all', 'group', 'category'], true) ? $scopeIn : 'all',
         'scope_value' => trim($data['carddav_scope_value'] ?? '') ?: null,
         // 🔴 Whether edits in FreeITSM are pushed back to the card. Absent means
-        // OFF, not "leave as it was": the one setting on this screen that can
-        // modify the operator's own address book should never be left on by a
-        // request that simply forgot to mention it.
+        // OFF on a NEW source - the one setting that can modify the operator's
+        // own address book is never switched on by default. On an update, absent
+        // means "as it was" (see below): the Add/Edit dialog never shows this
+        // switch, so treating its silence as "off" turned write-back off every
+        // time somebody renamed the source.
         'write_back'  => !empty($data['carddav_write_back']) ? 1 : 0,
     ];
     $cardDavSecretIn = $data['carddav_password'] ?? '';
@@ -306,6 +316,54 @@ try {
              $ldap['attr_phone'], $ldap['attr_mobile'], $ldap['attr_employee_id'], $ldap['attr_manager'],
              $carddav['url'], $carddav['username'], $carddav['addressbook'], $carddav['auth'],
              $carddav['scope'], $carddav['scope_value'], $carddav['write_back']];
+
+    // 🔴 ON UPDATE, A SETTING THE REQUEST DOES NOT MENTION KEEPS ITS STORED VALUE.
+    //
+    // Three screens save through this endpoint and none of them sends everything:
+    //   - the Add/Edit dialog sends no address book, scope or write-back for a
+    //     CardDAV source, and none of the directory-sync settings for LDAP;
+    //   - carddav.php sends no company or default modules;
+    //   - provider.php (LDAP) sends no require-verified-email or default modules.
+    // Treating "not sent" as "empty" meant editing a source's name in the dialog
+    // silently cleared its chosen address book, reset it to import everyone and
+    // turned write-back off - and the LDAP equivalent switched directory sync
+    // off - while each settings page reset the company to Global.
+    //
+    // Only when the protocol is unchanged: switching protocol must still clear
+    // the old protocol's settings (see the note above the per-protocol fields).
+    // Only for settings this protocol actually reads from the request; values
+    // this endpoint forces (an address book's empty LDAP columns, its
+    // auto-create switch) are never taken from the stored row.
+    if ($id > 0) {
+        $st = $conn->prepare("SELECT * FROM auth_providers WHERE id = ?");
+        $st->execute([$id]);
+        $existing = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$existing) bail('Provider not found');
+
+        if ($existing['protocol'] === $protocol) {
+            $readable = ['enabled', 'default_modules', 'sort_order', 'tenant_id'];
+            if ($protocol === 'oidc') {
+                $readable = array_merge($readable, ['auto_create_users', 'require_verified_email', 'issuer_url', 'client_id', 'scopes']);
+            } elseif ($protocol === 'ldap') {
+                $readable = array_merge($readable, ['auto_create_users', 'require_verified_email'],
+                    array_values(array_filter($cols, fn($c) => strpos($c, 'ldap_') === 0 || strpos($c, 'sync_') === 0)));
+            } else {
+                $readable = array_merge($readable,
+                    array_values(array_filter($cols, fn($c) => strpos($c, 'carddav_') === 0)));
+            }
+            foreach ($cols as $i => $c) {
+                // Every readable column is named after its request key.
+                if (in_array($c, $readable, true) && !array_key_exists($c, $data)) {
+                    $vals[$i] = $existing[$c];
+                }
+            }
+            // An address book's import switch IS its enabled flag (see above), so
+            // it follows whatever `enabled` ended up as, sent or kept.
+            if ($protocol === 'carddav') {
+                $vals[array_search('sync_enabled', $cols, true)] = $vals[array_search('enabled', $cols, true)];
+            }
+        }
+    }
 
     // A blank/masked secret on update = keep what is stored.
     $writeSecret        = !isMaskedNoChangeValue($secretInput);

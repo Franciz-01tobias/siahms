@@ -767,8 +767,10 @@ $('saveBtn').addEventListener('click', async function () {
                 carddav_scope: scope,
                 // Newline-separated, the same convention as sync_ou_includes.
                 carddav_scope_value: scope === 'all' ? '' : picked.join('\n'),
-                carddav_write_back: $('fWriteBack').checked ? 1 : 0,
-                enabled: 1
+                // No `enabled`: this page has no switch for it, and sending 1
+                // turned a source somebody had disabled in the dialog back on.
+                // The server keeps what is stored for anything not sent.
+                carddav_write_back: $('fWriteBack').checked ? 1 : 0
             })
         });
         const d = await r.json();
