@@ -1562,6 +1562,13 @@ async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
         return;
     }
 
+    // A drop onto a closed status closes the ticket, so it asks the same
+    // mandatory-fields question as every other way of closing one.
+    if (isClosedStatusName(payload.status)
+            && !(await confirmCloseWithMandatoryFields([payload.ticket_id]))) {
+        return;
+    }
+
     try {
         const res = await fetch(API_BASE + 'assign_ticket.php', {
             method: 'POST',
@@ -2367,7 +2374,13 @@ async function applyToSelection(endpoint, payloadFor, label) {
 }
 
 /** Set one field across the selection. */
-function bulkSetField(fields, label) {
+async function bulkSetField(fields, label) {
+    // Closing several at once asks the mandatory-fields question first, the
+    // same as closing one (see confirmCloseWithMandatoryFields()).
+    if (fields && isClosedStatusName(fields.status) && !bulkBusy
+            && !(await confirmCloseWithMandatoryFields(selectedTicketIds()))) {
+        return;
+    }
     return applyToSelection('bulk_update_tickets.php',
         chunk => ({ ticket_ids: chunk, fields: fields }), label);
 }
@@ -4440,38 +4453,11 @@ async function assignStatus() {
 
     // Answered once per page load, not once per close: an operator does not
     // edit the email template between two closes, and asking again on every
-    // Mandatory fields (Tickets → Settings → Mandatory fields). Asked of the
-    // server rather than worked out here: the rule, the company's switches and
-    // which fields exist all live there, and the server enforces it again on the
-    // close itself. If the question fails, say nothing and let the close go to
-    // the server - a check that cannot run must not become a refusal.
-    if (closing && currentEmail && currentEmail.ticket_id) {
-        const mf = await mandatoryFieldsCheck(currentEmail.ticket_id);
-        if (mf && Array.isArray(mf.missing) && mf.missing.length > 0) {
-            const fieldList = mf.missing.map(m => '    • ' + m.label).join('\n');
-            if (mf.mode === 'block') {
-                await showConfirm({
-                    title: t('tickets.mandatory_close.block_title'),
-                    message: t('tickets.mandatory_close.block_message') + '\n\n' + fieldList,
-                    okLabel: t('tickets.mandatory_close.block_ok'), okClass: 'primary'
-                });
-                select.value = oldValue;   // or the dropdown shows a status never applied
-                return;
-            }
-            const after = [];
-            if (mf.record) after.push(t('tickets.mandatory_close.warn_recorded'));
-            if (mf.mode === 'notify') after.push(t('tickets.mandatory_close.warn_notified'));
-            const ok = await showConfirm({
-                title: t('tickets.mandatory_close.warn_title'),
-                message: t('tickets.mandatory_close.warn_message') + '\n\n' + fieldList
-                         + (after.length ? '\n\n' + after.join(' ') : ''),
-                okLabel: t('tickets.mandatory_close.close_anyway'), okClass: 'danger'
-            });
-            if (!ok) {
-                select.value = oldValue;
-                return;
-            }
-        }
+    // Mandatory fields (Tickets → Settings → Mandatory fields).
+    if (closing && currentEmail && currentEmail.ticket_id
+            && !(await confirmCloseWithMandatoryFields([currentEmail.ticket_id]))) {
+        select.value = oldValue;   // or the dropdown shows a status never applied
+        return;
     }
 
     // SOP checklists (PR #141): outstanding mandatory steps WARN and are
@@ -4575,16 +4561,114 @@ async function assignStatus() {
     }
 }
 
-// Which mandatory fields would be empty if this ticket closed now, or null when
-// the question could not be answered (see assignStatus()).
-async function mandatoryFieldsCheck(ticketId) {
+// ---------------------------------------------------------------------------
+// Mandatory fields at closure - the ONE question every way of closing asks.
+// ---------------------------------------------------------------------------
+// The status dropdown, the right-click menu, a drag onto a closed status and the
+// bulk actions all close tickets, and all of them call this first. It began
+// wired to the dropdown alone, so a right-click close went through with no
+// warning at all.
+//
+// Asked of the server rather than worked out here: the rule, each company's
+// switches and which fields exist all live there, and the server enforces it
+// again on the close itself. So if the question cannot be answered, say nothing
+// and let the close go to the server - a check that cannot run must not become
+// a refusal that cannot be cleared.
+
+/** Is this status name one that closes a ticket? */
+function isClosedStatusName(name) {
+    return !!name && (ticketStatuses || []).some(s => s.name === name && s.is_closed);
+}
+
+/**
+ * Tickets that would close with mandatory fields empty, or null when the
+ * question could not be answered. Asked in chunks for a large selection.
+ */
+async function mandatoryFieldsCheck(ticketIds) {
+    const found = [];
     try {
-        const r = await fetch(API_BASE + 'get_mandatory_fields_check.php?ticket_id=' + encodeURIComponent(ticketId));
-        const d = await r.json();
-        return d && d.success ? d : null;
+        for (let i = 0; i < ticketIds.length; i += 100) {
+            const chunk = ticketIds.slice(i, i + 100);
+            const q = chunk.length === 1
+                ? 'ticket_id=' + encodeURIComponent(chunk[0])
+                : 'ticket_ids=' + chunk.map(encodeURIComponent).join(',');
+            const r = await fetch(API_BASE + 'get_mandatory_fields_check.php?' + q);
+            const d = await r.json();
+            if (!d || !d.success) return null;
+            (d.tickets || []).forEach(tk => { if (tk.missing && tk.missing.length) found.push(tk); });
+        }
     } catch (e) {
         return null;
     }
+    return found;
+}
+
+/**
+ * Ask, then say. Resolves true when the close may go ahead: nothing is missing,
+ * the analyst chose to close anyway, or the question could not be answered.
+ * Resolves false when nothing should be sent.
+ *
+ * With several tickets and some of them refused, the analyst may still close the
+ * rest: the server refuses the others and the bulk result names them.
+ */
+async function confirmCloseWithMandatoryFields(ticketIds) {
+    const ids = (ticketIds || []).filter(Boolean);
+    if (!ids.length) return true;
+    const found = await mandatoryFieldsCheck(ids);
+    if (!found || !found.length) return true;
+
+    const fieldsOf = tk => tk.missing.map(m => m.label).join(', ');
+    const blocked  = found.filter(tk => tk.mode === 'block');
+    const warned   = found.filter(tk => tk.mode !== 'block');
+
+    // One ticket: the fields on their own lines.
+    if (ids.length === 1) {
+        const tk = found[0];
+        const fieldList = tk.missing.map(m => '    • ' + m.label).join('\n');
+        if (tk.mode === 'block') {
+            await showConfirm({
+                title: t('tickets.mandatory_close.block_title'),
+                message: t('tickets.mandatory_close.block_message') + '\n\n' + fieldList,
+                okLabel: t('tickets.mandatory_close.block_ok'), okClass: 'primary'
+            });
+            return false;
+        }
+        const after = [];
+        if (tk.record) after.push(t('tickets.mandatory_close.warn_recorded'));
+        if (tk.mode === 'notify') after.push(t('tickets.mandatory_close.warn_notified'));
+        return await showConfirm({
+            title: t('tickets.mandatory_close.warn_title'),
+            message: t('tickets.mandatory_close.warn_message') + '\n\n' + fieldList
+                     + (after.length ? '\n\n' + after.join(' ') : ''),
+            okLabel: t('tickets.mandatory_close.close_anyway'), okClass: 'danger'
+        });
+    }
+
+    // Several: one line per ticket, capped so a big selection stays readable.
+    const lines = list => {
+        const shown = list.slice(0, 10).map(tk => '    • ' + (tk.ticket_number || ('#' + tk.ticket_id)) + ': ' + fieldsOf(tk));
+        if (list.length > 10) shown.push('    ' + t('tickets.mandatory_close.and_more', { count: list.length - 10 }));
+        return shown.join('\n');
+    };
+    let message = '';
+    if (blocked.length) message += t('tickets.mandatory_close.multi_block_message') + '\n\n' + lines(blocked);
+    if (warned.length)  message += (message ? '\n\n' : '') + t('tickets.mandatory_close.multi_warn_message') + '\n\n' + lines(warned);
+
+    // Every selected ticket refused: there is nothing to close.
+    if (blocked.length === ids.length) {
+        await showConfirm({
+            title: t('tickets.mandatory_close.block_title'),
+            message: message,
+            okLabel: t('tickets.mandatory_close.block_ok'), okClass: 'primary'
+        });
+        return false;
+    }
+    return await showConfirm({
+        title: blocked.length ? t('tickets.mandatory_close.block_title') : t('tickets.mandatory_close.warn_title'),
+        message: message,
+        okLabel: blocked.length ? t('tickets.mandatory_close.close_rest') : t('tickets.mandatory_close.close_anyway'),
+        okClass: 'danger'
+    });
 }
 
 // Assign priority. Sends priority_id (or null for the "no priority" blank
@@ -9019,6 +9103,7 @@ async function setStatusFromContext(statusName) {
     if (ctxActsOnSelection) return bulkSetField({ status: statusName }, t('tickets.bulk.label_status'));
     if (!ctxTargetTicketId) return;
     const targetId = ctxTargetTicketId;
+    if (isClosedStatusName(statusName) && !(await confirmCloseWithMandatoryFields([targetId]))) return;
     try {
         const response = await fetch(API_BASE + 'assign_ticket.php', {
             method: 'POST',

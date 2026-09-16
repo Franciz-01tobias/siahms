@@ -326,6 +326,12 @@ return [
         'block_title'   => 'Fill these in first',
         'block_message' => 'This ticket cannot be closed until these fields are filled in:',
         'block_ok'      => 'OK',
+        // Closing several at once (bulk actions, or dragging a selection).
+        // Each ticket follows on its own line as "REF: Field, Field".
+        'multi_block_message' => 'These tickets cannot be closed until their fields are filled in:',
+        'multi_warn_message'  => 'These tickets have fields that should be filled in first:',
+        'close_rest'    => 'Close the rest',
+        'and_more'      => '…and {count} more',
     ],
 
     'tasks' => [
