@@ -229,15 +229,17 @@ function getHelpTopics() {
         ],
         'preferences' => [
             'hero' => 'Preferences',
-            'sub'  => 'Your own personal settings — interface language, where notifications pop up, how left-hand panels behave and a couple of display options. Each choice is saved to your account and follows you to any browser you sign in from.',
+            'sub'  => 'Your own personal settings — interface language, where notifications pop up, how left-hand panels behave, a couple of display options and your work calendar. Each choice is saved to your account and follows you to any browser you sign in from.',
             'sections' => [
                 ['id' => 'overview', 'label' => 'Overview'],
                 ['id' => 'language', 'label' => 'Interface language'],
                 ['id' => 'toasts',   'label' => 'Notifications'],
                 ['id' => 'panels',   'label' => 'Left panels'],
                 ['id' => 'display',  'label' => 'Display options'],
+                ['id' => 'workcal',  'label' => 'My work calendar'],
             ],
-            'terms' => 'my settings personal language locale translate toast popup dark mode timezone',
+            'terms' => 'my settings personal language locale translate toast popup dark mode timezone'
+                     . ' my work calendar outlook caldav nextcloud icloud subscribe link which calendar sign in to my calendar',
         ],
         'demo-data' => [
             'hero' => 'Demo data',

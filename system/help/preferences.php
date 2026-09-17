@@ -83,4 +83,29 @@ require __DIR__ . '/_top.php';
     </div>
 </div>
 
+<!-- My work calendar -->
+<div class="help-section" id="workcal">
+    <div class="help-section-header"><?php echo helpSectionNum('workcal'); ?>
+        <div>
+            <h3>My work calendar</h3>
+            <p>Your scheduled tickets and tasks, in the calendar you actually use.</p>
+        </div>
+    </div>
+    <div class="help-cards">
+        <div class="help-card">
+            <h4>Off, Add to my calendar, or Subscribe link</h4>
+            <p><strong>Add to my calendar</strong> writes real appointments into your calendar and needs a connection set up by an administrator under <a href="calendar-sync.php">Calendar sync</a>. <strong>Subscribe link</strong> gives you a private link any calendar app can read, with nothing to set up.</p>
+        </div>
+        <div class="help-card">
+            <h4>Which calendar</h4>
+            <p>If your system has more than one calendar connection - Microsoft 365 and a CalDAV server, say - pick yours here. With only one there is nothing to choose. Moving to another takes your appointments out of the old calendar first.</p>
+        </div>
+        <div class="help-card">
+            <h4>A CalDAV server</h4>
+            <p>You sign in with your own calendar account, press <strong>Find</strong> and choose a calendar. An app password is the better choice where your server offers them. <strong>Forget</strong> takes the appointments back out and forgets the sign-in.</p>
+        </div>
+    </div>
+    <p>The full guide, with each route compared, is <a href="../../tickets/help-calendar-sync.php">Tickets → Calendar sync</a>.</p>
+</div>
+
 <?php require __DIR__ . '/_bottom.php'; ?>

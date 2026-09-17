@@ -138,7 +138,7 @@ return [
         'security_keywords' => 'security password expiry lockout trusted device mfa 2fa login policy brute force',
         'sso_title'         => 'Authentication',
         'sso_desc'          => 'Choose how people sign in — single sign-on through an identity provider (OpenID Connect), or against your LDAP / Active Directory — and bring contacts in from a CardDAV address book.',
-        'sso_keywords'      => 'authentication auth sso single sign-on single sign on oidc openid connect saml identity provider idp keycloak entra azure ad okta google oauth federation login ldap active directory ad domain directory bind samba openldap carddav card dav addressbook vcard vcf sabredav sabre baikal nextcloud owncloud thunderbird contact sync import people two-way two way write back writeback sync back update contacts push changes refused conflict drift compare not writing read-only permission',
+        'sso_keywords'      => 'authentication auth sso single sign-on single sign on oidc openid connect saml identity provider idp keycloak entra azure ad okta google oauth federation login ldap active directory ad domain directory bind samba openldap carddav card dav addressbook vcard vcf sabredav sabre baikal nextcloud owncloud thunderbird contact sync import people two-way two way write back writeback sync back update contacts push changes refused conflict drift compare not writing read-only permission add to address book new contact add people',
         'api_title'         => 'API',
         'api_desc'          => 'Create API keys with granular permissions, and explore the REST API with interactive documentation.',
         'api_keywords'      => 'api rest keys tokens integration webhook endpoints documentation swagger developer external',
@@ -147,7 +147,7 @@ return [
         'webhooks_keywords' => 'webhooks webhook queue outbound deliveries delivery worker cron slack teams discord payload replay retries hmac signature integration workflow',
         'calsync_title'    => 'Calendar sync',
         'calsync_desc'     => 'Put analysts\' scheduled tickets into their own calendars - Outlook, or any CalDAV server such as Nextcloud or Baïkal - and govern subscription links.',
-        'calsync_keywords' => 'calendar sync outlook exchange graph google ical ics subscribe feed scheduled work appointments office 365 m365 caldav webdav nextcloud baikal radicale icloud fastmail sabredav',
+        'calsync_keywords' => 'calendar sync outlook exchange graph google ical ics subscribe feed scheduled work appointments office 365 m365 caldav webdav nextcloud baikal radicale icloud fastmail sabredav multiple connections several both which calendar',
         'preferences_title' => 'Preferences',
         'preferences_desc'  => 'Personal settings like notification position. These are saved per-browser and apply only to you.',
         'preferences_keywords' => 'preferences personal settings notifications toast position per-browser',
@@ -485,7 +485,7 @@ return [
     // System → Portal profile (#133)
     'portal_profile' => [
         'heading'          => 'Portal profile',
-        'intro'            => 'What people may change about themselves under <strong>My Account</strong> in the self-service portal. Anything you leave unticked is shown to them as read-only, or not at all.',
+        'intro'            => 'What people may change about themselves under <strong>My Account</strong> in the self-service portal. Anything you leave unticked is not shown to them at all.',
         'fields_heading'   => 'What people may change',
         'fields_desc'      => 'These apply to everyone who signs in to the portal. A person kept up to date from a directory still cannot change a detail the directory owns, unless the section below lets their address book take the change.',
         'always'           => 'Always',

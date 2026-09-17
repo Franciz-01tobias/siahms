@@ -491,7 +491,7 @@ $translationNamespaces = ['common', 'asset-management'];
                         <div class="help-step">
                             <div class="help-step-num">1</div>
                             <div>
-                                <strong><?php echo htmlspecialchars(t('asset-management.help.users_step1_strong')); ?></strong> <?php echo t('asset-management.help.users_step1_text'); ?>
+                                <strong><?php echo htmlspecialchars(t('asset-management.help.users_step1_strong')); ?></strong> <?php echo t('asset-management.help.users_step1_list'); ?>
                             </div>
                         </div>
                         <div class="help-step">

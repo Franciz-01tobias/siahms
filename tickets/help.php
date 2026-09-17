@@ -559,6 +559,8 @@ try {
 
                     <p style="margin-top: 16px;"><?php echo t('tickets.help.users.managed_heading'); ?></p>
                     <p><?php echo t('tickets.help.users.managed_body'); ?></p>
+                    <p><?php echo t('tickets.help.users.source_body'); ?></p>
+                    <p><?php echo t('tickets.help.users.add_book_body'); ?></p>
 
                     <p style="margin-top: 16px;"><?php echo t('tickets.help.users.delete_heading'); ?></p>
                     <p><?php echo t('tickets.help.users.delete_body'); ?></p>

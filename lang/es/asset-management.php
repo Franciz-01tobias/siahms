@@ -890,7 +890,6 @@ Hay dos formas de evitarlo: cambie también el nombre en la hoja de cálculo, o 
         'users_heading' => 'Quién tiene qué',
         'users_intro' => 'La pestaña <strong>Usuarios</strong> responde a una pregunta que antes significaba buscar en la lista de activos uno por uno: ¿qué tiene realmente esta persona? Elija a alguien y verá todo lo que tiene asignado en una sola pantalla, y podrá imprimir un documento de entrega para que lo firme.',
         'users_step1_strong' => 'Encuentre a la persona.',
-        'users_step1_text' => 'La lista de la izquierda muestra a todos los que actualmente tienen equipos, con un contador junto a cada nombre. Busque por nombre o correo electrónico si la lista es larga. Alguien que no tiene nada no aparece, porque la lista responde a «quién tiene equipo».',
         'users_step2_strong' => 'Vea lo que tiene.',
         'users_step2_text' => 'Al hacer clic en una persona se muestra cada elemento que tiene asignado con su tipo, nombre, marca y modelo, número de serie, etiqueta de activo y la fecha en que se asignó &mdash; que es justo lo que necesita una auditoría o una comprobación de baja de personal.',
         'users_step3_strong' => 'Imprima o envíe por correo un documento de entrega.',

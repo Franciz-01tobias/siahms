@@ -1062,7 +1062,7 @@ return [
         'users_heading' => 'Who holds what',
         'users_intro'   => 'The <strong>Users</strong> tab answers a question that used to mean searching the asset list one item at a time: what has this person actually got? Pick somebody and you see everything assigned to them on one screen, and you can print a handover document for them to sign.',
         'users_step1_strong' => 'Find the person.',
-        'users_step1_text'   => 'The list on the left shows everybody who currently holds equipment, with a count beside each name. Search by name or email if the list is long. Somebody holding nothing does not appear, because the list answers "who has kit".',
+        'users_step1_list'   => 'The list on the left shows your current people, with a count of what each holds. Search by name, email or department, and use the first dropdown for <strong>Leavers</strong>, <strong>Everyone</strong> or only those <strong>Holding equipment</strong>. Where people come from a directory or an address book, a second dropdown, <strong>Source</strong>, lists only the people from one of them, or only those added in FreeITSM; their details name where they come from. Someone who is in no address book can be added to one with <strong>Add to address book</strong>, if an administrator has allowed it for that address book.',
         'users_step2_strong' => 'See what they hold.',
         'users_step2_text'   => 'Clicking a person shows every item assigned to them with its type, name, make and model, serial number, asset tag and the date it was assigned &mdash; which is what an audit or an offboarding check actually needs.',
         'users_step3_strong' => 'Print or email a handover document.',
