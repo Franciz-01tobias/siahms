@@ -51,6 +51,13 @@ $prefDefaults = [
     // preference — the drawer keeps the board visible behind it, the modal gives
     // the description and comments room to breathe.
     'tasks_detail_view'          => 'panel',
+    // Whether clicking away closes the draggable search panel (#144, asked for
+    // by mbsouth). '' — only the ✕ or Escape — because the panel is draggable:
+    // it is meant to be parked somewhere useful while you work, and a
+    // click-anywhere dismiss makes that pointless for the people who do that.
+    // Opt-in per analyst rather than per install, because which of the two you
+    // want is a working style, not a property of the service desk.
+    'search_panel_close_outside' => '',
     // Whether the task calendar shows subtasks as well as tasks (#90). Written
     // from two places that must agree: here, and the calendar's own Show
     // control. '' is parent tasks only, which is what the calendar always did.
@@ -478,6 +485,22 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     <option value="modal" <?php echo $prefs['tasks_detail_view'] === 'modal' ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.task_view_modal')); ?></option>
                 </select>
                 <span class="pref-saving-hint" id="taskViewSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+            </div>
+
+            <!-- Closing the search panel (#144). Sits beside "Opening a task"
+                 because it is the same kind of choice: how a shared UI surface
+                 behaves for YOU. Off by default — see the note by the default. -->
+            <div class="pref-section">
+                <h3><?php echo htmlspecialchars(t('system.preferences.search_dismiss_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.search_dismiss_desc')); ?></p>
+                <label class="toggle-group">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="searchDismissToggle" <?php echo $prefs['search_panel_close_outside'] === 'on' ? 'checked' : ''; ?>>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label"><?php echo htmlspecialchars(t('system.preferences.search_dismiss_label')); ?></span>
+                </label>
+                <span class="pref-saving-hint" id="searchDismissSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
             </div>
 
             <!-- Subtasks on the task calendar (#90). The calendar's own Show control
@@ -997,6 +1020,22 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 taskViewHint.classList.add('show');
                 await savePref('tasks_detail_view', taskViewSelect.value);
                 setTimeout(() => taskViewHint.classList.remove('show'), 1200);
+            });
+        }
+
+        // ===== Closing the search panel (search_panel_close_outside) =====
+        // Stored as 'on' / '' so the value reads the same way as the other
+        // opt-in keys, and so an un-migrated or empty row means "off".
+        const searchDismissToggle = document.getElementById('searchDismissToggle');
+        const searchDismissHint   = document.getElementById('searchDismissSavingHint');
+        if (searchDismissToggle) {
+            searchDismissToggle.addEventListener('change', async function() {
+                searchDismissHint.classList.add('show');
+                await savePref('search_panel_close_outside', searchDismissToggle.checked ? 'on' : '');
+                // Take effect on this page's own globals too, so a module opened
+                // in another tab is the only thing needing a reload.
+                window.SEARCH_PANEL_CLOSE_OUTSIDE = searchDismissToggle.checked;
+                setTimeout(() => searchDismissHint.classList.remove('show'), 1200);
             });
         }
 

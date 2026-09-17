@@ -7747,6 +7747,24 @@ function closeSearchModal() {
     // Use the Clear button to reset if needed
 }
 
+// Escape always closes the panel; clicking away closes it only if the analyst
+// turned that on (System > Preferences > Display). #144.
+//
+// The reading pane counts as INSIDE: clicking a result loads the ticket there
+// rather than navigating, so a click in the pane — or in the ticket properties
+// it contains — means "I am working on what the search found", not "dismiss it".
+// That keeps the panel from vanishing the instant you touch the ticket you were
+// looking for, which is what a literal "anything outside" rule would do.
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.initSearchPanelDismiss && document.getElementById('searchModal')) {
+        window.initSearchPanelDismiss({
+            panelId: 'searchModal',
+            close: closeSearchModal,
+            inside: ['#readingPane']
+        });
+    }
+});
+
 function initSearchModalDrag() {
     const modal = document.getElementById('searchModal');
     const header = document.getElementById('searchModalHeader');

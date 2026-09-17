@@ -143,6 +143,15 @@ function pmOpenSearchModal() {
 
 function pmCloseSearchModal() { document.getElementById('pmSearchModal').classList.remove('active'); }
 
+// Escape always closes the panel; clicking away closes it only if the analyst
+// turned that on (System > Preferences > Display). #144. Clicking a result
+// already closes it, via pmSelectSearchResult().
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.initSearchPanelDismiss && document.getElementById('pmSearchModal')) {
+        window.initSearchPanelDismiss({ panelId: 'pmSearchModal', close: pmCloseSearchModal });
+    }
+});
+
 function pmInitSearchDrag() {
     const header = document.getElementById('pmSearchModalHeader');
     const modal = document.getElementById('pmSearchModal');

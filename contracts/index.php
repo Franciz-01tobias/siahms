@@ -526,9 +526,19 @@ $translationNamespaces = ['common', 'contracts'];
             }
         }
 
-        // Close search modal on escape
+        // Close search modal on escape. Kept as-is; the shared helper below
+        // registers the same key, and both routes call the same close.
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') closeSearchModal();
+        });
+
+        // Clicking away closes the panel if the analyst turned that on
+        // (System > Preferences > Display). #144. No reading-pane exception:
+        // clicking a result navigates to the contract, so the panel goes anyway.
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.initSearchPanelDismiss && document.getElementById('searchModal')) {
+                window.initSearchPanelDismiss({ panelId: 'searchModal', close: closeSearchModal });
+            }
         });
 
         // Helpers

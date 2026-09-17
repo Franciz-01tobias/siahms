@@ -72,13 +72,19 @@ require __DIR__ . '/_top.php';
     <div class="help-section-header"><?php echo helpSectionNum('display'); ?>
         <div>
             <h3>Display options</h3>
-            <p>A small extra display choice.</p>
+            <p>Small choices about how the screen behaves for you.</p>
         </div>
     </div>
     <div class="help-cards">
         <div class="help-card">
             <h4>Mission Control chart fill</h4>
             <p>Sets how charts on the Mission Control dashboard are filled: <strong>Plain</strong> (solid colour) or <strong>Gradient</strong> (a graded fill). Purely cosmetic — it changes the look, not the data.</p>
+        </div>
+        <div class="help-card">
+            <h4>Closing the search panel</h4>
+            <p>The search panel in Tickets, Change Management, Problem Management and Contracts can be dragged out of the way and left open, so by default only its <strong>✕</strong> or the <strong>Escape</strong> key closes it. That suits searching once and then clicking down the results looking for the right ticket.</p>
+            <p>Turn on <strong>Close it when I click away</strong> if you would rather it got out of the way on its own. It then closes as soon as you click the folder list, the ticket list or the toolbar. Clicking the ticket you just found — or its properties — leaves it open, so changing something on the ticket the search gave you does not throw the search away.</p>
+            <p><strong>Escape always closes it</strong>, whichever way this is set.</p>
         </div>
     </div>
 </div>

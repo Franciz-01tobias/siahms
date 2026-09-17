@@ -239,7 +239,8 @@ function getHelpTopics() {
                 ['id' => 'workcal',  'label' => 'My work calendar'],
             ],
             'terms' => 'my settings personal language locale translate toast popup dark mode timezone'
-                     . ' my work calendar outlook caldav nextcloud icloud subscribe link which calendar sign in to my calendar',
+                     . ' my work calendar outlook caldav nextcloud icloud subscribe link which calendar sign in to my calendar'
+                     . ' search panel closing close when i click away click outside escape dismiss search window search popup',
         ],
         'demo-data' => [
             'hero' => 'Demo data',

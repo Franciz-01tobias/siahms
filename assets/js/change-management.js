@@ -1129,6 +1129,16 @@ function closeSearchModal() {
     document.getElementById('searchModal').classList.remove('active');
 }
 
+// Escape always closes the panel; clicking away closes it only if the analyst
+// turned that on (System > Preferences > Display). #144. No reading-pane
+// exception here: clicking a result opens the change in a detail view that
+// covers the screen, and closeSearchModal() is already called for it.
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.initSearchPanelDismiss && document.getElementById('searchModal')) {
+        window.initSearchPanelDismiss({ panelId: 'searchModal', close: closeSearchModal });
+    }
+});
+
 function initSearchModalDrag() {
     const header = document.getElementById('searchModalHeader');
     const modal = document.getElementById('searchModal');

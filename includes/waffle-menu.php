@@ -722,6 +722,7 @@ function renderWaffleMenuJS() {
     $toastPos = 'bottom-right';
     $toastAnim = 'slide';
     $notifSound = 'off';                // silence unless this analyst asked for a chime
+    $searchDismiss = '';                // '' = only the ✕ or Escape closes the search panel
     if (isset($_SESSION['analyst_id'])) {
         try {
             if (!function_exists('connectToDatabase')) {
@@ -730,7 +731,7 @@ function renderWaffleMenuJS() {
             $conn = connectToDatabase();
             $stmt = $conn->prepare(
                 "SELECT preference_key, preference_value FROM user_preferences
-                 WHERE analyst_id = ? AND preference_key IN ('toast_position', 'toast_animation', 'notification_sound')"
+                 WHERE analyst_id = ? AND preference_key IN ('toast_position', 'toast_animation', 'notification_sound', 'search_panel_close_outside')"
             );
             $stmt->execute([(int)$_SESSION['analyst_id']]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -740,6 +741,8 @@ function renderWaffleMenuJS() {
                     $toastAnim = $row['preference_value'];
                 } elseif ($row['preference_key'] === 'notification_sound' && $row['preference_value']) {
                     $notifSound = $row['preference_value'];
+                } elseif ($row['preference_key'] === 'search_panel_close_outside' && $row['preference_value']) {
+                    $searchDismiss = $row['preference_value'];
                 }
             }
         } catch (Exception $e) {
@@ -747,6 +750,16 @@ function renderWaffleMenuJS() {
         }
     }
     ?>
+    <!-- Search panel dismissal (#144, per analyst, off by default). The search
+         panel is a DRAGGABLE floating panel, not a modal with a backdrop, so
+         click-outside-to-close fights its own design for anyone who parks it
+         somewhere useful — hence opt-in. It rides on the query above rather than
+         adding a second one, and lives here rather than in each module because
+         the same panel appears in Tickets, Change Management, Problem Management
+         and Contracts: a setting that only worked in one of them would be a
+         label promising more than it delivers. -->
+    <script>window.SEARCH_PANEL_CLOSE_OUTSIDE = <?php echo json_encode($searchDismiss === 'on'); ?>;</script>
+    <?php ?>
     <!-- Notification chime (per-analyst, off by default). The bell and the
          war-room alerts both call window.playNotificationSound(); the value
          below is what decides whether anything is heard. -->
@@ -759,6 +772,9 @@ function renderWaffleMenuJS() {
     <script src="<?php echo BASE_URL; ?>assets/js/toast.js"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/confirm.js?v=4"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/clipboard.js?v=1"></script>
+    <!-- Escape (always) and click-away (opt-in) for the draggable search panel,
+         shared by the four modules that have one — see #144. -->
+    <script src="<?php echo BASE_URL; ?>assets/js/search-panel-dismiss.js?v=1"></script>
     <?php
     // Command palette (#932). ⌘/Ctrl-K launcher on every analyst page. We hand
     // it BASE_URL plus the module list already filtered to what this analyst may
