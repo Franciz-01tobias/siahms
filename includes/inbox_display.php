@@ -61,6 +61,28 @@ function inboxDisplayRegistry(): array
             'styles'        => ['off', 'name', 'initials'],
             'default'       => 'initials',
         ],
+        // WHICH person the name beside the ticket number refers to (GH #143,
+        // reported by mbsouth). Unlike the three above this adds nothing to the
+        // row — the name was always there; this decides who it is.
+        //
+        // 🔴 WHY THE DEFAULT CHANGED. The row used to show the sender of the
+        // LATEST message, which is whoever spoke last — so the moment anybody
+        // replied, the row started naming your own mailbox. On the development
+        // install that was 52 of 118 rows reading "ITSM Support" or
+        // "freeitsm.com inbox": a column of identical text where a person's name
+        // should be, which is information-free exactly when the queue is busy.
+        // 'requester' is therefore the default, and it is what the row shows for
+        // anyone who has not chosen — including analysts whose saved config
+        // predates this field, because inboxDisplayNormalise() fills a missing
+        // field from its default.
+        //
+        // 'last_sender' keeps the old behaviour for desks that read the queue as
+        // a mailbox and want to know who spoke last.
+        'row_name' => [
+            'colour_source' => null,
+            'styles'        => ['requester', 'last_sender', 'off'],
+            'default'       => 'requester',
+        ],
     ];
 }
 

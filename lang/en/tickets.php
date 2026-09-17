@@ -909,22 +909,26 @@ return [
                 'priority' => 'Priority',
                 'status'   => 'Status',
                 'agent'    => 'Assigned agent',
+                'row_name' => 'Name beside the ticket number',
             ],
 
             'style' => [
-                'off'      => 'Hidden',
-                'stripe'   => 'Left edge',
-                'pill'     => 'Pill with the word',
-                'block'    => 'Block, top right',
-                'dot'      => 'Dot only',
-                'name'     => 'Full name',
-                'initials' => 'Initials',
+                'off'         => 'Hidden',
+                'stripe'      => 'Left edge',
+                'pill'        => 'Pill with the word',
+                'block'       => 'Block, top right',
+                'dot'         => 'Dot only',
+                'name'        => 'Full name',
+                'initials'    => 'Initials',
+                'requester'   => 'Who raised it',
+                'last_sender' => 'Who replied last',
             ],
 
             'help' => [
                 'priority' => 'The left edge costs no space and is easiest to scan down a long queue. A dot sits beside the date — note the SLA indicator is already a coloured dot there, so two dots can be hard to tell apart.',
                 'status'   => 'Off by default: the folder you are looking in usually tells you the status already.',
                 'agent'    => 'Initials keep the row narrow. Hover to see the full name either way.',
+                'row_name' => 'Who raised it keeps the customer\'s name on the row for the life of the ticket. Who replied last names whoever sent the most recent message, so once you reply it shows your mailbox — which reads the same on every ticket you have answered.',
             ],
 
             'preview'          => 'Preview',
@@ -2271,6 +2275,7 @@ return [
             'switch_heading' => '<strong>Switching between Department and Analyst grouping</strong>',
             'switch_body'    => 'A small two-button toggle at the top of the folder panel switches between two views of the same data. <strong>Department</strong> grouping (default) lists tickets under each department with status sub-folders inside; <strong>Analyst</strong> grouping flips it so each top-level folder represents an analyst\'s personal queue with status sub-folders inside. The <strong>Unassigned</strong> folder is context-aware in each view &mdash; in Department view it lists tickets with no department set; in Analyst view it lists tickets with no assignee &mdash; so you can always see what needs picking up. Your choice is saved per-analyst so each team member keeps the view they prefer across sessions.',
             'p_actions'      => 'Above the ticket list, you have three action buttons: <strong>New</strong> to create a ticket, <strong>Search</strong> to find tickets by keyword, reference, or requester, and <strong>Refresh</strong> to reload the current folder.',
+            'row_name'       => 'Each row shows the ticket reference and then a name. By default that is <strong>the person who raised the ticket</strong>, and it stays the same for the life of the ticket. If you would rather see whoever sent the most recent message &mdash; which becomes your own mailbox once you have replied &mdash; change <strong>Name beside the ticket number</strong> under <strong>Settings &rarr; Row display</strong>, where you can also hide the name and leave just the reference. That tab is your own setting: it changes nothing for anyone else.',
             'tip'            => 'Click any ticket in the list to load it in the reading pane. From there you can update fields, add comments, reply by email, or attach files &mdash; all without navigating away from the inbox.',
         ],
         // Section 4 — the analyst speed-ups added in #909–#916.

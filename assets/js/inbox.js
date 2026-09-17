@@ -1724,7 +1724,7 @@ function renderEmailList() {
                  onclick="handleEmailRowClick(event, ${email.id})" ondblclick="selectEmailFullScreen(${email.id})"
                  oncontextmenu="openTicketContextMenu(event, ${ticketId}, '${escapeHtml(email.ticket_number || '')}')">
                 ${inboxRowStripes(email)}${inboxRowBlocks(email)}
-                <div class="email-from">${escapeHtml(email.ticket_number || '')} - ${senderLabel(email.from_name, email.from_address, false)} ${countBadge}</div>
+                <div class="email-from">${escapeHtml(email.ticket_number || '')}${rowNameSuffix(email)} ${countBadge}</div>
                 <div class="email-subject">${escapeHtml(email.subject)}</div>
                 <div class="email-preview">${escapeHtml(email.body_preview || '')}</div>
                 <div class="email-footer-row">
@@ -5055,6 +5055,41 @@ function escapeHtml(text) {
  * @param {string|null} address
  * @param {boolean} withAngles include " <address>" when there is one
  */
+/**
+ * The name beside the ticket number on an inbox row (#143).
+ *
+ * Which person that is comes from the analyst's row-display choice:
+ *   requester   — who raised it (the default; see includes/inbox_display.php)
+ *   last_sender — who spoke last, which is what the row always used to show
+ *   off         — just the ticket number
+ *
+ * ⚠️ The requester falls back to the last sender, not to "unknown". A ticket
+ * with no requester on record is rare but real (an import, or a channel that
+ * never resolved one), and naming whoever last spoke is far better than a row
+ * that reads "Unknown sender" — that would trade one unreadable row for another.
+ */
+/**
+ * The name with its separator, or nothing at all when the name is off — so
+ * "off" leaves "SD-1042" and not "SD-1042 - ", which is what appending an empty
+ * name to a hardcoded " - " would have produced.
+ */
+function rowNameSuffix(email) {
+    const label = inboxRowName(email);
+    return label === '' ? '' : ' - ' + label;
+}
+
+function inboxRowName(email) {
+    const mode = (window.INBOX_ROW_DISPLAY && window.INBOX_ROW_DISPLAY.row_name) || 'requester';
+    if (mode === 'off') return '';
+    if (mode === 'requester') {
+        const n = (email.requester_name || '').trim();
+        const a = (email.requester_address || '').trim();
+        if (n || a) return senderLabel(n, a, false);
+        // fall through to the last sender
+    }
+    return senderLabel(email.from_name, email.from_address, false);
+}
+
 function senderLabel(name, address, withAngles) {
     const n = (name || '').trim();
     const a = (address || '').trim();

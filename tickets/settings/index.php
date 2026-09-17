@@ -7871,6 +7871,11 @@ $translationNamespaces = ['common', 'tickets'];
         const RD_SAMPLE = {
             ticket_number: 'SD-1042',
             from: 'Priya Raman',
+            // Two names, because the point of the row_name choice is which of
+            // these two the row shows — a preview with one name could not show
+            // the difference, which is the only reason to look at a preview.
+            requester: 'Priya Raman',
+            last_sender: 'IT Service Desk',
             subject: 'Laptop will not wake from sleep',
             preview: 'Tried a hard restart twice this morning and it still…',
             priority: 'High',       priority_colour: '#d97706',
@@ -7926,11 +7931,17 @@ $translationNamespaces = ['common', 'tickets'];
                 chips += `<span class="email-chip-agent is-initials">${rdEsc(rdInitials(s.assignee))}</span>`;
             }
 
+            // Which name, per the row_name choice — and nothing at all (not a
+            // dangling " - ") when it is off, matching rowNameSuffix() in inbox.js.
+            const rdName = cfg.row_name === 'off' ? ''
+                         : cfg.row_name === 'last_sender' ? s.last_sender
+                         : s.requester;
+
             el.innerHTML = `
                 <div class="email-item unread">
                     ${stripes ? `<span class="email-stripes">${stripes}</span>` : ''}
                     ${blocks ? `<span class="email-blocks">${blocks}</span>` : ''}
-                    <div class="email-from">${rdEsc(s.ticket_number)} - ${rdEsc(s.from)}</div>
+                    <div class="email-from">${rdEsc(s.ticket_number)}${rdName ? ' - ' + rdEsc(rdName) : ''}</div>
                     <div class="email-subject">${rdEsc(s.subject)}</div>
                     <div class="email-preview">${rdEsc(s.preview)}</div>
                     <div class="email-footer-row">

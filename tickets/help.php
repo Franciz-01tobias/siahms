@@ -187,6 +187,8 @@ try {
                     <p><?php echo t('tickets.help.inbox.switch_body'); ?></p>
 
                     <p><?php echo t('tickets.help.inbox.p_actions'); ?></p>
+                    <!-- What the name on a row means, and where to change it (#143). -->
+                    <p><?php echo t('tickets.help.inbox.row_name'); ?></p>
                     <p class="help-note"><?php echo t('tickets.help.inbox.tip'); ?></p>
                 </div>
 

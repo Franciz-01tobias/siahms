@@ -75,6 +75,17 @@ try {
                 -- blank sender would be worse than the bug this fixes.
                 COALESCE(le.from_address, u.email) AS from_address,
                 COALESCE(le.from_name, u.display_name, u.username) AS from_name,
+                -- Who RAISED the ticket, as opposed to who spoke last (#143).
+                -- Sent on every row regardless of the row-display setting, for
+                -- the same reason the colours are: switching the choice is then
+                -- instant rather than a reload. Costs nothing new — the users
+                -- join was already here for the no-email fallback above.
+                -- NULLIF(TRIM(...)) because a requester with a blank name must
+                -- fall through to the next option rather than render an empty
+                -- space where a person should be; 2 of 118 rows on the
+                -- development install are in exactly that state.
+                COALESCE(NULLIF(TRIM(u.display_name), ''), NULLIF(TRIM(u.username), '')) AS requester_name,
+                u.email AS requester_address,
                 COALESCE(le.received_datetime, t.created_datetime) AS received_datetime,
                 le.body_preview,
                 -- No email means nothing to have left unread.
