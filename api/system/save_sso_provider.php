@@ -356,7 +356,11 @@ try {
             }
             foreach ($cols as $i => $c) {
                 // Every readable column is named after its request key.
-                if (in_array($c, $readable, true) && !array_key_exists($c, $data)) {
+                // ⚠️ Only if the stored row HAS the column: before Database
+                // Verification a newer column is missing, and reading it would
+                // print a warning ahead of the JSON and break the save.
+                if (in_array($c, $readable, true) && !array_key_exists($c, $data)
+                    && array_key_exists($c, $existing)) {
                     $vals[$i] = $existing[$c];
                 }
             }
@@ -374,6 +378,15 @@ try {
     $iWb = array_search('carddav_write_back', $cols, true);
     $iAc = array_search('carddav_allow_create', $cols, true);
     if ((int)$vals[$iWb] !== 1) $vals[$iAc] = 0;
+
+    // 🔴 An install that has not run Database Verification since this column
+    // arrived has no such column, and naming it failed EVERY provider save.
+    // (Listing it did worse: the Authentication page showed no providers at
+    // all.) Leave it out until it exists; nothing else depends on it.
+    if (!$conn->query("SHOW COLUMNS FROM auth_providers LIKE 'carddav_allow_create'")->fetch()) {
+        array_splice($cols, $iAc, 1);
+        array_splice($vals, $iAc, 1);
+    }
 
     // A blank/masked secret on update = keep what is stored.
     $writeSecret        = !isMaskedNoChangeValue($secretInput);
