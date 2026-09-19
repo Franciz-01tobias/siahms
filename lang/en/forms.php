@@ -246,6 +246,17 @@ return [
         'date_mode_date'     => 'A date',
         'date_mode_time'     => 'A time',
         'date_mode_datetime' => 'Date and time',
+        /* How wide a field is, in twelfths of the row. 🌍 These are the words
+           on a picker, so they must read as fractions of a line, not as sizes:
+           "Half" means half the row, not a medium-sized box. */
+        'width'            => 'Width',
+        'width_12'         => 'Full width',
+        'width_9'          => 'Three-quarters',
+        'width_8'          => 'Two-thirds',
+        'width_6'          => 'Half',
+        'width_4'          => 'Third',
+        'width_3'          => 'Quarter',
+        'width_hint'       => 'Fields narrower than the full row sit side by side, up to a full line. Everything is full width on a phone.',
         'required'          => 'Required',
         'remove_field'      => 'Remove field',
         'untitled_field'    => 'Untitled field',

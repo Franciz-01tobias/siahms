@@ -1054,3 +1054,39 @@ body.portal-app .portal-layout { padding: 0; max-width: none; margin: 0; }
     .inc-upd-when { padding-right: 0 !important; padding-bottom: 2px !important; }
     .inc-upd-table td.inc-upd-body { border-top: none; padding-top: 0; }
 }
+
+/* ---- Request catalogue: field widths, in twelfths -------------------------
+   See docs/design/form-layout-and-grid.md. 12 divides by 1, 2, 3, 4 and 6, so
+   full / three-quarters / two-thirds / half / third / quarter are all whole
+   columns, as are the asymmetric pairs a real document wants (8+4).
+
+   ⚠️ minmax(0, 1fr), not 1fr: a grid track's default minimum is `auto`, so one
+   long unbroken word would push its track past its share and break the row. */
+.cat-form-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0 18px;
+    align-items: start;
+}
+/* No width means the whole row — every field that predates this, and anything
+   in the form that is not a field. */
+.cat-form-grid > * { grid-column: span 12; }
+.cat-form-grid > [data-width="9"] { grid-column: span 9; }
+.cat-form-grid > [data-width="8"] { grid-column: span 8; }
+.cat-form-grid > [data-width="6"] { grid-column: span 6; }
+.cat-form-grid > [data-width="4"] { grid-column: span 4; }
+.cat-form-grid > [data-width="3"] { grid-column: span 3; }
+
+/* 🔴 ONE COLUMN ON A PHONE, always — and this is the portal, so a phone is the
+   likely case, not the edge case. Two controls side by side on 360px is worse
+   than one, and at quarter width a label wraps to three lines before its input
+   is even narrow. Later in the file at equal specificity, so no !important. */
+@media (max-width: 768px) {
+    .cat-form-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .cat-form-grid > *,
+    .cat-form-grid > [data-width="9"],
+    .cat-form-grid > [data-width="8"],
+    .cat-form-grid > [data-width="6"],
+    .cat-form-grid > [data-width="4"],
+    .cat-form-grid > [data-width="3"] { grid-column: span 1; }
+}

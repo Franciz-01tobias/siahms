@@ -54,6 +54,21 @@ class FormsService
      * one and strands every answer already given to it under a separate column. A mode
      * is a setting you can flip, and the field keeps its identity.
      */
+    /* A field's width, in twelfths of the form. 12 divides by 1, 2, 3, 4 and 6,
+       which is why this is the convention everywhere: full, three-quarters,
+       two-thirds, half, third and quarter are all whole numbers of columns, and
+       so are the asymmetric pairs an actual document wants (8+4 for
+       "Area | Date", not 6+6).
+
+       🔑 ABSENT = FULL. Every field that predates this has no `width` key at
+       all, so nothing needs migrating and no existing form changes.
+
+       ⚠️ Below the mobile breakpoint everything is full width regardless. Two
+       controls side by side on a 360px screen is worse than one, and the
+       portal is where customers fill these in. */
+    const FIELD_WIDTHS = [12, 9, 8, 6, 4, 3];
+    const FIELD_WIDTH_DEFAULT = 12;
+
     const DATE_MODES = ['date', 'time', 'datetime'];
     const DATE_MODE_DEFAULT = 'date';
 
@@ -1595,6 +1610,25 @@ class FormsService
             throw new ServiceError('validation', 'invalid_field', "fields[{$i}]: 'config' must be an object.");
         }
 
+        /* Width applies to every kind of field, including a section heading and
+           a presentational block — a heading that spans half a row beside
+           another is a real layout.
+
+           Absent stays absent rather than being written as 12: that keeps
+           `config` empty for the forms that never asked for a width, so the
+           "60 of 66 have config NULL" property survives, and it keeps the
+           default in ONE place (this constant) instead of copied into rows. */
+        if (array_key_exists('width', $config)) {
+            $w = $config['width'];
+            if ($w === null || $w === '' || (int)$w === self::FIELD_WIDTH_DEFAULT) {
+                unset($config['width']);
+            } elseif (!in_array((int)$w, self::FIELD_WIDTHS, true)) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "fields[{$i}]: unknown width '{$w}'. One of: " . implode(', ', self::FIELD_WIDTHS) . '.');
+            } else {
+                $config['width'] = (int)$w;
+            }
+        }
         // date_mode belongs to a 'datetime' field and nowhere else — dropped rather
         // than stored on other types, so it can never sit there looking meaningful.
         if ($type === 'datetime') {

@@ -428,6 +428,18 @@ foreach ($formActionDefs as $def) {
             font-size: 12px;
             color: var(--text-muted, #475569);
         }
+
+        /* Sits with the Required toggle in the field header. Deliberately
+           quiet: it is a layout detail, not a property of the question. */
+        .field-width-picker {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 12px; color: var(--text-muted, #666); white-space: nowrap;
+        }
+        .field-width-picker select {
+            padding: 3px 6px; font-size: 12px; font-family: inherit;
+            border: 1px solid var(--border, #ddd); border-radius: 4px;
+            background: var(--surface, #fff); color: var(--text, #333);
+        }
     </style>
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
@@ -1338,9 +1350,21 @@ foreach ($formActionDefs as $def) {
          * reaches the payload) is dropped rather than sent as a dangling reference.
          */
         function buildRulesForSave(f, payloadFields) {
-            // Start from everything else the field's config holds (today: date_mode) so
-            // that adding a condition to a date field doesn't wipe the mode it is in.
+            /* 🔴 PRESERVE what this function does not manage, do not enumerate
+               what to keep. This used to start from {} and copy across the four
+               keys it knew about, so any other key — `width` was the first —
+               was silently dropped on the next save. A field would lose a
+               setting because somebody opened the form and pressed Save.
+
+               Inverted: everything survives by default, and only the keys
+               rebuilt below are taken over. A key added tomorrow needs no
+               change here and cannot be lost. */
+            const MANAGED = ['date_mode', 'lookup_source', 'portal_lookup', 'visible_if'];
+            const prev = (f.config && typeof f.config === 'object') ? f.config : {};
             const out = {};
+            Object.keys(prev).forEach(function (k) {
+                if (MANAGED.indexOf(k) === -1) out[k] = prev[k];
+            });
             if (isDateField(f.field_type)) out.date_mode = dateModeOf(f);
             if (isLookupField(f.field_type)) {
                 out.lookup_source = lookupSourceOf(f);
@@ -1603,6 +1627,16 @@ foreach ($formActionDefs as $def) {
                                     ${esc(window.t('forms.field.required'))}
                                 </label>`;
 
+                /* Width applies to everything, including a heading — a heading
+                   spanning half a row beside another is a real layout. */
+                const widthSel = `
+                                <label class="field-width-picker" title="${escAttr(window.t('forms.field.width_hint'))}">
+                                    ${esc(window.t('forms.field.width'))}
+                                    <select onchange="setFieldWidth(${i}, this.value)">
+                                        ${FIELD_WIDTHS.map(w => `<option value="${w}"${widthOf(f) === w ? ' selected' : ''}>${esc(window.t('forms.field.width_' + w))}</option>`).join('')}
+                                    </select>
+                                </label>`;
+
                 return `
                     <li class="field-item${isSection(f.field_type) ? ' field-item-section' : ''}" data-index="${i}" draggable="true"
                         ondragstart="onFieldDragStart(event, ${i})"
@@ -1616,6 +1650,7 @@ foreach ($formActionDefs as $def) {
                             <span class="field-type-badge ${f.field_type}">${isDateField(f.field_type) ? esc(window.t('forms.typename.date_' + dateModeOf(f))) : typeName(f.field_type)}</span>
                             <input type="text" class="field-label-input" value="${esc(f.label)}" placeholder="${escAttr(isSection(f.field_type) ? window.t('forms.field.section_ph') : window.t('forms.field.label_ph'))}" onchange="updateLabel(${i}, this.value)">
                             <div class="field-controls">
+                                ${widthSel}
                                 ${requiredToggle}
                                 <button class="field-delete-btn" onclick="deleteField(${i})" title="${escAttr(window.t('forms.field.remove_field'))}">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -1631,6 +1666,28 @@ foreach ($formActionDefs as $def) {
         function typeName(type) {
             const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section'];
             return known.includes(type) ? window.t('forms.typename.' + type) : type;
+        }
+        /* Mirrors FormsService::FIELD_WIDTHS and FormLogic's copy. Three lists
+           that must agree — a test asserts it, because a guard a human has to
+           remember is not a guard. */
+        const FIELD_WIDTHS = [12, 9, 8, 6, 4, 3];
+
+        /** A field's width, defaulting to full. Absent is every pre-existing field. */
+        function widthOf(f) {
+            const w = parseInt((f.config || {}).width, 10);
+            return FIELD_WIDTHS.includes(w) ? w : 12;
+        }
+
+        function setFieldWidth(i, val) {
+            const w = parseInt(val, 10);
+            if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
+            /* Full width is the DEFAULT, so it is removed rather than stored —
+               which keeps `config` empty for a form that never asked for a
+               width, and keeps the default in one place. The service does the
+               same on the way in. */
+            if (w === 12) delete fields[i].config.width;
+            else fields[i].config.width = w;
+            markDirty(); renderFields(); updatePreview();
         }
         function updateLabel(i, val)    { fields[i].label = val;       markDirty(); updatePreview(); }
         function toggleRequired(i, val) { fields[i].is_required = val; markDirty(); updatePreview(); }

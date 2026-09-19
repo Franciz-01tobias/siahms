@@ -34,11 +34,43 @@
         try { var d = JSON.parse(raw); return (d && d.label) ? String(d.label) : ''; }
         catch (e) { return ''; }
     }
-    function lookupSource(field) {
+    /**
+     * A field's config as an object.
+     *
+     * ⚠️ It arrives from get_form.php as a raw JSON STRING — the endpoint selects
+     * the column and hands it to json_encode untouched — but callers elsewhere
+     * may already have parsed it. Accept both, and never throw: a field with
+     * unreadable config should lose its settings, not its form.
+     */
+    function configOf(field) {
         var c = field && field.config;
         if (typeof c === 'string') { try { c = JSON.parse(c); } catch (e) { c = null; } }
-        return (c && c.lookup_source) ? String(c.lookup_source) : '';
+        return (c && typeof c === 'object') ? c : {};
     }
+
+    function lookupSource(field) {
+        var c = configOf(field);
+        return c.lookup_source ? String(c.lookup_source) : '';
+    }
+
+    /**
+     * A field's width in twelfths. Absent means full, which is every field that
+     * predates the layout work.
+     *
+     * 🔑 WIDTHS mirrors FormsService::FIELD_WIDTHS. Two lists that have to agree
+     * is exactly the drift that bit the index backfill, so anything not on the
+     * list falls back to full rather than being trusted — a bad value cannot
+     * reach here through the service, but it can through a hand-edited row.
+     */
+    function fieldWidth(field) {
+        var w = parseInt(configOf(field).width, 10);
+        return WIDTHS.indexOf(w) !== -1 ? w : WIDTH_DEFAULT;
+    }
+
+    /* Twelfths. Mirrors FormsService::FIELD_WIDTHS — see
+       docs/design/form-layout-and-grid.md for why 12. */
+    var WIDTHS = [12, 9, 8, 6, 4, 3];
+    var WIDTH_DEFAULT = 12;
 
     function isAnswerable(type) { return type !== 'section'; }
     function hasOptions(type)   { return WITH_OPTIONS.indexOf(type) !== -1; }
@@ -46,9 +78,7 @@
 
     /** The mode of a datetime field, defaulting when unset. Mirrors FormsService::dateModeOf(). */
     function dateMode(field) {
-        var cfg = field && field.config;
-        if (typeof cfg === 'string') { try { cfg = JSON.parse(cfg); } catch (e) { cfg = null; } }
-        var mode = cfg && cfg.date_mode;
+        var mode = configOf(field).date_mode;
         return DATE_MODES.indexOf(mode) !== -1 ? mode : DATE_MODE_DEFAULT;
     }
 
@@ -274,6 +304,9 @@
         hasOptions: hasOptions,
         isMultiValue: isMultiValue,
         dateMode: dateMode,
+        configOf: configOf,
+        fieldWidth: fieldWidth,
+        FIELD_WIDTHS: WIDTHS,
         dateInputType: dateInputType,
         formatDateValue: formatDateValue,
         parseOptions: parseOptions,

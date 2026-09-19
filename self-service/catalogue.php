@@ -245,7 +245,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const fields = (form.fields || []).map(f => {
                 // A section is a heading, not a question: no label element, no answer.
                 if (f.field_type === 'section') {
-                    return '<div class="cat-section" data-wrap-id="' + f.id + '"><h2>'
+                    return '<div class="cat-section" data-wrap-id="' + f.id + '" data-width="' + FormLogic.fieldWidth(f) + '"><h2>'
                          + esc(f.label || '') + '</h2></div>';
                 }
                 const req = f.is_required == 1
@@ -306,14 +306,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     default:   // text
                         input = '<input type="text" id="f' + f.id + '" data-field-id="' + f.id + '">';
                 }
-                return '<div class="cat-field" data-wrap-id="' + f.id + '">' + label + input + '</div>';
+                /* Same width attribute as the analyst filler. Two renderers, one
+                   meaning — FormLogic.fieldWidth is the single place that decides
+                   what a missing or bad width becomes. */
+                return '<div class="cat-field" data-wrap-id="' + f.id + '" data-width="' + FormLogic.fieldWidth(f) + '">' + label + input + '</div>';
             }).join('');
 
             container.innerHTML = backBtn()
                 + '<div class="cat-form">'
                 +   '<h1>' + esc(form.title || '') + '</h1>'
                 +   (form.description ? '<div class="cat-form-desc">' + esc(form.description) + '</div>' : '')
-                +   '<form id="catForm" onsubmit="return false;">' + fields + '</form>'
+                +   '<form id="catForm" class="cat-form-grid" onsubmit="return false;">' + fields + '</form>'
                 +   '<div class="cat-actions">'
                 +     '<button type="button" class="btn btn-primary" id="catSubmit" onclick="submitForm(' + form.id + ')">'
                 +       esc(window.t('self-service.catalogue.submit')) + '</button>'

@@ -286,7 +286,46 @@ $translationNamespaces = ['common', 'forms'];
         }
         .lookup-option:hover { background: var(--surface-hover, #f3f4f6); }
         .lookup-empty { padding: 9px 12px; font-size: 13px; color: var(--text-muted, #666); }
-    </style>
+
+        /* ---- Field widths, in twelfths (docs/design/form-layout-and-grid.md) ----
+           12 divides by 1, 2, 3, 4 and 6, so full / three-quarters / two-thirds /
+           half / third / quarter are all whole columns — and so are the
+           asymmetric pairs a real document wants, like 8+4 for "Area | Date".
+
+           `align-items: start` matters: without it a short field stretches to
+           the height of a tall neighbour and its input grows with it. */
+        .fill-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 0 18px;
+            align-items: start;
+        }
+        /* Anything without a width spans the row — including a field type that
+           predates this and a submit button that is not a field at all. */
+        .fill-grid > * { grid-column: span 12; }
+        .fill-grid > [data-width="9"] { grid-column: span 9; }
+        .fill-grid > [data-width="8"] { grid-column: span 8; }
+        .fill-grid > [data-width="6"] { grid-column: span 6; }
+        .fill-grid > [data-width="4"] { grid-column: span 4; }
+        .fill-grid > [data-width="3"] { grid-column: span 3; }
+
+        /* 🔴 ONE COLUMN ON A PHONE, always. Two controls side by side on a
+           360px screen is worse than one, and at quarter width a label wraps
+           to three lines before its input is even narrow. Equal specificity
+           and later in the file, so it wins without !important. */
+        @media (max-width: 768px) {
+            .fill-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+            .fill-grid > *,
+            .fill-grid > [data-width="9"],
+            .fill-grid > [data-width="8"],
+            .fill-grid > [data-width="6"],
+            .fill-grid > [data-width="4"],
+            .fill-grid > [data-width="3"] { grid-column: span 1; }
+        }
+
+        /* ⚠️ minmax(0, 1fr) rather than 1fr: a grid track's default minimum is
+           auto, so one long unbroken word in a narrow column would push the
+           track wider than its share and break the row. */    </style>
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
@@ -352,7 +391,7 @@ $translationNamespaces = ['common', 'forms'];
                 html += `<p class="fill-desc">${esc(formData.description)}</p>`;
             }
 
-            html += '<form id="fillForm" onsubmit="submitForm(event)">';
+            html += '<form id="fillForm" class="fill-grid" onsubmit="submitForm(event)">';
 
             formData.fields.forEach(f => {
                 const req = f.is_required == 1;
@@ -362,7 +401,14 @@ $translationNamespaces = ['common', 'forms'];
                 // thing to look for. It is deliberately separate from data-field-id,
                 // which the value-reading code below already uses with two different
                 // meanings (on the input for simple types, on the wrapper for groups).
-                const wrap = `data-wrap-id="${f.id}"`;
+                /* The width, in twelfths, on the SAME wrapper every case already
+                   uses — so one line covers all eleven field types and any added
+                   later. Absent means full width, which is every field that
+                   predates this, so nothing needed migrating.
+                   ⚠️ An attribute, not an inline style: an inline style can only
+                   be overridden with !important, and the mobile layer would then
+                   need it on every rule. */
+                const wrap = `data-wrap-id="${f.id}" data-width="${FormLogic.fieldWidth(f)}"`;
 
                 switch (f.field_type) {
                     case 'section':
