@@ -259,6 +259,7 @@ return [
     ['form_submissions', 'idx_form_submissions_user', 'key', '(`submitted_by_user_id`)'],
     ['form_submissions', 'idx_form_submissions_ticket', 'key', '(`ticket_id`)'],
     ['form_submissions', 'idx_form_submissions_approval', 'key', '(`approval_status`,`approver_id`)'],
+    ['form_submissions', 'idx_form_submissions_collection', 'key', '(`collection_id`)'],
     ['contracts', 'ix_contracts_supplier_id', 'key', '(`supplier_id`)'],
     ['contracts', 'ix_contracts_contract_end', 'key', '(`contract_end`)'],
     ['contract_term_values', 'uq_ctv_contract_tab', 'unique', '(`contract_id`,`term_tab_id`)'],
