@@ -156,7 +156,8 @@ function getDebugTools() {
             'when'     => 'Run this when outbound HTTPS misbehaves — a mailbox won\'t connect, an AI test fails, a webhook errors with "unable to get local issuer certificate" — or simply to confirm a fresh install is secure. It traces the whole chain: the global SSL_VERIFY_PEER switch, the php.ini CA settings, the shipped includes/cacert.pem, which bundle actually gets used, and a batch of LIVE certificate-verified requests to the real services the app talks to (Microsoft Graph, Anthropic, OpenAI, Google, Slack), ending in a plain-English verdict and the fix.',
             'checks'   => [
                 'Environment — PHP version, OS, the libcurl build and its TLS backend, and which PHP (web vs CLI worker) this reflects',
-                'The global switch — SSL_VERIFY_PEER (on/off/undefined) and whether the shared sslApplyCurl() helper is loaded',
+                'The global switch — SSL_VERIFY_PEER (on/off/undefined) and whether SSL_CA_BUNDLE is defined',
+                'Where sslApplyCurl() comes from — whether YOUR config.php still carries the SSL block (it is your file, so an upgrade never adds it) and whether the two OAuth callbacks load includes/ssl.php themselves instead of relying on it',
                 'php.ini CA configuration — curl.cainfo and openssl.cafile: set or not, and crucially whether a path that IS set points at a file that actually exists',
                 'The shipped bundle — includes/cacert.pem: present, readable, its size and certificate count (catching a truncated or HTML-error-page download)',
                 'Which CA bundle actually wins, and why (configured php.ini bundle → shipped cert on Windows → the OS trust store on Linux)',

@@ -91,6 +91,192 @@ ok('loading includes/db.php over a legacy definition does not fatal',
 
 @unlink($stub); @unlink($probe); @unlink($legacy);
 
+echo "\n5. Every entry point that CALLS a helper also LOADS its home itself\n";
+
+// 🔴 WHAT THIS EXISTS TO CATCH, and why sections 1-4 could not.
+// Sections above ask "does the function have a HOME?". A real user hit
+// `Call to undefined function sslApplyCurl()` connecting a Microsoft 365 mailbox
+// anyway (2026-09-17), because the question that matters is the other one: "does
+// each CALLER load that home?". auth/oauth_callback.php called it while loading
+// only config.php + db.php + encryption.php - and config.php is the OPERATOR'S
+// file. His copy predated the `require_once includes/ssl.php` line, so on his
+// install the definition was simply not there. His D006 confirmed it: SSL_CA_BUNDLE
+// not defined, so his config.php lacks that whole block.
+//
+// 🔑 THE ONE RULE THAT MAKES THIS AUDIT MEAN ANYTHING: walk the include graph with
+// config.php's OWN EDGES CUT. An earlier version of this audit let paths run THROUGH
+// config.php and therefore cleared oauth_callback.php - the one file already known to
+// be broken. If the operator's file is what carries you to the definition, you have
+// proved the bug, not its absence.
+
+$helperHomes = [
+    'sslApplyCurl'        => 'includes/ssl.php',
+    'sslResolveCaBundle'  => 'includes/ssl.php',
+    'dbConnectionOptions' => 'includes/db.php',
+];
+
+/**
+ * Real call sites only, via the tokeniser.
+ *
+ * ⚠️ A regex cannot do this. `sslApplyCurl()` appears inside a description STRING in
+ * system/debug-tools/includes/tools.php, and a regex audit reported that file as a
+ * broken caller. Comments and string literals are not calls.
+ */
+$callsHelper = static function (string $src, string $fn): bool {
+    $tokens = @token_get_all($src);
+    if (!is_array($tokens)) return false;
+    $count = count($tokens);
+    $prev = null;
+    foreach ($tokens as $i => $t) {
+        if (is_array($t) && $t[0] === T_STRING && $t[1] === $fn) {
+            // Not a method or static call, and not the declaration itself.
+            $isMemberOrDecl = is_array($prev)
+                && in_array($prev[0], [T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION], true);
+            if (!$isMemberOrDecl) {
+                // Followed by '(' - skipping trivia - makes it a call.
+                for ($j = $i + 1; $j < $count; $j++) {
+                    $n = $tokens[$j];
+                    if (is_array($n) && in_array($n[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) continue;
+                    if ($n === '(') return true;
+                    break;
+                }
+            }
+        }
+        if (!is_array($t) || $t[0] !== T_WHITESPACE) $prev = $t;
+    }
+    return false;
+};
+
+/** The files a given file requires, resolved to real paths. */
+$requiresOf = static function (string $file, string $root): array {
+    $src = (string)@file_get_contents($file);
+    $dir = dirname($file);
+    $hits = [];
+    $patterns = [
+        ['/(?:require|include)(?:_once)?\s*\(?\s*__DIR__\s*\.\s*([\'"])([^\'"]+)\1/',          static function ($rel) use ($dir) { return $dir . $rel; }],
+        ['/(?:require|include)(?:_once)?\s*\(?\s*dirname\(__DIR__\)\s*\.\s*([\'"])([^\'"]+)\1/', static function ($rel) use ($dir) { return dirname($dir) . $rel; }],
+        ['/(?:require|include)(?:_once)?\s*\(?\s*([\'"])([^\'"$]+\.php)\1/',                    static function ($rel) use ($dir) { return $dir . '/' . $rel; }],
+    ];
+    foreach ($patterns as $pair) {
+        list($re, $make) = $pair;
+        if (preg_match_all($re, $src, $m)) {
+            foreach ($m[2] as $rel) {
+                $p = realpath($make($rel));
+                if (!$p) $p = realpath($root . '/' . ltrim($rel, '/'));
+                if ($p) $hits[] = str_replace('\\', '/', $p);
+            }
+        }
+    }
+    return array_values(array_unique($hits));
+};
+
+/** Reachability through requires, with the operator's file cut out of the graph. */
+$reaches = static function (string $file, string $target, string $root) use ($requiresOf): bool {
+    $target = str_replace('\\', '/', (string)realpath($target));
+    $start  = str_replace('\\', '/', (string)realpath($file));
+    $seen  = [];
+    $queue = [$start];
+    while ($queue) {
+        $cur = array_pop($queue);
+        if ($cur === '' || isset($seen[$cur])) continue;
+        $seen[$cur] = true;
+        // 🔴 Cut the operator's file - unless it IS the file under test. This is
+        // the whole point of the section; see the note above.
+        if ($cur !== $start && preg_match('#(^|/)config\.php$#', $cur)) continue;
+        foreach ($requiresOf($cur, $root) as $r) {
+            if ($r === $target) return true;
+            $queue[] = $r;
+        }
+    }
+    return false;
+};
+
+// Walk the tree once.
+$rootFwd = str_replace('\\', '/', $root);
+$allPhp = [];
+$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($it as $f) {
+    if (!$f->isFile() || strtolower($f->getExtension()) !== 'php') continue;
+    $p = str_replace('\\', '/', $f->getPathname());
+    if (preg_match('#/(vendor|node_modules|\.git|tests)/#', $p)) continue;
+    $allPhp[] = $p;
+}
+
+$checked = 0;
+$broken  = [];
+
+foreach ($helperHomes as $fn => $homeRel) {
+    $home = "$rootFwd/$homeRel";
+    foreach ($allPhp as $file) {
+        $rel = ltrim(str_replace($rootFwd, '', $file), '/');
+
+        // The home declares it, and config.php is the operator's file - cut by design.
+        if ($rel === $homeRel) continue;
+        if (preg_match('#(^|/)config\.php$#', $rel)) continue;
+
+        // A library under an includes/ directory only ever executes through a caller,
+        // and loading the home is that caller's job. Same for _-prefixed partials,
+        // which are always required after functions.php.
+        if (preg_match('#(^|/)includes/#', $rel)) continue;
+        if (preg_match('#(^|/)_[^/]+\.php$#', $rel)) continue;
+
+        if (!$callsHelper((string)file_get_contents($file), $fn)) continue;
+
+        $checked++;
+        if (!$reaches($file, $home, $rootFwd)) {
+            $broken[] = "$rel calls $fn() but never loads $homeRel";
+        }
+    }
+}
+
+ok('every directly-requestable caller loads the helper it calls', $broken === [],
+   $broken ? "\n       " . implode("\n       ", $broken) : "$checked call sites checked, config.php cut");
+
+// 🔑 The rule must have found something. A pattern that silently matched nothing
+// would print exactly the same PASS as a clean install.
+ok('the audit actually examined some call sites', $checked > 0, "$checked found");
+
+// Positive control: reintroduce the fault and require that it is caught.
+$faulty = sys_get_temp_dir() . '/freeitsm_faulty_caller_' . getmypid() . '.php';
+file_put_contents($faulty,
+    "<?php\nrequire_once " . var_export("$rootFwd/config.php", true) . ";\n\$ch = curl_init();\nsslApplyCurl(\$ch);\n");
+ok('positive control: a caller reaching ssl.php ONLY via config.php is flagged',
+   !$reaches($faulty, "$rootFwd/includes/ssl.php", $rootFwd),
+   'a config.php-only path must not count as reaching it');
+@unlink($faulty);
+
+echo "\n6. A config.php with no SSL block still gets a CA bundle\n";
+
+// SSL_CA_BUNDLE is defined by config.php - the OPERATOR'S file. sslApplyCurl() used
+// to attach a bundle only when that constant existed, so an install whose config.php
+// lacked the block verified with no bundle and died on "unable to get local issuer
+// certificate" instead. Reproduced live on a stripped config.php before this changed.
+$noBundle = sys_get_temp_dir() . '/freeitsm_nobundle_' . getmypid() . '.php';
+file_put_contents($noBundle, '<?php
+define("SSL_VERIFY_PEER", true);        // values only, and deliberately NO SSL_CA_BUNDLE
+require_once ' . var_export("$root/includes/ssl.php", true) . ';
+$ch = curl_init();
+sslApplyCurl($ch);
+// CURLINFO_CAINFO is not readable back, so assert on the resolver the fallback uses.
+echo sslResolveCaBundle() !== "" || stripos(PHP_OS, "WIN") !== 0 ? "RESOLVED" : "EMPTY";
+');
+$out3 = trim((string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($noBundle) . ' 2>&1'));
+ok('sslApplyCurl survives an undefined SSL_CA_BUNDLE and finds a bundle',
+   strpos($out3, 'RESOLVED') !== false, $out3);
+
+// And the operator's own value must still win when they have one.
+$ownBundle = sys_get_temp_dir() . '/freeitsm_ownbundle_' . getmypid() . '.php';
+file_put_contents($ownBundle, '<?php
+define("SSL_VERIFY_PEER", true);
+define("SSL_CA_BUNDLE", "Z:/operators/own/cacert.pem");
+require_once ' . var_export("$root/includes/ssl.php", true) . ';
+echo SSL_CA_BUNDLE === "Z:/operators/own/cacert.pem" ? "THEIRS" : "OVERRIDDEN";
+');
+$out4 = trim((string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($ownBundle) . ' 2>&1'));
+ok("the operator's own SSL_CA_BUNDLE is not overridden", strpos($out4, 'THEIRS') !== false, $out4);
+
+@unlink($noBundle); @unlink($ownBundle);
+
 echo "\n" . str_repeat('-', 78) . "\n";
 printf("  %d passed, %d failed\n\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

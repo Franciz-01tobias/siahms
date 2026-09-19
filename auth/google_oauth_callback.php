@@ -8,6 +8,7 @@
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/db.php';   // dbConnectionOptions() — NOT in config.php, see GH #129
+require_once __DIR__ . '/../includes/ssl.php';  // sslApplyCurl() — this file does not load functions.php, see GH #129
 require_once __DIR__ . '/../includes/encryption.php';
 
 if (!isset($_GET['code'])) {

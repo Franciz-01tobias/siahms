@@ -16,6 +16,20 @@
  *   no effect) and this libcurl build ignores the CURL_CA_BUNDLE env var. The
  *   only mechanism that works without hand-editing php.ini is setting the bundle
  *   per-handle with CURLOPT_CAINFO, which is what we ship a cacert.pem for.
+ *
+ * WHY BOTH DEFINITIONS ARE GUARDED BY function_exists(), same as includes/db.php:
+ * every caller loads config.php first, and config.php requires this file. An
+ * operator whose own config.php carries a hand-pasted copy of either function
+ * would otherwise trade "undefined function" for "cannot redeclare" - the same
+ * outage in the other direction. Theirs wins; this fills the hole for everyone
+ * else. See GH #129.
+ *
+ * AND WHY EVERY DIRECTLY-REQUESTABLE ENTRY POINT MUST REQUIRE THIS FILE ITSELF:
+ * reaching sslApplyCurl() only through config.php means the operator's file is
+ * load-bearing, which is exactly what #129 forbids. Most callers arrive via
+ * includes/functions.php, which requires this file; the OAuth callbacks
+ * deliberately do not load functions.php, so they require it directly.
+ * tests/config-not-load-bearing.php enforces that structurally.
  */
 
 /**
@@ -28,21 +42,23 @@
  *   3. Otherwise '' — on Linux with no configured bundle, cURL's system trust
  *      store is correct and we must not override it with a possibly-staler copy.
  */
-function sslResolveCaBundle(): string
-{
-    foreach (['curl.cainfo', 'openssl.cafile'] as $iniKey) {
-        $p = ini_get($iniKey);
-        if ($p && is_readable($p)) {
-            return $p;
+if (!function_exists('sslResolveCaBundle')) {
+    function sslResolveCaBundle(): string
+    {
+        foreach (['curl.cainfo', 'openssl.cafile'] as $iniKey) {
+            $p = ini_get($iniKey);
+            if ($p && is_readable($p)) {
+                return $p;
+            }
         }
-    }
-    if (stripos(PHP_OS, 'WIN') === 0) {
-        $bundled = __DIR__ . '/cacert.pem';
-        if (is_readable($bundled)) {
-            return $bundled;
+        if (stripos(PHP_OS, 'WIN') === 0) {
+            $bundled = __DIR__ . '/cacert.pem';
+            if (is_readable($bundled)) {
+                return $bundled;
+            }
         }
+        return '';
     }
-    return '';
 }
 
 /**
@@ -59,12 +75,25 @@ function sslResolveCaBundle(): string
  *                            parties over the public internet). Still attaches
  *                            the CA bundle so it works out of the box.
  */
-function sslApplyCurl($ch, bool $alwaysVerify = false): void
-{
-    $verify = $alwaysVerify || (defined('SSL_VERIFY_PEER') ? (bool)SSL_VERIFY_PEER : true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verify ? 2 : 0);
-    if ($verify && defined('SSL_CA_BUNDLE') && SSL_CA_BUNDLE !== '') {
-        curl_setopt($ch, CURLOPT_CAINFO, SSL_CA_BUNDLE);
+if (!function_exists('sslApplyCurl')) {
+    function sslApplyCurl($ch, bool $alwaysVerify = false): void
+    {
+        $verify = $alwaysVerify || (defined('SSL_VERIFY_PEER') ? (bool)SSL_VERIFY_PEER : true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verify ? 2 : 0);
+        if (!$verify) {
+            return;
+        }
+        // SSL_CA_BUNDLE is defined by config.php, which is the OPERATOR'S file and
+        // never upgrades - a hand-assembled or pre-release copy can lack that block
+        // entirely. Falling back to the same resolver config.php would have used
+        // means a missing line costs nothing, instead of verifying with no bundle
+        // and failing with "unable to get local issuer certificate". Theirs still
+        // wins when they have one. See GH #129.
+        static $fallback = null;
+        $bundle = defined('SSL_CA_BUNDLE') ? SSL_CA_BUNDLE : ($fallback ?? $fallback = sslResolveCaBundle());
+        if ($bundle !== '') {
+            curl_setopt($ch, CURLOPT_CAINFO, $bundle);
+        }
     }
 }

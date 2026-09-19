@@ -13,6 +13,13 @@
  * batch of LIVE verified requests to the real services the app talks to — so a
  * "certificate problem" is diagnosed in one place instead of guessed at.
  *
+ * ⚠️ It also asks the question a live request cannot: config.php is the
+ * OPERATOR'S file and never upgrades, so a hand-assembled or pre-release copy can
+ * lack the SSL block the app expects. Every certificate test here can pass while a
+ * mailbox sign-in still dies on "Call to undefined function sslApplyCurl()".
+ * This tool used to print that helper's function_exists() as if it meant something,
+ * having itself loaded functions.php first - so it could only ever say YES.
+ *
  * READ-ONLY. It makes unauthenticated HEAD requests to public endpoints and
  * writes nothing. Prints no secrets (no API keys, no request bodies).
  *
@@ -71,9 +78,76 @@ $verifyOn      = $verifyDefined && SSL_VERIFY_PEER;
 addSection($sections, "GLOBAL SETTING (config.php)", [
     "SSL_VERIFY_PEER defined : " . yn($verifyDefined),
     "SSL_VERIFY_PEER value   : " . ($verifyDefined ? ($verifyOn ? 'true (verification ON)' : 'false (verification OFF — INSECURE)') : '(not defined!)'),
-    "includes/ssl.php loaded : " . yn(function_exists('sslApplyCurl')),
-    "sslResolveCaBundle()    : " . yn(function_exists('sslResolveCaBundle')),
+    "SSL_CA_BUNDLE defined   : " . yn(defined('SSL_CA_BUNDLE'))
+        . (defined('SSL_CA_BUNDLE') ? '' : "   <-- see the next section, your config.php looks incomplete"),
 ]);
+
+// ---- 2b. WHERE sslApplyCurl() COMES FROM -------------------------------
+// ⚠️ "Is the function loaded?" is the WRONG QUESTION, and this tool used to ask
+// exactly it on this spot. D006 requires includes/functions.php, which requires
+// includes/ssl.php, so function_exists('sslApplyCurl') is ALWAYS true in here.
+// It therefore reported a healthy install to a user who had a live
+// "Call to undefined function sslApplyCurl()" in his Microsoft OAuth callback.
+//
+// 🔑 The question that tells the two apart is structural: config.php is the
+// OPERATOR'S file and never upgrades, so does each entry point that calls the
+// helper LOAD it itself rather than relying on that file? See GH #129 and
+// tests/config-not-load-bearing.php.
+$sslHome = 'includes/ssl.php';
+$cfgPath = $appRoot . DIRECTORY_SEPARATOR . 'config.php';
+$cfgSrc  = is_readable($cfgPath) ? (string)file_get_contents($cfgPath) : '';
+$reqRe   = '#(?:require|include)(?:_once)?\s*\(?\s*__DIR__\s*\.\s*[\'"][^\'"]*includes/ssl\.php[\'"]#';
+$cfgLoadsSsl = $cfgSrc !== '' && preg_match($reqRe, $cfgSrc) === 1;
+
+// The entry points that deliberately do NOT load includes/functions.php, so they
+// must require ssl.php for themselves. Everything else arrives via functions.php.
+$sslEntryPoints = ['auth/oauth_callback.php', 'auth/google_oauth_callback.php'];
+$sslEntryProblems = [];
+$entryLines = [];
+foreach ($sslEntryPoints as $ep) {
+    $p = $appRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $ep);
+    if (!is_readable($p)) {
+        $entryLines[] = sprintf("  %-32s (not present on this install)", $ep);
+        continue;
+    }
+    $loads = preg_match($reqRe, (string)file_get_contents($p)) === 1;
+    if (!$loads) $sslEntryProblems[] = $ep;
+    $entryLines[] = sprintf("  %-32s %s", $ep,
+        $loads ? 'loads includes/ssl.php itself  [OK]'
+               : 'does NOT load it  [PROBLEM - see below]');
+}
+
+$whereLines = array_merge([
+    "config.php requires includes/ssl.php : " . yn($cfgLoadsSsl),
+    "",
+], $entryLines, [
+    "",
+]);
+if (!$cfgLoadsSsl) {
+    $whereLines[] = "🔴 YOUR config.php IS MISSING THE SSL BLOCK. config.php is your file, not";
+    $whereLines[] = "   ours - it is never overwritten by an upgrade - so an older or";
+    $whereLines[] = "   hand-assembled copy can lack lines the app now expects. The shipped";
+    $whereLines[] = "   template has these, just after the SSL_VERIFY_PEER line:";
+    $whereLines[] = "";
+    $whereLines[] = "       require_once(__DIR__ . '/includes/ssl.php');";
+    $whereLines[] = "       if (!defined('SSL_CA_BUNDLE')) {";
+    $whereLines[] = "           define('SSL_CA_BUNDLE', sslResolveCaBundle());";
+    $whereLines[] = "       }";
+    $whereLines[] = "";
+    $whereLines[] = "   Compare your config.php against the one in the release you are running";
+    $whereLines[] = "   and add anything missing. Other blocks may be absent too.";
+} elseif (!$sslEntryProblems) {
+    $whereLines[] = "Nothing here depends on your config.php carrying the right lines, which is";
+    $whereLines[] = "the point: every entry point that needs the helper loads it for itself.";
+}
+if ($sslEntryProblems) {
+    $whereLines[] = "";
+    $whereLines[] = "🔴 " . implode(' and ', $sslEntryProblems) . " will fail with";
+    $whereLines[] = "   \"Call to undefined function sslApplyCurl()\" on any install whose";
+    $whereLines[] = "   config.php does not happen to load it. Upgrade, or add";
+    $whereLines[] = "   require_once __DIR__ . '/../includes/ssl.php'; to each.";
+}
+addSection($sections, "WHERE sslApplyCurl() COMES FROM", $whereLines);
 
 // ---- 3. PHP.INI CA CONFIGURATION --------------------------------------
 $curlCa = (string)ini_get('curl.cainfo');
@@ -194,6 +268,16 @@ if (!$verifyOn) {
 } else {
     $verdict[] = "? Could not confirm. Every test hit a network/DNS error, so the certificate";
     $verdict[] = "  path could not be exercised. Check this server has outbound internet access.";
+}
+// A clean run of the live tests above says nothing about the OAuth callbacks:
+// they are separate entry points, and the request that breaks them is one no
+// diagnostic here makes. Say so rather than printing an unqualified tick.
+if (!empty($sslEntryProblems) || !$cfgLoadsSsl) {
+    $verdict[] = "";
+    $verdict[] = "⚠ But see WHERE sslApplyCurl() COMES FROM above: something is missing that";
+    $verdict[] = "  the tests on this page cannot exercise. Mailbox sign-in can still fail";
+    $verdict[] = "  with \"Call to undefined function sslApplyCurl()\" while everything here";
+    $verdict[] = "  passes.";
 }
 addSection($sections, "VERDICT", $verdict);
 
