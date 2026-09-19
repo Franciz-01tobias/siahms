@@ -40,7 +40,7 @@ require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 class FormsService
 {
     // 'section' is a heading, not a question — see ANSWERABLE_TYPES.
-    const FIELD_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section'];
+    const FIELD_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'grid'];
 
     /** The types that actually collect an answer. A 'section' never produces submission data. */
     const ANSWERABLE_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup'];
@@ -66,6 +66,38 @@ class FormsService
        ⚠️ Below the mobile breakpoint everything is full width regardless. Two
        controls side by side on a 360px screen is worse than one, and the
        portal is where customers fill these in. */
+    /* ---- Grid ------------------------------------------------------------
+       A question whose answer is a table: named columns, and as many rows as
+       the person needs.
+
+       🔑 THE PALETTE IS RESTRICTED ON PURPOSE. A file upload or a signature pad
+       inside a 200px column is unusable, and per-cell conditional logic is
+       combinatorial. The product that solved this commercially restricts its
+       table the same way and offers a separate "repeating section" for the rich
+       case. Widening this later is easy; narrowing it after people have built
+       forms is not.
+
+       ⚠️ `radio` is permitted because it was agreed, but a radio group in a
+       table cell is cramped past two options — a dropdown says the same thing
+       in the space available. The builder should steer people accordingly.
+
+       ⬜ `lookup` is NOT here yet. It is a scoped search over the install's own
+       records, and making that behave inside a repeating row is its own piece
+       of work rather than a line on a list. */
+    const GRID_CELL_TYPES = ['text', 'number', 'dropdown', 'radio', 'checkbox', 'datetime'];
+
+    /** Cell types that are meaningless without a list to choose from. */
+    const GRID_CELL_TYPES_WITH_OPTIONS = ['dropdown', 'radio'];
+
+    /* A cap, not a design limit. Twelve is what fits on a page and what the
+       comparable product allows; beyond that a table is a spreadsheet and
+       belongs somewhere else. */
+    const GRID_MAX_COLUMNS = 12;
+
+    /* Rows are "as many as you need", so this is an ABUSE ceiling rather than a
+       feature. Nobody fills in 500 rows of a web form by hand; a script might. */
+    const GRID_MAX_ROWS = 500;
+
     const FIELD_WIDTHS = [12, 9, 8, 6, 4, 3];
     const FIELD_WIDTH_DEFAULT = 12;
 
@@ -1214,6 +1246,9 @@ class FormsService
                 $value = $value ? '1' : '0';
             }
             if (is_array($value)) {
+                /* A grid's rows are a list of OBJECTS keyed by column id, so
+                   array_values would be wrong for the rows themselves but is
+                   right for the list — json_encode preserves each row's map. */
                 $value = json_encode(array_values($value));
             }
             $normalised[(int)$fieldId] = (string)$value;
@@ -1245,6 +1280,82 @@ class FormsService
                 continue;
             }
 
+            /* ---- A grid's answer -----------------------------------------
+               Validated against the column definitions as they are NOW, which
+               is right: somebody is filling the form in now. A submission made
+               earlier keeps whatever it stored, and readers label it from the
+               column list including retired ones. */
+            if ($type === 'grid') {
+                $rows = self::gridRows($val);
+                $cols = self::gridLiveColumns($field);
+
+                if (count($rows) > self::GRID_MAX_ROWS) {
+                    throw new ServiceError('validation', 'invalid_field',
+                        "'{$field['label']}' has more than " . self::GRID_MAX_ROWS . ' rows.');
+                }
+
+                /* A row where every cell is blank is somebody pressing "add"
+                   and changing their mind. Dropped rather than refused — and
+                   dropped BEFORE the required check, or an empty trailing row
+                   would make a required column fail. */
+                $kept = [];
+                foreach ($rows as $row) {
+                    $any = false;
+                    foreach ($row as $v) {
+                        if (is_array($v) ? !empty($v) : trim((string)$v) !== '') { $any = true; break; }
+                    }
+                    if ($any) $kept[] = $row;
+                }
+
+                foreach ($kept as $rIdx => $row) {
+                    $human = $rIdx + 1;
+                    foreach ($row as $cid => $cell) {
+                        if (!isset($cols[(int)$cid])) {
+                            throw new ServiceError('validation', 'invalid_field',
+                                "'{$field['label']}' row {$human}: no column {$cid} on this grid.");
+                        }
+                    }
+                    foreach ($cols as $cid => $col) {
+                        $cell = $row[$cid] ?? ($row[(string)$cid] ?? '');
+                        $str  = is_array($cell) ? implode(', ', $cell) : trim((string)$cell);
+
+                        if (!empty($col['required'])) {
+                            $blank = ($col['type'] === 'checkbox')
+                                ? ($str === '' || $str === '0')
+                                : ($str === '');
+                            if ($blank) {
+                                throw new ServiceError('validation', 'invalid_field',
+                                    "'{$field['label']}' row {$human}: '{$col['label']}' is required.");
+                            }
+                        }
+                        if ($str === '') continue;
+
+                        if ($col['type'] === 'number' && !is_numeric($str)) {
+                            throw new ServiceError('validation', 'invalid_field',
+                                "'{$field['label']}' row {$human}: '{$col['label']}' must be a number.");
+                        }
+                        /* A narrowed dropdown has never been a check — the list
+                           is re-tested here, exactly as it is for a top-level
+                           dropdown field. */
+                        if (in_array($col['type'], self::GRID_CELL_TYPES_WITH_OPTIONS, true)) {
+                            $allowed = $col['options'] ?? [];
+                            if ($allowed && !in_array($str, $allowed, true)) {
+                                throw new ServiceError('validation', 'invalid_field',
+                                    "'{$field['label']}' row {$human}: '{$str}' is not one of the choices for '{$col['label']}'.");
+                            }
+                        }
+                    }
+                }
+
+                // Store the tidied table, so a blank row never reaches the record.
+                $normalised[$fid] = json_encode(array_values($kept));
+
+                if ($field['is_required'] && !$kept) {
+                    throw new ServiceError('validation', 'missing_field',
+                        "'{$field['label']}' needs at least one row.");
+                }
+                continue;   // the generic required/format checks do not apply
+            }
             if ($field['is_required']) {
                 $isEmpty = false;
                 if ($val === '' || $val === null) {
@@ -1398,8 +1509,15 @@ class FormsService
             foreach ($normalised as $fieldId => $value) {
                 if (!isset($fieldsById[$fieldId])) continue;
                 $label = $fieldsById[$fieldId]['label'];
-                $decoded = json_decode($value, true);
-                $flat = is_array($decoded) ? implode(', ', $decoded) : $value;
+                /* ⚠️ A grid's rows are OBJECTS, so the generic implode below would
+                   render them as "Array, Array" and emit a PHP warning. It gets
+                   readable text instead — one line per row, cells labelled. */
+                if ($fieldsById[$fieldId]['field_type'] === 'grid') {
+                    $flat = self::gridToText($fieldsById[$fieldId], $value);
+                } else {
+                    $decoded = json_decode($value, true);
+                    $flat = is_array($decoded) ? implode(', ', $decoded) : $value;
+                }
                 $submissionFields[$label] = $flat;
                 if ($submissionEmail === '' && $fieldsById[$fieldId]['field_type'] === 'email' && $flat !== '') {
                     $submissionEmail = $flat;
@@ -1595,6 +1713,105 @@ class FormsService
      * (A shows when B is set, B shows when A is set) structurally impossible, so
      * neither evaluator ever has to detect a cycle at render time.
      */
+    /**
+     * A grid's columns, as stored. Includes RETIRED ones, because a submission
+     * made while a column existed still holds its answers and a reader has to
+     * be able to label them.
+     *
+     * @return array<int,array> keyed by column id
+     */
+    /**
+     * An option list, from whatever shape it is stored in.
+     *
+     * 🔑 Mirrors FormLogic.parseOptions() exactly: options are a JSON ARRAY,
+     * not a newline-separated string. Guessing the other way here would have
+     * split "A, B" into one option and shown it as two on screen — the two
+     * halves of one rule disagreeing, which is the failure this codebase keeps
+     * writing warnings about.
+     */
+    private static function parseOptionList($raw): array
+    {
+        if (is_array($raw)) {
+            return array_values(array_filter(array_map(
+                fn($v) => trim((string)$v),
+                $raw
+            ), fn($v) => $v !== ''));
+        }
+        if (!is_string($raw) || $raw === '') return [];
+        $parsed = json_decode($raw, true);
+        if (!is_array($parsed)) return [];
+        return array_values(array_filter(array_map(
+            fn($v) => trim((string)$v),
+            $parsed
+        ), fn($v) => $v !== ''));
+    }
+    public static function gridColumns(array $field): array
+    {
+        $cfg = $field['config'] ?? null;
+        if (is_string($cfg)) $cfg = json_decode($cfg, true);
+        $cols = (is_array($cfg) && isset($cfg['columns']) && is_array($cfg['columns'])) ? $cfg['columns'] : [];
+
+        $out = [];
+        foreach ($cols as $c) {
+            if (!is_array($c) || !isset($c['id'])) continue;
+            $out[(int)$c['id']] = $c;
+        }
+        return $out;
+    }
+
+    /** The columns a NEW row may be filled in against — retired ones excluded. */
+    public static function gridLiveColumns(array $field): array
+    {
+        return array_filter(self::gridColumns($field), fn($c) => empty($c['deleted']));
+    }
+
+    /**
+     * A grid's answer, decoded. Always a list of rows, each a map of
+     * column id => value; anything unreadable becomes an empty table rather
+     * than an error, because a submission that cannot be displayed is worse
+     * than one displayed as empty.
+     */
+    /**
+     * A grid's answer as readable text — one line per row, each cell prefixed
+     * with its column's label.
+     *
+     * Used wherever a grid has to become a single string: the workflow payload
+     * handed to automations, and anywhere else that expects one value per
+     * question. The PDF and the submissions table render a real table instead,
+     * because they have the room.
+     *
+     * ⚠️ Labels come from gridColumns(), which INCLUDES retired ones — a value
+     * stored against a column since withdrawn still says what it was, rather
+     * than appearing as an unexplained extra.
+     */
+    public static function gridToText(array $field, $raw): string
+    {
+        $cols = self::gridColumns($field);
+        $lines = [];
+        foreach (self::gridRows($raw) as $row) {
+            $parts = [];
+            foreach ($row as $cid => $v) {
+                $label = $cols[(int)$cid]['label'] ?? ('#' . $cid);
+                $val   = is_array($v) ? implode(', ', $v) : trim((string)$v);
+                if ($val === '') continue;
+                $parts[] = $label . ': ' . $val;
+            }
+            if ($parts) $lines[] = implode(', ', $parts);
+        }
+        return implode("\n", $lines);
+    }
+    public static function gridRows($raw): array
+    {
+        if (is_string($raw)) $raw = json_decode($raw, true);
+        if (!is_array($raw)) return [];
+        // Tolerate both {"rows": [...]} and a bare list.
+        if (isset($raw['rows']) && is_array($raw['rows'])) $raw = $raw['rows'];
+        $out = [];
+        foreach ($raw as $row) {
+            if (is_array($row)) $out[] = $row;
+        }
+        return $out;
+    }
     private static function validateFieldConfig($config, int $i, array $fields, array $indexById, string $type = 'text'): ?array
     {
         if ($config === null || $config === '') {
@@ -1642,6 +1859,90 @@ class FormsService
             unset($config['date_mode']);
         }
 
+        /* ---- Grid columns ------------------------------------------------
+           🔑 Identified by a STABLE ID, never a position or a label. An id is
+           what lets a column be reordered, renamed and retired without
+           orphaning every value ever stored against it — the same rule
+           form_fields already follows for questions, one level down.
+
+           A retired column keeps its row here (soft delete) so that readers can
+           still label the answers people genuinely gave it. */
+        if ($type === 'grid') {
+            $cols = $config['columns'] ?? null;
+            if (!is_array($cols) || !$cols) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "fields[{$i}]: a grid needs at least one column.");
+            }
+
+            $live = 0;
+            $seen = [];
+            $clean = [];
+            foreach ($cols as $n => $col) {
+                if (!is_array($col)) {
+                    throw new ServiceError('validation', 'invalid_field', "fields[{$i}]: column {$n} is not an object.");
+                }
+                $cid = isset($col['id']) ? (int)$col['id'] : 0;
+                if ($cid <= 0) {
+                    throw new ServiceError('validation', 'invalid_field',
+                        "fields[{$i}]: column {$n} has no id. Columns are identified by id, not by position.");
+                }
+                if (isset($seen[$cid])) {
+                    throw new ServiceError('validation', 'invalid_field', "fields[{$i}]: column id {$cid} is used twice.");
+                }
+                $seen[$cid] = true;
+
+                $deleted = !empty($col['deleted']);
+                $label   = trim((string)($col['label'] ?? ''));
+                $ctype   = (string)($col['type'] ?? 'text');
+
+                if (!$deleted && $label === '') {
+                    throw new ServiceError('validation', 'invalid_field', "fields[{$i}]: column {$cid} has no label.");
+                }
+                if (!in_array($ctype, self::GRID_CELL_TYPES, true)) {
+                    throw new ServiceError('validation', 'invalid_field',
+                        "fields[{$i}]: column {$cid} has type '{$ctype}'. A grid cell may be one of: "
+                        . implode(', ', self::GRID_CELL_TYPES) . '.');
+                }
+
+                $opts = null;
+                if (in_array($ctype, self::GRID_CELL_TYPES_WITH_OPTIONS, true)) {
+                    $opts = self::parseOptionList($col['options'] ?? '');
+                    if (!$deleted && !$opts) {
+                        throw new ServiceError('validation', 'invalid_field',
+                            "fields[{$i}]: column {$cid} is a '{$ctype}' and needs at least one option.");
+                    }
+                }
+
+                if (!$deleted) $live++;
+
+                /* Rebuilt rather than passed through, so a client cannot store
+                   arbitrary keys inside a column definition. */
+                $entry = ['id' => $cid, 'label' => $label, 'type' => $ctype, 'required' => !empty($col['required'])];
+                if ($opts !== null)  $entry['options'] = $opts;
+                if ($deleted)        $entry['deleted'] = true;
+                $clean[] = $entry;
+            }
+
+            if ($live < 1) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "fields[{$i}]: a grid needs at least one column that is not retired.");
+            }
+            if ($live > self::GRID_MAX_COLUMNS) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "fields[{$i}]: a grid may have at most " . self::GRID_MAX_COLUMNS . " columns.");
+            }
+
+            /* The id counter must never go backwards, or a retired column's id
+               gets reused and its old answers reappear under a new heading. */
+            $maxId = $seen ? max(array_keys($seen)) : 0;
+            $next  = (int)($config['next_column_id'] ?? 0);
+            $config['next_column_id'] = max($next, $maxId + 1);
+            $config['columns'] = $clean;
+        } else {
+            // Columns belong to a grid and nowhere else — dropped rather than
+            // stored on another type, where they would look meaningful.
+            unset($config['columns'], $config['next_column_id']);
+        }
         $vif = $config['visible_if'] ?? null;
         if ($vif === null) {
             return $config ?: null;
