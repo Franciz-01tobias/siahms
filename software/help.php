@@ -44,7 +44,7 @@ $translationNamespaces = ['common', 'software'];
             --on-accent:    var(--sw-on-accent);
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=141">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=143">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -458,6 +458,6 @@ $translationNamespaces = ['common', 'software'];
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=59"></script>
+    <script src="../assets/js/mobile.js?v=60"></script>
 </body>
 </html>

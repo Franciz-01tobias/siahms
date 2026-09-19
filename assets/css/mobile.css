@@ -12935,19 +12935,16 @@
     body[data-mobile-page="tickets-rota"] .rota-m-hide { display: none !important; }
 
     /* DAY - the name column and one day's column. */
-    body[data-rota-view="day"] .rota-grid { grid-template-columns: 104px 1fr; }
+    /* 132px, not the original 104px: measured, the longest name on the
+       development install needs 111px and three of seven were being
+       ellipsised (Ed). The ellipsis stays for the ones longer than this -
+       a name is prose-length and there is no width that fits every one. */
+    body[data-rota-view="day"] .rota-grid { grid-template-columns: 132px 1fr; }
 
-    /* ANALYST - one person, their days stacked one per row, each labelled
-       from its own data-date. Harvested from markup that is already there,
-       so it is right in all 24 locales and adds no strings. */
+    /* ANALYST - one person, their days stacked one per row. The date label
+       itself is LAYER 37d: it has to be formatted to the operator's preference,
+       which attr() cannot do on its own. */
     body[data-rota-view="analyst"] .rota-grid { grid-template-columns: 1fr; }
-    body[data-rota-view="analyst"] .rota-cell::before {
-        content: attr(data-date);
-        display: block;
-        font-size: 11px;
-        color: var(--text-muted, #666);
-        margin-bottom: 2px;
-    }
 
     /* The chooser strip: in day view the day headings pick the day, in
        analyst view the name cells pick the person. Both are markup the page
@@ -13121,4 +13118,56 @@
     /* The heading row is gone in day view and the name column in analyst view,
        so the grid is narrower than the two-column rule assumed. */
     body[data-rota-view="analyst"] .rota-cell { min-height: 0; }
+
+    /* ---- LAYER 37d: rota polish, all five from Ed driving it -------------
+       Every one of these is something that only shows up in use.
+       -------------------------------------------------------------------- */
+
+    /* 1. DAY VIEW - an analyst's name must not wrap. The column is 104px and a
+          full name is prose-length, so "Samantha Williams" became two lines and
+          the rows stopped lining up with the day beside them. */
+    body[data-rota-view="day"] .rota-analyst-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+
+    /* 2. ANALYST VIEW - the date goes on the LEFT of the cell, on one line, and
+          it is there even when the day is empty: the date is the point of the
+          row, so a blank day still has to say which day it is. The label is
+          `data-mlabel`, written by mobile.js in the operator's own date format
+          (attr() could only ever give the raw 2026-09-16).
+          ::before becomes a flex item here, which is what puts it beside the
+          content rather than above it. */
+    body[data-rota-view="analyst"] .rota-cell {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-align: left;
+        min-height: 0;
+    }
+    body[data-rota-view="analyst"] .rota-cell::before {
+        content: attr(data-mlabel);
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted, #666);
+        margin: 0;
+    }
+    /* An empty day is a cell holding only the add button. Keep the date at the
+       left and send the + to the far edge, so every row reads the same way
+       whether or not there is a shift in it. */
+    body[data-rota-view="analyst"] .rota-cell .rota-cell-add { margin-left: auto; }
+    body[data-rota-view="analyst"] .rota-cell .rota-entry { min-width: 0; }
+
+    /* 3. WEEK VIEW - you could not quite reach the bottom row. The wrapper
+          scrolls horizontally, and its scrollbar sits under the last row
+          eating the height the §18 check measured at exactly 15px. Give the
+          scroller its own bottom padding rather than adding more to the
+          container, which would push the other two readings down for nothing. */
+    body[data-rota-view="week"] .rota-grid-wrapper {
+        padding-bottom: 16px;
+    }
 }

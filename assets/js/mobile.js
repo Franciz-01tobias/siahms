@@ -4009,7 +4009,25 @@
     function clearTags() {
         Array.prototype.forEach.call(grid.children, function (el) {
             el.classList.remove('rota-m-hide');
+            el.removeAttribute('data-mlabel');
         });
+    }
+
+    /* The analyst view labels each stacked cell with its date, and it must be
+       the format the operator chose in preferences.
+
+       🔴 fmtNaiveDate, NOT fmtDate. A rota day is a NAIVE calendar date - the
+       third date kind - and fmtDate treats its argument as a UTC instant and
+       converts it into the viewer's zone, which moves a date across midnight
+       for anybody west of UTC. The label would be a day out for some people
+       and right for everybody testing it in London. */
+    function dayLabel(iso) {
+        if (!iso) return '';
+        if (typeof window.fmtNaiveDate === 'function') {
+            var v = window.fmtNaiveDate(iso);
+            if (v) return v;
+        }
+        return iso;                        // never leave the cell unlabelled
     }
 
     function apply() {
@@ -4042,8 +4060,12 @@
                     show = (row > 0) && (col === 0 || col === chosenCol + 1);
                 } else {
                     // One analyst's days, stacked. The name is in the chooser,
-                    // and each cell labels itself from its own data-date.
+                    // and each cell carries its own date as a label.
                     show = (row === chosenRow + 1) && (col > 0);
+                    // Every cell gets the label, including an empty one: the
+                    // date is the point of the row, so a blank day still has
+                    // to say which day it is.
+                    if (show && el.dataset.date) el.setAttribute('data-mlabel', dayLabel(el.dataset.date));
                 }
                 if (!show) el.classList.add('rota-m-hide');
             }
@@ -4071,6 +4093,19 @@
     var pasteBtn = document.getElementById('rotaPasteWeekBtn');
     if (pasteBtn) {
         new MutationObserver(reserveSpace).observe(pasteBtn, { attributes: true, attributeFilter: ['style'] });
+    }
+
+    /* Today changed the week and left the chosen day alone, so on the current
+       week it looked like a button that did nothing: the same column index was
+       still selected. Wrap it - section 1, extend the page's JS from outside -
+       and drop the choice so defaults() picks today again.
+       mobile.js loads after rota.js, so the global is already there. */
+    if (typeof window.goToThisWeek === 'function') {
+        var rotaGoToThisWeek = window.goToThisWeek;
+        window.goToThisWeek = function () {
+            if (mq.matches) chosenCol = null;
+            return rotaGoToThisWeek.apply(this, arguments);
+        };
     }
 
     function sync() {

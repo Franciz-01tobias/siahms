@@ -45,6 +45,6 @@
             });
         })();
     </script>
-    <script src="../../assets/js/mobile.js?v=59"></script>
+    <script src="../../assets/js/mobile.js?v=60"></script>
 </body>
 </html>

@@ -295,7 +295,7 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
         @media (max-width: 700px) { .prov-wrap { padding: 14px 12px 50px; } }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=141">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=143">
 </head>
 <body data-mobile-module="system" data-mobile-page="sso-provider">
 <?php include '../includes/header.php'; ?>
@@ -1120,6 +1120,6 @@ if (<?php echo json_encode($activeTab); ?> === 'history') loadRuns();
 // The typed-DN warning must be right on arrival, not only after a click.
 ouManualNote();
 </script>
-    <script src="../../assets/js/mobile.js?v=59"></script>
+    <script src="../../assets/js/mobile.js?v=60"></script>
 </body>
 </html>

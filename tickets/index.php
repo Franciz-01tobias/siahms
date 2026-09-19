@@ -36,7 +36,7 @@ $translationNamespaces = ['common', 'tickets'];
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../checklists/ticket_checklist.css?v=4">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=141">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=143">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <?php
@@ -952,7 +952,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../checklists/search_scoring.js?v=1"></script>
     <script src="../checklists/ticket_view.js?v=6"></script>
     <script src="../assets/js/inbox.js?v=132"></script>
-    <script src="../assets/js/mobile.js?v=59"></script>
+    <script src="../assets/js/mobile.js?v=60"></script>
     <script>
     // Auto-check mailboxes every 60 seconds
     (function() {

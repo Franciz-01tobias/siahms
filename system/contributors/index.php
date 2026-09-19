@@ -41,7 +41,7 @@ $contributors = getContributors();
     <title>Service Desk - <?php echo htmlspecialchars(t('system.contributors.title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=141">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=143">
     <style>
         /* System's accent. --on-accent is pinned too: System is the one module
            whose dark accent is a LIGHT colour, and the global --on-accent stays

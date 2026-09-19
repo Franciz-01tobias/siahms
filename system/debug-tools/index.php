@@ -87,7 +87,7 @@ $debugTools = getDebugTools();
         [data-theme-mode="dark"] .intro-card .intro-text strong { color: #e6eefb; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=141">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=143">
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo $path_prefix; ?>assets/js/tz.js?v=5"></script>
 </head>
@@ -166,6 +166,6 @@ $debugTools = getDebugTools();
         });
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=59"></script>
+    <script src="../../assets/js/mobile.js?v=60"></script>
 </body>
 </html>
