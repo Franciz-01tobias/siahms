@@ -154,7 +154,7 @@ table.analyst-table td.score { font-weight: 600; }
 
 .empty { color: var(--text-faint, #999); font-style: italic; padding: 20px 0; text-align: center; }
 </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=146">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=149">
 </head>
 <body data-mobile-page="tickets-csat">
 

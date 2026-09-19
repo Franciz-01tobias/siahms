@@ -51,7 +51,6 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
     <title>Service Desk - Checklist template</title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=146">
     <style>
         html, body { height: auto !important; min-height: 100vh; overflow-y: auto !important; overflow-x: hidden; margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }
         .ed-shell { display: flex; flex-direction: column; min-height: 100vh; }
@@ -130,8 +129,9 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
 
         .ed-empty { text-align: center; padding: 26px; font-size: 13px; color: var(--text-muted, #64748b); border: 1px dashed var(--border-soft, #cbd5e1); border-radius: 6px; }
     </style>
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=149">
 </head>
-<body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>" class="ed-shell">
+<body data-mobile-page="checklists-edit" data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>" class="ed-shell">
     <?php include __DIR__ . '/../includes/header.php'; ?>
 
     <div class="ed-bar">
@@ -432,5 +432,6 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
 
         load();
     </script>
+    <script src="../../assets/js/mobile.js?v=63"></script>
 </body>
 </html>

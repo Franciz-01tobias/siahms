@@ -13491,4 +13491,88 @@
     body[data-mobile-page="tickets-csat"] .analyst-table th,
     body[data-mobile-page="tickets-csat"] .analyst-table td { overflow-wrap: anywhere; }
     body[data-mobile-page="tickets-csat"] .panel { min-width: 0; }
+
+    /* ====================================================================
+       LAYER 40 - Checklists & SOPs
+       --------------------------------------------------------------------
+       Sandy's module was built with `mobile.css` already linked, which is why
+       three of its four pages measured clean from the start - and it had no
+       `data-mobile-page` marker on any of them, so nothing could be scoped to
+       it. The markers are now in place on all four.
+
+       🔴 The card grid is the one real fault:
+
+           .chk-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+
+       `minmax(340px, 1fr)` reads as "at least 340". On a 360px screen the
+       container has about 336px to give, so auto-fill lays out a 340px track
+       anyway and the cards run off the side - the first one starts at x=296
+       and the row reaches 636. ⭐ §30's one-line question settles it without
+       any of the coordinates: *is anything still laid out in more than one
+       column at phone width?*
+
+       ⚠️ `auto-fill` is not the guard it looks like. It counts how many
+       tracks fit, but the track MINIMUM is a floor it will not go under, so a
+       grid that is responsive everywhere above 340px is rigid below it - and
+       that is the only place it matters.
+       -------------------------------------------------------------------- */
+    body[data-mobile-page="checklists"] .chk-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    /* ⚠️ §14 again, on a GRID item this time. Setting the track to `1fr` was
+       not enough: a grid item also has `min-width: auto`, so the card would
+       not shrink below its content s own minimum and sat 489px wide inside a
+       336px track. The track was right and the item ignored it. */
+    body[data-mobile-page="checklists"] .chk-card {
+        padding: 14px;
+        min-width: 0;
+    }
+    body[data-mobile-page="checklists"] .chk-card * {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    /* ---- 40b. And the reason the grid fix alone did nothing -------------
+       🔴 `.chk-layout` is a flex row with a 260px `.chk-sidebar` that carries
+       `flex-shrink: 0`, so on a 360px screen `.chk-main` measured ONE HUNDRED
+       pixels. That is why the cards still started at x=296 after the grid was
+       set to a single column: a `1fr` track inside a 100px box is 100px, and
+       the cards overflow it exactly as before.
+
+       ⭐ The lesson is not the rule, it is the order. `minmax(340px, 1fr)` was
+       a genuine fault and fixing it changed nothing measurable, because a
+       second fault upstream was setting the width both of them share. When a
+       fix that should have moved something moves nothing, look OUTWARD before
+       looking again at the rule - the same instinct §9 teaches for load order.
+
+       This is the third instance of the fixed-sidebar shape in this round
+       alone (mailbox activity, CMDB browse before it, and now here), so the
+       treatment is the same: stack, cap the chooser, hand the scroller role
+       to the main pane explicitly, and give it the house 12px. */
+    body[data-mobile-page="checklists"] .chk-layout {
+        flex-direction: column;
+        height: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        overflow: visible;
+    }
+    body[data-mobile-page="checklists"] .chk-sidebar {
+        width: 100%;
+        flex: 0 0 auto;
+        max-height: 32vh;
+        padding: 12px;
+        gap: 12px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border-soft, #e2e8f0);
+    }
+    body[data-mobile-page="checklists"] .chk-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        padding: 12px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 }

@@ -68,7 +68,6 @@ foreach ($templates as $t) {
     <title>Service Desk - Checklists</title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=146">
     <style>
         body { margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }
         .chk-layout { display: flex; height: calc(100vh - 48px); width: 100%; overflow: hidden; }
@@ -88,8 +87,9 @@ foreach ($templates as $t) {
         .chk-pill-task { background: #dcfce7; color: #16a34a; }
         .chk-pill-both { background: #f3e8ff; color: #9333ea; }
     </style>
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=149">
 </head>
-<body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>">
+<body data-mobile-page="checklists" data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>">
     <?php include 'includes/header.php'; ?>
 
     <div class="chk-layout">
@@ -324,5 +324,6 @@ foreach ($templates as $t) {
         }
 
     </script>
+    <script src="../assets/js/mobile.js?v=63"></script>
 </body>
 </html>
