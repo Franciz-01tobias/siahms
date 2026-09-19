@@ -188,13 +188,38 @@ addSection($sections, "SHIPPED CA BUNDLE (includes/cacert.pem)", [
 // ---- 5. RESOLVED BUNDLE (what sslApplyCurl will actually attach) -------
 $resolved = function_exists('sslResolveCaBundle') ? sslResolveCaBundle() : (defined('SSL_CA_BUNDLE') ? SSL_CA_BUNDLE : '');
 $isWindows = stripos(PHP_OS, 'WIN') === 0;
+
+// ⚠️ Compare the FILES, never the path strings. sslResolveCaBundle() returns
+// __DIR__ . '/cacert.pem' - backslashes from __DIR__ and then one forward slash -
+// while section 4 builds the same path with DIRECTORY_SEPARATOR throughout. Those
+// are two spellings of one file, and a === between them is false on Windows. That
+// sent this decision to its "nothing could be resolved, verification will likely
+// fail" branch on precisely the installs the shipped bundle exists for: Windows
+// with no php.ini bundle, which is a stock WAMP. The bundle was found and attached
+// the whole time; only the sentence describing it was wrong.
+$sameFile = static function (string $a, string $b): bool {
+    if ($a === '' || $b === '') return false;
+    $ra = realpath($a);
+    $rb = realpath($b);
+    if ($ra === false || $rb === false) return false;
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        $ra = strtolower(str_replace('\\', '/', $ra));
+        $rb = strtolower(str_replace('\\', '/', $rb));
+    }
+    return $ra === $rb;
+};
+
 if ($curlCaReadable) {
     $why = "using the bundle configured in php.ini (curl.cainfo).";
 } elseif ($osslCaReadable) {
     $why = "using the bundle configured in php.ini (openssl.cafile).";
-} elseif ($resolved !== '' && $resolved === $bundled) {
+} elseif ($sameFile($resolved, $bundled)) {
     $why = "using the shipped includes/cacert.pem (Windows fallback — php.ini has none).";
-} elseif ($resolved === '' && !$isWindows) {
+} elseif ($resolved !== '' && is_readable($resolved)) {
+    $why = "using the bundle named above, which is readable. It is neither a php.ini setting nor the shipped includes/cacert.pem, so it came from SSL_CA_BUNDLE in config.php.";
+} elseif ($resolved !== '') {
+    $why = "a bundle is named above but is NOT READABLE — verification will fail. Fix that path, or remove it to fall back to the shipped includes/cacert.pem.";
+} elseif (!$isWindows) {
     $why = "no explicit bundle — on Linux, libcurl falls back to the OS trust store (/etc/ssl/certs), which is correct.";
 } else {
     $why = "no CA bundle could be resolved — verification will likely fail.";
