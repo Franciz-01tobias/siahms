@@ -5,6 +5,7 @@
 session_start();
 require_once '../config.php';
 require_once '../includes/functions.php';
+require_once '../includes/branding.php';   // brandingLogoUrl() for the PDF export - NOT in functions.php
 require_once '../includes/i18n.php';
 require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
@@ -31,6 +32,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
     <script src="../assets/js/form-logic.js?v=2"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <style>
@@ -351,6 +353,26 @@ $translationNamespaces = ['common', 'forms'];
         .btn-danger { background: #d32f2f; color: white; }
         .btn-danger:hover { background: #b71c1c; }
 
+        .detail-actions { display: flex; align-items: center; gap: 10px; }
+
+        /* The approval block sits above the answers: on an audit trail the
+           decision is the headline, not a footnote. */
+        .detail-approval {
+            border: 1px solid var(--border-soft, #e2e8f0);
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            background: var(--surface-2, #f8fafc);
+            font-size: 13px;
+        }
+        .detail-approval .da-row { display: flex; gap: 8px; margin-bottom: 4px; }
+        .detail-approval .da-row:last-child { margin-bottom: 0; }
+        .detail-approval .da-label { color: var(--text-muted, #64748b); min-width: 88px; }
+        .da-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-weight: 600; font-size: 12px; }
+        .da-approved { background: #dcfce7; color: #16a34a; }
+        .da-rejected { background: #fee2e2; color: #dc2626; }
+        .da-pending  { background: #fef3c7; color: #b45309; }
+
         @media print {
             .header, .subs-toolbar-right, .subs-table .delete-btn,
             .detail-overlay, .confirm-overlay { display: none !important; }
@@ -410,7 +432,12 @@ $translationNamespaces = ['common', 'forms'];
         <div class="detail-box">
             <div class="detail-header">
                 <h3><?php echo htmlspecialchars(t('forms.subs.detail_heading')); ?></h3>
-                <button class="detail-close" onclick="closeDetail()">&times;</button>
+                <div class="detail-actions">
+                    <button class="btn btn-secondary" id="detailPdfBtn" onclick="exportSubmissionPdf()">
+                        <?php echo htmlspecialchars(t('forms.subs.export_pdf')); ?>
+                    </button>
+                    <button class="detail-close" onclick="closeDetail()">&times;</button>
+                </div>
             </div>
             <div class="detail-body" id="detailBody"></div>
         </div>
@@ -541,42 +568,58 @@ $translationNamespaces = ['common', 'forms'];
             document.getElementById('subsContent').innerHTML = html;
         }
 
+        /* Which submission the detail panel is showing, so the PDF button knows
+           what to export. Set here and nowhere else. */
+        let currentDetailIndex = -1;
+
         function showDetail(idx) {
             const sub = filteredSubmissions[idx];
             if (!sub) return;
+            currentDetailIndex = idx;
 
             let html = `<div class="detail-meta">
                 <span><strong>${esc(window.t('forms.subs.detail_submitted_by'))}</strong> ${esc(sub.submitted_by || window.t('forms.subs.unknown_user'))}</span>
                 <span><strong>${esc(window.t('forms.subs.detail_date'))}</strong> ${esc(formatDate(sub.submitted_date))}</span>
             </div>`;
 
+            /* The approval trail. It has been in `form_submissions` since the
+               catalogue approvals work and this panel never showed it, so the
+               screen said less than the database held. */
+            const ap = approvalParts(sub);
+            html += `<div class="detail-approval">
+                <div class="da-row">
+                    <span class="da-label">${esc(window.t('forms.subs.detail_approval'))}</span>
+                    <span class="da-pill ${ap.cls}">${esc(ap.label)}</span>
+                </div>`;
+            if (sub.approval_decided_by) {
+                html += `<div class="da-row">
+                    <span class="da-label">${esc(window.t('forms.approval.approver'))}</span>
+                    <span>${esc(sub.approval_decided_by)}${sub.approval_decided_datetime ? ' &middot; ' + esc(formatDate(sub.approval_decided_datetime)) : ''}</span>
+                </div>`;
+            }
+            if (sub.approval_comment) {
+                html += `<div class="da-row">
+                    <span class="da-label">${esc(window.t('forms.subs.approval_comment'))}</span>
+                    <span>${esc(sub.approval_comment)}</span>
+                </div>`;
+            }
+            html += '</div>';
+
             formData.fields.forEach(f => {
-                const val = sub.data[f.id] ?? '';
+                const p = fieldValueParts(f, sub.data[f.id]);
                 const retired = f.is_deleted == 1
                     ? ` <span class="col-retired" title="${escAttr(window.t('forms.subs.retired_hint'))}">${esc(window.t('forms.subs.retired'))}</span>` : '';
                 html += `<div class="detail-field">
                     <div class="detail-field-label">${esc(f.label)}${retired}</div>`;
 
-                if (f.field_type === 'checkbox') {
-                    const checked = val === '1';
-                    html += `<div class="detail-field-value"><span class="cb-value ${checked ? 'cb-yes' : 'cb-no'}">${checked ? '&#10003;' : '&#10007;'}</span> ${checked ? esc(window.t('forms.subs.yes')) : esc(window.t('forms.subs.no'))}</div>`;
-                } else if (f.field_type === 'checkboxes') {
-                    const list = decodeMultiValue(val);
-                    if (list.length === 0) {
-                        html += `<div class="detail-field-value empty">${esc(window.t('forms.subs.no_response'))}</div>`;
-                    } else {
-                        html += `<div class="detail-field-value"><ul style="margin:0; padding-left: 18px;">${list.map(v => `<li>${esc(v)}</li>`).join('')}</ul></div>`;
-                    }
-                } else if (f.field_type === 'lookup') {
-                        // Show the label the person actually chose. The id stays
-                        // in the stored JSON for anything that wants the record.
-                        const lbl = FormLogic.lookupLabel(val);
-                        html += `<td title="${esc(lbl)}">${esc(lbl) || '<span style="color:var(--text-faint, #ccc)">—</span>'}</td>`;
-                    } else if (f.field_type === 'datetime') {
-                    const shown = FormLogic.formatDateValue(val);
-                    html += `<div class="detail-field-value ${!shown ? 'empty' : ''}">${esc(shown) || esc(window.t('forms.subs.no_response'))}</div>`;
+                if (p.kind === 'bool') {
+                    html += `<div class="detail-field-value"><span class="cb-value ${p.checked ? 'cb-yes' : 'cb-no'}">${p.checked ? '&#10003;' : '&#10007;'}</span> ${esc(p.text)}</div>`;
+                } else if (p.kind === 'list') {
+                    html += p.empty
+                        ? `<div class="detail-field-value empty">${esc(window.t('forms.subs.no_response'))}</div>`
+                        : `<div class="detail-field-value"><ul style="margin:0; padding-left: 18px;">${p.list.map(v => `<li>${esc(v)}</li>`).join('')}</ul></div>`;
                 } else {
-                    html += `<div class="detail-field-value ${!val ? 'empty' : ''}">${esc(val) || esc(window.t('forms.subs.no_response'))}</div>`;
+                    html += `<div class="detail-field-value ${p.empty ? 'empty' : ''}">${p.empty ? esc(window.t('forms.subs.no_response')) : esc(p.text)}</div>`;
                 }
 
                 html += '</div>';
@@ -585,6 +628,205 @@ $translationNamespaces = ['common', 'forms'];
             document.getElementById('detailBody').innerHTML = html;
             document.getElementById('detailOverlay').classList.add('open');
         }
+
+        /* ------------------------------------------------------------------
+           ONE formatter, two renderers.
+
+           The detail panel and the PDF must never disagree about what a
+           submission says. So the decision about how a stored value READS
+           lives here, and both callers format the result their own way -
+           HTML for the panel, plain text for the document. Duplicating the
+           if/else would guarantee drift the first time a field type is added.
+
+           Returns { kind: 'bool' | 'list' | 'text', text, list, empty }.
+           ------------------------------------------------------------------ */
+        function fieldValueParts(f, raw) {
+            const val = raw ?? '';
+            if (f.field_type === 'checkbox') {
+                const checked = val === '1';
+                return {
+                    kind: 'bool',
+                    checked: checked,
+                    text: checked ? window.t('forms.subs.yes') : window.t('forms.subs.no'),
+                    empty: false
+                };
+            }
+            if (f.field_type === 'checkboxes') {
+                const list = decodeMultiValue(val);
+                return { kind: 'list', list: list, text: list.join(', '), empty: list.length === 0 };
+            }
+            if (f.field_type === 'lookup') {
+                /* The label the person actually chose. The id stays in the
+                   stored JSON for anything that wants the record. */
+                const lbl = FormLogic.lookupLabel(val) || '';
+                return { kind: 'text', text: lbl, empty: !lbl };
+            }
+            if (f.field_type === 'datetime') {
+                const shown = FormLogic.formatDateValue(val) || '';
+                return { kind: 'text', text: shown, empty: !shown };
+            }
+            return { kind: 'text', text: String(val), empty: !val };
+        }
+
+        /* The approval outcome, as words and a class. `not_required` is not a
+           non-answer - it means nobody had to approve this, which is worth
+           saying on a record rather than leaving blank. */
+        function approvalParts(sub) {
+            const st = (sub.approval_status || 'not_required');
+            if (st === 'approved') return { st, cls: 'da-approved', label: window.t('forms.approval.status_approved') };
+            if (st === 'rejected') return { st, cls: 'da-rejected', label: window.t('forms.approval.status_rejected') };
+            if (st === 'pending')  return { st, cls: 'da-pending',  label: window.t('forms.subs.approval_awaiting') };
+            return { st, cls: '', label: window.t('forms.subs.approval_none') };
+        }
+
+        /* ------------------------------------------------------------------
+           Export the open submission as a PDF.
+
+           Built like the Knowledge export - a real document with selectable,
+           searchable text rather than an image of the screen - so an auditor
+           can search it and copy out of it.
+           ------------------------------------------------------------------ */
+        async function exportSubmissionPdf() {
+            const idx = currentDetailIndex;
+            const sub = filteredSubmissions[idx];
+            if (!sub || !formData) return;
+
+            const btn = document.getElementById('detailPdfBtn');
+            if (btn) btn.disabled = true;
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+                const pageW = doc.internal.pageSize.getWidth();
+                const pageH = doc.internal.pageSize.getHeight();
+                const margin = 15;
+                const contentW = pageW - margin * 2;
+                let y = margin;
+
+                /* Start a new page when the next block would run off the foot.
+                   Checked BEFORE writing each block rather than after, or the
+                   last line of a long answer lands in the margin. */
+                const room = (needed) => {
+                    if (y + needed > pageH - margin) { doc.addPage(); y = margin; }
+                };
+
+                // --- Logo: the operator's own, not a hard-coded file ---------
+                try {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    await new Promise((res, rej) => {
+                        img.onload = res; img.onerror = rej;
+                        img.src = <?php echo json_encode(brandingLogoUrl()); ?>;
+                    });
+                    const maxH = 12;
+                    /* alias + compression, both deliberate: the alias means a bundle
+                       of many submissions embeds the logo ONCE rather than per page,
+                       and FAST deflates it - an uncompressed branding PNG took a
+                       one-page document to 1.45 MB, which is a lot to keep for a
+                       record you are storing by the hundred. */
+                    doc.addImage(img, 'PNG', margin, y, maxH * (img.width / img.height), maxH, 'brandlogo', 'FAST');
+                    y += maxH + 6;
+                } catch (e) { /* a missing logo must not cost you the document */ }
+
+                // --- Title ---------------------------------------------------
+                doc.setFontSize(18);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(30, 30, 30);
+                const titleLines = doc.splitTextToSize(formData.title || '', contentW);
+                doc.text(titleLines, margin, y);
+                y += titleLines.length * 7 + 2;
+
+                // --- Meta ----------------------------------------------------
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(120, 120, 120);
+                const num = filteredSubmissions.length - idx;
+                const meta = '#' + num + '  |  ' +
+                    window.t('forms.subs.detail_submitted_by') + ' ' +
+                    (sub.submitted_by || window.t('forms.subs.unknown_user')) + '  |  ' +
+                    window.t('forms.subs.detail_date') + ' ' + formatDate(sub.submitted_date);
+                doc.text(doc.splitTextToSize(meta, contentW), margin, y);
+                y += 8;
+
+                // --- Approval trail ------------------------------------------
+                // The reason this document exists. A list of answers with no
+                // decision on it is a form, not a record.
+                const ap = approvalParts(sub);
+                room(18);
+                doc.setDrawColor(210, 214, 220);
+                doc.setFillColor(248, 250, 252);
+                const apLines = [window.t('forms.subs.detail_approval') + ': ' + ap.label];
+                if (sub.approval_decided_by) {
+                    apLines.push(window.t('forms.approval.approver') + ': ' + sub.approval_decided_by +
+                        (sub.approval_decided_datetime ? '  (' + formatDate(sub.approval_decided_datetime) + ')' : ''));
+                }
+                if (sub.approval_comment) {
+                    apLines.push(window.t('forms.subs.approval_comment') + ': ' + sub.approval_comment);
+                }
+                const apWrapped = [];
+                apLines.forEach(l => doc.splitTextToSize(l, contentW - 8).forEach(w => apWrapped.push(w)));
+                const apH = apWrapped.length * 5 + 6;
+                doc.roundedRect(margin, y, contentW, apH, 1.5, 1.5, 'FD');
+                doc.setFontSize(10);
+                doc.setTextColor(60, 60, 60);
+                doc.text(apWrapped, margin + 4, y + 6);
+                y += apH + 8;
+
+                // --- Fields ---------------------------------------------------
+                formData.fields.forEach(f => {
+                    const p = fieldValueParts(f, sub.data[f.id]);
+                    let valueLines;
+                    if (p.kind === 'bool') {
+                        valueLines = [(p.checked ? '[x] ' : '[ ] ') + p.text];
+                    } else if (p.kind === 'list') {
+                        valueLines = p.empty
+                            ? [window.t('forms.subs.no_response')]
+                            : p.list.map(v => '• ' + v);
+                    } else {
+                        valueLines = doc.splitTextToSize(
+                            p.empty ? window.t('forms.subs.no_response') : p.text, contentW);
+                    }
+
+                    const label = (f.label || '') +
+                        (f.is_deleted == 1 ? ' (' + window.t('forms.subs.retired') + ')' : '');
+                    const labelLines = doc.splitTextToSize(label, contentW);
+
+                    room(labelLines.length * 5 + valueLines.length * 5 + 6);
+
+                    doc.setFontSize(9);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(100, 116, 139);
+                    doc.text(labelLines, margin, y);
+                    y += labelLines.length * 5;
+
+                    doc.setFontSize(11);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(p.empty ? 150 : 30, p.empty ? 150 : 30, p.empty ? 150 : 30);
+                    // A long answer can outrun a page on its own, so wrap line by
+                    // line rather than trusting the block to fit.
+                    valueLines.forEach(line => { room(5); doc.text(line, margin, y); y += 5; });
+                    y += 4;
+                });
+
+                // --- Footer on every page ------------------------------------
+                const pages = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pages; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.setTextColor(150, 150, 150);
+                    doc.text(window.t('forms.subs.pdf_footer', { n: i, total: pages }),
+                        pageW - margin, pageH - 8, { align: 'right' });
+                }
+
+                const safe = (formData.title || 'submission').replace(/[^a-z0-9]/gi, '_');
+                doc.save(safe + '_' + num + '.pdf');
+            } catch (e) {
+                console.error(e);
+                if (typeof showToast === 'function') showToast(window.t('forms.subs.pdf_error'), 'error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
 
         function closeDetail() {
             document.getElementById('detailOverlay').classList.remove('open');

@@ -459,6 +459,16 @@ return [
         'retired_hint'      => 'This question was removed from the form. The answers people already gave it are kept.',
         'delete'            => 'Delete',
         'detail_heading'    => 'Submission Detail',
+        /* PDF export of a single submission (Enrique: a record you can keep). */
+        'export_pdf'        => 'Export as PDF',
+        'pdf_footer'        => 'Page {n} of {total}',
+        'pdf_error'         => 'The PDF could not be created.',
+        /* The approval trail. `not_required` is not a blank - it means nobody
+           had to approve this, which is worth saying on a record. */
+        'detail_approval'   => 'Approval',
+        'approval_awaiting' => 'Awaiting approval',
+        'approval_none'     => 'Not required',
+        'approval_comment'  => 'Comment',
         'detail_submitted_by' => 'Submitted by:',
         'detail_date'       => 'Date:',
         'yes'               => 'Yes',

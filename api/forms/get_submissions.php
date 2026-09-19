@@ -63,11 +63,18 @@ try {
                                    CASE WHEN s.submitted_by_user_id IS NOT NULL THEN 1 ELSE 0 END AS from_portal,
                                    s.ticket_id,
                                    t.ticket_number,
-                                   DATE_FORMAT(s.submitted_date, '%Y-%m-%d %H:%i:%s') as submitted_date
+                                   DATE_FORMAT(s.submitted_date, '%Y-%m-%d %H:%i:%s') as submitted_date,
+                                   s.approval_status,
+                                   s.approval_comment,
+                                   decider.full_name AS approval_decided_by,
+                                   DATE_FORMAT(s.approval_decided_datetime, '%Y-%m-%d %H:%i:%s') AS approval_decided_datetime
                             FROM form_submissions s
                             LEFT JOIN analysts a ON s.submitted_by = a.id
                             LEFT JOIN users    u ON u.id = s.submitted_by_user_id
                             LEFT JOIN tickets  t ON t.id = s.ticket_id
+                            /* The analyst who actually decided, which is not always the
+                               form's configured approver - an admin can step in. */
+                            LEFT JOIN analysts decider ON decider.id = s.approval_decided_by_id
                             WHERE s.form_id = ?
                             ORDER BY s.submitted_date DESC");
     $stmt->execute([$formId]);
