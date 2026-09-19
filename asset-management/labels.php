@@ -4,12 +4,18 @@
  *
  * WHY A PRINT PAGE AND NOT A PDF
  * ------------------------------
- * FreeITSM ships no PDF library, and adding one to print a grid of squares
- * would be a dependency for nothing: `@page` plus millimetre units gives the
- * same result through the browser's own print dialog, on any printer, with a
- * live preview. The QR codes are drawn client-side by the qrcode library the
+ * A PDF would be the wrong tool for a grid of squares: `@page` plus millimetre
+ * units give the same result through the browser's own print dialog, on any
+ * printer, with a live preview. The QR codes are drawn client-side by the qrcode library the
  * app already bundles for MFA enrolment — so nothing about your estate is sent
  * to a third-party QR service, which is the usual way this gets done badly.
+ *
+ * ⚠️ This comment used to begin "FreeITSM ships no PDF library". That was
+ * WRONG, and it cost a later round its first answer. jsPDF IS bundled, in
+ * assets/js/vendor/, and five screens use it: morning checks, the asset table,
+ * knowledge, and both mappers. The reasoning above stands on its own - a
+ * sticker sheet is output, not a record, so there is nothing to keep - but the
+ * premise did not.
  *
  * WHAT IT PRINTS
  * --------------

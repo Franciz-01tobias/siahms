@@ -545,7 +545,7 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <!-- Link Copied Toast -->
 
     <!-- jsPDF for searchable PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
     <script>window.API_BASE = '../api/knowledge/';</script>
     <script src="../assets/js/knowledge.js?v=56"></script>
     <!-- Prism.js for code syntax highlighting when viewing articles -->
