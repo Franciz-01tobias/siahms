@@ -581,7 +581,7 @@ $translationNamespaces = ['common', 'tickets'];
          data-mobile-shell="own" opts OUT of LAYER 2's flex body — this page
          deliberately keeps <body> unstyled (see the .settings-shell comment
          above) and builds its own scroll shell one level down. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=139">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=140">
 </head>
 <body data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
@@ -8570,6 +8570,6 @@ $translationNamespaces = ['common', 'tickets'];
     </script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/mobile.js?v=57"></script>
+    <script src="../../assets/js/mobile.js?v=58"></script>
 </body>
 </html>

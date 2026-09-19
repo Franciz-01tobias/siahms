@@ -3782,3 +3782,230 @@
     if (mq.addEventListener) { mq.addEventListener('change', sync); }
     else if (mq.addListener) { mq.addListener(sync); }
 })();
+
+/* ============================================================================
+   LAYER 37 - Tickets rota: three readings of one grid.
+
+   The rota is a CSS grid of `160px repeat(N, 1fr)` - a name column and N days,
+   so six columns at days-5. Section 11: a sideways scroller stops preserving a
+   comparison past about four. Ed's decision was that which reading you want is
+   a PERSONAL PREFERENCE, so all three stay behind a sticky footer.
+
+   WHY THE HIDING IS DONE HERE AND NOT IN CSS. A day is every (cols)th child,
+   which nth-child expresses fine. An analyst is the n-th GROUP of `cols`
+   children, and the number of analysts is unbounded - there is no nth-child
+   for "the 4th group of 6". So the cells are tagged here.
+
+   AND WHY IT IS RE-APPLIED ON MUTATION. rota.js rebuilds #rotaGrid's entire
+   innerHTML on every week change, which throws the tags away. A view that
+   works until you press the next-week arrow and then silently reverts is
+   worse than one that never worked, because nothing announces it. Same
+   reasoning as the section 21 harvester, and the same fix.
+
+   Desktop is untouched: the bar is only injected while mq.matches, and both
+   body attributes are removed when the viewport leaves mobile.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'tickets-rota') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var grid = document.getElementById('rotaGrid');
+    var container = document.querySelector('.rota-container');
+    if (!grid || !container) return;
+
+    var STORE = 'freeitsm.rota.mobileView';
+    var VIEWS = ['day', 'analyst', 'week'];
+    var view = 'day';
+    try { if (VIEWS.indexOf(localStorage.getItem(STORE)) !== -1) view = localStorage.getItem(STORE); }
+    catch (e) { /* private mode: the default is fine */ }
+
+    var chosenCol = null;      // which day, in day view
+    var chosenRow = null;      // which analyst, in analyst view
+
+    /* Prefer the module's own translations; fall back only if a key is
+       missing, which can happen if a page exports fewer namespaces. */
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+
+    /* How many columns per row, read from the class rota.js sets. */
+    function colCount() {
+        var m = /\bdays-(\d+)\b/.exec(grid.className);
+        return m ? (parseInt(m[1], 10) + 1) : 6;
+    }
+
+    var ICONS = {
+        // one day
+        day: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/><rect x="7" y="13" width="5" height="4" rx="1" fill="currentColor" stroke="none"/></svg>',
+        // one person
+        analyst: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>',
+        // the whole grid
+        week: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M9 10v11M15 10v11"/></svg>'
+    };
+
+    var LABELS = {
+        day:     function () { return tr('common.view_day', 'Day'); },
+        analyst: function () { return tr('tickets.group_analyst', 'Analyst'); },
+        week:    function () { return tr('common.view_week', 'Week'); }
+    };
+
+    var bar = null;
+
+    function buildBar() {
+        if (bar) return;
+        bar = document.createElement('div');
+        bar.className = 'rota-viewbar';
+        bar.setAttribute('role', 'group');
+        VIEWS.forEach(function (v) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'rota-vb-btn';
+            b.dataset.view = v;
+            b.innerHTML = ICONS[v] + '<span>' + LABELS[v]() + '</span>';
+            // display:none on the label would remove the accessible name, so
+            // the name comes from the visible text and this is belt-and-braces.
+            b.setAttribute('aria-label', LABELS[v]());
+            b.addEventListener('click', function () { setView(v); });
+            bar.appendChild(b);
+        });
+        document.body.appendChild(bar);
+    }
+
+    function syncBarPressed() {
+        if (!bar) return;
+        Array.prototype.forEach.call(bar.querySelectorAll('.rota-vb-btn'), function (b) {
+            b.setAttribute('aria-pressed', b.dataset.view === view ? 'true' : 'false');
+        });
+    }
+
+    function setView(v) {
+        view = v;
+        try { localStorage.setItem(STORE, v); } catch (e) { /* not essential */ }
+        document.body.setAttribute('data-rota-view', v);
+        syncBarPressed();
+        apply();
+    }
+
+    /* Default the day to today when this week contains it, else the first day.
+       Default the analyst to the first row. Both only on the first apply, so a
+       re-render does not yank the user back to today. */
+    function defaults() {
+        var cols = colCount();
+        if (chosenCol === null) {
+            var today = grid.querySelector('.rota-col-header.rota-line-head.today');
+            chosenCol = today ? (parseInt(today.dataset.col, 10) || 0) : 0;
+        }
+        if (chosenRow === null) {
+            var firstName = grid.querySelector('.rota-analyst-name');
+            chosenRow = firstName ? (parseInt(firstName.dataset.row, 10) || 0) : 0;
+        }
+        if (chosenCol > cols - 2) chosenCol = 0;
+    }
+
+    function clearTags() {
+        Array.prototype.forEach.call(grid.children, function (el) {
+            el.classList.remove('rota-m-hide', 'rota-m-chosen');
+        });
+    }
+
+    function apply() {
+        if (!mq.matches) { clearTags(); return; }
+        defaults();
+        var cols = colCount();
+        var kids = grid.children;
+
+        clearTags();
+        if (view === 'week') return;               // the grid as it is
+
+        for (var i = 0; i < kids.length; i++) {
+            var el = kids[i];
+
+            /* Section 11: do not swallow the empty state. rota.js renders
+               "no analysts" as one div spanning `grid-column: 1 / -1`, which
+               sits at an arbitrary index and would be hidden by the modulo
+               like any other cell - deleting the only thing on the screen
+               that explains why it is blank. */
+            if (el.classList.contains('rota-empty')) continue;
+
+            var col = i % cols;                    // 0 is the name column
+            var row = Math.floor(i / cols);        // 0 is the heading row
+
+            var show;
+            if (view === 'day') {
+                show = (col === 0) || (col === chosenCol + 1);
+            } else {
+                show = (row === 0) || (row === chosenRow + 1);
+                // In analyst view the heading row's day cells are noise: each
+                // cell labels itself from its own data-date instead.
+                if (row === 0 && col !== 0) show = false;
+            }
+            if (!show) el.classList.add('rota-m-hide');
+        }
+
+        // Mark what is being shown, so the chooser reads as a chooser.
+        if (view === 'day') {
+            var head = grid.querySelector('.rota-col-header.rota-line-head[data-col="' + chosenCol + '"]');
+            if (head) head.classList.add('rota-m-chosen');
+        } else {
+            var nameCell = grid.querySelector('.rota-analyst-name[data-row="' + chosenRow + '"]');
+            if (nameCell) nameCell.classList.add('rota-m-chosen');
+        }
+    }
+
+    /* Choosing. Delegated, because the grid is replaced wholesale on every
+       week change and a listener bound to a cell would go with it. */
+    grid.addEventListener('click', function (e) {
+        if (!mq.matches) return;
+        if (view === 'analyst') {
+            var name = e.target.closest ? e.target.closest('.rota-analyst-name') : null;
+            if (name) {
+                chosenRow = parseInt(name.dataset.row, 10) || 0;
+                apply();
+            }
+            return;
+        }
+        if (view === 'day') {
+            var head = e.target.closest ? e.target.closest('.rota-col-header.rota-line-head') : null;
+            if (head) {
+                chosenCol = parseInt(head.dataset.col, 10) || 0;
+                apply();
+            }
+        }
+    }, true);
+
+    /* rota.js replaces the grid's innerHTML on every week change, so the tags
+       have to be put back. Without this the view works until the first time
+       somebody presses the next-week arrow. */
+    var mo = new MutationObserver(function () {
+        // The row/col the user picked may not exist in the new week.
+        var cols = colCount();
+        if (chosenCol !== null && chosenCol > cols - 2) chosenCol = 0;
+        if (chosenRow !== null && !grid.querySelector('.rota-analyst-name[data-row="' + chosenRow + '"]')) {
+            chosenRow = null;
+        }
+        apply();
+    });
+    mo.observe(grid, { childList: true });
+
+    function sync() {
+        if (mq.matches) {
+            buildBar();
+            if (bar) bar.style.display = '';
+            document.body.setAttribute('data-rota-view', view);
+            syncBarPressed();
+            apply();
+        } else {
+            // Desktop must look exactly as it did before this layer existed.
+            if (bar) bar.style.display = 'none';
+            document.body.removeAttribute('data-rota-view');
+            clearTags();
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();

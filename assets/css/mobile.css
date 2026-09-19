@@ -12831,4 +12831,182 @@
         font-size: 12px;
         overflow-wrap: anywhere;
     }
+
+    /* ====================================================================
+       LAYER 37 - TICKETS ROTA: three readings of one grid
+       --------------------------------------------------------------------
+       The rota is `160px repeat(5, 1fr)` - a name column and five days, so
+       SIX columns on a 360px screen. Section 11 says a sideways scroller
+       stops preserving a comparison past about four, and this one has six.
+       It was already scrolling sideways BY ACCIDENT, with both of section
+       18's signatures present on `.rota-grid-wrapper`: overflow-y declared
+       alone computes overflow-x to auto, and a horizontal scrollbar was
+       eating 15px of height.
+
+       Ed's call, and it is the right one: WHICH reading you want is a
+       personal preference, not something to settle on everyone's behalf. So
+       all three stay and a sticky footer flips between them - the shape
+       Knowledge's `.article-actions` already uses (fixed, bottom, z-index
+       1200, env() to clear the iPhone home indicator).
+
+       The reading is ONE attribute on <body>, the same device LAYER 2 uses
+       for the pane stack, so this is CSS reacting to a single state.
+
+       ⚠️ The cell hiding cannot be done in CSS alone. A day is every
+       (cols)th child and nth-child handles that, but an ANALYST is the n-th
+       group of six children and the number of analysts is unbounded - there
+       is no nth-child for "the 4th group of 6". So mobile.js tags the cells,
+       and re-tags them when rota.js re-renders the grid: the same observer
+       reasoning as section 21's harvester, for the same reason, because a
+       re-render must not quietly undo it.
+
+       ⚠️ Zero new translation keys. The three labels already exist and are
+       already translated: common.view_day, tickets.group_analyst,
+       common.view_week.
+       -------------------------------------------------------------------- */
+
+    /* Week keeps the grid and scrolls it - deliberately now, rather than by
+       accident. The other two readings fit the screen and need no scroller. */
+    body[data-mobile-page="tickets-rota"] .rota-grid-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    body[data-rota-view="day"] .rota-grid-wrapper,
+    body[data-rota-view="analyst"] .rota-grid-wrapper {
+        overflow-x: hidden;
+    }
+
+    /* The switcher is a real footer: it reaches the actual bottom of the
+       screen rather than floating a little short of it. */
+    body[data-mobile-page="tickets-rota"] .rota-viewbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        gap: 6px;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="tickets-rota"] .rota-vb-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 44px;              /* a finger, not a cursor */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 4px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: none;
+        color: var(--text-muted, #666);
+        font: inherit;
+        font-size: 11px;
+        line-height: 1.1;
+        cursor: pointer;
+        /* A translated label can be long; it shrinks rather than widening
+           the control past the screen. Same reasoning as .con-vs-btn. */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-vb-btn svg {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-vb-btn[aria-pressed="true"] {
+        background: var(--surface-hover, #f0f0f0);
+        border-color: var(--border, #ddd);
+        color: var(--accent, #0078d4);
+    }
+
+    /* The bar is fixed, so the content underneath needs room to clear it or
+       the last analyst row is unreachable behind it. */
+    body[data-mobile-page="tickets-rota"] .rota-container {
+        padding-bottom: calc(66px + env(safe-area-inset-bottom));
+    }
+
+    /* What the current reading does not show. Set by mobile.js. */
+    body[data-mobile-page="tickets-rota"] .rota-m-hide { display: none !important; }
+
+    /* DAY - the name column and one day's column. */
+    body[data-rota-view="day"] .rota-grid { grid-template-columns: 104px 1fr; }
+
+    /* ANALYST - one person, their days stacked one per row, each labelled
+       from its own data-date. Harvested from markup that is already there,
+       so it is right in all 24 locales and adds no strings. */
+    body[data-rota-view="analyst"] .rota-grid { grid-template-columns: 1fr; }
+    body[data-rota-view="analyst"] .rota-cell::before {
+        content: attr(data-date);
+        display: block;
+        font-size: 11px;
+        color: var(--text-muted, #666);
+        margin-bottom: 2px;
+    }
+
+    /* The chooser strip: in day view the day headings pick the day, in
+       analyst view the name cells pick the person. Both are markup the page
+       already ships, so nothing is cloned and nothing is invented. */
+    body[data-rota-view="day"] .rota-col-header.rota-line-head,
+    body[data-rota-view="analyst"] .rota-analyst-name {
+        cursor: pointer;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-m-chosen {
+        box-shadow: inset 0 -2px 0 var(--accent, #0078d4);
+    }
+
+    /* ---- LAYER 37b: the rota header, and the grid's 700px floor ---------
+       Driving the three views showed the switcher working and the layout
+       still 700px wide in all of them, so two things were still wrong and
+       only one of them was the grid.
+
+       1. `.rota-grid` carries `min-width: 700px`. That is right for the week
+          scroller and fatal for the other two: `1fr` resolves against the
+          FLOOR, not the screen, so day view computed `104px 596px` and
+          analyst view a single `700px` column. The columns were redistributed
+          and nothing actually narrowed.
+
+       2. The header is one flex row of prev/next + a title with
+          `min-width: 220px` + the action buttons - about 560px of content
+          asked to fit in 360, and `justify-content: space-between` pushes the
+          ends past both edges rather than wrapping. The title minimum exists
+          to stop the desktop title jiggling as the week changes; it has no
+          job at this width.
+       -------------------------------------------------------------------- */
+    body[data-rota-view="day"] .rota-grid,
+    body[data-rota-view="analyst"] .rota-grid { min-width: 0; }
+
+    body[data-mobile-page="tickets-rota"] .rota-header {
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-nav { flex: 1 1 100%; }
+    /* Section 23: `1 1 0` and not `0 1 auto` - beside two fixed 36px chevrons
+       the title has to be the part that gives way, and `auto` would let it
+       claim the whole line and push them off. */
+    body[data-mobile-page="tickets-rota"] .rota-title {
+        flex: 1 1 0;
+        min-width: 0;
+        font-size: 17px;
+        margin-left: 6px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-actions {
+        flex: 1 1 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-actions .btn {
+        flex: 1 1 auto;
+        min-height: 44px;
+    }
 }
