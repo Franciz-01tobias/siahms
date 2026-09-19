@@ -87,7 +87,7 @@ foreach ($templates as $t) {
         .chk-pill-task { background: #dcfce7; color: #16a34a; }
         .chk-pill-both { background: #f3e8ff; color: #9333ea; }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=150">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=151">
 </head>
 <body data-mobile-page="checklists" data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>">
     <?php include 'includes/header.php'; ?>
@@ -196,8 +196,8 @@ foreach ($templates as $t) {
                                     <span style="color: var(--text-muted, #94a3b8); font-style: italic;">No checklist steps defined</span>
                                 <?php else: ?>
                                     <?php foreach (array_slice($items, 0, 4) as $it): ?>
-                                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                                            <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        <div class="chk-step-row" style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                                            <div class="chk-step-main" style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                 <span style="color: <?php echo $it['is_mandatory'] ? '#0d9488' : '#94a3b8'; ?>;">✓</span>
                                                 <span style="color: var(--text, #334155); overflow: hidden; text-overflow: ellipsis;"><?php echo htmlspecialchars($it['title']); ?></span>
                                                 <?php if ($it['is_mandatory']): ?>
@@ -205,7 +205,7 @@ foreach ($templates as $t) {
                                                 <?php endif; ?>
                                             </div>
                                             <?php if (!empty($it['suggested_role'])): ?>
-                                                <span style="font-size: 10px; background: rgba(13,148,136,0.1); color: #0d9488; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap;">
+                                                <span class="chk-step-role" style="font-size: 10px; background: rgba(13,148,136,0.1); color: #0d9488; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap;">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: -1px;"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><?php echo htmlspecialchars($it['suggested_role']); ?>
                                                 </span>
                                             <?php endif; ?>
@@ -324,6 +324,6 @@ foreach ($templates as $t) {
         }
 
     </script>
-    <script src="../assets/js/mobile.js?v=64"></script>
+    <script src="../assets/js/mobile.js?v=65"></script>
 </body>
 </html>

@@ -4421,3 +4421,139 @@
     if (mq.addEventListener) { mq.addEventListener('change', sync); }
     else if (mq.addListener) { mq.addListener(sync); }
 })();
+
+/* ============================================================================
+   LAYER 40e - Checklists list: the scope panel becomes a sheet.
+
+   Ed: "the top half of the screen which is used to set the scope - can this be
+   moved to its own full screen panel which you access by an icon in a sticky
+   footer". That is §4's section sheet, and the module is a good candidate: the
+   sidebar is a New button, a search box and THREE filter groups (scope,
+   categories, roles), which is most of a phone screen before a single template
+   is shown.
+
+   The REAL `.chk-sidebar` is relocated into the sheet, not cloned - the filter
+   links call `setScopeFilter(..., this)` and friends with `this`, and the
+   active-link bookkeeping is done by walking `.scope-link` / `.cat-link` /
+   `.role-link`, so a second copy would leave two sets of links disagreeing
+   about which one is active. It goes home when the viewport leaves mobile:
+   the calendar's 16a move.
+
+   🔑 The sheet closes when a FILTER is tapped, because that is an arrival -
+   you have chosen, and the thing you chose is behind the sheet. It does NOT
+   close on the search box or on "Manage", which are not arrivals. The System
+   Wiki round is the reason that distinction is written down: closing on every
+   tap there would have made a whole branch unreachable.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'checklists') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var sidebar = document.querySelector('.chk-sidebar');
+    var layout = document.querySelector('.chk-layout');
+    if (!sidebar || !layout) return;
+
+    var home = { parent: sidebar.parentNode, next: sidebar.nextSibling };
+
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+
+    var ICONS = {
+        filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5h18M7 12h10M10 19h4"/></svg>',
+        close:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+    };
+
+    var sheet = null, sheetBody = null, bar = null;
+
+    function build() {
+        if (sheet) return;
+
+        sheet = document.createElement('div');
+        sheet.className = 'chk-sheet';
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+
+        var head = document.createElement('div');
+        head.className = 'chk-sheet-head';
+        var title = document.createElement('span');
+        title.className = 'chk-sheet-title';
+        title.textContent = tr('common.filter', 'Filters');
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'chk-sheet-close';
+        close.innerHTML = ICONS.close;
+        close.setAttribute('aria-label', tr('common.close', 'Close'));
+        close.addEventListener('click', function () { setOpen(false); });
+        head.appendChild(title);
+        head.appendChild(close);
+
+        sheetBody = document.createElement('div');
+        sheetBody.className = 'chk-sheet-body';
+
+        sheet.appendChild(head);
+        sheet.appendChild(sheetBody);
+        document.body.appendChild(sheet);
+
+        bar = document.createElement('div');
+        bar.className = 'chk-fbar';
+        var open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'chk-fbar-btn';
+        open.innerHTML = ICONS.filter + '<span>' + tr('common.filter', 'Filters') + '</span>';
+        open.setAttribute('aria-label', tr('common.filter', 'Filters'));
+        open.addEventListener('click', function () { setOpen(true); });
+        bar.appendChild(open);
+        document.body.appendChild(bar);
+
+        /* An arrival closes the sheet; a search keystroke or "Manage" does not.
+           Delegated, because the category and role links are rendered from the
+           page's own data and a listener per link would miss any redraw. */
+        sheetBody.addEventListener('click', function (e) {
+            var link = e.target.closest ? e.target.closest('.chk-filter-link') : null;
+            if (link) setOpen(false);
+        });
+    }
+
+    function setOpen(open) {
+        document.body.setAttribute('data-chk-sheet', open ? 'open' : 'closed');
+        if (open && sheetBody) sheetBody.scrollTop = 0;
+    }
+
+    function place(intoSheet) {
+        if (intoSheet) {
+            if (sheetBody && sidebar.parentNode !== sheetBody) sheetBody.appendChild(sidebar);
+        } else if (sidebar.parentNode !== home.parent) {
+            home.parent.insertBefore(sidebar, home.next);
+        }
+    }
+
+    function reserve() {
+        if (!bar) return;
+        document.body.style.setProperty('--chk-bar-h',
+            Math.ceil(bar.getBoundingClientRect().height) + 'px');
+    }
+
+    function sync() {
+        if (mq.matches) {
+            build();
+            place(true);
+            if (bar) bar.style.display = '';
+            if (!document.body.getAttribute('data-chk-sheet')) setOpen(false);
+            reserve();
+        } else {
+            place(false);
+            if (bar) bar.style.display = 'none';
+            if (sheet) sheet.style.display = 'none';
+            document.body.removeAttribute('data-chk-sheet');
+            document.body.style.removeProperty('--chk-bar-h');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();

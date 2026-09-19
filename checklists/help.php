@@ -53,7 +53,7 @@ $translationNamespaces = ['common', 'checklists'];
         }
         [data-theme-mode="dark"] body { --accent-soft: #123b36; }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=150">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=151">
 </head>
 <body data-mobile-page="checklists-help">
     <?php include 'includes/header.php'; ?>
@@ -348,6 +348,6 @@ $translationNamespaces = ['common', 'checklists'];
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=64"></script>
+    <script src="../assets/js/mobile.js?v=65"></script>
 </body>
 </html>
