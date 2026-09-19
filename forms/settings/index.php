@@ -352,7 +352,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=151">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -466,13 +466,24 @@ $translationNamespaces = ['common', 'forms'];
         <div class="modal-content" style="max-width: 560px;">
             <div class="modal-header" id="collModalTitle"><?php echo htmlspecialchars(t('forms.collections.add_title')); ?></div>
             <form id="collForm" onsubmit="event.preventDefault(); collSave();">
-                <div class="form-group">
-                    <label for="collName"><?php echo htmlspecialchars(t('forms.collections.name')); ?></label>
-                    <input type="text" id="collName" maxlength="255" required placeholder="<?php echo htmlspecialchars(t('forms.collections.name_ph')); ?>">
-                </div>
-                <div class="form-group">
-                    <label for="collDesc"><?php echo htmlspecialchars(t('forms.collections.description')); ?></label>
-                    <textarea id="collDesc" maxlength="500" placeholder="<?php echo htmlspecialchars(t('forms.collections.description_ph')); ?>"></textarea>
+                <!-- ⚠️ `.modal-body` is not decoration: it is where the 24px
+                     padding lives, and it is the scrolling pane between the
+                     header and the footer. Without it the fields sit flush
+                     against the edges (Ed's screenshot). inbox.css explicitly
+                     anticipates this `form > .modal-body` arrangement with
+                     `.modal-content:has(> form > .modal-body)`, which hands the
+                     scrolling to the body instead of the whole modal. -->
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="collName"><?php echo htmlspecialchars(t('forms.collections.name')); ?></label>
+                        <input type="text" id="collName" maxlength="255" required placeholder="<?php echo htmlspecialchars(t('forms.collections.name_ph')); ?>">
+                    </div>
+                    <!-- The last group's 20px bottom margin doubles up with the
+                         body's own padding, so drop it on the final one. -->
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="collDesc"><?php echo htmlspecialchars(t('forms.collections.description')); ?></label>
+                        <textarea id="collDesc" maxlength="500" rows="3" placeholder="<?php echo htmlspecialchars(t('forms.collections.description_ph')); ?>"></textarea>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="collCloseModal()"><?php echo htmlspecialchars(t('forms.collections.cancel')); ?></button>

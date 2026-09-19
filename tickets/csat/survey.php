@@ -201,7 +201,7 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     font-size: 14px;
 }
 </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=151">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
 </head>
 <body data-mobile-page="csat-survey">
 <div class="card">

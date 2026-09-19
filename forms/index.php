@@ -163,6 +163,24 @@ $translationNamespaces = ['common', 'forms'];
             white-space: nowrap;
         }
 
+        /* The pill row under a form's title. `gap` rather than spaces between
+           the spans, so an absent pill leaves no phantom gap - three of the
+           four are conditional and most forms show two. */
+        .forms-table td.col-title .ft-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 6px;
+        }
+        /* A collection name is a sentence, not a word. Let it stay on one line
+           and cut it rather than wrap mid-name, with the full name on hover. */
+        .forms-table td.col-title .ft-pills .ft-pill {
+            max-width: 260px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .ft-pill {
             display: inline-block;
             padding: 2px 8px;
@@ -241,7 +259,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=151">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -264,7 +282,6 @@ $translationNamespaces = ['common', 'forms'];
                     <tr>
                         <th data-sort="title"><?php echo htmlspecialchars(t('forms.list.col_title')); ?> <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="version" style="width: 80px;"><?php echo htmlspecialchars(t('forms.list.col_version')); ?> <span class="sort-arrow">&#9650;&#9660;</span></th>
-                        <th data-sort="status" style="width: 100px;"><?php echo htmlspecialchars(t('forms.list.col_status')); ?> <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="fields" style="width: 80px; text-align: right;"><?php echo htmlspecialchars(t('forms.list.col_fields')); ?> <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="submissions" style="width: 110px; text-align: right;"><?php echo htmlspecialchars(t('forms.list.col_submissions')); ?> <span class="sort-arrow">&#9650;&#9660;</span></th>
                         <th data-sort="modified" style="width: 200px;"><?php echo htmlspecialchars(t('forms.list.col_modified')); ?> <span class="sort-arrow">&#9650;&#9660;</span></th>
@@ -493,9 +510,13 @@ $translationNamespaces = ['common', 'forms'];
                     <td class="col-title">
                         <strong>${esc(f.title)}</strong>
                         ${desc}
+                        <!-- The pills live here rather than in a 100px Status column:
+                             a collection name is a sentence, and four pills in 100px
+                             wrapped to one word per line. This column is the wide
+                             one, and the pills describe the form. -->
+                        <div class="ft-pills">${statusPill}${portalPill}${approvalPill}${collectionPill}</div>
                     </td>
                     <td><span class="ft-pill version">v${f.version_number || 1}</span></td>
-                    <td>${statusPill} ${portalPill} ${approvalPill} ${collectionPill}</td>
                     <td style="text-align: right;">${f.field_count}</td>
                     <td style="text-align: right;">${f.submission_count}</td>
                     <td title="${esc(fullLocalDate(f.modified_date))}">${esc(relativeDate(f.modified_date))}</td>
@@ -518,7 +539,6 @@ $translationNamespaces = ['common', 'forms'];
             switch (key) {
                 case 'title':       return (f.title || '').toLowerCase();
                 case 'version':     return Number(f.version_number) || 0;
-                case 'status':      return f.is_active == 1 ? 1 : 0;
                 case 'fields':      return Number(f.field_count) || 0;
                 case 'submissions': return Number(f.submission_count) || 0;
                 case 'modified':    return f.modified_date || '';
