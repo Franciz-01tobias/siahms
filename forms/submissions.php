@@ -45,10 +45,19 @@ $translationNamespaces = ['common', 'forms'];
             background-color: var(--app-bg, #f5f7fa);
         }
 
+        /* Full width, edge to edge (Ed). ⚠️ Dropping the cap alone does
+           NOTHING here: `.main-container` is `display: flex`, so this is a flex
+           item and `margin: 0 auto` absorbs the free space - it would keep its
+           gutters and look exactly as if the 1400px cap were still in place.
+           The `margin: 0` is the half that actually does the work. */
         .subs-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 25px;
+            flex: 1 1 auto;
+            min-width: 0;
+            max-width: none;
+            width: 100%;
+            margin: 0;
+            box-sizing: border-box;
+            padding: 24px 32px 40px;
         }
 
         .subs-toolbar {
