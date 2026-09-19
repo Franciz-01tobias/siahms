@@ -32,7 +32,7 @@ $translationNamespaces = ['common', 'tickets'];
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="../assets/css/rota.css?v=4">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=145">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=146">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -133,6 +133,6 @@ $translationNamespaces = ['common', 'tickets'];
     </div>
 
     <script src="../assets/js/rota.js?v=7"></script>
-    <script src="../assets/js/mobile.js?v=61"></script>
+    <script src="../assets/js/mobile.js?v=63"></script>
 </body>
 </html>

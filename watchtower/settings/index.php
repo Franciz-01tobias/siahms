@@ -102,7 +102,7 @@ $translationNamespaces = ['common', 'watchtower'];
 
         [data-theme-mode="dark"] .wt-opt:hover { background: #14312e; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=145">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=146">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -312,6 +312,6 @@ async function saveSettings() {
 
 load();
 </script>
-    <script src="../../assets/js/mobile.js?v=61"></script>
+    <script src="../../assets/js/mobile.js?v=63"></script>
 </body>
 </html>

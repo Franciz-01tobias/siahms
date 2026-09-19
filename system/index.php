@@ -281,7 +281,7 @@ $translationNamespaces = ['common', 'system'];
         [data-theme-mode="dark"] .storage-alert__link { background: #c0392b; color: #fff; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=145">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=146">
     <?php echo Tz::scriptTag(); ?>
     <!-- $translationNamespaces was being prepared above and then never shipped, so
          window.t did not exist on this page and the notification bell threw on its
@@ -407,6 +407,6 @@ $translationNamespaces = ['common', 'system'];
         });
     })();
     </script>
-    <script src="../assets/js/mobile.js?v=61"></script>
+    <script src="../assets/js/mobile.js?v=63"></script>
 </body>
 </html>

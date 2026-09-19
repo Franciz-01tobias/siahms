@@ -13367,4 +13367,128 @@
         color: var(--text, #1f2330);
         padding-bottom: 4px;
     }
+
+    /* ====================================================================
+       LAYER 39 - five things Ed found by using the pages
+       -------------------------------------------------------------------- */
+
+    /* ---- 39a. Users: the detail pane was ZERO PIXELS wide --------------
+       🔴 Tapping a user did nothing, and so did tapping a group - and both
+       were working the whole time. Measured right after a tap, the detail
+       pane held 1748 characters of freshly loaded content. It is
+       `flex: 1 1 0` beside a list that is `width: 400px; min-width: 300px`,
+       so on a 360px screen the list takes everything and the detail sits at
+       x=360 with a width of 0.
+
+       🔑 Nothing was broken, so nothing could be found by looking for a
+       break. A pane stack: one at a time, with a way back. Both users and
+       groups draw into this same pane, so this serves both. */
+    body[data-mobile-page="tickets-users"] .users-list-container,
+    body[data-mobile-page="tickets-users"] .user-detail-container {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        flex: 1 1 auto;
+    }
+    body[data-mobile-page="tickets-users"][data-users-pane="list"] .user-detail-container { display: none; }
+    body[data-mobile-page="tickets-users"][data-users-pane="detail"] .users-list-container { display: none; }
+
+    body[data-mobile-page="tickets-users"] .users-mobile-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 10px 12px 0;
+        padding: 8px 12px 8px 8px;
+        min-height: 44px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--accent, #0078d4);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    body[data-mobile-page="tickets-users"] .users-mobile-back svg { width: 18px; height: 18px; }
+
+    /* ---- 39b. The calendar modal's four buttons become icons -----------
+       Ed asked for this, mobile only. mobile.js swaps the markup and puts the
+       label into aria-label; this makes them square and keeps them on one row
+       instead of a four-button stack that pushed the modal body off screen. */
+    body[data-mobile-page="tickets-calendar"] #ticketModal .modal-footer {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        align-items: center;
+    }
+    body[data-mobile-page="tickets-calendar"] #ticketModal .modal-footer .cal-btn-icon {
+        flex: 0 0 auto;
+        width: 46px;
+        min-width: 46px;
+        height: 46px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    body[data-mobile-page="tickets-calendar"] #ticketModal .modal-footer .cal-btn-icon svg {
+        width: 20px;
+        height: 20px;
+    }
+    /* The spacer still does its job - it pushes the destructive pair away
+       from Close, which is the whole reason it is there. */
+    body[data-mobile-page="tickets-calendar"] #ticketModal .modal-footer-spacer { flex: 1 1 auto; }
+
+    /* ---- 39c. The day view's columns must be allowed to shrink ---------
+       ⚠️ Ed reports the day view using only half the screen. It measures
+       correctly here on every route in - Day button from month, from week,
+       and a month cell tap - so this is a guard rather than a reproduction,
+       and it is the §14 one: `.day-events-column` is `flex-grow: 1` with
+       `min-width: auto`, so its automatic minimum size is its CONTENT width
+       and it will not shrink below a wide event. `.day-body` also declares
+       only `overflow-y`, which computes `overflow-x` to auto (§12) - so the
+       moment anything inside is too wide, the body scrolls sideways instead
+       of the column narrowing. Both are one-line guards. */
+    body[data-mobile-page="tickets-calendar"] .day-body,
+    body[data-mobile-page="tickets-calendar"] .day-grid { min-width: 0; }
+    body[data-mobile-page="tickets-calendar"] .day-events-column,
+    body[data-mobile-page="tickets-calendar"] .day-time-column { min-width: 0; }
+    body[data-mobile-page="tickets-calendar"] .day-event { min-width: 0; overflow-wrap: anywhere; }
+
+    /* ---- 39d. CSAT: a comment column FIFTY-SEVEN pixels wide -----------
+       🔴 Measured: `grid-template-columns: 60px 56.83px 160px`. The rating
+       emoji takes a fixed 60, the analyst and date take a fixed 160, and the
+       middle column - the ticket subject AND the customer's comment - gets
+       whatever is left, which on a 360px screen is 57 pixels. One word per
+       line, exactly as Ed described.
+
+       ⭐ §11's CRUSHED signature, and the reason the page measured clean:
+       "Overflow gets reported; crushing does not." A table that spills looks
+       broken so somebody tells you; one that squeezes looks like the app is
+       a bit cramped, so people put up with it. My own crushed check missed it
+       too - it wanted a cell over 60px TALL, and a 57px-wide comment that
+       wraps to 34px is already unreadable.
+
+       The row becomes two lines: rating and subject on the first, the meta
+       underneath, both at full width. */
+    body[data-mobile-page="tickets-csat"] .recent-row {
+        grid-template-columns: 44px 1fr;
+        gap: 10px;
+        padding: 12px 0;
+    }
+    body[data-mobile-page="tickets-csat"] .recent-rating { font-size: 24px; text-align: left; }
+    body[data-mobile-page="tickets-csat"] .recent-comment { font-size: 13px; }
+    /* The meta drops under the subject rather than holding a 160px column
+       hostage, and reads left so it lines up with everything above it. */
+    body[data-mobile-page="tickets-csat"] .recent-meta {
+        grid-column: 2;
+        text-align: left;
+        margin-top: 6px;
+    }
+    /* Three columns of which the first is a name: let it shrink and wrap
+       rather than setting the table's own minimum width. */
+    body[data-mobile-page="tickets-csat"] .analyst-table { width: 100%; table-layout: fixed; }
+    body[data-mobile-page="tickets-csat"] .analyst-table th,
+    body[data-mobile-page="tickets-csat"] .analyst-table td { overflow-wrap: anywhere; }
+    body[data-mobile-page="tickets-csat"] .panel { min-width: 0; }
 }

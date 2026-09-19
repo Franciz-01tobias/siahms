@@ -4150,3 +4150,180 @@
     if (mq.addEventListener) { mq.addEventListener('change', sync); }
     else if (mq.addListener) { mq.addListener(sync); }
 })();
+
+/* ============================================================================
+   LAYER 39a - Tickets > Users: the detail pane was 0px wide at x=360.
+
+   🔴 Tapping a user "did nothing", and so did tapping a group. Both were
+   working perfectly: measured after a tap, `.user-detail-container` held 1748
+   characters of freshly loaded detail. It is just that the pane is
+   `flex: 1 1 0` beside a list that is `width: 400px; min-width: 300px`, so on
+   a 360px screen the list takes the whole width and the detail is left
+   ZERO PIXELS WIDE, parked at x=360.
+
+   🔑 Nothing was broken, so nothing could be found by looking for a break.
+   The fault is the oldest one in this rollout: a fixed-width pane beside a
+   flexible one on a screen narrower than the fixed pane.
+
+   Both users and groups render into that same container - selectGroup()
+   redraws the whole detail pane - so one pane stack serves both.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'tickets-users') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var detail = document.getElementById('userDetail')
+              || document.querySelector('.user-detail-container');
+    var list = document.querySelector('.users-list-container');
+    if (!detail || !list) return;
+
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+
+    var back = null;
+
+    /* 🔴 selectUser() and selectGroup() REDRAW the detail pane wholesale, which
+       throws this button away with everything else. Exactly the same fault as
+       the rota chooser, written up one layer earlier and still walked into
+       here: anything injected into a pane a page re-renders has to be put
+       back, and the only reliable trigger is watching the pane. */
+    function buildBack() {
+        if (back && back.isConnected) return;
+        if (back) { detail.insertBefore(back, detail.firstChild); return; }
+        back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'users-mobile-back';
+        /* The label is an existing, already-translated string. */
+        back.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+            'aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>' +
+            '<span>' + tr('common.back', 'Back') + '</span>';
+        back.addEventListener('click', function () { showPane('list'); });
+        detail.insertBefore(back, detail.firstChild);
+    }
+
+    function showPane(which) {
+        document.body.setAttribute('data-users-pane', which);
+        if (which === 'detail') {
+            // A new record starts at the top, not wherever the last one was read.
+            detail.scrollTop = 0;
+        }
+    }
+
+    /* Wrap rather than edit (§1). users.php calls these globals from the row
+       markup it generates, so wrapping catches every row including the ones
+       drawn after a search or a re-render - which a listener bound to the rows
+       would not. */
+    ['selectUser', 'selectGroup'].forEach(function (name) {
+        var orig = window[name];
+        if (typeof orig !== 'function') return;
+        window[name] = function () {
+            var out = orig.apply(this, arguments);
+            if (mq.matches) {
+                // selectGroup is async and redraws the pane; switching now is
+                // still correct because the pane is what we are revealing.
+                showPane('detail');
+            }
+            return out;
+        };
+    });
+
+    /* Put it back after every redraw of the pane. */
+    new MutationObserver(function () {
+        if (mq.matches) buildBack();
+    }).observe(detail, { childList: true });
+
+    function sync() {
+        if (mq.matches) {
+            buildBack();
+            if (back) back.style.display = '';
+            if (!document.body.getAttribute('data-users-pane')) showPane('list');
+        } else {
+            // Desktop is a two-pane screen and must stay one.
+            if (back) back.style.display = 'none';
+            document.body.removeAttribute('data-users-pane');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ============================================================================
+   LAYER 39b - the tickets calendar's ticket modal: icon buttons on a phone.
+
+   Ed's request, and the footer is four controls wide: Close, Open in inbox,
+   Clear schedule, Save. At 360px they wrap into a stack that pushes the modal
+   body off the screen.
+
+   ⚠️ The icons cannot come from CSS. `content:` on a pseudo-element could draw
+   one, but the LABEL still has to go, and an icon-only button with no text has
+   no accessible name. So the real text is harvested into `aria-label` and the
+   button's markup is swapped - and put back, exactly as it was, the moment the
+   viewport leaves mobile. That is the same rule that caught a `title`
+   attribute leaking a hover tooltip onto five desktop buttons: an attribute
+   cannot be set from a media query, so it has to be removed again by hand.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'tickets-calendar') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var footer = document.querySelector('#ticketModal .modal-footer');
+    if (!footer) return;
+
+    var ICONS = {
+        close:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+        inbox:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h5l2 3h4l2-3h5"/><path d="M5 5h14l2 7v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z"/></svg>',
+        unschedule:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/><path d="M9 15l6 4M15 15l-6 4"/></svg>',
+        save:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>'
+    };
+
+    /* Which icon belongs to which control, by the handler the page already
+       wrote - not by position, which a future edit would quietly change. */
+    function iconFor(el) {
+        var on = (el.getAttribute('onclick') || '');
+        if (el.id === 'ticketModalLink') return ICONS.inbox;
+        if (/closeTicketModal/.test(on)) return ICONS.close;
+        if (/unschedule/i.test(on)) return ICONS.unschedule;
+        if (/save/i.test(on)) return ICONS.save;
+        return null;
+    }
+
+    var swapped = [];
+
+    function toIcons() {
+        if (swapped.length) return;
+        Array.prototype.forEach.call(footer.querySelectorAll('.btn'), function (el) {
+            var icon = iconFor(el);
+            if (!icon) return;
+            var label = (el.textContent || '').trim();
+            swapped.push({ el: el, html: el.innerHTML, hadAria: el.hasAttribute('aria-label') });
+            el.innerHTML = icon;
+            // display:none on a label removes it from the accessibility tree,
+            // so the name has to be restated here.
+            if (label) el.setAttribute('aria-label', label);
+            el.classList.add('cal-btn-icon');
+        });
+    }
+
+    function toText() {
+        swapped.forEach(function (s) {
+            s.el.innerHTML = s.html;
+            if (!s.hadAria) s.el.removeAttribute('aria-label');
+            s.el.classList.remove('cal-btn-icon');
+        });
+        swapped = [];
+    }
+
+    function sync() { if (mq.matches) toIcons(); else toText(); }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();

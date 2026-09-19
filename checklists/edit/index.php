@@ -51,7 +51,7 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
     <title>Service Desk - Checklist template</title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=145">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=146">
     <style>
         html, body { height: auto !important; min-height: 100vh; overflow-y: auto !important; overflow-x: hidden; margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }
         .ed-shell { display: flex; flex-direction: column; min-height: 100vh; }
