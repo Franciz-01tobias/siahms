@@ -87,7 +87,7 @@ foreach ($templates as $t) {
         .chk-pill-task { background: #dcfce7; color: #16a34a; }
         .chk-pill-both { background: #f3e8ff; color: #9333ea; }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=149">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=150">
 </head>
 <body data-mobile-page="checklists" data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>">
     <?php include 'includes/header.php'; ?>
@@ -324,6 +324,6 @@ foreach ($templates as $t) {
         }
 
     </script>
-    <script src="../assets/js/mobile.js?v=63"></script>
+    <script src="../assets/js/mobile.js?v=64"></script>
 </body>
 </html>

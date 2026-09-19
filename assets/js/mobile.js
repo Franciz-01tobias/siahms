@@ -4327,3 +4327,97 @@
     if (mq.addEventListener) { mq.addEventListener('change', sync); }
     else if (mq.addListener) { mq.addListener(sync); }
 })();
+
+/* ============================================================================
+   LAYER 40c - Checklists editor: Back and Save move to a sticky footer.
+
+   Ed's request. The editor's top bar carries Back, the title, an unsaved-changes
+   flag and Save, which at 360px leaves the title almost nothing; and Save is the
+   control you reach for after scrolling to the bottom of a long template, which
+   is the far end of the page from where it lives.
+
+   The REAL nodes are relocated, not cloned: `#edSave` has a click handler bound
+   in the page's own script and `#edBack` is an <a> carrying the href, so a copy
+   would be a button that does nothing next to an original that still works. They
+   go home when the viewport leaves mobile.
+
+   ⚠️ The icons cannot come from CSS. An icon-only control with no text has no
+   accessible name, so each one's own already-translated label is harvested into
+   `aria-label` and the markup is restored exactly on the way back - the same
+   rule as the calendar modal in LAYER 39b.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'checklists-edit') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var back = document.getElementById('edBack');
+    var save = document.getElementById('edSave');
+    var bar = document.querySelector('.ed-bar');
+    if (!back || !save || !bar) return;
+
+    var ICONS = {
+        edBack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
+        edSave: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>'
+    };
+
+    var footer = null;
+    var saved = [];          // original markup, so desktop gets it back exactly
+
+    function build() {
+        if (footer) return;
+        footer = document.createElement('div');
+        footer.className = 'ed-mobile-bar';
+        document.body.appendChild(footer);
+    }
+
+    function toIcons() {
+        if (saved.length) return;
+        [back, save].forEach(function (el) {
+            saved.push({ el: el, html: el.innerHTML, parent: el.parentNode, next: el.nextSibling,
+                         hadAria: el.hasAttribute('aria-label') });
+            var label = (el.textContent || '').trim();
+            el.innerHTML = ICONS[el.id] || '';
+            if (label) el.setAttribute('aria-label', label);
+            el.classList.add('ed-mb-btn');
+            footer.appendChild(el);
+        });
+    }
+
+    function toText() {
+        saved.forEach(function (s) {
+            s.el.innerHTML = s.html;
+            if (!s.hadAria) s.el.removeAttribute('aria-label');
+            s.el.classList.remove('ed-mb-btn');
+            // Back exactly where it was, not merely back into the bar.
+            s.parent.insertBefore(s.el, s.next);
+        });
+        saved = [];
+    }
+
+    /* The footer is fixed, so the editor needs to reserve its height or the last
+       step sits behind it. Measured rather than assumed - the bar is one row
+       here, but a constant is wrong in whichever state you did not measure. */
+    function reserve() {
+        if (!footer) return;
+        document.body.style.setProperty('--ed-bar-h',
+            Math.ceil(footer.getBoundingClientRect().height) + 'px');
+    }
+
+    function sync() {
+        if (mq.matches) {
+            build();
+            footer.style.display = '';
+            toIcons();
+            reserve();
+        } else {
+            toText();
+            if (footer) footer.style.display = 'none';
+            document.body.style.removeProperty('--ed-bar-h');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();

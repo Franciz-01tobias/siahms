@@ -474,7 +474,7 @@ $translationNamespaces = ['common', 'tickets'];
             border-bottom: 1px solid var(--border, #e0e0e0);
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=149">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=150">
 </head>
 <body data-mobile-page="tickets-users">
     <?php include 'includes/header.php'; ?>
@@ -1676,6 +1676,6 @@ $translationNamespaces = ['common', 'tickets'];
             results.classList.remove('open');
         });
     </script>
-    <script src="../assets/js/mobile.js?v=63"></script>
+    <script src="../assets/js/mobile.js?v=64"></script>
 </body>
 </html>
