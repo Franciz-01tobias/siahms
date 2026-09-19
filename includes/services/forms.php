@@ -439,6 +439,183 @@ class FormsService
         return $q->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Set exactly which forms belong to a collection, from the collection's
+     * side. Ed asked for this as well as the per-form control on the forms
+     * list; both write through the same column, so they cannot disagree.
+     *
+     * 🔑 A form belongs to AT MOST ONE collection, so adding one that is
+     * already in another MOVES it. That is a real consequence and the caller
+     * has to have said it out loud - the returned `moved` list is what the
+     * screen uses to do so.
+     *
+     * 🔴 Touches `forms` ONLY. Submissions already made keep the collection
+     * they were filed under: unlinking a form here must not rewrite history,
+     * which is the entire point of the second column.
+     *
+     * @param  int[] $formIds leaf form ids that should be in the collection
+     * @return array{added:int,removed:int,moved:array}
+     */
+    public static function setCollectionForms(PDO $conn, ActorContext $ctx, int $collectionId, array $formIds): array
+    {
+        self::requireCollections($conn);
+
+        $exists = $conn->prepare("SELECT id FROM form_collections WHERE id = ?");
+        $exists->execute([$collectionId]);
+        if ($exists->fetchColumn() === false) {
+            throw new ServiceError('not_found', 'not_found', 'Collection not found');
+        }
+
+        $wanted = array_values(array_unique(array_map('intval', $formIds)));
+
+        /* Only leaves. A form is a chain of rows and the frozen versions are
+           history; pairing one would put a collection on a snapshot nobody can
+           submit against. */
+        $leaves = [];
+        if ($wanted) {
+            $in = implode(',', array_fill(0, count($wanted), '?'));
+            $q = $conn->prepare(
+                "SELECT f.id, f.title, f.collection_id
+                   FROM forms f
+                  WHERE f.id IN ($in)
+                    AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)"
+            );
+            $q->execute($wanted);
+            $leaves = $q->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        // Which of them are being taken from somewhere else?
+        $moved = [];
+        foreach ($leaves as $row) {
+            $from = $row['collection_id'];
+            if ($from !== null && (int)$from !== $collectionId) {
+                $moved[] = ['id' => (int)$row['id'], 'title' => $row['title'], 'from' => (int)$from];
+            }
+        }
+
+        $conn->beginTransaction();
+        try {
+            // Out: anything currently in this collection but not in the list.
+            $keep = array_column($leaves, 'id');
+            if ($keep) {
+                $in = implode(',', array_fill(0, count($keep), '?'));
+                $out = $conn->prepare("UPDATE forms SET collection_id = NULL, modified_by = ?, modified_date = UTC_TIMESTAMP()
+                                        WHERE collection_id = ? AND id NOT IN ($in)");
+                $out->execute(array_merge([$ctx->actorId, $collectionId], $keep));
+            } else {
+                $out = $conn->prepare("UPDATE forms SET collection_id = NULL, modified_by = ?, modified_date = UTC_TIMESTAMP()
+                                        WHERE collection_id = ?");
+                $out->execute([$ctx->actorId, $collectionId]);
+            }
+            $removed = $out->rowCount();
+
+            // In: everything on the list that is not already here.
+            $added = 0;
+            if ($keep) {
+                $in = implode(',', array_fill(0, count($keep), '?'));
+                $ins = $conn->prepare("UPDATE forms SET collection_id = ?, modified_by = ?, modified_date = UTC_TIMESTAMP()
+                                        WHERE id IN ($in) AND (collection_id IS NULL OR collection_id <> ?)");
+                $ins->execute(array_merge([$collectionId, $ctx->actorId], $keep, [$collectionId]));
+                $added = $ins->rowCount();
+            }
+            $conn->commit();
+            return ['added' => $added, 'removed' => $removed, 'moved' => $moved];
+        } catch (Exception $e) {
+            if ($conn->inTransaction()) $conn->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Every leaf form, with the collection it is in — the picker's whole list,
+     * so somebody choosing can see what a tick would take away from where.
+     */
+    public static function formsForPicker(PDO $conn): array
+    {
+        if (!self::collectionsAvailable($conn)) return [];
+        return $conn->query(
+            "SELECT f.id, f.title, f.is_active, f.collection_id, c.name AS collection_name
+               FROM forms f
+               LEFT JOIN form_collections c ON c.id = f.collection_id
+              WHERE NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)
+              ORDER BY f.title"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Every submission stamped into a collection, across all its forms, newest
+     * first — plus the field definitions of each form involved, because a
+     * collection's rows do not share a set of questions and both the detail
+     * panel and the PDF need the right ones.
+     *
+     * 🔑 Selected on `form_submissions.collection_id` — the STAMP — not by
+     * joining through the form. A submission made while the form was in this
+     * collection belongs here whatever the form says today, and one made before
+     * it was paired does not. That is the whole reason for the second column.
+     */
+    public static function collectionSubmissions(PDO $conn, int $collectionId): array
+    {
+        self::requireCollections($conn);
+
+        $q = $conn->prepare(
+            "SELECT s.id, s.form_id, f.title AS form_title,
+                    -- Matches get_submissions.php: `users` has display_name, not
+                    -- full_name, and a requester who set neither still has an email.
+                    COALESCE(a.full_name, u.display_name, u.email) AS submitted_by,
+                    s.submitted_date,
+                    s.approval_status, s.approval_comment,
+                    decider.full_name AS approval_decided_by,
+                    s.approval_decided_datetime
+               FROM form_submissions s
+               JOIN forms f            ON f.id = s.form_id
+               LEFT JOIN analysts a    ON a.id = s.submitted_by
+               LEFT JOIN users u       ON u.id = s.submitted_by_user_id
+               LEFT JOIN analysts decider ON decider.id = s.approval_decided_by_id
+              WHERE s.collection_id = ?
+              ORDER BY s.submitted_date DESC, s.id DESC"
+        );
+        $q->execute([$collectionId]);
+        $subs = $q->fetchAll(PDO::FETCH_ASSOC);
+        if (!$subs) return ['submissions' => [], 'forms' => []];
+
+        // The answers, in one query rather than one per submission.
+        $ids = array_column($subs, 'id');
+        $in  = implode(',', array_fill(0, count($ids), '?'));
+        $d = $conn->prepare("SELECT submission_id, field_id, field_value FROM form_submission_data WHERE submission_id IN ($in)");
+        $d->execute($ids);
+        $byId = [];
+        foreach ($d->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $byId[(int)$row['submission_id']][(int)$row['field_id']] = $row['field_value'];
+        }
+        foreach ($subs as &$sub) {
+            $sub['data'] = $byId[(int)$sub['id']] ?? [];
+        }
+        unset($sub);
+
+        /* The questions of every form represented. ⚠️ Retired questions are
+           INCLUDED: the answers people gave them are still on these records,
+           and a heading that simply disappeared would make those answers look
+           as though they had never been given. */
+        $formIds = array_values(array_unique(array_map('intval', array_column($subs, 'form_id'))));
+        $in = implode(',', array_fill(0, count($formIds), '?'));
+        $fq = $conn->prepare(
+            "SELECT id, form_id, label, field_type, options, config, is_deleted, sort_order
+               FROM form_fields
+              WHERE form_id IN ($in) AND field_type <> 'section'
+              ORDER BY form_id, sort_order, id"
+        );
+        $fq->execute($formIds);
+
+        $forms = [];
+        foreach ($formIds as $fid) $forms[$fid] = ['id' => $fid, 'title' => '', 'fields' => []];
+        foreach ($subs as $sub) $forms[(int)$sub['form_id']]['title'] = $sub['form_title'];
+        foreach ($fq->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $forms[(int)$row['form_id']]['fields'][] = $row;
+        }
+
+        return ['submissions' => $subs, 'forms' => array_values($forms)];
+    }
+
     private static function requireCollections(PDO $conn): void
     {
         if (!self::collectionsAvailable($conn)) {

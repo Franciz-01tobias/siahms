@@ -25,6 +25,14 @@ $settingsManifest = settingsManifestFor('forms');
 $visibleTabs      = settingsVisibleTabs(connectToDatabase(), (int) $_SESSION['analyst_id'], $settingsManifest);
 $activeTabId      = settingsFirstTabId($visibleTabs);
 
+/* Honour ?tab=, so "Back" from a collection's submissions returns to the
+   Collections tab rather than dumping you on Layout. Validated against the
+   VISIBLE tabs, not just the manifest — a tab this analyst has no capability
+   for is never rendered, and asking for it must not select nothing. */
+if (!empty($_GET['tab']) && settingsTabVisible($visibleTabs, (string) $_GET['tab'])) {
+    $activeTabId = (string) $_GET['tab'];
+}
+
 $analyst_name = $_SESSION['analyst_name'] ?? 'Analyst';
 $current_page = 'settings';
 $path_prefix = '../../';
@@ -333,6 +341,20 @@ $translationNamespaces = ['common', 'forms'];
 
         .coll-empty { color: var(--text-dim); font-size: 14px; padding: 24px 12px; }
 
+        /* The form picker. A scroll pane, because an install with eighty
+           forms must not produce a modal taller than the screen. */
+        #collFormsList { max-height: 46vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+        #collFormsList label {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 9px 12px; cursor: pointer; font-size: 13px; color: var(--text);
+            border-bottom: 1px solid var(--border-soft);
+        }
+        #collFormsList label:last-child { border-bottom: none; }
+        #collFormsList label:hover { background: var(--surface-hover); }
+        #collFormsList input { margin-top: 2px; }
+        #collFormsList .cf-where { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+        #collFormsList .cf-inactive { color: var(--text-faint); }
+
         .coll-effect label {
             display: flex; gap: 10px; align-items: flex-start;
             padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
@@ -462,6 +484,24 @@ $translationNamespaces = ['common', 'forms'];
         <?php endif; ?>
     <!-- Create / rename a collection. Uses the shared `.modal` + `.active`
          convention from inbox.css, as every other settings screen does. -->
+    <!-- Which forms belong to this collection. The same field the forms list
+         sets per form, edited from the other end; both write through
+         saveForm/setCollectionForms, so they cannot disagree. -->
+    <div class="modal" id="collFormsModal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header" id="collFormsTitle"><?php echo htmlspecialchars(t('forms.collections.manage_title')); ?></div>
+            <div class="modal-body">
+                <p style="margin: 0 0 6px; color: var(--text-muted, #666); font-size: 13px;"><?php echo htmlspecialchars(t('forms.collections.manage_intro')); ?></p>
+                <!-- Said BEFORE they tick, not after they save. -->
+                <p style="margin: 0 0 14px; color: var(--text-dim, #888); font-size: 12px;"><?php echo htmlspecialchars(t('forms.collections.steal_warning')); ?></p>
+                <div id="collFormsList"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="collCloseFormsModal()"><?php echo htmlspecialchars(t('forms.collections.cancel')); ?></button>
+                <button type="button" class="btn btn-primary" id="collFormsSaveBtn" onclick="collSaveForms()"><?php echo htmlspecialchars(t('forms.collections.save')); ?></button>
+            </div>
+        </div>
+    </div>
     <div class="modal" id="collModal">
         <div class="modal-content" style="max-width: 560px;">
             <div class="modal-header" id="collModalTitle"><?php echo htmlspecialchars(t('forms.collections.add_title')); ?></div>
@@ -593,6 +633,8 @@ $translationNamespaces = ['common', 'forms'];
 
         /* Inline SVGs rather than a shared sprite, matching the other settings
            screens. Pencil / box-arrow / reopen-arrow / bin. */
+        const COLL_ICON_SUBS   = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+        const COLL_ICON_FORMS  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line></svg>';
         const COLL_ICON_EDIT   = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
         const COLL_ICON_CLOSE  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
         const COLL_ICON_REOPEN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>';
@@ -647,6 +689,8 @@ $translationNamespaces = ['common', 'forms'];
                     <td><span class="coll-state ${closed ? 'closed' : 'open'}">${
                         collEsc(window.t(closed ? 'forms.collections.closed_badge' : 'forms.collections.state_open'))}</span></td>
                     <td class="coll-actions">
+                        <a class="action-btn" href="../collection.php?id=${c.id}" onclick="event.stopPropagation()" title="${collEsc(window.t('forms.collections.view_submissions'))}">${COLL_ICON_SUBS}</a>
+                        <button class="action-btn" onclick="collOpenFormsModal(${c.id})" title="${collEsc(window.t('forms.collections.manage_forms'))}">${COLL_ICON_FORMS}</button>
                         <button class="action-btn" onclick="collOpenModal(${c.id})" title="${collEsc(window.t('forms.collections.edit'))}">${COLL_ICON_EDIT}</button>
                         <button class="action-btn" onclick="collSetClosed(${c.id}, ${closed ? 'false' : 'true'})" title="${
                             collEsc(window.t(closed ? 'forms.collections.reopen' : 'forms.collections.close'))}">${
@@ -677,6 +721,90 @@ $translationNamespaces = ['common', 'forms'];
             document.getElementById('collModal').classList.remove('active');
             collEditingId = 0;
         }
+        // ---------------------------------------------------------------- //
+        //  Which forms are in a collection — the other end of the pairing   //
+        //  control on the forms list. Both write the same column.           //
+        // ---------------------------------------------------------------- //
+
+        let collFormsId = 0;
+        let collPickerForms = null;      // fetched once per page
+
+        async function collOpenFormsModal(id) {
+            collFormsId = Number(id);
+            const c = collections.find(x => Number(x.id) === collFormsId);
+            document.getElementById('collFormsTitle').textContent =
+                (c ? c.name : window.t('forms.collections.manage_title'));
+
+            if (collPickerForms === null) {
+                try {
+                    const res = await fetch(API_BASE + 'get_collection_form_picker.php');
+                    const data = await res.json();
+                    collPickerForms = (data.success ? data.forms : []) || [];
+                } catch (e) { collPickerForms = []; }
+            }
+
+            const list = document.getElementById('collFormsList');
+            if (!collPickerForms.length) {
+                list.innerHTML = `<div style="padding:14px;color:var(--text-dim)">${collEsc(window.t('forms.collections.manage_none'))}</div>`;
+            } else {
+                list.innerHTML = collPickerForms.map(f => {
+                    const mine = Number(f.collection_id) === collFormsId;
+                    /* Where it lives NOW, said on the row rather than in a toast
+                       afterwards: ticking it takes it from there. */
+                    const elsewhere = (!mine && f.collection_id)
+                        ? `<span class="cf-where">${collEsc(window.t('forms.collections.in_other', { name: f.collection_name || '' }))}</span>`
+                        : '';
+                    return `<label>
+                        <input type="checkbox" value="${f.id}"${mine ? ' checked' : ''}>
+                        <span class="${f.is_active == 1 ? '' : 'cf-inactive'}">${collEsc(f.title)}${elsewhere}</span>
+                    </label>`;
+                }).join('');
+            }
+            document.getElementById('collFormsModal').classList.add('active');
+        }
+
+        function collCloseFormsModal() {
+            document.getElementById('collFormsModal').classList.remove('active');
+            collFormsId = 0;
+        }
+
+        async function collSaveForms() {
+            if (!collFormsId) return;
+            const ids = Array.prototype.map.call(
+                document.querySelectorAll('#collFormsList input:checked'),
+                el => Number(el.value));
+
+            const btn = document.getElementById('collFormsSaveBtn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + 'save_collection_forms.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ collection_id: collFormsId, form_ids: ids })
+                });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || window.t('forms.collections.save_failed'), 'error'); btn.disabled = false; return; }
+
+                /* Say what was taken from where. Moving a form out of another
+                   collection is a real consequence and the person should see it
+                   happened, not just that "forms updated". */
+                if (data.moved && data.moved.length) {
+                    showToast(window.t('forms.collections.moved_note', {
+                        names: data.moved.map(m => m.title).join(', ')
+                    }), 'info');
+                } else {
+                    showToast(window.t('forms.collections.forms_saved'), 'success');
+                }
+                collCloseFormsModal();
+                // The counts and the member list both change.
+                collPickerForms = null;
+                loadCollections();
+            } catch (e) {
+                showToast(window.t('forms.collections.save_failed'), 'error');
+            }
+            btn.disabled = false;
+        }
+
         async function collSave() {
             const name = document.getElementById('collName').value.trim();
             if (!name) { document.getElementById('collName').focus(); return; }

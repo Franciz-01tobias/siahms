@@ -461,6 +461,24 @@ return [
         'add_title'        => 'New collection',
         'edit_title'       => 'Rename collection',
         'no_forms_short'   => 'None',
+        /* Managing membership from the collection's side, and reading what
+           is in it. 🌍 `steal_warning` must survive translation intact - it
+           is the sentence that stops somebody silently emptying another
+           collection. */
+        'manage_forms'     => 'Forms',
+        'manage_title'     => 'Forms in this collection',
+        'manage_intro'     => 'Tick the forms whose new submissions should be filed under this collection. A form can belong to only one collection at a time.',
+        'manage_none'      => 'There are no forms yet.',
+        'in_other'         => 'currently in {name}',
+        'steal_warning'    => 'Ticking a form that is already in another collection moves it out of that one.',
+        'moved_note'       => 'Moved out of another collection: {names}',
+        'forms_saved'      => 'Forms updated',
+        'view_submissions' => 'Submissions',
+        'page_title'       => 'Collection submissions',
+        'back'             => 'Back',
+        'col_form'         => 'Form',
+        'no_subs_title'    => 'Nothing filed here yet',
+        'no_subs_body'     => 'Submissions appear here once a form in this collection is filled in. Submissions made before a form joined stay where they were.',
         'empty'            => 'No collections yet.',
         'empty_hint'       => 'Create one, then pair forms with it from the forms list.',
         'closed_badge'     => 'Closed',

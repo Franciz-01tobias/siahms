@@ -33,6 +33,10 @@ $translationNamespaces = ['common', 'forms'];
          NOT go through Tz, which would shift them into the reader's timezone. -->
     <script src="../assets/js/form-logic.js?v=2"></script>
     <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
+    <!-- The shared document builder, also used by forms/collection.php. One
+         implementation of what a record looks like, so the two pages cannot
+         disagree the first time a field type changes. -->
+    <script src="../assets/js/form-pdf.js?v=1"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <style>
@@ -523,6 +527,9 @@ $translationNamespaces = ['common', 'forms'];
 
     <script>
         const API_BASE = '../api/forms/';
+        // Handed to FormPdf rather than read by it: the module is shared and
+        // must not know how any one page renders its branding.
+        const LOGO_URL = <?php echo json_encode(brandingLogoUrl()); ?>;
         let formData = null;
         let allSubmissions = [];
         let filteredSubmissions = [];
@@ -725,44 +732,12 @@ $translationNamespaces = ['common', 'forms'];
 
            Returns { kind: 'bool' | 'list' | 'text', text, list, empty }.
            ------------------------------------------------------------------ */
-        function fieldValueParts(f, raw) {
-            const val = raw ?? '';
-            if (f.field_type === 'checkbox') {
-                const checked = val === '1';
-                return {
-                    kind: 'bool',
-                    checked: checked,
-                    text: checked ? window.t('forms.subs.yes') : window.t('forms.subs.no'),
-                    empty: false
-                };
-            }
-            if (f.field_type === 'checkboxes') {
-                const list = decodeMultiValue(val);
-                return { kind: 'list', list: list, text: list.join(', '), empty: list.length === 0 };
-            }
-            if (f.field_type === 'lookup') {
-                /* The label the person actually chose. The id stays in the
-                   stored JSON for anything that wants the record. */
-                const lbl = FormLogic.lookupLabel(val) || '';
-                return { kind: 'text', text: lbl, empty: !lbl };
-            }
-            if (f.field_type === 'datetime') {
-                const shown = FormLogic.formatDateValue(val) || '';
-                return { kind: 'text', text: shown, empty: !shown };
-            }
-            return { kind: 'text', text: String(val), empty: !val };
-        }
+        const fieldValueParts = (f, raw) => FormPdf.fieldValueParts(f, raw);
 
         /* The approval outcome, as words and a class. `not_required` is not a
            non-answer - it means nobody had to approve this, which is worth
            saying on a record rather than leaving blank. */
-        function approvalParts(sub) {
-            const st = (sub.approval_status || 'not_required');
-            if (st === 'approved') return { st, cls: 'da-approved', label: window.t('forms.approval.status_approved') };
-            if (st === 'rejected') return { st, cls: 'da-rejected', label: window.t('forms.approval.status_rejected') };
-            if (st === 'pending')  return { st, cls: 'da-pending',  label: window.t('forms.subs.approval_awaiting') };
-            return { st, cls: '', label: window.t('forms.subs.approval_none') };
-        }
+        const approvalParts = (sub) => FormPdf.approvalParts(sub);
 
         /* ------------------------------------------------------------------
            Export the open submission as a PDF.
@@ -779,193 +754,21 @@ $translationNamespaces = ['common', 'forms'];
            stamped by the server and converts into the viewer's zone. A rota day
            is the other kind and must NOT be converted. Both helpers exist and
            choosing wrongly is silently wrong for everyone outside UTC. */
-        /* A date template is not a filename. DD/MM/YYYY is a perfectly good
-           preference and a slash is illegal in a filename everywhere, so
-           separators become dots instead of vanishing. Windows also refuses
-           a trailing dot or space. Shared by the single export and the bundle -
-           one of them getting a fix the other missed is exactly the drift this
-           file has been avoiding all along. */
-        function cleanForFileName(v) {
-            return String(v || '')
-                .replace(/[\/\\]/g, '.')
-                .replace(/[<>:"|?*\x00-\x1f]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .replace(/[. ]+$/, '');
-        }
-        function submissionFileName(sub) {
-            /* A date template is not a filename. DD/MM/YYYY is a perfectly good
-               preference and a slash is illegal in a filename everywhere, so
-               separators become dots instead of vanishing. Windows also refuses
-               a trailing dot or space. */
-            const clean = cleanForFileName;
-
-            const when = (typeof window.fmtDate === 'function')
-                ? window.fmtDate(sub.submitted_date) : '';
-
-            const parts = [
-                clean(formData.title || 'Submission'),
-                clean(sub.submitted_by || window.t('forms.subs.unknown_user')),
-                clean(when)
-            ].filter(Boolean);
-
-            /* Long form titles are common and 255 is the practical filename
-               limit, so leave room for the extension and any "(1)" a browser
-               adds when two files collide. */
-            let name = parts.join(' - ');
-            if (name.length > 180) name = name.slice(0, 180).replace(/[. ]+$/, '');
-            return name + '.pdf';
-        }
-        /* `idx` is passed by the row icon; the panel's own button passes nothing
-           and gets whatever is open. One function, two entry points - a second
-           copy for the list would drift from this one. */
-        /* The branding image, fetched once per page load however many documents
-           are made. Resolves to null if it cannot be loaded - a missing logo
-           must never cost somebody their record. */
-        let brandLogoPromise = null;
-        function loadBrandLogo() {
-            if (brandLogoPromise) return brandLogoPromise;
-            brandLogoPromise = new Promise((resolve) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => resolve(img);
-                img.onerror = () => resolve(null);
-                img.src = <?php echo json_encode(brandingLogoUrl()); ?>;
-            });
-            return brandLogoPromise;
-        }
-
-        /* Draw ONE submission into an existing document, starting at `y`, and
-           return the y it finished at. Everything that decides what a record
-           LOOKS like lives here and nowhere else, so the single export and the
-           bundle can never disagree about what a record contains. */
-        function drawSubmission(doc, sub, idx, logo) {
-            const pageW = doc.internal.pageSize.getWidth();
-            const pageH = doc.internal.pageSize.getHeight();
-            const margin = 15;
-            const contentW = pageW - margin * 2;
-            let y = margin;
-
-            /* Start a new page when the next block would run off the foot.
-               Checked BEFORE writing each block rather than after, or the
-               last line of a long answer lands in the margin. */
-            const room = (needed) => {
-                if (y + needed > pageH - margin) { doc.addPage(); y = margin; }
-            };
-
-            // --- Logo: the operator's own, not a hard-coded file -------------
-            if (logo) {
-                const maxH = 12;
-                /* alias + compression, both deliberate: the alias means a bundle
-                   of many submissions embeds the logo ONCE rather than per page,
-                   and FAST deflates it - an uncompressed branding PNG took a
-                   one-page document to 1.45 MB, which is a lot to keep for a
-                   record you are storing by the hundred. */
-                doc.addImage(logo, 'PNG', margin, y, maxH * (logo.width / logo.height), maxH, 'brandlogo', 'FAST');
-                y += maxH + 6;
-            }
-
-            // --- Title -------------------------------------------------------
-            doc.setFontSize(18);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(30, 30, 30);
-            const titleLines = doc.splitTextToSize(formData.title || '', contentW);
-            doc.text(titleLines, margin, y);
-            y += titleLines.length * 7 + 2;
-
-            // --- Meta --------------------------------------------------------
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(120, 120, 120);
-            const num = filteredSubmissions.length - idx;
-            const meta = '#' + num + '  |  ' +
-                window.t('forms.subs.detail_submitted_by') + ' ' +
-                (sub.submitted_by || window.t('forms.subs.unknown_user')) + '  |  ' +
-                window.t('forms.subs.detail_date') + ' ' + formatDate(sub.submitted_date);
-            doc.text(doc.splitTextToSize(meta, contentW), margin, y);
-            y += 8;
-
-            // --- Approval trail ----------------------------------------------
-            // The reason this document exists. A list of answers with no
-            // decision on it is a form, not a record.
-            const ap = approvalParts(sub);
-            room(18);
-            doc.setDrawColor(210, 214, 220);
-            doc.setFillColor(248, 250, 252);
-            const apLines = [window.t('forms.subs.detail_approval') + ': ' + ap.label];
-            if (sub.approval_decided_by) {
-                apLines.push(window.t('forms.approval.approver') + ': ' + sub.approval_decided_by +
-                    (sub.approval_decided_datetime ? '  (' + formatDate(sub.approval_decided_datetime) + ')' : ''));
-            }
-            if (sub.approval_comment) {
-                apLines.push(window.t('forms.subs.approval_comment') + ': ' + sub.approval_comment);
-            }
-            const apWrapped = [];
-            apLines.forEach(l => doc.splitTextToSize(l, contentW - 8).forEach(w => apWrapped.push(w)));
-            const apH = apWrapped.length * 5 + 6;
-            doc.roundedRect(margin, y, contentW, apH, 1.5, 1.5, 'FD');
-            doc.setFontSize(10);
-            doc.setTextColor(60, 60, 60);
-            doc.text(apWrapped, margin + 4, y + 6);
-            y += apH + 8;
-
-            // --- Fields ---------------------------------------------------
-            formData.fields.forEach(f => {
-                const p = fieldValueParts(f, sub.data[f.id]);
-                let valueLines;
-                if (p.kind === 'bool') {
-                    valueLines = [(p.checked ? '[x] ' : '[ ] ') + p.text];
-                } else if (p.kind === 'list') {
-                    valueLines = p.empty
-                        ? [window.t('forms.subs.no_response')]
-                        : p.list.map(v => '\u2022 ' + v);
-                } else {
-                    valueLines = doc.splitTextToSize(
-                        p.empty ? window.t('forms.subs.no_response') : p.text, contentW);
-                }
-
-                const label = (f.label || '') +
-                    (f.is_deleted == 1 ? ' (' + window.t('forms.subs.retired') + ')' : '');
-                const labelLines = doc.splitTextToSize(label, contentW);
-                room(labelLines.length * 5 + valueLines.length * 5 + 6);
-
-                doc.setFontSize(9);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(100, 116, 139);
-                doc.text(labelLines, margin, y);
-                y += labelLines.length * 5;
-
-                doc.setFontSize(11);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(p.empty ? 150 : 30, p.empty ? 150 : 30, p.empty ? 150 : 30);
-                // A long answer can outrun a page on its own, so wrap line by
-                // line rather than trusting the block to fit.
-                valueLines.forEach(line => { room(5); doc.text(line, margin, y); y += 5; });
-                y += 4;
-            });
-
-            return y;
-        }
-
-        /* Page numbers, stamped once the document is complete - they cannot be
-           written as you go, because you do not know the total until the end. */
-        function stampFooters(doc) {
-            const pageW = doc.internal.pageSize.getWidth();
-            const pageH = doc.internal.pageSize.getHeight();
-            const pages = doc.internal.getNumberOfPages();
-            for (let i = 1; i <= pages; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setTextColor(150, 150, 150);
-                doc.text(window.t('forms.subs.pdf_footer', { n: i, total: pages }),
-                    pageW - 15, pageH - 8, { align: 'right' });
-            }
-        }
-
-        function newPdfDoc() {
-            const { jsPDF } = window.jspdf;
-            return new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        }
+        /* ------------------------------------------------------------------
+           Producing the document lives in assets/js/form-pdf.js, shared with
+           forms/collection.php. These are one-line delegates so every call
+           site on this page is unchanged; the only difference is that the
+           shared versions take an explicit `form`, because a collection page
+           has a different one per row and "the form" can no longer be a
+           property of the page.
+           ------------------------------------------------------------------ */
+        const cleanForFileName = (v) => FormPdf.cleanForFileName(v);
+        const submissionFileName = (sub) => FormPdf.submissionFileName(formData, sub);
+        const loadBrandLogo = () => FormPdf.loadBrandLogo(LOGO_URL);
+        const drawSubmission = (doc, sub, idx, logo) =>
+            FormPdf.drawSubmission(doc, formData, sub, filteredSubmissions.length - idx, logo);
+        const stampFooters = (doc) => FormPdf.stampFooters(doc);
+        const newPdfDoc = () => FormPdf.newDoc();
 
         /* Ticked rows, held by submission id rather than by index: an index is a
            position in the CURRENT filter and means something different the moment
@@ -1021,14 +824,7 @@ $translationNamespaces = ['common', 'forms'];
         /* "Software Request - 6 submissions - 19.09.2026.pdf" - the same shape as
            a single export, and the same sanitising, because a form title can carry
            anything a filesystem refuses. */
-        function bundleFileName(n) {
-            const when = (typeof window.fmtDate === 'function') ? window.fmtDate(new Date()) : '';
-            return cleanForFileName(window.t('forms.subs.bundle_name', {
-                title: formData.title || 'Submissions',
-                n: n,
-                date: when
-            })) + '.pdf';
-        }
+        const bundleFileName = (n) => FormPdf.bundleFileName(formData.title, n);
 
         async function exportSelected(mode) {
             const rows = selectedSubmissions();
@@ -1249,15 +1045,7 @@ $translationNamespaces = ['common', 'forms'];
 
         // Decode the JSON-encoded array stored for multi-checkbox values.
         // Tolerant of empty / null / non-JSON garbage — never throws.
-        function decodeMultiValue(raw) {
-            if (raw == null || raw === '') return [];
-            try {
-                const parsed = JSON.parse(raw);
-                return Array.isArray(parsed) ? parsed.map(v => String(v)) : [];
-            } catch (e) {
-                return [];
-            }
-        }
+        const decodeMultiValue = (raw) => FormPdf.decodeMultiValue(raw);
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
