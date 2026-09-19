@@ -268,6 +268,72 @@ $translationNamespaces = ['common', 'forms'];
         }
         .ai-form .btn-test:hover { background: var(--surface-hover, #f5f5f5); border-color: var(--forms-accent, #00897b); color: var(--forms-accent, #00897b); }
         .ai-form .test-status { font-size: 13px; margin-left: 8px; }
+        /* Collections. Every colour is a token from theme.css — a var() with a
+           fallback fails SILENTLY to that fallback, so a name that does not
+           exist paints a light panel on a dark page and nothing says so. */
+        .coll-list { display: flex; flex-direction: column; gap: 10px; max-width: 900px; }
+        .coll-row {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            padding: 14px 16px;
+        }
+        .coll-row.is-closed { background: var(--surface-2); }
+        .coll-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .coll-name { font-weight: 600; font-size: 15px; color: var(--text); }
+        .coll-row.is-closed .coll-name { color: var(--text-muted); }
+        .coll-meta { font-size: 12px; color: var(--text-dim); }
+        .coll-spacer { flex: 1; }
+        .coll-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+        .coll-pill {
+            font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+            background: var(--surface-hover); color: var(--text-muted);
+        }
+        .coll-forms {
+            margin-top: 10px; padding-top: 10px;
+            border-top: 1px solid var(--border-soft);
+            font-size: 13px; color: var(--text-muted);
+            display: flex; flex-wrap: wrap; gap: 6px 14px;
+        }
+        .coll-forms a { color: var(--forms-accent, #00897b); text-decoration: none; }
+        .coll-forms a:hover { text-decoration: underline; }
+        .coll-btn {
+            background: none; border: 1px solid var(--border); border-radius: 4px;
+            padding: 4px 10px; font-size: 12px; cursor: pointer;
+            color: var(--text-muted); font-family: inherit;
+        }
+        .coll-btn:hover { border-color: var(--forms-accent, #00897b); color: var(--forms-accent, #00897b); }
+        .coll-btn.danger:hover { border-color: var(--danger-text); color: var(--danger-text); }
+        .coll-btn[disabled] { opacity: .5; cursor: not-allowed; }
+        .coll-empty { color: var(--text-dim); font-size: 14px; padding: 18px 0; }
+
+        /* The editor row. ⚠️ Not `display:flex` with [hidden] — an element with
+           its own display rule ignores the hidden attribute entirely. */
+        .coll-editor { display: none; gap: 10px; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; }
+        .coll-editor.open { display: flex; }
+        .coll-editor input {
+            padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px;
+            background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px;
+        }
+        .coll-editor input.name { min-width: 240px; }
+        .coll-editor input.desc { flex: 1; min-width: 260px; }
+
+        .coll-effect { max-width: 760px; margin-top: 28px; }
+        .coll-effect label {
+            display: flex; gap: 10px; align-items: flex-start;
+            padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+            margin-bottom: 8px; cursor: pointer; background: var(--surface);
+        }
+        .coll-effect label:hover { border-color: var(--forms-accent, #00897b); }
+        .coll-effect input { margin-top: 2px; }
+        .coll-effect .ce-text { font-size: 13px; color: var(--text); }
+
+        .coll-unavailable {
+            border: 1px solid var(--warning-border, var(--border));
+            background: var(--warning-bg, var(--surface-2));
+            color: var(--warning-text, var(--text));
+            padding: 14px 16px; border-radius: 6px; max-width: 760px; font-size: 14px;
+        }
     </style>
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
@@ -321,6 +387,60 @@ $translationNamespaces = ['common', 'forms'];
              connection. Saved settings drive api/forms/ai_generate.php. -->
         <?php endif; ?>
 
+        <!-- Collections Tab — create / rename / close / delete. Pairing a form
+             with one happens on the FORM, in the forms list, beside portal
+             visibility and approval. -->
+        <?php if (settingsTabVisible($visibleTabs, 'collections')): ?>
+        <div class="tab-content<?php echo $activeTabId === 'collections' ? ' active' : ''; ?>" id="collections-tab" data-capability="<?php echo Cap::FORMS_COLLECTIONS; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('forms.collections.heading')); ?></h2>
+            </div>
+            <p style="color: var(--text-muted, #666); margin-bottom: 20px; max-width: 760px;"><?php echo htmlspecialchars(t('forms.collections.intro')); ?></p>
+
+            <!-- Shown instead of the list when the schema is not there yet, so
+                 an un-migrated install is told what to do rather than being
+                 shown an empty list that looks like a working feature. -->
+            <div class="coll-unavailable" id="collUnavailable" style="display:none">
+                <strong><?php echo htmlspecialchars(t('forms.collections.unavailable')); ?></strong><br>
+                <?php echo htmlspecialchars(t('forms.collections.unavailable_hint')); ?>
+            </div>
+
+            <div id="collBody">
+                <div style="margin-bottom: 14px;">
+                    <button class="btn btn-primary" onclick="collStartNew()"><?php echo htmlspecialchars(t('forms.collections.add')); ?></button>
+                </div>
+
+                <div class="coll-editor" id="collEditor">
+                    <input type="text" class="name" id="collName" maxlength="255" placeholder="<?php echo htmlspecialchars(t('forms.collections.name_ph')); ?>" aria-label="<?php echo htmlspecialchars(t('forms.collections.name')); ?>">
+                    <input type="text" class="desc" id="collDesc" maxlength="500" placeholder="<?php echo htmlspecialchars(t('forms.collections.description_ph')); ?>" aria-label="<?php echo htmlspecialchars(t('forms.collections.description')); ?>">
+                    <button class="btn btn-primary" onclick="collSave()"><?php echo htmlspecialchars(t('forms.collections.save')); ?></button>
+                    <button class="coll-btn" onclick="collCancel()"><?php echo htmlspecialchars(t('forms.collections.cancel')); ?></button>
+                </div>
+
+                <div class="coll-list" id="collList"></div>
+
+                <div class="coll-effect">
+                    <div class="section-header" style="margin-top: 8px;">
+                        <h2 style="font-size: 16px;"><?php echo htmlspecialchars(t('forms.collections.effect_heading')); ?></h2>
+                    </div>
+                    <p style="color: var(--text-muted, #666); margin-bottom: 14px; font-size: 13px;"><?php echo htmlspecialchars(t('forms.collections.effect_intro')); ?></p>
+
+                    <label>
+                        <input type="radio" name="closeEffect" value="reporting_only" onchange="collSaveEffect(this.value)">
+                        <span class="ce-text"><?php echo htmlspecialchars(t('forms.collections.effect_reporting')); ?></span>
+                    </label>
+                    <label>
+                        <input type="radio" name="closeEffect" value="stop_submissions" onchange="collSaveEffect(this.value)">
+                        <span class="ce-text"><?php echo htmlspecialchars(t('forms.collections.effect_stop')); ?></span>
+                    </label>
+                    <label>
+                        <input type="radio" name="closeEffect" value="stop_and_hide" onchange="collSaveEffect(this.value)">
+                        <span class="ce-text"><?php echo htmlspecialchars(t('forms.collections.effect_hide')); ?></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
         <?php if (settingsTabVisible($visibleTabs, 'ai')): ?>
         <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo Cap::FORMS_AI; ?>">
             <div class="section-header">
@@ -351,6 +471,10 @@ $translationNamespaces = ['common', 'forms'];
 
         document.addEventListener('DOMContentLoaded', function() {
             loadSettings();
+            // Only when the tab is actually on the page - it is behind its own
+            // capability, so somebody may be looking at a settings page that
+            // has no Collections tab at all.
+            if (document.getElementById('collList')) loadCollections();
         });
 
         // AI provider/model/key for the form builder's AI Assist is now handled
@@ -375,6 +499,205 @@ $translationNamespaces = ['common', 'forms'];
                 }
             } catch (e) {
                 console.error(e);
+            }
+        }
+
+        // ---------------------------------------------------------------- //
+        //  Collections                                                     //
+        // ---------------------------------------------------------------- //
+
+        let collections = [];
+        let collEditingId = 0;      // 0 = creating
+
+        function collEsc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, c =>
+                ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function loadCollections() {
+            try {
+                const res = await fetch(API_BASE + 'get_collections.php');
+                const data = await res.json();
+                if (!data.success) { showToast(data.error, 'error'); return; }
+
+                /* The schema is not there yet. Say so instead of showing an empty
+                   list, which looks exactly like a working feature nobody has
+                   used - the most misleading state this page could be in. */
+                document.getElementById('collUnavailable').style.display = data.available ? 'none' : '';
+                document.getElementById('collBody').style.display = data.available ? '' : 'none';
+                if (!data.available) return;
+
+                collections = data.collections || [];
+                const eff = document.querySelector(`input[name="closeEffect"][value="${data.close_effect}"]`);
+                if (eff) eff.checked = true;
+                renderCollections();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderCollections() {
+            const el = document.getElementById('collList');
+            if (!collections.length) {
+                el.innerHTML = `<div class="coll-empty">${collEsc(window.t('forms.collections.empty'))}
+                    <div style="margin-top:4px">${collEsc(window.t('forms.collections.empty_hint'))}</div></div>`;
+                return;
+            }
+
+            el.innerHTML = collections.map(c => {
+                const closed = !!c.closed_datetime;
+                const forms  = Number(c.form_count) || 0;
+                const subs   = Number(c.submission_count) || 0;
+
+                /* 🔑 fmtDate, not fmtNaiveDate: closed_datetime is a real instant
+                   written by the server in UTC, so it converts into the reader's
+                   own zone. */
+                const closedOn = (closed && typeof window.fmtDate === 'function')
+                    ? window.t('forms.collections.closed_on', {
+                        date: window.fmtDate(c.closed_datetime),
+                        who: c.closed_by_name || '—' })
+                    : '';
+
+                const formList = (c.forms || []).map(f =>
+                    `<a href="../submissions.php?id=${f.id}">${collEsc(f.title)}</a>`).join('');
+
+                /* Delete is offered only while nothing is stamped into it. The
+                   service and the database both refuse otherwise; disabling the
+                   button as well means nobody has to discover that by pressing it. */
+                const canDelete = subs === 0;
+
+                return `<div class="coll-row${closed ? ' is-closed' : ''}">
+                    <div class="coll-head">
+                        <span class="coll-name">${collEsc(c.name)}</span>
+                        ${closed ? `<span class="coll-pill">${collEsc(window.t('forms.collections.closed_badge'))}</span>` : ''}
+                        <span class="coll-meta">${collEsc(
+                            window.t(forms === 1 ? 'forms.collections.form_count_one' : 'forms.collections.form_count', { n: forms })
+                            + ' · ' +
+                            window.t(subs === 1 ? 'forms.collections.sub_count_one' : 'forms.collections.sub_count', { n: subs })
+                        )}</span>
+                        <span class="coll-spacer"></span>
+                        <button class="coll-btn" onclick="collStartEdit(${c.id})">${collEsc(window.t('forms.collections.edit'))}</button>
+                        <button class="coll-btn" onclick="collSetClosed(${c.id}, ${closed ? 'false' : 'true'})">${
+                            collEsc(window.t(closed ? 'forms.collections.reopen' : 'forms.collections.close'))}</button>
+                        <button class="coll-btn danger" onclick="collDelete(${c.id})"${canDelete ? '' :
+                            ` disabled title="${collEsc(window.t('forms.collections.has_submissions'))}"`}>${
+                            collEsc(window.t('forms.collections.delete'))}</button>
+                    </div>
+                    ${c.description ? `<div class="coll-desc">${collEsc(c.description)}</div>` : ''}
+                    ${closedOn ? `<div class="coll-meta" style="margin-top:4px">${collEsc(closedOn)}</div>` : ''}
+                    <div class="coll-forms">${formList || collEsc(window.t('forms.collections.no_forms'))}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function collStartNew() {
+            collEditingId = 0;
+            document.getElementById('collName').value = '';
+            document.getElementById('collDesc').value = '';
+            document.getElementById('collEditor').classList.add('open');
+            document.getElementById('collName').focus();
+        }
+
+        function collStartEdit(id) {
+            const c = collections.find(x => Number(x.id) === Number(id));
+            if (!c) return;
+            collEditingId = Number(id);
+            document.getElementById('collName').value = c.name || '';
+            document.getElementById('collDesc').value = c.description || '';
+            document.getElementById('collEditor').classList.add('open');
+            document.getElementById('collName').focus();
+        }
+
+        function collCancel() {
+            document.getElementById('collEditor').classList.remove('open');
+            collEditingId = 0;
+        }
+
+        async function collSave() {
+            const name = document.getElementById('collName').value.trim();
+            if (!name) { document.getElementById('collName').focus(); return; }
+            try {
+                const res = await fetch(API_BASE + 'save_collection.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: collEditingId,
+                        name: name,
+                        description: document.getElementById('collDesc').value.trim()
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || window.t('forms.collections.save_failed'), 'error'); return; }
+                showToast(window.t('forms.collections.saved'), 'success');
+                collCancel();
+                loadCollections();
+            } catch (e) {
+                showToast(window.t('forms.collections.save_failed'), 'error');
+            }
+        }
+
+        async function collSetClosed(id, closed) {
+            if (closed) {
+                const ok = await showConfirm({
+                    title: window.t('forms.collections.confirm_close'),
+                    message: window.t('forms.collections.confirm_close_body'),
+                    okLabel: window.t('forms.collections.close')
+                });
+                if (!ok) return;
+            }
+            try {
+                const res = await fetch(API_BASE + 'set_collection_closed.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, closed: closed })
+                });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error, 'error'); return; }
+                loadCollections();
+            } catch (e) {
+                showToast(window.t('forms.collections.save_failed'), 'error');
+            }
+        }
+
+        async function collDelete(id) {
+            const ok = await showConfirm({
+                title: window.t('forms.collections.confirm_delete'),
+                message: window.t('forms.collections.confirm_delete_body'),
+                okLabel: window.t('forms.collections.delete'),
+                okClass: 'danger'
+            });
+            if (!ok) return;
+            try {
+                const res = await fetch(API_BASE + 'delete_collection.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const data = await res.json();
+                // The service explains WHY when it refuses (it holds submissions),
+                // so show its sentence rather than a generic failure.
+                if (!data.success) { showToast(data.error, 'error'); return; }
+                loadCollections();
+            } catch (e) {
+                showToast(window.t('forms.collections.save_failed'), 'error');
+            }
+        }
+
+        async function collSaveEffect(value) {
+            try {
+                const res = await fetch(API_BASE + 'save_settings.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // Only this key: the endpoint checks a capability PER key, and
+                    // sending logo_alignment as well would demand a capability this
+                    // tab's owner may not have.
+                    body: JSON.stringify({ settings: { collection_close_effect: value } })
+                });
+                const data = await res.json();
+                if (data.success) showToast(window.t('forms.toast.settings_saved'), 'success');
+                else showToast(window.t('forms.toast.error_prefix', { message: data.error }), 'error');
+            } catch (e) {
+                showToast(window.t('forms.toast.settings_save_failed'), 'error');
             }
         }
 

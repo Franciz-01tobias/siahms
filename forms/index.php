@@ -300,6 +300,27 @@ $translationNamespaces = ['common', 'forms'];
         .ca-btn-primary { background: var(--accent, #0078d4); color: var(--on-accent, #fff); }
         .ca-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
+    <!-- Which collection this form's NEW submissions are filed under. Modelled
+         on the approval modal above rather than invented afresh: same overlay,
+         same footer, same save-and-reload. -->
+    <div id="collectionModal" class="ca-modal-overlay" onclick="if(event.target===this)closeCollectionModal()">
+        <div class="ca-modal-box">
+            <div class="ca-modal-header"><?php echo htmlspecialchars(t('forms.pairing.title')); ?></div>
+            <div class="ca-modal-body">
+                <p class="ca-modal-intro"><?php echo htmlspecialchars(t('forms.pairing.help')); ?></p>
+                <div class="ca-field">
+                    <label for="collectionSelect"><?php echo htmlspecialchars(t('forms.pairing.label')); ?></label>
+                    <select id="collectionSelect"></select>
+                </div>
+                <p class="ca-note" id="collectionClosedNote" style="display:none;"><?php echo htmlspecialchars(t('forms.pairing.closed_note')); ?></p>
+                <p class="ca-note" id="collectionNoneNote" style="display:none;"><?php echo htmlspecialchars(t('forms.pairing.none_yet')); ?></p>
+            </div>
+            <div class="ca-modal-footer">
+                <button class="ca-btn ca-btn-secondary" onclick="closeCollectionModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button class="ca-btn ca-btn-primary" id="collectionSaveBtn" onclick="saveCollectionPairing()"><?php echo htmlspecialchars(t('forms.collections.save')); ?></button>
+            </div>
+        </div>
+    </div>
     <div id="approvalModal" class="ca-modal-overlay" onclick="if(event.target===this)closeApprovalModal()">
         <div class="ca-modal-box">
             <div class="ca-modal-header"><?php echo htmlspecialchars(t('forms.approval.modal_title')); ?></div>
@@ -341,6 +362,9 @@ $translationNamespaces = ['common', 'forms'];
         const ICON_PORTAL_ON  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12" stroke="#fff"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="none" stroke="#fff"></path></svg>';
         const ICON_PORTAL_OFF = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
         // Shield-check: catalogue-request approval settings.
+        // A folder: a collection is a place submissions are filed, which is the
+        // nearest thing the icon set already has to what this means.
+        const ICON_COLLECTION = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
         const ICON_APPROVAL = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>';
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -450,13 +474,28 @@ $translationNamespaces = ['common', 'forms'];
                       + escAttr(window.t('forms.list.approval_on_title', { name: f.approver_name || '' })) + '">'
                       + esc(window.t('forms.list.approval_on')) + '</span>'
                     : '';
+                /* The collection, readable without opening anything. A closed one
+                   is marked here too: otherwise the first person to learn the
+                   form is not accepting submissions is whoever tried to fill it
+                   in. `collection_name` is absent entirely on an install that
+                   has not run DB Verification, so this renders nothing there. */
+                const collectionClosed = !!f.collection_closed_datetime;
+                const collectionPill = f.collection_name
+                    ? '<span class="ft-pill" title="' + escAttr(f.collection_name) + '" style="'
+                      + (collectionClosed
+                          ? 'background:var(--surface-hover);color:var(--text-muted);'
+                          : 'background:var(--forms-accent-soft);color:var(--forms-accent);')
+                      + '">' + esc(f.collection_name)
+                      + (collectionClosed ? ' · ' + esc(window.t('forms.collections.closed_badge')) : '')
+                      + '</span>'
+                    : '';
                 return `<tr onclick="openEdit(${f.id})">
                     <td class="col-title">
                         <strong>${esc(f.title)}</strong>
                         ${desc}
                     </td>
                     <td><span class="ft-pill version">v${f.version_number || 1}</span></td>
-                    <td>${statusPill} ${portalPill} ${approvalPill}</td>
+                    <td>${statusPill} ${portalPill} ${approvalPill} ${collectionPill}</td>
                     <td style="text-align: right;">${f.field_count}</td>
                     <td style="text-align: right;">${f.submission_count}</td>
                     <td title="${esc(fullLocalDate(f.modified_date))}">${esc(relativeDate(f.modified_date))}</td>
@@ -466,6 +505,7 @@ $translationNamespaces = ['common', 'forms'];
                         <a class="ft-action-btn" href="<?php echo BASE_URL; ?>forms/submissions.php?id=${f.id}" title="${escAttr(window.t('forms.list.subs_title'))}">${ICON_SUBS}</a>
                         <button class="ft-action-btn" onclick="togglePortal(${f.id}, ${f.is_portal_visible == 1 ? 0 : 1})" title="${escAttr(window.t(f.is_portal_visible == 1 ? 'forms.list.portal_remove_title' : 'forms.list.portal_add_title'))}">${f.is_portal_visible == 1 ? ICON_PORTAL_ON : ICON_PORTAL_OFF}</button>
                         <button class="ft-action-btn" onclick="openApprovalModal(${f.id})" title="${escAttr(window.t('forms.list.approval_title'))}">${ICON_APPROVAL}</button>
+                        <button class="ft-action-btn" onclick="openCollectionModal(${f.id})" title="${escAttr(window.t('forms.pairing.title'))}">${ICON_COLLECTION}</button>
                         <button class="ft-action-btn danger" onclick="confirmDelete(${f.id})" title="${escAttr(window.t('forms.list.delete_title'))}">${ICON_DELETE}</button>
                     </td>
                 </tr>`;
@@ -628,6 +668,89 @@ $translationNamespaces = ['common', 'forms'];
                 loadForms();
             } catch (e) {
                 showToast(window.t('forms.approval.save_failed'), 'error');
+            }
+            btn.disabled = false;
+        }
+
+        // ---------------------------------------------------------------- //
+        //  Collection pairing                                              //
+        // ---------------------------------------------------------------- //
+
+        let collectionFormId = 0;
+        let collectionCache = null;     // fetched once per page, not per open
+
+        async function openCollectionModal(id) {
+            const form = allForms.find(f => f.id == id);
+            if (!form) return;
+            collectionFormId = id;
+
+            if (collectionCache === null) {
+                try {
+                    const res = await fetch(API_BASE + 'get_collections.php');
+                    const data = await res.json();
+                    // `available` false means the schema is not there yet. An empty
+                    // list is then the honest answer, and the note below says why.
+                    collectionCache = (data.success && data.available) ? (data.collections || []) : [];
+                } catch (e) {
+                    collectionCache = [];
+                }
+            }
+
+            const sel = document.getElementById('collectionSelect');
+            /* "No collection" is a real choice, not an empty state - most forms
+               belong to nothing, and it has to be selectable to UNPAIR one. */
+            sel.innerHTML = `<option value="">${esc(window.t('forms.pairing.none'))}</option>` +
+                collectionCache.map(c => {
+                    const closed = c.closed_datetime
+                        ? ' · ' + window.t('forms.collections.closed_badge') : '';
+                    return `<option value="${c.id}">${esc(c.name)}${esc(closed)}</option>`;
+                }).join('');
+            sel.value = form.collection_id ? String(form.collection_id) : '';
+
+            document.getElementById('collectionNoneNote').style.display = collectionCache.length ? 'none' : '';
+            onCollectionChange();
+            sel.onchange = onCollectionChange;
+            document.getElementById('collectionModal').style.display = 'flex';
+        }
+
+        /* Say it while they are choosing, not after they have saved: picking a
+           closed collection means this form stops taking submissions. */
+        function onCollectionChange() {
+            const id = document.getElementById('collectionSelect').value;
+            const c = collectionCache && collectionCache.find(x => String(x.id) === String(id));
+            document.getElementById('collectionClosedNote').style.display =
+                (c && c.closed_datetime) ? '' : 'none';
+        }
+
+        function closeCollectionModal() {
+            document.getElementById('collectionModal').style.display = 'none';
+        }
+
+        async function saveCollectionPairing() {
+            if (!collectionFormId) return;
+            const value = document.getElementById('collectionSelect').value;
+            const btn = document.getElementById('collectionSaveBtn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + 'save_form.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // Partial update — this key only, so nothing else about the form
+                    // is touched. Same contract as togglePortal and saveApproval.
+                    body: JSON.stringify({
+                        id: collectionFormId,
+                        collection_id: value === '' ? null : Number(value)
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || window.t('forms.pairing.save_failed'), 'error'); btn.disabled = false; return; }
+                showToast(window.t('forms.pairing.saved'), 'success');
+                closeCollectionModal();
+                // The counts on the collection change too, so drop the cache.
+                collectionCache = null;
+                loadForms();
+            } catch (e) {
+                showToast(window.t('forms.pairing.save_failed'), 'error');
             }
             btn.disabled = false;
         }

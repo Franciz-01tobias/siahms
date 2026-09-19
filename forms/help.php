@@ -340,6 +340,18 @@ $translationNamespaces = ['common', 'forms'];
                                 <?php echo t('forms.help.subs_step3'); ?>
                             </div>
                         </div>
+                        <div class="help-step">
+                            <div class="help-step-num">4</div>
+                            <div>
+                                <?php echo t('forms.help.subs_step4'); ?>
+                            </div>
+                        </div>
+                        <div class="help-step">
+                            <div class="help-step-num">5</div>
+                            <div>
+                                <?php echo t('forms.help.subs_step5'); ?>
+                            </div>
+                        </div>
                     </div>
 
                     <p class="help-note"><?php echo htmlspecialchars(t('forms.help.subs_tip')); ?></p>

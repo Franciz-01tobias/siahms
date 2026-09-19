@@ -434,6 +434,66 @@ return [
     ],
 
     // ── Submissions page (forms/submissions.php) ────────────────────
+    /* Collections — a named exercise several forms' submissions belong to.
+       🌍 "Closed" is ambiguous in a lot of languages (shut? concluded?), so the
+       strings that carry weight say which, and the setting spells out the
+       consequence rather than naming it. */
+    'collections' => [
+        'heading'          => 'Collections',
+        'intro'            => 'A collection groups the submissions of several forms under one name, such as a survey or an audit round. It is optional — most forms, like a laptop request, do not belong to one.',
+        'add'              => 'New',
+        'name'             => 'Name',
+        'name_ph'          => 'Staff Survey 2026',
+        'description'      => 'Description',
+        'description_ph'   => 'What this collection is for (optional)',
+        'save'             => 'Save',
+        'cancel'           => 'Cancel',
+        'close'            => 'Close',
+        'reopen'           => 'Reopen',
+        'delete'           => 'Delete',
+        'edit'             => 'Rename',
+        'empty'            => 'No collections yet.',
+        'empty_hint'       => 'Create one, then pair forms with it from the forms list.',
+        'closed_badge'     => 'Closed',
+        'closed_on'        => 'Closed {date} by {who}',
+        'form_count'       => '{n} forms',
+        'form_count_one'   => '1 form',
+        'sub_count'        => '{n} submissions',
+        'sub_count_one'    => '1 submission',
+        'no_forms'         => 'No forms are paired with this yet.',
+        'view_subs'        => 'Submissions',
+
+        /* What closing DOES. An operator setting because organisations mean
+           different things by it, and there is no right answer to hard-code. */
+        'effect_heading'   => 'When a collection is closed',
+        'effect_intro'     => 'Closing a collection never changes the forms themselves, so reopening one always restores exactly what was there before.',
+        'effect_reporting' => 'Nothing stops. Closing is a label saying the exercise is over.',
+        'effect_stop'      => 'The forms in it stop accepting new submissions.',
+        'effect_hide'      => 'The forms in it stop accepting new submissions, and are hidden from the self-service portal.',
+
+        'confirm_close'       => 'Close this collection?',
+        'confirm_close_body'  => 'What this does depends on your setting above. It can be reopened at any time.',
+        'confirm_delete'      => 'Delete this collection?',
+        'confirm_delete_body' => 'The forms paired with it will simply have no collection. This cannot be undone.',
+        'has_submissions'     => 'This collection holds submissions, so it can be closed but not deleted.',
+        'saved'               => 'Collection saved',
+        'save_failed'         => 'The collection could not be saved',
+        'unavailable'         => 'Collections need a database update.',
+        'unavailable_hint'    => 'Run DB Verification in System settings, then reload this page.',
+    ],
+
+    /* Pairing a form with a collection — on the FORM, because that is where
+       every other per-form setting already lives. */
+    'pairing' => [
+        'title'        => 'Collection',
+        'label'        => 'Part of',
+        'none'         => 'No collection',
+        'help'         => 'New submissions of this form will be filed under the collection you choose. Submissions already made keep the collection they were filed under, so changing this never rewrites history.',
+        'closed_note'  => 'This collection is closed, so the form is not accepting new submissions.',
+        'saved'        => 'Collection updated',
+        'save_failed'  => 'The collection could not be updated',
+        'none_yet'     => 'No collections exist yet. Create one in Forms settings.',
+    ],
     'subs' => [
         'page_title'        => 'Service Desk - Form Submissions',
         'page_title_named'  => 'Service Desk - {title} Submissions',
@@ -509,6 +569,7 @@ return [
     'settings' => [
         'page_title'        => 'Service Desk - Forms Settings',
         'tab_layout'        => 'Layout',
+        'tab_collections'   => 'Collections',
         'tab_ai'            => 'AI',
         'layout_heading'    => 'Layout Settings',
         'layout_intro'      => 'Configure how forms appear when users fill them in and in the form preview.',
@@ -657,6 +718,8 @@ return [
         'subs_step1' => '<strong>Table view</strong> &mdash; submissions are displayed in a sortable table showing the submitter, submission date, and a summary of the responses. The total count is shown in a badge next to the heading.',
         'subs_step2' => '<strong>Detail view</strong> &mdash; click any row in the table to open a modal showing the complete submission. Every field label and its corresponding answer are displayed in a clean, readable format.',
         'subs_step3' => '<strong>Date range filtering</strong> &mdash; use the date pickers in the toolbar to narrow submissions down to a specific time period. Set a start date, an end date, or both to focus on exactly the window you need.',
+        'subs_step4' => '<strong>Collections</strong> &mdash; a collection groups the submissions of several forms under one name, such as <em>Staff Survey 2026</em> or an audit round. Create collections in Forms settings, then pair a form with one from the folder icon on the forms list. It is optional, and most forms &mdash; a laptop request, say &mdash; belong to none.',
+        'subs_step5' => '<strong>A collection is recorded on the submission itself</strong>, at the moment it is submitted. Pairing a form with a different collection later, or with none at all, never changes what earlier submissions were filed under &mdash; so last year\'s survey still reads as last year\'s survey.',
         'subs_tip'   => 'Date range filtering is especially useful for recurring forms. For example, if you run a weekly checklist, filter by the current week to see only the latest responses.',
 
         // Section 5: Export
