@@ -22,6 +22,7 @@
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/services/forms.php';   // portalCatalogueFilter()
 
 header('Content-Type: application/json');
 
@@ -33,13 +34,24 @@ if (!isset($_SESSION['ss_user_id'])) {
 try {
     $conn = connectToDatabase();
 
+    /* A third gate, but only when the operator chose it: forms whose
+       collection has closed. Empty string on every other install, so the
+       query is unchanged for anyone not using collections - and unchanged
+       for anyone who has not run DB Verification yet, which is the case
+       where naming the column would 500 the whole portal catalogue.
+       ⚠️ A FILTER, never a stored flag: closing must not write
+       is_portal_visible = 0 onto the forms, or reopening would switch on
+       one that was deliberately kept off. */
+    $collectionGate = FormsService::portalCatalogueFilter($conn, 'f');
+
     $stmt = $conn->query(
         "SELECT f.id, f.title, f.description
          FROM forms f
          WHERE f.is_portal_visible = 1
            AND f.is_active = 1
-           AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)
-         ORDER BY f.title ASC"
+           AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)"
+         . $collectionGate .
+        " ORDER BY f.title ASC"
     );
     $forms = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

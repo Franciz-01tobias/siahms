@@ -24,6 +24,16 @@ return [
             'setting_keys' => ['forms_logo_alignment'],
         ],
         [
+            // Its own capability rather than sharing the layout one: closing a
+            // collection can stop several forms accepting submissions, which is
+            // a different order of thing from choosing where the logo sits.
+            'id'           => 'collections',
+            'cap'          => Cap::FORMS_COLLECTIONS,
+            'label_key'    => 'forms.settings.tab_collections',
+            'grant'        => 'Create, close and delete form collections',
+            'setting_keys' => ['forms_collection_close_effect'],
+        ],
+        [
             'id'           => 'ai',
             'cap'          => Cap::FORMS_AI,
             'label_key'    => 'forms.settings.tab_ai',

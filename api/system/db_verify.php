@@ -2622,6 +2622,8 @@ try {
         ['form_submissions',     'fk_form_submissions_form',     "ALTER TABLE form_submissions ADD CONSTRAINT fk_form_submissions_form FOREIGN KEY (form_id) REFERENCES forms (id)"],
         ['form_submission_data', 'fk_submission_data_submission', "ALTER TABLE form_submission_data ADD CONSTRAINT fk_submission_data_submission FOREIGN KEY (submission_id) REFERENCES form_submissions (id) ON DELETE CASCADE"],
         ['form_submission_data', 'fk_submission_data_field',     "ALTER TABLE form_submission_data ADD CONSTRAINT fk_submission_data_field FOREIGN KEY (field_id) REFERENCES form_fields (id)"],
+        ['forms',                'fk_forms_collection',          "ALTER TABLE forms ADD CONSTRAINT fk_forms_collection FOREIGN KEY (collection_id) REFERENCES form_collections (id) ON DELETE SET NULL"],
+        ['form_submissions',     'fk_form_submissions_collection', "ALTER TABLE form_submissions ADD CONSTRAINT fk_form_submissions_collection FOREIGN KEY (collection_id) REFERENCES form_collections (id)"],
     ];
     foreach ($formsFks as [$tbl, $name, $sql]) {
         if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;

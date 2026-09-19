@@ -3482,6 +3482,28 @@ return [
         'is_demo'            => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
 
+    /* A named exercise that several forms' submissions belong to - "Staff
+       Survey 2026", "ISO 27001 evidence round". Optional: a laptop request
+       form belongs to nothing.
+
+       `closed_datetime` NULL = open. What closing DOES is an operator setting
+       (`forms_collection_close_effect`), not a property of the row, because
+       different organisations mean different things by it - and whatever it
+       means, it is evaluated when asked and NEVER written onto the forms. If
+       closing stamped is_portal_visible = 0 on three forms, reopening would
+       turn all three back on, including one deliberately kept off the portal. */
+    'form_collections' => [
+        'id'              => 'INT NOT NULL AUTO_INCREMENT',
+        'name'            => 'VARCHAR(255) NOT NULL',
+        'description'     => 'TEXT NULL',
+        'closed_datetime' => 'DATETIME NULL',
+        'closed_by'       => 'INT NULL',
+        'created_by'      => 'INT NULL',
+        'created_date'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'modified_date'   => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'         => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
     'forms' => [
         'id'             => 'INT NOT NULL AUTO_INCREMENT',
         'title'          => 'VARCHAR(255) NOT NULL',
@@ -3522,6 +3544,12 @@ return [
         // what makes this upgrade safe WITHOUT a data migration: every existing
         // form keeps doing exactly what it did. An empty list means somebody
         // opened the panel and deliberately chose nothing.
+        // Which collection NEW submissions of this form are stamped into.
+        // NULL = none, and that is the normal case. ⚠️ Carried forward by
+        // createVersion(): the catalogue lists leaves, so a new version that
+        // dropped this would silently unpair the form the moment somebody
+        // pressed Save - exactly how approval gating was lost before #95.
+        'collection_id'      => 'INT NULL',
         'submission_actions' => 'TEXT NULL',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
@@ -3569,6 +3597,11 @@ return [
         'approval_decided_by_id'     => 'INT NULL',
         'approval_decided_datetime'  => 'DATETIME NULL',
         'approval_comment'           => 'TEXT NULL',
+        // Which collection this submission WAS part of, stamped at submit
+        // time from forms.collection_id. 🔑 The two are allowed to disagree:
+        // re-pairing a form must never rewrite what last year's responses
+        // belonged to. Same snapshot rule as approver_id above.
+        'collection_id'     => 'INT NULL',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
 

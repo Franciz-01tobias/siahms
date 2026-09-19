@@ -20,7 +20,9 @@
  * ⚙️ Side effect: a successful submission dispatches the `form.submitted`
  * workflow event with a label-keyed answers map (+ the first email answer) —
  * the "new starter form → tickets" automation. It fires after commit and its
- * errors are swallowed so a workflow can never break a submission.
+ * errors are swallowed so a workflow can never break a submission — caught as
+ * Throwable, not Exception, because these run after the commit and a PHP Error
+ * escaping there would fail a submission that is already saved.
  */
 
 require_once __DIR__ . '/../service_context.php';
@@ -331,6 +333,257 @@ class FormsService
     // ======================================================================
 
     /** Create (no id) or update (id present) a form + its fields. Returns ['id','created']. */
+    // ---------------------------------------------------------------- //
+    //  Collections                                                     //
+    // ---------------------------------------------------------------- //
+
+    /** What closing a collection DOES. The operator chooses; see closeEffect(). */
+    const CLOSE_EFFECTS = ['reporting_only', 'stop_submissions', 'stop_and_hide'];
+    const CLOSE_EFFECT_DEFAULT = 'stop_submissions';
+
+    /**
+     * 🔴 Is the collections schema actually here?
+     *
+     * A new column has to survive being absent. Someone who pulls the code and
+     * has not yet run DB Verification must get the forms module they had
+     * yesterday, not a wall of 500s - so every read and write below is guarded
+     * by this, and with it false the feature is simply not offered.
+     *
+     * Cached per request: this is an information_schema query and the forms
+     * list would otherwise run it once per form.
+     */
+    public static function collectionsAvailable(PDO $conn): bool
+    {
+        static $known = null;
+        if ($known !== null) return $known;
+        try {
+            $q = $conn->prepare(
+                "SELECT
+                   (SELECT COUNT(*) FROM information_schema.tables
+                      WHERE table_schema = DATABASE() AND table_name = 'form_collections')
+                 + (SELECT COUNT(*) FROM information_schema.columns
+                      WHERE table_schema = DATABASE() AND table_name = 'forms' AND column_name = 'collection_id')
+                 + (SELECT COUNT(*) FROM information_schema.columns
+                      WHERE table_schema = DATABASE() AND table_name = 'form_submissions' AND column_name = 'collection_id')"
+            );
+            $q->execute();
+            // All three, not any: two of the three is a half-migrated database
+            // and offering the feature there writes stamps nothing can read.
+            $known = ((int)$q->fetchColumn() === 3);
+        } catch (Exception $e) {
+            $known = false;
+        }
+        return $known;
+    }
+
+    /**
+     * What closing a collection means on this install. An operator setting
+     * rather than a property of the collection, because organisations disagree
+     * about what "closed" implies and there is no right answer to hard-code.
+     */
+    public static function closeEffect(PDO $conn): string
+    {
+        static $cached = null;
+        if ($cached !== null) return $cached;
+        try {
+            $q = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'forms_collection_close_effect'");
+            $q->execute();
+            $v = (string)$q->fetchColumn();
+        } catch (Exception $e) {
+            $v = '';
+        }
+        $cached = in_array($v, self::CLOSE_EFFECTS, true) ? $v : self::CLOSE_EFFECT_DEFAULT;
+        return $cached;
+    }
+
+    /**
+     * Collections, newest first, each with how many forms point at it and how
+     * many submissions carry its stamp.
+     *
+     * ⚠️ The form count is over LEAVES only. A form's history is a chain of
+     * rows all carrying collection_id, so counting rows would report "Staff
+     * Survey 2026 - 4 forms" for one form that had been edited three times.
+     * The submission count is not filtered that way on purpose: every one of
+     * those IS a real submission, whichever version it came from.
+     */
+    public static function listCollections(PDO $conn): array
+    {
+        if (!self::collectionsAvailable($conn)) return [];
+        $q = $conn->query(
+            "SELECT c.id, c.name, c.description,
+                    c.closed_datetime, c.closed_by, closer.full_name AS closed_by_name,
+                    c.created_date,
+                    (SELECT COUNT(*) FROM forms f
+                       WHERE f.collection_id = c.id
+                         AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)) AS form_count,
+                    (SELECT COUNT(*) FROM form_submissions s WHERE s.collection_id = c.id) AS submission_count
+               FROM form_collections c
+               LEFT JOIN analysts closer ON closer.id = c.closed_by
+              ORDER BY c.closed_datetime IS NOT NULL, c.name"
+        );
+        return $q->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** The leaf forms currently paired to a collection, for the settings list. */
+    public static function collectionForms(PDO $conn, int $collectionId): array
+    {
+        if (!self::collectionsAvailable($conn)) return [];
+        $q = $conn->prepare(
+            "SELECT f.id, f.title, f.is_active, f.is_portal_visible
+               FROM forms f
+              WHERE f.collection_id = ?
+                AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)
+              ORDER BY f.title"
+        );
+        $q->execute([$collectionId]);
+        return $q->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    private static function requireCollections(PDO $conn): void
+    {
+        if (!self::collectionsAvailable($conn)) {
+            throw new ServiceError('conflict', 'schema_missing',
+                'Collections need a database update. Run DB Verification in System settings.');
+        }
+    }
+
+    /** Create or rename. Returns the id. */
+    public static function saveCollection(PDO $conn, ActorContext $ctx, array $in): int
+    {
+        self::requireCollections($conn);
+        $id   = (int)($in['id'] ?? 0);
+        $name = trim((string)($in['name'] ?? ''));
+        $desc = trim((string)($in['description'] ?? ''));
+
+        if ($name === '') {
+            throw new ServiceError('validation', 'missing_field', 'A collection needs a name');
+        }
+        if (mb_strlen($name) > 255) {
+            throw new ServiceError('validation', 'invalid_field', 'Name is too long');
+        }
+
+        // Case-insensitive, because "Staff Survey 2026" and "staff survey 2026"
+        // in the same list is a filing error waiting to happen. Not a UNIQUE
+        // index: that would reject on the collation's terms rather than on
+        // these, and give a raw SQL error instead of a sentence.
+        $dupe = $conn->prepare("SELECT id FROM form_collections WHERE LOWER(name) = LOWER(?) AND id <> ?");
+        $dupe->execute([$name, $id]);
+        if ($dupe->fetchColumn() !== false) {
+            throw new ServiceError('conflict', 'duplicate', 'A collection with that name already exists');
+        }
+
+        if ($id > 0) {
+            $q = $conn->prepare("UPDATE form_collections SET name = ?, description = ?, modified_date = UTC_TIMESTAMP() WHERE id = ?");
+            $q->execute([$name, $desc !== '' ? $desc : null, $id]);
+            if ($q->rowCount() === 0) {
+                $e = $conn->prepare("SELECT id FROM form_collections WHERE id = ?");
+                $e->execute([$id]);
+                if ($e->fetchColumn() === false) throw new ServiceError('not_found', 'not_found', 'Collection not found');
+            }
+            return $id;
+        }
+
+        $conn->prepare(
+            "INSERT INTO form_collections (name, description, created_by, created_date, modified_date)
+             VALUES (?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+        )->execute([$name, $desc !== '' ? $desc : null, $ctx->actorId]);
+        return (int)$conn->lastInsertId();
+    }
+
+    /**
+     * Close or reopen.
+     *
+     * 🔴 Writes to form_collections and NOTHING ELSE. If closing stamped
+     * is_portal_visible = 0 on the forms, reopening would turn them all back
+     * on - including one deliberately kept off the portal. What closing means
+     * is asked at the moment somebody tries to fill the form in; see
+     * submissionsBlockedBy() and portalHiddenBy().
+     */
+    public static function setCollectionClosed(PDO $conn, ActorContext $ctx, int $id, bool $closed): void
+    {
+        self::requireCollections($conn);
+        $q = $conn->prepare(
+            $closed
+                ? "UPDATE form_collections SET closed_datetime = UTC_TIMESTAMP(), closed_by = ?, modified_date = UTC_TIMESTAMP() WHERE id = ? AND closed_datetime IS NULL"
+                : "UPDATE form_collections SET closed_datetime = NULL, closed_by = NULL, modified_date = UTC_TIMESTAMP() WHERE id = ? AND closed_datetime IS NOT NULL"
+        );
+        $closed ? $q->execute([$ctx->actorId, $id]) : $q->execute([$id]);
+
+        if ($q->rowCount() === 0) {
+            $e = $conn->prepare("SELECT closed_datetime FROM form_collections WHERE id = ?");
+            $e->execute([$id]);
+            $row = $e->fetch(PDO::FETCH_ASSOC);
+            if ($row === false) throw new ServiceError('not_found', 'not_found', 'Collection not found');
+            // Already in the state asked for - not an error worth failing on.
+        }
+    }
+
+    /**
+     * Delete, but only while nothing is stamped into it.
+     *
+     * 🔑 A collection holding submissions is CLOSABLE, not deletable. The
+     * database enforces this too (no ON DELETE rule on the submission FK), but
+     * a raw constraint error is not an explanation, so say it here.
+     */
+    public static function deleteCollection(PDO $conn, ActorContext $ctx, int $id): void
+    {
+        self::requireCollections($conn);
+        $q = $conn->prepare("SELECT COUNT(*) FROM form_submissions WHERE collection_id = ?");
+        $q->execute([$id]);
+        if ((int)$q->fetchColumn() > 0) {
+            throw new ServiceError('conflict', 'has_submissions',
+                'This collection holds submissions, so it can be closed but not deleted.');
+        }
+        // Forms pointing at it are simply unpaired (ON DELETE SET NULL).
+        $d = $conn->prepare("DELETE FROM form_collections WHERE id = ?");
+        $d->execute([$id]);
+        if ($d->rowCount() === 0) throw new ServiceError('not_found', 'not_found', 'Collection not found');
+    }
+
+    /**
+     * Is this form's collection closed in a way that stops new submissions?
+     * Returns the collection name when it is, null when it is not.
+     *
+     * 🔑 Asked at the moment it matters, never stored. `is_active` remains the
+     * form's OWN switch - two independent reasons a form may be shut, and
+     * neither overwrites the other.
+     */
+    public static function submissionsBlockedBy(PDO $conn, int $formId): ?string
+    {
+        if (!self::collectionsAvailable($conn)) return null;
+        if (self::closeEffect($conn) === 'reporting_only') return null;
+        try {
+            $q = $conn->prepare(
+                "SELECT c.name FROM forms f
+                   JOIN form_collections c ON c.id = f.collection_id
+                  WHERE f.id = ? AND c.closed_datetime IS NOT NULL"
+            );
+            $q->execute([$formId]);
+            $name = $q->fetchColumn();
+            return $name === false ? null : (string)$name;
+        } catch (Exception $e) {
+            // A broken probe must not stop people filling forms in.
+            return null;
+        }
+    }
+
+    /**
+     * A SQL fragment for the portal catalogue: forms whose collection is closed
+     * are not offered, but only when the operator chose 'stop_and_hide'.
+     * Returns '' when nothing should be filtered, so callers can concatenate.
+     *
+     * ⚠️ NOT EXISTS rather than a LEFT JOIN with IS NULL: a form with no
+     * collection at all must stay in the catalogue, and that is the common case.
+     */
+    public static function portalCatalogueFilter(PDO $conn, string $formsAlias = 'f'): string
+    {
+        if (!self::collectionsAvailable($conn)) return '';
+        if (self::closeEffect($conn) !== 'stop_and_hide') return '';
+        return " AND NOT EXISTS (SELECT 1 FROM form_collections fc
+                                  WHERE fc.id = {$formsAlias}.collection_id
+                                    AND fc.closed_datetime IS NOT NULL)";
+    }
+
     public static function saveForm(PDO $conn, ActorContext $ctx, array $in): array
     {
         if (!empty($in['id'])) {
@@ -354,10 +607,19 @@ class FormsService
 
             $conn->beginTransaction();
             try {
+                /* Collections join the same incremental rule: named only when
+                   the schema has the column AND the caller sent it, so neither
+                   an un-migrated database nor a collections-unaware adapter can
+                   unpair a form as a side effect of saving something else.
+                   ⚠️ Appended LAST, before the WHERE - the argument list below
+                   is positional and inserting it anywhere else would write the
+                   collection id into whichever column followed. */
+                $collectionSet = (self::collectionsAvailable($conn) && array_key_exists('collection_id', $in))
+                    ? ', collection_id = ?' : '';
                 $conn->prepare(
                     "UPDATE forms SET title = ?, description = ?, is_active = ?, is_portal_visible = ?,
                             requires_approval = ?, approver_id = ?, submission_actions = ?,
-                            modified_by = ?, modified_date = UTC_TIMESTAMP()
+                            modified_by = ?" . $collectionSet . ", modified_date = UTC_TIMESTAMP()
                      WHERE id = ?"
                 )->execute([
                     $title,
@@ -382,6 +644,10 @@ class FormsService
                         ? self::encodeActionLists($in['submission_actions'])
                         : ($current['submission_actions'] ?? null),
                     $ctx->actorId,
+                    // Matches $collectionSet above, and is absent when it is.
+                    ...($collectionSet !== ''
+                        ? [($in['collection_id'] === null || $in['collection_id'] === '') ? null : (int)$in['collection_id']]
+                        : []),
                     $formId,
                 ]);
                 if ($fields !== null) {
@@ -582,8 +848,11 @@ class FormsService
         $conn->beginTransaction();
         try {
             $conn->prepare(
-                "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval, approver_id, submission_actions, created_by, modified_by, parent_form_id, version_number, created_date, modified_date)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+                self::collectionsAvailable($conn)
+                    ? "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval, approver_id, submission_actions, created_by, modified_by, parent_form_id, version_number, collection_id, created_date, modified_date)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+                    : "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval, approver_id, submission_actions, created_by, modified_by, parent_form_id, version_number, created_date, modified_date)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
             )->execute([
                 $src['title'],
                 $src['description'],
@@ -616,6 +885,17 @@ class FormsService
                 $ctx->actorId,
                 $parentId,
                 (int)$src['version_number'] + 1,
+                // Carried for the same reason as everything above it: the
+                // catalogue lists leaves, so a new version that dropped this
+                // would unpair the form from its collection the moment
+                // somebody pressed Save, and the next submission would be
+                // stamped with nothing. Spread rather than appended inline,
+                // because the INSERT has two shapes and a positional array
+                // that matches only one of them writes version_number into
+                // collection_id without complaining.
+                ...(self::collectionsAvailable($conn)
+                    ? [isset($src['collection_id']) && $src['collection_id'] !== null ? (int)$src['collection_id'] : null]
+                    : []),
             ]);
             $newId = (int)$conn->lastInsertId();
 
@@ -694,6 +974,19 @@ class FormsService
         // is reached — knowing a hidden form's id must not be enough.
         if ($portalUserId !== null && !(int)($form['is_portal_visible'] ?? 0)) {
             throw new ServiceError('not_found', 'not_found', 'Form not found.');
+        }
+
+        /* The form's collection has been closed, and this operator's setting
+           says closing stops submissions. Same reasoning as the guard above:
+           checked here so a bookmarked URL cannot walk around it.
+           🔑 Independent of is_active, which stays the form's OWN switch -
+           two separate reasons a form may be shut, and reopening the
+           collection restores exactly what was there because closing never
+           wrote to the form in the first place. */
+        $closedCollection = self::submissionsBlockedBy($conn, $formId);
+        if ($closedCollection !== null) {
+            throw new ServiceError('conflict', 'collection_closed',
+                'This form is part of "' . $closedCollection . '", which has closed, so it is no longer accepting submissions.');
         }
 
         // Ordered, and without retired fields: a soft-deleted question is no longer
@@ -868,16 +1161,31 @@ class FormsService
         try {
             // Exactly one submitter column is populated — see the $portalUserId
             // note on this method.
-            $conn->prepare(
-                "INSERT INTO form_submissions (form_id, submitted_by, submitted_by_user_id, submitted_date, approval_status, approver_id)
-                 VALUES (?, ?, ?, UTC_TIMESTAMP(), ?, ?)"
-            )->execute([
+            /* The collection this submission belongs to, SNAPSHOTTED here and
+               never read live again. Re-pairing the form afterwards must not
+               rewrite what last year's responses were part of - the same rule
+               as approver_id above, and the reason the column exists at all.
+               Guarded because an install that has not run DB Verification yet
+               has neither column, and a submission must still go through. */
+            $hasCollections = self::collectionsAvailable($conn);
+            $collectionId = $hasCollections ? ($form['collection_id'] ?? null) : null;
+            $collectionId = ($collectionId !== null && $collectionId !== '') ? (int)$collectionId : null;
+
+            $cols = 'form_id, submitted_by, submitted_by_user_id, submitted_date, approval_status, approver_id';
+            $vals = '?, ?, ?, UTC_TIMESTAMP(), ?, ?';
+            $args = [
                 $formId,
                 $portalUserId !== null ? null : $ctx->actorId,
                 $portalUserId,
                 $approvalStatus,
                 $gateApproverId,
-            ]);
+            ];
+            if ($hasCollections) {
+                $cols .= ', collection_id';
+                $vals .= ', ?';
+                $args[] = $collectionId;
+            }
+            $conn->prepare("INSERT INTO form_submissions ($cols) VALUES ($vals)")->execute($args);
             $submissionId = (int)$conn->lastInsertId();
 
             $ins = $conn->prepare("INSERT INTO form_submission_data (submission_id, field_id, field_value) VALUES (?, ?, ?)");
@@ -926,7 +1234,11 @@ class FormsService
             } else {
                 WorkflowEngine::dispatch('form.submitted', $payload);
             }
-        } catch (Exception $wfEx) {
+        /* Throwable, not Exception: this runs AFTER the commit, so anything
+           escaping here turns a submission that WAS saved into a 500 the
+           person then repeats. A TypeError in a workflow action is not an
+           Exception and used to walk straight out of here. */
+        } catch (Throwable $wfEx) {
             error_log('Workflow dispatch error in form submission: ' . $wfEx->getMessage());
         }
 
@@ -949,7 +1261,10 @@ class FormsService
                         $payload
                     );
                 }
-            } catch (Exception $e) {
+            /* Throwable for the same reason as the dispatch above: post-commit,
+               so an Error escaping here loses a submission that is already in
+               the database. */
+            } catch (Throwable $e) {
                 error_log('Form action list error on submission: ' . $e->getMessage());
             }
         }

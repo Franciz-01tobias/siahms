@@ -171,6 +171,7 @@ final class Cap
     const FORMS_MANAGE = 'forms.manage';    // umbrella
     const FORMS_LAYOUT = 'forms.layout';
     const FORMS_AI     = 'forms.ai';        // AI provider + API key
+    const FORMS_COLLECTIONS = 'forms.collections';   // create / close collections — closing can stop forms accepting submissions
 
     // ---- Process Mapper ----------------------------------------------------
     const PROCESS_MAPPER_MANAGE     = 'process_mapper.manage';    // umbrella

@@ -4632,6 +4632,36 @@ CREATE TABLE IF NOT EXISTS `task_tag_map` (
 -- Forms
 -- ----------------------------------------------------------
 
+-- A named exercise that several forms' submissions belong to - "Staff Survey
+-- 2026", "ISO 27001 evidence round". Entirely optional: a laptop request form
+-- belongs to no collection, and that is the normal case.
+--
+-- closed_datetime NULL = open. WHAT CLOSING DOES is an operator setting
+-- (forms_collection_close_effect: reporting_only / stop_submissions /
+-- stop_and_hide), not a property of this row, because different organisations
+-- mean different things by "closed". Whatever it means, it is evaluated when
+-- the portal or the fill page asks and is NEVER written onto the forms: if
+-- closing stamped is_portal_visible = 0 on three forms, reopening would turn
+-- all three back on, including one deliberately kept off the portal.
+--
+-- Declared before `forms` because forms.collection_id references it.
+CREATE TABLE IF NOT EXISTS `form_collections` (
+    `id`              INT NOT NULL AUTO_INCREMENT,
+    `name`            VARCHAR(255) NOT NULL,
+    `description`     TEXT NULL,
+    `closed_datetime` DATETIME NULL,
+    `closed_by`       INT NULL,
+    `created_by`      INT NULL,
+    `created_date`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `modified_date`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `is_demo`         TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    -- SET NULL on both: losing the analyst who made or closed a collection
+    -- must not take the collection, and with it the audit trail, with them.
+    CONSTRAINT `fk_form_collections_closed_by`  FOREIGN KEY (`closed_by`)  REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_form_collections_created_by` FOREIGN KEY (`created_by`) REFERENCES `analysts` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `forms` (
     `id`             INT NOT NULL AUTO_INCREMENT,
     `title`          VARCHAR(255) NOT NULL,
@@ -4674,6 +4704,12 @@ CREATE TABLE IF NOT EXISTS `forms` (
     -- migration: every existing form keeps behaving exactly as it did. An empty
     -- list means somebody opened the panel and chose nothing on purpose.
     `submission_actions` TEXT NULL,
+    -- Which collection NEW submissions of this form are stamped into.
+    -- NULL = none, and that is the normal case. Carried forward by
+    -- createVersion(): the catalogue lists leaves, so a new version that
+    -- dropped this would silently unpair the form the moment somebody
+    -- pressed Save - exactly how approval gating was lost before #95.
+    `collection_id`     INT NULL,
     `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,   -- set by the demo data importer (#1297)
     PRIMARY KEY (`id`),
     -- RESTRICT (no delete rule): a frozen version can't be deleted while
@@ -4681,7 +4717,10 @@ CREATE TABLE IF NOT EXISTS `forms` (
     CONSTRAINT `fk_forms_parent` FOREIGN KEY (`parent_form_id`) REFERENCES `forms` (`id`),
     -- SET NULL: losing the approver shouldn't delete the catalogue item, it just
     -- becomes unconfigured (and stops gating) until a new approver is chosen.
-    CONSTRAINT `fk_forms_approver` FOREIGN KEY (`approver_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL
+    CONSTRAINT `fk_forms_approver` FOREIGN KEY (`approver_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    -- SET NULL: deleting a collection leaves its forms unpaired, which is a
+    -- legitimate state. Contrast form_submissions below, where it is not.
+    CONSTRAINT `fk_forms_collection` FOREIGN KEY (`collection_id`) REFERENCES `form_collections` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `form_fields` (
@@ -4742,16 +4781,28 @@ CREATE TABLE IF NOT EXISTS `form_submissions` (
     `approval_decided_by_id`     INT NULL,
     `approval_decided_datetime`  DATETIME NULL,
     `approval_comment`           TEXT NULL,
+    -- Which collection this submission WAS part of, stamped at submit time
+    -- from forms.collection_id. The two are ALLOWED TO DISAGREE and that is
+    -- the point: re-pairing a form must never rewrite what last year's
+    -- responses belonged to. Same snapshot rule as approver_id above.
+    `collection_id`     INT NULL,
     `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,   -- set by the demo data importer (#1297)
     PRIMARY KEY (`id`),
     KEY `idx_form_submissions_user` (`submitted_by_user_id`),
     KEY `idx_form_submissions_ticket` (`ticket_id`),
     KEY `idx_form_submissions_approval` (`approval_status`, `approver_id`),
+    -- The collection view reads every submission for a collection across
+    -- several forms, so this is the column it filters on.
+    KEY `idx_form_submissions_collection` (`collection_id`),
     CONSTRAINT `fk_form_submissions_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`),
     CONSTRAINT `fk_form_submissions_user` FOREIGN KEY (`submitted_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_form_submissions_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_form_submissions_approver` FOREIGN KEY (`approver_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_form_submissions_decided_by` FOREIGN KEY (`approval_decided_by_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL
+    CONSTRAINT `fk_form_submissions_decided_by` FOREIGN KEY (`approval_decided_by_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    -- RESTRICT (no delete rule), DELIBERATELY: a collection holding
+    -- submissions can be CLOSED but not deleted. SET NULL here would quietly
+    -- destroy the very record this column exists to keep.
+    CONSTRAINT `fk_form_submissions_collection` FOREIGN KEY (`collection_id`) REFERENCES `form_collections` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `form_submission_data` (
