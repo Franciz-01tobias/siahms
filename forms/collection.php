@@ -41,7 +41,7 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
-    <script src="../assets/js/form-logic.js?v=2"></script>
+    <script src="../assets/js/form-logic.js?v=3"></script>
     <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
     <!-- The shared document builder. Same code as the single-form page, so a
          record exported from here is identical to one exported from there. -->
