@@ -364,6 +364,20 @@ $translationNamespaces = ['common', 'forms'];
 
         .detail-actions { display: flex; align-items: center; gap: 10px; }
 
+        /* Matches .delete-btn's shape so the two read as one control group;
+           only the hover colour differs, because one of them is destructive. */
+        .row-pdf-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            margin-right: 2px;
+            color: var(--text-muted, #94a3b8);
+            border-radius: 4px;
+            vertical-align: middle;
+        }
+        .row-pdf-btn:hover { color: var(--accent, #00897b); background: var(--surface-hover, #f1f5f9); }
+
         /* The approval block sits above the answers: on an audit trail the
            decision is the headline, not a footnote. */
         .detail-approval {
@@ -567,7 +581,12 @@ $translationNamespaces = ['common', 'forms'];
                     }
                 });
 
-                html += `<td><button class="delete-btn" onclick="event.stopPropagation();confirmDelete(${sub.id})" title="${escAttr(window.t('forms.subs.delete'))}">
+                /* Export sits before Delete: the harmless action first, and the
+                   destructive one furthest from where the eye lands. stopPropagation
+                   because the row itself opens the panel. */
+                html += `<td><button class="row-pdf-btn" onclick="event.stopPropagation();exportSubmissionPdf(${idx})" title="${escAttr(window.t('forms.subs.export_pdf'))}" aria-label="${escAttr(window.t('forms.subs.export_pdf'))}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button><button class="delete-btn" onclick="event.stopPropagation();confirmDelete(${sub.id})" title="${escAttr(window.t('forms.subs.delete'))}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                 </button></td>`;
                 html += '</tr>';
@@ -695,13 +714,53 @@ $translationNamespaces = ['common', 'forms'];
            searchable text rather than an image of the screen - so an auditor
            can search it and copy out of it.
            ------------------------------------------------------------------ */
-        async function exportSubmissionPdf() {
-            const idx = currentDetailIndex;
+        /* "Mobile phone request - Ed Mozley - 19.09.2026.pdf"
+           The date is the operator's OWN format, so a US install files it as
+           09.19.2026 without this knowing anything about locales.
+
+           🔑 fmtDate, not fmtNaiveDate: `submitted_date` is a real instant
+           stamped by the server and converts into the viewer's zone. A rota day
+           is the other kind and must NOT be converted. Both helpers exist and
+           choosing wrongly is silently wrong for everyone outside UTC. */
+        function submissionFileName(sub) {
+            /* A date template is not a filename. DD/MM/YYYY is a perfectly good
+               preference and a slash is illegal in a filename everywhere, so
+               separators become dots instead of vanishing. Windows also refuses
+               a trailing dot or space. */
+            const clean = (v) => String(v || '')
+                .replace(/[\/\\]/g, '.')
+                .replace(/[<>:"|?*\x00-\x1f]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/[. ]+$/, '');
+
+            const when = (typeof window.fmtDate === 'function')
+                ? window.fmtDate(sub.submitted_date) : '';
+
+            const parts = [
+                clean(formData.title || 'Submission'),
+                clean(sub.submitted_by || window.t('forms.subs.unknown_user')),
+                clean(when)
+            ].filter(Boolean);
+
+            /* Long form titles are common and 255 is the practical filename
+               limit, so leave room for the extension and any "(1)" a browser
+               adds when two files collide. */
+            let name = parts.join(' - ');
+            if (name.length > 180) name = name.slice(0, 180).replace(/[. ]+$/, '');
+            return name + '.pdf';
+        }
+        /* `idx` is passed by the row icon; the panel's own button passes nothing
+           and gets whatever is open. One function, two entry points - a second
+           copy for the list would drift from this one. */
+        async function exportSubmissionPdf(idx) {
+            if (typeof idx !== 'number') idx = currentDetailIndex;
             const sub = filteredSubmissions[idx];
             if (!sub || !formData) return;
 
             const btn = document.getElementById('detailPdfBtn');
-            if (btn) btn.disabled = true;
+            const fromPanel = (idx === currentDetailIndex) && document.getElementById('detailOverlay').classList.contains('open');
+            if (btn && fromPanel) btn.disabled = true;
             try {
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
@@ -826,13 +885,12 @@ $translationNamespaces = ['common', 'forms'];
                         pageW - margin, pageH - 8, { align: 'right' });
                 }
 
-                const safe = (formData.title || 'submission').replace(/[^a-z0-9]/gi, '_');
-                doc.save(safe + '_' + num + '.pdf');
+                doc.save(submissionFileName(sub));
             } catch (e) {
                 console.error(e);
                 if (typeof showToast === 'function') showToast(window.t('forms.subs.pdf_error'), 'error');
             } finally {
-                if (btn) btn.disabled = false;
+                if (btn && fromPanel) btn.disabled = false;
             }
         }
 
