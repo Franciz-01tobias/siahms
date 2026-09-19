@@ -366,6 +366,33 @@ $translationNamespaces = ['common', 'forms'];
 
         /* Matches .delete-btn's shape so the two read as one control group;
            only the hover colour differs, because one of them is destructive. */
+        /* The selection bar. ⚠️ NOT `display:flex` with `[hidden]` - an element
+           with a display rule of its own ignores the hidden attribute entirely,
+           which is how a "hidden" toolbar ends up on screen. Hidden is the
+           default state here and `.open` is what turns it on. */
+        .subs-selbar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 12px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            background: var(--surface-alt, #f1f5f9);
+            border: 1px solid var(--border, #e2e8f0);
+        }
+        .subs-selbar.open { display: flex; }
+        .subs-selbar .sel-count { font-weight: 600; font-size: 14px; }
+        .subs-selbar .sel-spacer { flex: 1; }
+
+        /* The tick column stays narrow and does not travel when the table
+           scrolls sideways - it is a control, not data. */
+        .subs-table th.sel-col, .subs-table td.sel-col {
+            width: 34px;
+            padding-left: 10px;
+            padding-right: 0;
+            text-align: center;
+        }
+        .subs-table .sel-box { cursor: pointer; margin: 0; vertical-align: middle; }
         .row-pdf-btn {
             background: none;
             border: none;
@@ -398,6 +425,7 @@ $translationNamespaces = ['common', 'forms'];
 
         @media print {
             .header, .subs-toolbar-right, .subs-table .delete-btn,
+            .subs-table .row-pdf-btn, .subs-selbar, .sel-col,
             .detail-overlay, .confirm-overlay { display: none !important; }
             .subs-content { padding: 0; max-width: 100%; }
             .subs-card { box-shadow: none; }
@@ -438,6 +466,16 @@ $translationNamespaces = ['common', 'forms'];
                         <?php echo htmlspecialchars(t('forms.subs.export_csv')); ?>
                     </button>
                 </div>
+            </div>
+
+            <!-- Appears the moment something is ticked; `.open`, not the
+                 hidden attribute, because this has a display rule. -->
+            <div class="subs-selbar" id="selBar">
+                <span class="sel-count" id="selCount"></span>
+                <span class="sel-spacer"></span>
+                <button class="btn btn-secondary" onclick="exportSelected('bundle')" title="<?php echo htmlspecialchars(t('forms.subs.sel_bundle_hint')); ?>"><?php echo htmlspecialchars(t('forms.subs.sel_bundle')); ?></button>
+                <button class="btn btn-secondary" onclick="exportSelected('separate')" title="<?php echo htmlspecialchars(t('forms.subs.sel_separate_hint')); ?>"><?php echo htmlspecialchars(t('forms.subs.sel_separate')); ?></button>
+                <button class="btn btn-secondary" onclick="clearSelection()"><?php echo htmlspecialchars(t('forms.subs.sel_clear')); ?></button>
             </div>
 
             <div class="subs-card">
@@ -519,6 +557,15 @@ $translationNamespaces = ['common', 'forms'];
         }
 
         function renderTable() {
+            /* The ticks belong to the rows that were on screen, and this
+               redraws them - a filter change, a delete, a reload. Exporting
+               something you can no longer see is the worse surprise.
+               🔴 At the TOP, before the empty-list branch returns: putting it
+               at the foot meant the one redraw that most obviously invalidates
+               a selection - filtering down to nothing - was the only one that
+               never cleared it, and the bar went on offering to export rows
+               that were no longer there. */
+            clearSelection();
             const count = filteredSubmissions.length;
             document.getElementById('subCount').textContent = count !== 1
                 ? window.t('forms.subs.count_plural', { n: count })
@@ -534,6 +581,7 @@ $translationNamespaces = ['common', 'forms'];
             }
 
             let html = '<table class="subs-table"><thead><tr>';
+            html += `<th class="sel-col"><input type="checkbox" class="sel-box" id="selAll" onchange="toggleSelectAll(this.checked)" title="${escAttr(window.t('forms.subs.sel_all'))}" aria-label="${escAttr(window.t('forms.subs.sel_all'))}"></th>`;
             html += '<th>' + esc(window.t('forms.subs.col_num')) + '</th>';
             html += '<th>' + esc(window.t('forms.subs.col_submitted_by')) + '</th>';
             html += '<th>' + esc(window.t('forms.subs.col_date')) + '</th>';
@@ -552,6 +600,9 @@ $translationNamespaces = ['common', 'forms'];
 
             filteredSubmissions.forEach((sub, idx) => {
                 html += `<tr onclick="showDetail(${idx})">`;
+                /* stopPropagation on the click as well as the change: without it
+                   ticking a row opens that row's detail panel over the list. */
+                html += `<td class="sel-col"><input type="checkbox" class="sel-box" data-sub-id="${sub.id}" onclick="event.stopPropagation()" onchange="toggleSelect(${sub.id}, this.checked)" aria-label="${escAttr(window.t('forms.subs.sel_row'))}"></td>`;
                 html += `<td>${count - idx}</td>`;
                 html += `<td>${esc(sub.submitted_by || window.t('forms.subs.unknown_user'))}</td>`;
                 html += `<td>${esc(formatDate(sub.submitted_date))}</td>`;
@@ -594,6 +645,7 @@ $translationNamespaces = ['common', 'forms'];
 
             html += '</tbody></table>';
             document.getElementById('subsContent').innerHTML = html;
+            refreshSelBar();
         }
 
         /* Which submission the detail panel is showing, so the PDF button knows
@@ -722,17 +774,26 @@ $translationNamespaces = ['common', 'forms'];
            stamped by the server and converts into the viewer's zone. A rota day
            is the other kind and must NOT be converted. Both helpers exist and
            choosing wrongly is silently wrong for everyone outside UTC. */
-        function submissionFileName(sub) {
-            /* A date template is not a filename. DD/MM/YYYY is a perfectly good
-               preference and a slash is illegal in a filename everywhere, so
-               separators become dots instead of vanishing. Windows also refuses
-               a trailing dot or space. */
-            const clean = (v) => String(v || '')
+        /* A date template is not a filename. DD/MM/YYYY is a perfectly good
+           preference and a slash is illegal in a filename everywhere, so
+           separators become dots instead of vanishing. Windows also refuses
+           a trailing dot or space. Shared by the single export and the bundle -
+           one of them getting a fix the other missed is exactly the drift this
+           file has been avoiding all along. */
+        function cleanForFileName(v) {
+            return String(v || '')
                 .replace(/[\/\\]/g, '.')
                 .replace(/[<>:"|?*\x00-\x1f]/g, '')
                 .replace(/\s+/g, ' ')
                 .trim()
                 .replace(/[. ]+$/, '');
+        }
+        function submissionFileName(sub) {
+            /* A date template is not a filename. DD/MM/YYYY is a perfectly good
+               preference and a slash is illegal in a filename everywhere, so
+               separators become dots instead of vanishing. Windows also refuses
+               a trailing dot or space. */
+            const clean = cleanForFileName;
 
             const when = (typeof window.fmtDate === 'function')
                 ? window.fmtDate(sub.submitted_date) : '';
@@ -753,6 +814,260 @@ $translationNamespaces = ['common', 'forms'];
         /* `idx` is passed by the row icon; the panel's own button passes nothing
            and gets whatever is open. One function, two entry points - a second
            copy for the list would drift from this one. */
+        /* The branding image, fetched once per page load however many documents
+           are made. Resolves to null if it cannot be loaded - a missing logo
+           must never cost somebody their record. */
+        let brandLogoPromise = null;
+        function loadBrandLogo() {
+            if (brandLogoPromise) return brandLogoPromise;
+            brandLogoPromise = new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null);
+                img.src = <?php echo json_encode(brandingLogoUrl()); ?>;
+            });
+            return brandLogoPromise;
+        }
+
+        /* Draw ONE submission into an existing document, starting at `y`, and
+           return the y it finished at. Everything that decides what a record
+           LOOKS like lives here and nowhere else, so the single export and the
+           bundle can never disagree about what a record contains. */
+        function drawSubmission(doc, sub, idx, logo) {
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const margin = 15;
+            const contentW = pageW - margin * 2;
+            let y = margin;
+
+            /* Start a new page when the next block would run off the foot.
+               Checked BEFORE writing each block rather than after, or the
+               last line of a long answer lands in the margin. */
+            const room = (needed) => {
+                if (y + needed > pageH - margin) { doc.addPage(); y = margin; }
+            };
+
+            // --- Logo: the operator's own, not a hard-coded file -------------
+            if (logo) {
+                const maxH = 12;
+                /* alias + compression, both deliberate: the alias means a bundle
+                   of many submissions embeds the logo ONCE rather than per page,
+                   and FAST deflates it - an uncompressed branding PNG took a
+                   one-page document to 1.45 MB, which is a lot to keep for a
+                   record you are storing by the hundred. */
+                doc.addImage(logo, 'PNG', margin, y, maxH * (logo.width / logo.height), maxH, 'brandlogo', 'FAST');
+                y += maxH + 6;
+            }
+
+            // --- Title -------------------------------------------------------
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 30, 30);
+            const titleLines = doc.splitTextToSize(formData.title || '', contentW);
+            doc.text(titleLines, margin, y);
+            y += titleLines.length * 7 + 2;
+
+            // --- Meta --------------------------------------------------------
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(120, 120, 120);
+            const num = filteredSubmissions.length - idx;
+            const meta = '#' + num + '  |  ' +
+                window.t('forms.subs.detail_submitted_by') + ' ' +
+                (sub.submitted_by || window.t('forms.subs.unknown_user')) + '  |  ' +
+                window.t('forms.subs.detail_date') + ' ' + formatDate(sub.submitted_date);
+            doc.text(doc.splitTextToSize(meta, contentW), margin, y);
+            y += 8;
+
+            // --- Approval trail ----------------------------------------------
+            // The reason this document exists. A list of answers with no
+            // decision on it is a form, not a record.
+            const ap = approvalParts(sub);
+            room(18);
+            doc.setDrawColor(210, 214, 220);
+            doc.setFillColor(248, 250, 252);
+            const apLines = [window.t('forms.subs.detail_approval') + ': ' + ap.label];
+            if (sub.approval_decided_by) {
+                apLines.push(window.t('forms.approval.approver') + ': ' + sub.approval_decided_by +
+                    (sub.approval_decided_datetime ? '  (' + formatDate(sub.approval_decided_datetime) + ')' : ''));
+            }
+            if (sub.approval_comment) {
+                apLines.push(window.t('forms.subs.approval_comment') + ': ' + sub.approval_comment);
+            }
+            const apWrapped = [];
+            apLines.forEach(l => doc.splitTextToSize(l, contentW - 8).forEach(w => apWrapped.push(w)));
+            const apH = apWrapped.length * 5 + 6;
+            doc.roundedRect(margin, y, contentW, apH, 1.5, 1.5, 'FD');
+            doc.setFontSize(10);
+            doc.setTextColor(60, 60, 60);
+            doc.text(apWrapped, margin + 4, y + 6);
+            y += apH + 8;
+
+            // --- Fields ---------------------------------------------------
+            formData.fields.forEach(f => {
+                const p = fieldValueParts(f, sub.data[f.id]);
+                let valueLines;
+                if (p.kind === 'bool') {
+                    valueLines = [(p.checked ? '[x] ' : '[ ] ') + p.text];
+                } else if (p.kind === 'list') {
+                    valueLines = p.empty
+                        ? [window.t('forms.subs.no_response')]
+                        : p.list.map(v => '\u2022 ' + v);
+                } else {
+                    valueLines = doc.splitTextToSize(
+                        p.empty ? window.t('forms.subs.no_response') : p.text, contentW);
+                }
+
+                const label = (f.label || '') +
+                    (f.is_deleted == 1 ? ' (' + window.t('forms.subs.retired') + ')' : '');
+                const labelLines = doc.splitTextToSize(label, contentW);
+                room(labelLines.length * 5 + valueLines.length * 5 + 6);
+
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(100, 116, 139);
+                doc.text(labelLines, margin, y);
+                y += labelLines.length * 5;
+
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(p.empty ? 150 : 30, p.empty ? 150 : 30, p.empty ? 150 : 30);
+                // A long answer can outrun a page on its own, so wrap line by
+                // line rather than trusting the block to fit.
+                valueLines.forEach(line => { room(5); doc.text(line, margin, y); y += 5; });
+                y += 4;
+            });
+
+            return y;
+        }
+
+        /* Page numbers, stamped once the document is complete - they cannot be
+           written as you go, because you do not know the total until the end. */
+        function stampFooters(doc) {
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const pages = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pages; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text(window.t('forms.subs.pdf_footer', { n: i, total: pages }),
+                    pageW - 15, pageH - 8, { align: 'right' });
+            }
+        }
+
+        function newPdfDoc() {
+            const { jsPDF } = window.jspdf;
+            return new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        }
+
+        /* Ticked rows, held by submission id rather than by index: an index is a
+           position in the CURRENT filter and means something different the moment
+           the list is redrawn. */
+        const selectedIds = new Set();
+
+        function toggleSelect(id, on) {
+            if (on) selectedIds.add(id); else selectedIds.delete(id);
+            refreshSelBar();
+        }
+
+        function toggleSelectAll(on) {
+            selectedIds.clear();
+            if (on) filteredSubmissions.forEach(s => selectedIds.add(s.id));
+            document.querySelectorAll('.subs-table .sel-box[data-sub-id]')
+                .forEach(b => { b.checked = on; });
+            refreshSelBar();
+        }
+
+        function clearSelection() {
+            selectedIds.clear();
+            document.querySelectorAll('.subs-table .sel-box').forEach(b => { b.checked = false; });
+            refreshSelBar();
+        }
+
+        function refreshSelBar() {
+            const bar = document.getElementById('selBar');
+            if (!bar) return;
+            const n = selectedIds.size;
+            bar.classList.toggle('open', n > 0);
+            document.getElementById('selCount').textContent = window.t('forms.subs.sel_count', { n: n });
+
+            /* The header tick shows all / none / some honestly. `indeterminate` is
+               a property, never an attribute, so it cannot be set in the markup. */
+            const all = document.getElementById('selAll');
+            if (all) {
+                const total = filteredSubmissions.length;
+                all.checked = total > 0 && n === total;
+                all.indeterminate = n > 0 && n < total;
+            }
+        }
+
+        /* Which submissions are ticked, in the order the list shows them - so a
+           bundle reads down the page the way the table does, rather than in the
+           order somebody happened to click. */
+        function selectedSubmissions() {
+            return filteredSubmissions
+                .map((sub, idx) => ({ sub: sub, idx: idx }))
+                .filter(r => selectedIds.has(r.sub.id));
+        }
+
+        /* "Software Request - 6 submissions - 19.09.2026.pdf" - the same shape as
+           a single export, and the same sanitising, because a form title can carry
+           anything a filesystem refuses. */
+        function bundleFileName(n) {
+            const when = (typeof window.fmtDate === 'function') ? window.fmtDate(new Date()) : '';
+            return cleanForFileName(window.t('forms.subs.bundle_name', {
+                title: formData.title || 'Submissions',
+                n: n,
+                date: when
+            })) + '.pdf';
+        }
+
+        async function exportSelected(mode) {
+            const rows = selectedSubmissions();
+            if (!rows.length || !formData) return;
+
+            /* One save per file, and a browser asks once before it will accept a
+               run of them. Worth saying so before forty start, rather than after. */
+            if (mode === 'separate' && rows.length > 10 &&
+                !confirm(window.t('forms.subs.sel_many_confirm', { n: rows.length }))) return;
+
+            const bar = document.getElementById('selBar');
+            if (bar) bar.querySelectorAll('button').forEach(b => { b.disabled = true; });
+            try {
+                const logo = await loadBrandLogo();
+
+                if (mode === 'bundle') {
+                    const doc = newPdfDoc();
+                    rows.forEach((r, i) => {
+                        // Each record starts its own page. The first one is the
+                        // page the document already has.
+                        if (i > 0) doc.addPage();
+                        drawSubmission(doc, r.sub, r.idx, logo);
+                    });
+                    stampFooters(doc);
+                    doc.save(bundleFileName(rows.length));
+                } else {
+                    for (const r of rows) {
+                        const doc = newPdfDoc();
+                        drawSubmission(doc, r.sub, r.idx, logo);
+                        stampFooters(doc);
+                        doc.save(submissionFileName(r.sub));
+                        /* A beat between saves. Fired back to back, browsers drop
+                           all but the first few - the downloads are queued by the
+                           page, not by the click. */
+                        await new Promise(res => setTimeout(res, 150));
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                if (typeof showToast === 'function') showToast(window.t('forms.subs.pdf_error'), 'error');
+            } finally {
+                if (bar) bar.querySelectorAll('button').forEach(b => { b.disabled = false; });
+            }
+        }
+
         async function exportSubmissionPdf(idx) {
             if (typeof idx !== 'number') idx = currentDetailIndex;
             const sub = filteredSubmissions[idx];
@@ -762,129 +1077,9 @@ $translationNamespaces = ['common', 'forms'];
             const fromPanel = (idx === currentDetailIndex) && document.getElementById('detailOverlay').classList.contains('open');
             if (btn && fromPanel) btn.disabled = true;
             try {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-                const pageW = doc.internal.pageSize.getWidth();
-                const pageH = doc.internal.pageSize.getHeight();
-                const margin = 15;
-                const contentW = pageW - margin * 2;
-                let y = margin;
-
-                /* Start a new page when the next block would run off the foot.
-                   Checked BEFORE writing each block rather than after, or the
-                   last line of a long answer lands in the margin. */
-                const room = (needed) => {
-                    if (y + needed > pageH - margin) { doc.addPage(); y = margin; }
-                };
-
-                // --- Logo: the operator's own, not a hard-coded file ---------
-                try {
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    await new Promise((res, rej) => {
-                        img.onload = res; img.onerror = rej;
-                        img.src = <?php echo json_encode(brandingLogoUrl()); ?>;
-                    });
-                    const maxH = 12;
-                    /* alias + compression, both deliberate: the alias means a bundle
-                       of many submissions embeds the logo ONCE rather than per page,
-                       and FAST deflates it - an uncompressed branding PNG took a
-                       one-page document to 1.45 MB, which is a lot to keep for a
-                       record you are storing by the hundred. */
-                    doc.addImage(img, 'PNG', margin, y, maxH * (img.width / img.height), maxH, 'brandlogo', 'FAST');
-                    y += maxH + 6;
-                } catch (e) { /* a missing logo must not cost you the document */ }
-
-                // --- Title ---------------------------------------------------
-                doc.setFontSize(18);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(30, 30, 30);
-                const titleLines = doc.splitTextToSize(formData.title || '', contentW);
-                doc.text(titleLines, margin, y);
-                y += titleLines.length * 7 + 2;
-
-                // --- Meta ----------------------------------------------------
-                doc.setFontSize(9);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(120, 120, 120);
-                const num = filteredSubmissions.length - idx;
-                const meta = '#' + num + '  |  ' +
-                    window.t('forms.subs.detail_submitted_by') + ' ' +
-                    (sub.submitted_by || window.t('forms.subs.unknown_user')) + '  |  ' +
-                    window.t('forms.subs.detail_date') + ' ' + formatDate(sub.submitted_date);
-                doc.text(doc.splitTextToSize(meta, contentW), margin, y);
-                y += 8;
-
-                // --- Approval trail ------------------------------------------
-                // The reason this document exists. A list of answers with no
-                // decision on it is a form, not a record.
-                const ap = approvalParts(sub);
-                room(18);
-                doc.setDrawColor(210, 214, 220);
-                doc.setFillColor(248, 250, 252);
-                const apLines = [window.t('forms.subs.detail_approval') + ': ' + ap.label];
-                if (sub.approval_decided_by) {
-                    apLines.push(window.t('forms.approval.approver') + ': ' + sub.approval_decided_by +
-                        (sub.approval_decided_datetime ? '  (' + formatDate(sub.approval_decided_datetime) + ')' : ''));
-                }
-                if (sub.approval_comment) {
-                    apLines.push(window.t('forms.subs.approval_comment') + ': ' + sub.approval_comment);
-                }
-                const apWrapped = [];
-                apLines.forEach(l => doc.splitTextToSize(l, contentW - 8).forEach(w => apWrapped.push(w)));
-                const apH = apWrapped.length * 5 + 6;
-                doc.roundedRect(margin, y, contentW, apH, 1.5, 1.5, 'FD');
-                doc.setFontSize(10);
-                doc.setTextColor(60, 60, 60);
-                doc.text(apWrapped, margin + 4, y + 6);
-                y += apH + 8;
-
-                // --- Fields ---------------------------------------------------
-                formData.fields.forEach(f => {
-                    const p = fieldValueParts(f, sub.data[f.id]);
-                    let valueLines;
-                    if (p.kind === 'bool') {
-                        valueLines = [(p.checked ? '[x] ' : '[ ] ') + p.text];
-                    } else if (p.kind === 'list') {
-                        valueLines = p.empty
-                            ? [window.t('forms.subs.no_response')]
-                            : p.list.map(v => '• ' + v);
-                    } else {
-                        valueLines = doc.splitTextToSize(
-                            p.empty ? window.t('forms.subs.no_response') : p.text, contentW);
-                    }
-
-                    const label = (f.label || '') +
-                        (f.is_deleted == 1 ? ' (' + window.t('forms.subs.retired') + ')' : '');
-                    const labelLines = doc.splitTextToSize(label, contentW);
-
-                    room(labelLines.length * 5 + valueLines.length * 5 + 6);
-
-                    doc.setFontSize(9);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setTextColor(100, 116, 139);
-                    doc.text(labelLines, margin, y);
-                    y += labelLines.length * 5;
-
-                    doc.setFontSize(11);
-                    doc.setFont('helvetica', 'normal');
-                    doc.setTextColor(p.empty ? 150 : 30, p.empty ? 150 : 30, p.empty ? 150 : 30);
-                    // A long answer can outrun a page on its own, so wrap line by
-                    // line rather than trusting the block to fit.
-                    valueLines.forEach(line => { room(5); doc.text(line, margin, y); y += 5; });
-                    y += 4;
-                });
-
-                // --- Footer on every page ------------------------------------
-                const pages = doc.internal.getNumberOfPages();
-                for (let i = 1; i <= pages; i++) {
-                    doc.setPage(i);
-                    doc.setFontSize(8);
-                    doc.setTextColor(150, 150, 150);
-                    doc.text(window.t('forms.subs.pdf_footer', { n: i, total: pages }),
-                        pageW - margin, pageH - 8, { align: 'right' });
-                }
-
+                const doc = newPdfDoc();
+                drawSubmission(doc, sub, idx, await loadBrandLogo());
+                stampFooters(doc);
                 doc.save(submissionFileName(sub));
             } catch (e) {
                 console.error(e);

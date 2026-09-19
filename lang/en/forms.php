@@ -459,6 +459,19 @@ return [
         'retired_hint'      => 'This question was removed from the form. The answers people already gave it are kept.',
         'delete'            => 'Delete',
         'detail_heading'    => 'Submission Detail',
+        /* Ticking rows to export several at once. "Bundle" is one file holding
+           them all; "Separate" is one file each. Both hints say which, because
+           the two buttons are a single word apart. */
+        'sel_all'           => 'Select all',
+        'sel_row'           => 'Select this submission',
+        'sel_count'         => '{n} selected',
+        'sel_bundle'        => 'Bundle',
+        'sel_bundle_hint'   => 'One PDF containing every selected submission',
+        'sel_separate'      => 'Separate',
+        'sel_separate_hint' => 'One PDF for each selected submission',
+        'sel_clear'         => 'Clear',
+        'bundle_name'       => '{title} - {n} submissions - {date}',
+        'sel_many_confirm'  => 'This will download {n} separate files. Your browser may ask you to allow them. Continue?',
         /* PDF export of a single submission (Enrique: a record you can keep). */
         'export_pdf'        => 'Export as PDF',
         'pdf_footer'        => 'Page {n} of {total}',
