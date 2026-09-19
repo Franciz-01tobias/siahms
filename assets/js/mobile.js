@@ -1753,6 +1753,22 @@
     var FEEDS = [
         { table: '#formsTable', columns: [3, 4] },
 
+        /* ---- Tickets subsections (LAYER 38, #17xx) ----
+           Two feeds, and in both cases the columns that cannot speak for
+           themselves are the NAMES and the bare words.
+
+           Triage: sender is an email and announces itself; subject is the
+           headline. Domain ("acme.co.uk"), mailbox (a NAME sitting right
+           under a person's name) and received (a bare date) do not. */
+        { table: 'body[data-mobile-page="tickets-triage"] table.triage',
+          columns: [1, 3, 4] },          /* domain, mailbox, received */
+
+        /* Activity: from is an email, subject is the headline, and the
+           datetime leads the card so it reads as the timestamp it is.
+           Mailbox is the second name on the card; action ("Ignored",
+           "Created") and reason are bare words that could be anything. */
+        { table: 'body[data-mobile-page="tickets-activity"] .activity-main table',
+          columns: [1, 4, 5] },          /* mailbox, action, reason */
         /* ---- Contracts (LAYER 28c, #1362) ----
            Six card feeds, and the list below is the whole argument for §21
            existing. Under §11 alone a seven-column contracts list was a

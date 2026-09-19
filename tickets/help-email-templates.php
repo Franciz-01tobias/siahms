@@ -41,8 +41,9 @@ $translationNamespaces = ['common', 'tickets'];
             --on-accent:    var(--accent-on-accent);
         }
     </style>
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=145">
 </head>
-<body>
+<body data-mobile-page="tickets-help-email">
 <?php include 'includes/header.php'; ?>
 
 <div class="help-container">
@@ -278,5 +279,6 @@ $translationNamespaces = ['common', 'tickets'];
         });
     });
 </script>
+    <script src="../assets/js/mobile.js?v=61"></script>
 </body>
 </html>

@@ -228,8 +228,9 @@ $translationNamespaces = ['common', 'tickets'];
         /* Form fields follow the palette (inbox.css only themes specific input classes). */
     .dashboard-page input, .dashboard-page select, .dashboard-page textarea { background: var(--surface, #fff); color: var(--text, #333); }
     </style>
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=145">
 </head>
-<body>
+<body data-mobile-page="tickets-dashboard">
     <?php require_once '../includes/header.php'; ?>
 
     <div class="dashboard-page">
@@ -722,5 +723,6 @@ $translationNamespaces = ['common', 'tickets'];
 
         init();
     </script>
+    <script src="../../assets/js/mobile.js?v=61"></script>
 </body>
 </html>

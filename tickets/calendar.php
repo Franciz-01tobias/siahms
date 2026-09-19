@@ -46,12 +46,13 @@ try {
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="../assets/css/calendar-grid.css?v=1">
     <link rel="stylesheet" href="../assets/css/calendar.css?v=10">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=145">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=2"></script>
 </head>
-<body>
+<body data-mobile-page="tickets-calendar">
     <?php include 'includes/header.php'; ?>
 
     <div class="calendar-container">
@@ -148,5 +149,6 @@ try {
     </script>
     <script src="../assets/js/schedule.js?v=1"></script>
     <script src="../assets/js/calendar.js?v=10"></script>
+    <script src="../assets/js/mobile.js?v=61"></script>
 </body>
 </html>

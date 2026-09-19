@@ -13170,4 +13170,201 @@
     body[data-rota-view="week"] .rota-grid-wrapper {
         padding-bottom: 16px;
     }
+
+    /* ====================================================================
+       LAYER 38 - the rest of the Tickets subsections
+       --------------------------------------------------------------------
+       Opting these pages in took every one from a 1404px document to 360px on
+       the SHARED layers alone: the desktop nav becomes the views drawer, and
+       mobile.js injects its opener wherever `.header` + `.header-nav` exist,
+       which is not scoped to the inbox.
+
+       Five of the thirteen then needed nothing at all:
+         · dashboard/index.php and dashboard/library.php - `.dashboard-page`
+           and `.widget-grid` are the same class names Assets and Software
+           already carry, so the whole shell arrived free
+         · csat/index.php, and the public survey (reached at /csat, since a
+           direct hit on survey.php 404s by design)
+         · all five guides - `.help-container` takes the scroller role from
+           LAYER 16h and the contents strip already scrolls sideways
+         · users.php, once it actually had the stylesheet
+
+       Three needed real work.
+       -------------------------------------------------------------------- */
+
+    /* ---- 38a. The tickets CALENDAR's two toggles -----------------------
+       ⚠️ `.view-toggle` / `.view-btn` are FOUR modules' class names, and this
+       file already says so: the existing fixes are scoped to `.calendar-main`
+       (the Calendar module) and `.tasks-main`. The tickets calendar has
+       NEITHER, which is exactly how the Tasks calendar missed out before it.
+       Scoped to this page's own marker rather than widening either rule and
+       restyling three other modules by accident.
+
+       Two toggles sit in this header - whose work, and which view - and they
+       were running to x=432 on a 360px screen. Each takes its own row. */
+    body[data-mobile-page="tickets-calendar"] .calendar-header {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    body[data-mobile-page="tickets-calendar"] .calendar-nav { flex: 1 1 100%; min-width: 0; }
+    body[data-mobile-page="tickets-calendar"] .calendar-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    body[data-mobile-page="tickets-calendar"] .view-toggle { flex: 1 1 100%; display: flex; }
+    body[data-mobile-page="tickets-calendar"] .view-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 40px;
+        padding: 9px 4px;
+        font-size: 13px;
+    }
+
+    /* ---- 38b. TRIAGE: a card feed, and §11 allows no argument ----------
+       Six columns, and Subject holds a SENTENCE - the page's own stylesheet
+       gives `.subject-cell` a 320px max-width and an ellipsis, which is the
+       admission. §11: "If any column contains a sentence, it is a card feed.
+       There is no second consideration." The table measured 843px on a 360px
+       screen with four cells that could not be scrolled to at all. */
+    body[data-mobile-page="tickets-triage"] table.triage,
+    body[data-mobile-page="tickets-triage"] table.triage tbody { display: block; width: 100%; }
+    body[data-mobile-page="tickets-triage"] table.triage thead { display: none; }
+    body[data-mobile-page="tickets-triage"] table.triage tbody tr {
+        display: block;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    }
+    body[data-mobile-page="tickets-triage"] table.triage tbody td {
+        display: block;
+        border-bottom: none;
+        padding: 2px 0;
+        white-space: normal;
+    }
+    /* The subject becomes the headline, so it stops being a truncated line. */
+    body[data-mobile-page="tickets-triage"] table.triage .subject-cell {
+        max-width: none;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        font-weight: 600;
+    }
+    /* The last cell is the actions. Keep it a row and give them a finger.
+       ⚠️ An empty state is one <td colspan> and so is both first and last
+       child, so this must not be a rule that would swallow it - it only
+       changes layout, never display. */
+    body[data-mobile-page="tickets-triage"] table.triage tbody td:last-child {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        text-align: left;
+        padding-top: 8px;
+    }
+    body[data-mobile-page="tickets-triage"] table.triage tbody td:last-child .btn {
+        flex: 1 1 auto;
+        min-height: 40px;
+    }
+    body[data-mobile-page="tickets-triage"] .triage-container { padding: 10px 12px; }
+
+    /* ---- 38c. ACTIVITY: a 280px sidebar on a 360px screen --------------
+       🔴 §30 in its plainest form. `.activity-container` is a flex row with a
+       fixed 280px sidebar, so the pane holding the content measured EIGHTY
+       pixels wide - and because the body clips, the page still reported itself
+       perfectly contained. The same fault as CMDB browse and the Forms
+       approvals sidebar.
+
+       Stack them, and hand the scroller role to the main pane EXPLICITLY -
+       §28: opting a module in does not give it that role, you have to pass it
+       over, and `min-height: 0` is not optional or the content's own height
+       becomes the floor. */
+    body[data-mobile-page="tickets-activity"] .activity-container {
+        flex-direction: column;
+        height: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+    }
+    body[data-mobile-page="tickets-activity"] .activity-sidebar {
+        width: 100%;
+        flex: 0 0 auto;
+        max-height: 34vh;              /* a chooser, not the page */
+        border-right: 0;
+        border-bottom: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="tickets-activity"] .activity-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    /* The search box was 194px wide starting at x=310 - mostly off the screen,
+       because it was sized for the desktop toolbar it used to sit in. */
+    body[data-mobile-page="tickets-activity"] #activitySearch {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        min-height: 40px;
+    }
+    /* Six columns, TWO of them prose (Subject and Reason). Feed, by §11. */
+    body[data-mobile-page="tickets-activity"] .activity-main table,
+    body[data-mobile-page="tickets-activity"] .activity-main tbody { display: block; width: 100%; }
+    body[data-mobile-page="tickets-activity"] .activity-main thead { display: none; }
+    body[data-mobile-page="tickets-activity"] .activity-main tbody tr {
+        display: block;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    }
+    body[data-mobile-page="tickets-activity"] .activity-main tbody td {
+        display: block;
+        border-bottom: none;
+        padding: 2px 0;
+        white-space: normal;
+    }
+
+    /* ---- 38d. The tickets guides' reference tables ---------------------
+       Four of the five guides carry a `.help-table` and the fifth does not,
+       which is the whole reason help.php measured clean while SLA, Calendar
+       sync, Email templates and Mailbox authentication did not. Each is a
+       reference table about 363px wide inside a 352px column.
+
+       This is the same shape as `.syshelp-table` on the twenty System guides,
+       and it gets the same treatment for the same reason: the last column is a
+       SENTENCE, and §11 is plain that you cannot scroll prose sideways - you
+       would scroll right to finish a sentence and left again to start the next
+       row. Each row becomes a block, the first cell reads as the heading of
+       what is being defined, and no labels are harvested because in a
+       reference table the first cell IS the label.
+
+       ⚠️ Scoped with a PREFIX to this module's five guides rather than to
+       `.help-table` bare. Thirty files across the app carry that class, and
+       restyling every other module's guide is not this round's business -
+       though it is worth doing, and the note is here so it is not lost. */
+    body[data-mobile-page^="tickets-help"] .help-table,
+    body[data-mobile-page^="tickets-help"] .help-table tbody {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+    body[data-mobile-page^="tickets-help"] .help-table thead { display: none; }
+    body[data-mobile-page^="tickets-help"] .help-table tbody tr {
+        display: block;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-soft, #ececf1);
+    }
+    body[data-mobile-page^="tickets-help"] .help-table tbody td {
+        display: block;
+        min-width: 0;
+        padding: 0 0 3px;
+        border: none;
+        overflow-wrap: anywhere;
+    }
+    /* The first cell is the thing being defined - it reads as the heading. */
+    body[data-mobile-page^="tickets-help"] .help-table tbody td:first-child {
+        font-weight: 600;
+        color: var(--text, #1f2330);
+        padding-bottom: 4px;
+    }
 }

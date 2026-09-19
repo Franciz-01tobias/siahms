@@ -86,7 +86,7 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
     <title>Service Desk - Checklist Settings</title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=143">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=145">
     <style>
         /* Full-width settings shell — the same one tickets/settings and LMS use.
          * ⚠️ Dropping max-width alone is NOT enough: inbox.css sets

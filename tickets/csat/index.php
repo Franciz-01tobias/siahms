@@ -154,8 +154,9 @@ table.analyst-table td.score { font-weight: 600; }
 
 .empty { color: var(--text-faint, #999); font-style: italic; padding: 20px 0; text-align: center; }
 </style>
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=145">
 </head>
-<body>
+<body data-mobile-page="tickets-csat">
 
 <?php require_once '../includes/header.php'; ?>
 
@@ -249,5 +250,6 @@ table.analyst-table td.score { font-weight: 600; }
     </div>
 </div>
 
+    <script src="../../assets/js/mobile.js?v=61"></script>
 </body>
 </html>

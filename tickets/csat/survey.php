@@ -201,8 +201,9 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     font-size: 14px;
 }
 </style>
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=145">
 </head>
-<body>
+<body data-mobile-page="csat-survey">
 <div class="card">
 
 <?php if ($showThanks): ?>
@@ -308,5 +309,6 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 <?php endif; ?>
 
 </div>
+    <script src="../../assets/js/mobile.js?v=61"></script>
 </body>
 </html>
