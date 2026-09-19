@@ -49,8 +49,8 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="../assets/css/knowledge.css?v=26">
     <!-- Prism.js for code syntax highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.css">
+    <link rel="stylesheet" href="../assets/css/vendor/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="../assets/css/vendor/prism-toolbar.min.css">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -549,16 +549,16 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <script>window.API_BASE = '../api/knowledge/';</script>
     <script src="../assets/js/knowledge.js?v=56"></script>
     <!-- Prism.js for code syntax highlighting when viewing articles -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-powershell.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-batch.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+    <script src="../assets/js/vendor/prism.min.js"></script>
+    <script src="../assets/js/vendor/prism-powershell.min.js"></script>
+    <script src="../assets/js/vendor/prism-bash.min.js"></script>
+    <script src="../assets/js/vendor/prism-batch.min.js"></script>
+    <script src="../assets/js/vendor/prism-sql.min.js"></script>
+    <script src="../assets/js/vendor/prism-python.min.js"></script>
+    <script src="../assets/js/vendor/prism-csharp.min.js"></script>
+    <script src="../assets/js/vendor/prism-json.min.js"></script>
+    <script src="../assets/js/vendor/prism-toolbar.min.js"></script>
+    <script src="../assets/js/vendor/prism-copy-to-clipboard.min.js"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
 </body>
 </html>

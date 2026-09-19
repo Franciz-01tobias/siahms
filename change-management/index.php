@@ -522,7 +522,7 @@ $translationNamespaces = ['common', 'change-management'];
     </div>
 
     <!-- html2pdf for PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="../assets/js/vendor/html2pdf.bundle.min.js"></script>
     <script>
         window.API_BASE = '<?php echo BASE_URL; ?>api/change-management/';
         <?php if (!empty($openCreateOnLoad)): ?>
