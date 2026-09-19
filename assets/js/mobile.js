@@ -3788,22 +3788,28 @@
 
    The rota is a CSS grid of `160px repeat(N, 1fr)` - a name column and N days,
    so six columns at days-5. Section 11: a sideways scroller stops preserving a
-   comparison past about four. Ed's decision was that which reading you want is
-   a PERSONAL PREFERENCE, so all three stay behind a sticky footer.
+   comparison past about four. Ed's decision: WHICH reading you want is a
+   personal preference, so all three stay, flipped by a sticky footer.
 
-   WHY THE HIDING IS DONE HERE AND NOT IN CSS. A day is every (cols)th child,
-   which nth-child expresses fine. An analyst is the n-th GROUP of `cols`
-   children, and the number of analysts is unbounded - there is no nth-child
-   for "the 4th group of 6". So the cells are tagged here.
+   🔴 WHAT THE FIRST ATTEMPT GOT WRONG, because it is the whole reason this is
+   built the way it is now. The chooser was the grid's own cells: tap a day
+   heading to pick the day, tap a name to pick the analyst. But the rule that
+   hid the other days ALSO hid the other day headings, and the rule that hid the
+   other analysts ALSO hid their name cells. So each view showed exactly one
+   choice and offered no way to reach another. Ed found both immediately.
 
-   AND WHY IT IS RE-APPLIED ON MUTATION. rota.js rebuilds #rotaGrid's entire
-   innerHTML on every week change, which throws the tags away. A view that
-   works until you press the next-week arrow and then silently reverts is
-   worse than one that never worked, because nothing announces it. Same
-   reasoning as the section 21 harvester, and the same fix.
+   The probe did not, and could not: it counted visible cells, measured widths,
+   confirmed the empty state survived and reported all three views working. It
+   never asked "can you now change which day?" - the second tap again.
 
-   Desktop is untouched: the bar is only injected while mq.matches, and both
-   body attributes are removed when the viewport leaves mobile.
+   🔑 So the chooser is no longer made of the things being filtered. A strip of
+   chips sits above the grid, its labels HARVESTED from the cells' own text, so
+   hiding cells cannot take the chooser with it and no new strings are invented.
+
+   Copy / Paste week are RELOCATED into the footer, not cloned - rota.js talks
+   to them by id and two #rotaCopyWeekBtn would be two bugs. Same move as the
+   calendar's 16a: the real node goes, and comes back when the viewport leaves
+   mobile.
    ========================================================================== */
 (function () {
     'use strict';
@@ -3813,13 +3819,16 @@
     var mq = window.matchMedia('(max-width: 768px)');
     var grid = document.getElementById('rotaGrid');
     var container = document.querySelector('.rota-container');
-    if (!grid || !container) return;
+    var header = document.querySelector('.rota-header');
+    if (!grid || !container || !header) return;
 
     var STORE = 'freeitsm.rota.mobileView';
     var VIEWS = ['day', 'analyst', 'week'];
     var view = 'day';
-    try { if (VIEWS.indexOf(localStorage.getItem(STORE)) !== -1) view = localStorage.getItem(STORE); }
-    catch (e) { /* private mode: the default is fine */ }
+    try {
+        var saved = localStorage.getItem(STORE);
+        if (VIEWS.indexOf(saved) !== -1) view = saved;
+    } catch (e) { /* private mode: the default is fine */ }
 
     var chosenCol = null;      // which day, in day view
     var chosenRow = null;      // which analyst, in analyst view
@@ -3832,54 +3841,147 @@
         return (!v || v === key) ? fallback : v;
     }
 
-    /* How many columns per row, read from the class rota.js sets. */
+    /* Columns per row, read from the class rota.js sets on the grid. */
     function colCount() {
         var m = /\bdays-(\d+)\b/.exec(grid.className);
         return m ? (parseInt(m[1], 10) + 1) : 6;
     }
 
     var ICONS = {
-        // one day
         day: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/><rect x="7" y="13" width="5" height="4" rx="1" fill="currentColor" stroke="none"/></svg>',
-        // one person
         analyst: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>',
-        // the whole grid
         week: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M9 10v11M15 10v11"/></svg>'
     };
-
     var LABELS = {
         day:     function () { return tr('common.view_day', 'Day'); },
         analyst: function () { return tr('tickets.group_analyst', 'Analyst'); },
         week:    function () { return tr('common.view_week', 'Week'); }
     };
 
-    var bar = null;
+    var bar = null, viewsWrap = null, actionsWrap = null, chooser = null;
 
+    // ---- the sticky footer -------------------------------------------------
     function buildBar() {
         if (bar) return;
         bar = document.createElement('div');
         bar.className = 'rota-viewbar';
-        bar.setAttribute('role', 'group');
+
+        actionsWrap = document.createElement('div');
+        actionsWrap.className = 'rota-vb-actions';
+
+        viewsWrap = document.createElement('div');
+        viewsWrap.className = 'rota-vb-views';
+        viewsWrap.setAttribute('role', 'group');
         VIEWS.forEach(function (v) {
             var b = document.createElement('button');
             b.type = 'button';
             b.className = 'rota-vb-btn';
             b.dataset.view = v;
             b.innerHTML = ICONS[v] + '<span>' + LABELS[v]() + '</span>';
-            // display:none on the label would remove the accessible name, so
-            // the name comes from the visible text and this is belt-and-braces.
             b.setAttribute('aria-label', LABELS[v]());
             b.addEventListener('click', function () { setView(v); });
-            bar.appendChild(b);
+            viewsWrap.appendChild(b);
         });
+
+        bar.appendChild(actionsWrap);      // Copy / Paste, where Ed asked for them
+        bar.appendChild(viewsWrap);        // the three readings
         document.body.appendChild(bar);
     }
 
+    /* Move the real Copy / Paste buttons, never copies of them: rota.js finds
+       them with getElementById and toggles Paste's display, so a clone would
+       leave it talking to the one still in the header. */
+    function placeActions(intoFooter) {
+        var copyBtn = document.getElementById('rotaCopyWeekBtn');
+        var pasteBtn = document.getElementById('rotaPasteWeekBtn');
+        var home = document.querySelector('.rota-actions');
+        if (!copyBtn || !home || !actionsWrap) return;
+        var target = intoFooter ? actionsWrap : home;
+        if (copyBtn.parentElement !== target) target.appendChild(copyBtn);
+        if (pasteBtn && pasteBtn.parentElement !== target) target.appendChild(pasteBtn);
+    }
+
     function syncBarPressed() {
-        if (!bar) return;
-        Array.prototype.forEach.call(bar.querySelectorAll('.rota-vb-btn'), function (b) {
+        if (!viewsWrap) return;
+        Array.prototype.forEach.call(viewsWrap.querySelectorAll('.rota-vb-btn'), function (b) {
             b.setAttribute('aria-pressed', b.dataset.view === view ? 'true' : 'false');
         });
+    }
+
+    /* The footer's height is not a constant - it holds two rows, and Paste
+       appears and disappears. Measure it and let the CSS reserve exactly that
+       much, or the last analyst row hides behind it. */
+    function reserveSpace() {
+        if (!bar) return;
+        var h = Math.ceil(bar.getBoundingClientRect().height);
+        document.body.style.setProperty('--rota-bar-h', h + 'px');
+    }
+
+    // ---- the chooser strip -------------------------------------------------
+    function buildChooser() {
+        if (chooser) return;
+        chooser = document.createElement('div');
+        chooser.className = 'rota-chooser';
+        chooser.addEventListener('click', function (e) {
+            var chip = e.target.closest ? e.target.closest('.rota-ch-btn') : null;
+            if (!chip) return;
+            if (view === 'day')     chosenCol = parseInt(chip.dataset.col, 10) || 0;
+            if (view === 'analyst') chosenRow = parseInt(chip.dataset.row, 10) || 0;
+            apply();
+        });
+        header.parentNode.insertBefore(chooser, header.nextSibling);
+    }
+
+    /* Labels harvested from the grid's own cells (section 21): the day chips
+       read the day name and number the page already rendered, the analyst chips
+       read the name. Nothing invented, so it is right in all 24 locales. */
+    function renderChooser() {
+        if (!chooser) return;
+        chooser.innerHTML = '';
+        if (view === 'week') return;
+
+        if (view === 'day') {
+            Array.prototype.forEach.call(
+                grid.querySelectorAll('.rota-col-header.rota-line-head'), function (head) {
+                    var name = head.querySelector('.day-name');
+                    var date = head.querySelector('.day-date');
+                    var chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'rota-ch-btn';
+                    chip.dataset.col = head.dataset.col;
+                    chip.innerHTML =
+                        '<span class="rota-ch-top">' + (name ? name.textContent : '') + '</span>' +
+                        '<span class="rota-ch-sub">' + (date ? date.textContent : '') + '</span>';
+                    if (head.classList.contains('today')) chip.classList.add('rota-ch-today');
+                    chooser.appendChild(chip);
+                });
+        } else {
+            Array.prototype.forEach.call(
+                grid.querySelectorAll('.rota-analyst-name'), function (cell) {
+                    var chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'rota-ch-btn rota-ch-wide';
+                    chip.dataset.row = cell.dataset.row;
+                    chip.innerHTML = '<span class="rota-ch-top">' + cell.textContent.trim() + '</span>';
+                    chooser.appendChild(chip);
+                });
+        }
+        syncChooserPressed();
+    }
+
+    function syncChooserPressed() {
+        if (!chooser) return;
+        Array.prototype.forEach.call(chooser.querySelectorAll('.rota-ch-btn'), function (chip) {
+            var on = (view === 'day')
+                ? (parseInt(chip.dataset.col, 10) === chosenCol)
+                : (parseInt(chip.dataset.row, 10) === chosenRow);
+            chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        var cur = chooser.querySelector('.rota-ch-btn[aria-pressed="true"]');
+        if (cur && cur.scrollIntoView) {
+            // Keep the chosen chip in sight when the week changes.
+            cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
     }
 
     function setView(v) {
@@ -3890,9 +3992,7 @@
         apply();
     }
 
-    /* Default the day to today when this week contains it, else the first day.
-       Default the analyst to the first row. Both only on the first apply, so a
-       re-render does not yank the user back to today. */
+    /* Day defaults to today when this week holds it; analyst to the first row. */
     function defaults() {
         var cols = colCount();
         if (chosenCol === null) {
@@ -3908,7 +4008,7 @@
 
     function clearTags() {
         Array.prototype.forEach.call(grid.children, function (el) {
-            el.classList.remove('rota-m-hide', 'rota-m-chosen');
+            el.classList.remove('rota-m-hide');
         });
     }
 
@@ -3919,69 +4019,44 @@
         var kids = grid.children;
 
         clearTags();
-        if (view === 'week') return;               // the grid as it is
+        renderChooser();
 
-        for (var i = 0; i < kids.length; i++) {
-            var el = kids[i];
+        if (view !== 'week') {
+            for (var i = 0; i < kids.length; i++) {
+                var el = kids[i];
 
-            /* Section 11: do not swallow the empty state. rota.js renders
-               "no analysts" as one div spanning `grid-column: 1 / -1`, which
-               sits at an arbitrary index and would be hidden by the modulo
-               like any other cell - deleting the only thing on the screen
-               that explains why it is blank. */
-            if (el.classList.contains('rota-empty')) continue;
+                /* Section 11: do not swallow the empty state. rota.js renders
+                   "no analysts" as one div spanning `grid-column: 1 / -1`; it
+                   sits at an arbitrary index and the modulo would hide it like
+                   any other cell, deleting the only thing on screen that says
+                   why the page is blank. */
+                if (el.classList.contains('rota-empty')) continue;
 
-            var col = i % cols;                    // 0 is the name column
-            var row = Math.floor(i / cols);        // 0 is the heading row
+                var col = i % cols;                 // 0 is the name column
+                var row = Math.floor(i / cols);     // 0 is the heading row
+                var show;
 
-            var show;
-            if (view === 'day') {
-                show = (col === 0) || (col === chosenCol + 1);
-            } else {
-                show = (row === 0) || (row === chosenRow + 1);
-                // In analyst view the heading row's day cells are noise: each
-                // cell labels itself from its own data-date instead.
-                if (row === 0 && col !== 0) show = false;
+                if (view === 'day') {
+                    // The headings live in the chooser now, so the whole
+                    // heading row goes: name column plus the chosen day.
+                    show = (row > 0) && (col === 0 || col === chosenCol + 1);
+                } else {
+                    // One analyst's days, stacked. The name is in the chooser,
+                    // and each cell labels itself from its own data-date.
+                    show = (row === chosenRow + 1) && (col > 0);
+                }
+                if (!show) el.classList.add('rota-m-hide');
             }
-            if (!show) el.classList.add('rota-m-hide');
         }
-
-        // Mark what is being shown, so the chooser reads as a chooser.
-        if (view === 'day') {
-            var head = grid.querySelector('.rota-col-header.rota-line-head[data-col="' + chosenCol + '"]');
-            if (head) head.classList.add('rota-m-chosen');
-        } else {
-            var nameCell = grid.querySelector('.rota-analyst-name[data-row="' + chosenRow + '"]');
-            if (nameCell) nameCell.classList.add('rota-m-chosen');
-        }
+        syncChooserPressed();
+        reserveSpace();
     }
 
-    /* Choosing. Delegated, because the grid is replaced wholesale on every
-       week change and a listener bound to a cell would go with it. */
-    grid.addEventListener('click', function (e) {
-        if (!mq.matches) return;
-        if (view === 'analyst') {
-            var name = e.target.closest ? e.target.closest('.rota-analyst-name') : null;
-            if (name) {
-                chosenRow = parseInt(name.dataset.row, 10) || 0;
-                apply();
-            }
-            return;
-        }
-        if (view === 'day') {
-            var head = e.target.closest ? e.target.closest('.rota-col-header.rota-line-head') : null;
-            if (head) {
-                chosenCol = parseInt(head.dataset.col, 10) || 0;
-                apply();
-            }
-        }
-    }, true);
-
-    /* rota.js replaces the grid's innerHTML on every week change, so the tags
-       have to be put back. Without this the view works until the first time
-       somebody presses the next-week arrow. */
+    /* rota.js replaces the grid's entire innerHTML on a week change, which
+       throws the tags away AND replaces the cells the chooser was harvested
+       from. Both have to be redone, or the view works until the first tap of
+       the next-week arrow and then silently reverts. */
     var mo = new MutationObserver(function () {
-        // The row/col the user picked may not exist in the new week.
         var cols = colCount();
         if (chosenCol !== null && chosenCol > cols - 2) chosenCol = 0;
         if (chosenRow !== null && !grid.querySelector('.rota-analyst-name[data-row="' + chosenRow + '"]')) {
@@ -3991,17 +4066,32 @@
     });
     mo.observe(grid, { childList: true });
 
+    /* Paste appears only once a week has been copied, so the footer changes
+       height after rota.js shows it. Re-measure when it does. */
+    var pasteBtn = document.getElementById('rotaPasteWeekBtn');
+    if (pasteBtn) {
+        new MutationObserver(reserveSpace).observe(pasteBtn, { attributes: true, attributeFilter: ['style'] });
+    }
+
     function sync() {
         if (mq.matches) {
             buildBar();
+            buildChooser();
+            placeActions(true);
             if (bar) bar.style.display = '';
+            if (chooser) chooser.style.display = '';
             document.body.setAttribute('data-rota-view', view);
             syncBarPressed();
             apply();
         } else {
-            // Desktop must look exactly as it did before this layer existed.
+            // Desktop must look exactly as it did before this layer existed:
+            // the buttons go home, the injected furniture is hidden, the
+            // attribute and the measured variable come off.
+            placeActions(false);
             if (bar) bar.style.display = 'none';
+            if (chooser) { chooser.style.display = 'none'; chooser.innerHTML = ''; }
             document.body.removeAttribute('data-rota-view');
+            document.body.style.removeProperty('--rota-bar-h');
             clearTags();
         }
     }

@@ -68,7 +68,7 @@ foreach ($templates as $t) {
     <title>Service Desk - Checklists</title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=140">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=141">
     <style>
         body { margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }
         .chk-layout { display: flex; height: calc(100vh - 48px); width: 100%; overflow: hidden; }

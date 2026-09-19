@@ -13009,4 +13009,116 @@
         flex: 1 1 auto;
         min-height: 44px;
     }
+
+    /* ---- LAYER 37c: the chooser, the footer's second row, the padding ---
+       Ed drove all three readings and found what the probe could not:
+
+       1. DAY VIEW HAD NO WAY TO CHANGE DAY and ANALYST VIEW NO WAY TO CHANGE
+          ANALYST. The chooser was the grid's own cells, and the rule hiding
+          the other days hid the other day HEADINGS with them; likewise the
+          other analysts' name cells. Each view showed one choice and offered
+          no route to another. 🔑 A chooser must not be made of the things it
+          filters. It is now a strip of chips above the grid, labels harvested
+          from those cells' own text, so hiding cells cannot take it away.
+
+       2. Copy week belongs in the footer (Ed). The REAL buttons move there -
+          rota.js finds them by id and toggles Paste, so a clone would leave it
+          talking to the copy still in the header. The footer is therefore two
+          rows and its height is not a constant, so mobile.js measures it into
+          --rota-bar-h and the container reserves exactly that.
+
+       3. The panels were over-padded. `.rota-container` was on the desktop's
+          20px and `.rota-header` on 15px/20px, against a house convention of
+          12px that `.knowledge-main`, `.review-container`, `.ka-page` and
+          `.servers-content` all use, with `.wr-main` on 10px/12px. Matched to
+          12px rather than to a number picked for this page.
+       -------------------------------------------------------------------- */
+
+    /* 3. the padding, matched to the other modules */
+    body[data-mobile-page="tickets-rota"] .rota-container {
+        padding: 10px 12px calc(var(--rota-bar-h, 108px) + 10px + env(safe-area-inset-bottom));
+    }
+    body[data-mobile-page="tickets-rota"] .rota-header {
+        padding: 10px 12px;
+        margin-bottom: 10px;
+    }
+
+    /* 1. the chooser strip */
+    body[data-mobile-page="tickets-rota"] .rota-chooser {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 2px;
+        margin-bottom: 10px;
+        flex-shrink: 0;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-chooser::-webkit-scrollbar { display: none; }
+    body[data-rota-view="week"] .rota-chooser { display: none; }
+
+    body[data-mobile-page="tickets-rota"] .rota-ch-btn {
+        flex: 0 0 auto;
+        min-width: 52px;
+        min-height: 44px;              /* a finger, not a cursor */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1px;
+        padding: 6px 10px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--text-muted, #666);
+        font: inherit;
+        cursor: pointer;
+    }
+    /* An analyst's name is prose-length; a day is three letters and a number. */
+    body[data-mobile-page="tickets-rota"] .rota-ch-wide {
+        max-width: 60vw;
+        overflow: hidden;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-ch-top {
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-ch-sub {
+        font-size: 11px;
+        line-height: 1;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-ch-today .rota-ch-sub { font-weight: 700; }
+    body[data-mobile-page="tickets-rota"] .rota-ch-btn[aria-pressed="true"] {
+        background: var(--accent, #0078d4);
+        border-color: var(--accent, #0078d4);
+        color: #fff;
+    }
+
+    /* 2. the footer gains an actions row above the three readings */
+    body[data-mobile-page="tickets-rota"] .rota-viewbar {
+        flex-direction: column;
+        gap: 6px;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-vb-actions {
+        display: flex;
+        gap: 8px;
+    }
+    /* No Copy button on the page (a role without the permission) means no row. */
+    body[data-mobile-page="tickets-rota"] .rota-vb-actions:empty { display: none; }
+    body[data-mobile-page="tickets-rota"] .rota-vb-actions .btn {
+        flex: 1 1 auto;
+        min-height: 44px;
+    }
+    body[data-mobile-page="tickets-rota"] .rota-vb-views {
+        display: flex;
+        gap: 6px;
+    }
+
+    /* The heading row is gone in day view and the name column in analyst view,
+       so the grid is narrower than the two-column rule assumed. */
+    body[data-rota-view="analyst"] .rota-cell { min-height: 0; }
 }
