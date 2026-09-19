@@ -377,11 +377,16 @@ $translationNamespaces = ['common', 'forms'];
             margin: 0 0 12px;
             padding: 10px 14px;
             border-radius: 6px;
-            background: var(--surface-alt, #f1f5f9);
-            border: 1px solid var(--border, #e2e8f0);
+            /* 🔴 `--surface-alt` does not exist. A var() with a fallback fails
+               SILENTLY to that fallback, so the bar came out bright white on a
+               dark page - the token was never defined in either theme and
+               nothing said so. Every colour here is a real token from
+               theme.css, checked against it rather than remembered. */
+            background: var(--surface-2);
+            border: 1px solid var(--border);
         }
         .subs-selbar.open { display: flex; }
-        .subs-selbar .sel-count { font-weight: 600; font-size: 14px; }
+        .subs-selbar .sel-count { font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; }
         .subs-selbar .sel-spacer { flex: 1; }
 
         /* The tick column stays narrow and does not travel when the table
@@ -473,8 +478,8 @@ $translationNamespaces = ['common', 'forms'];
             <div class="subs-selbar" id="selBar">
                 <span class="sel-count" id="selCount"></span>
                 <span class="sel-spacer"></span>
-                <button class="btn btn-secondary" onclick="exportSelected('bundle')" title="<?php echo htmlspecialchars(t('forms.subs.sel_bundle_hint')); ?>"><?php echo htmlspecialchars(t('forms.subs.sel_bundle')); ?></button>
-                <button class="btn btn-secondary" onclick="exportSelected('separate')" title="<?php echo htmlspecialchars(t('forms.subs.sel_separate_hint')); ?>"><?php echo htmlspecialchars(t('forms.subs.sel_separate')); ?></button>
+                <button class="btn btn-secondary" onclick="exportSelected('bundle')" title="<?php echo htmlspecialchars(t('forms.subs.sel_bundle_hint')); ?>"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><?php echo htmlspecialchars(t('forms.subs.sel_bundle')); ?></button>
+                <button class="btn btn-secondary" onclick="exportSelected('separate')" title="<?php echo htmlspecialchars(t('forms.subs.sel_separate_hint')); ?>"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><?php echo htmlspecialchars(t('forms.subs.sel_separate')); ?></button>
                 <button class="btn btn-secondary" onclick="clearSelection()"><?php echo htmlspecialchars(t('forms.subs.sel_clear')); ?></button>
             </div>
 
@@ -991,7 +996,8 @@ $translationNamespaces = ['common', 'forms'];
             if (!bar) return;
             const n = selectedIds.size;
             bar.classList.toggle('open', n > 0);
-            document.getElementById('selCount').textContent = window.t('forms.subs.sel_count', { n: n });
+            document.getElementById('selCount').textContent =
+                window.t(n === 1 ? 'forms.subs.sel_count' : 'forms.subs.sel_count_plural', { n: n });
 
             /* The header tick shows all / none / some honestly. `indeterminate` is
                a property, never an attribute, so it cannot be set in the markup. */

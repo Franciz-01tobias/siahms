@@ -358,6 +358,8 @@ $translationNamespaces = ['common', 'forms'];
                         <div><?php echo t('forms.help.export_f2'); ?></div>
                         <div><?php echo t('forms.help.export_f3'); ?></div>
                         <div><?php echo t('forms.help.export_f4'); ?></div>
+                        <div><?php echo t('forms.help.export_f5'); ?></div>
+                        <div><?php echo t('forms.help.export_f6'); ?></div>
                     </div>
 
                     <p class="help-note"><?php echo t('forms.help.export_tip'); ?></p>

@@ -464,11 +464,16 @@ return [
            the two buttons are a single word apart. */
         'sel_all'           => 'Select all',
         'sel_row'           => 'Select this submission',
-        'sel_count'         => '{n} selected',
+        /* Says what the bar is FOR, not just how many are ticked - "3 selected"
+           next to buttons called Bundle and Separate never said PDF anywhere.
+           🌍 Two forms, following `count`/`count_plural`: English reads the
+           same either way, Polish does not. */
+        'sel_count'         => '{n} selected for export to PDF',
+        'sel_count_plural'  => '{n} selected for export to PDF',
         'sel_bundle'        => 'Bundle',
-        'sel_bundle_hint'   => 'One PDF containing every selected submission',
+        'sel_bundle_hint'   => 'Download one PDF containing every selected submission',
         'sel_separate'      => 'Separate',
-        'sel_separate_hint' => 'One PDF for each selected submission',
+        'sel_separate_hint' => 'Download a separate PDF for each selected submission',
         'sel_clear'         => 'Clear',
         'bundle_name'       => '{title} - {n} submissions - {date}',
         'sel_many_confirm'  => 'This will download {n} separate files. Your browser may ask you to allow them. Continue?',
@@ -602,7 +607,7 @@ return [
         'card_subs_title' => 'Submissions',
         'card_subs_body'  => 'Browse every submission in a sortable table. Click any row to open the full detail view and see exactly what was entered.',
         'card_export_title' => 'Export',
-        'card_export_body'  => 'Download submission data as a CSV file with UTF-8 BOM encoding so it opens correctly in Excel without character issues.',
+        'card_export_body'  => 'Take the answers as a CSV for a spreadsheet, or keep a submission as a PDF — your logo, the answers and the approval on it — one at a time or several together.',
 
         // Section 2: Building forms
         'building_title' => 'Building forms',
@@ -656,11 +661,13 @@ return [
 
         // Section 5: Export
         'export_title' => 'Export',
-        'export_intro' => 'Submission data can be exported to CSV at any time, giving you a portable file that works in Excel, Google Sheets, or any spreadsheet application. The export respects any active date range filters, so you can download just the data you need.',
+        'export_intro' => 'There are two ways out. Export to CSV when you want the answers as data — in Excel, Google Sheets or anything that reads a spreadsheet. Export to PDF when you want the record itself: one submission laid out with your logo, the answers and who approved it, ready to file or send to an auditor. Both respect any active date range filter, so you can take just the submissions you need.',
         'export_f1' => '<strong>UTF-8 BOM encoding</strong> &mdash; the CSV file includes a byte order mark (BOM) so that Excel correctly displays special characters, accented letters, and currency symbols without manual encoding setup.',
         'export_f2' => '<strong>All fields included</strong> &mdash; every field from the form is represented as a column in the CSV. The submitter name and submission date are always included as the first columns.',
         'export_f3' => '<strong>Filtered export</strong> &mdash; if you have set a date range filter on the Submissions page, only submissions within that range are included in the export. Clear the filters to export everything.',
         'export_f4' => '<strong>Instant download</strong> &mdash; the CSV is generated on the server and downloaded directly to your browser. No email or background processing required.',
+        'export_f5' => '<strong>A submission as a PDF</strong> &mdash; open a submission and choose <em>Export as PDF</em>, or use the download icon in its row. The document carries your own logo, the submission number, who submitted it and when, the approval decision and comment, and every answer &mdash; including answers to questions you have since removed from the form. Files are named <em>Form title - Person - date</em>, using your own date format.',
+        'export_f6' => '<strong>Several at once</strong> &mdash; tick the box beside any rows you want, then choose <em>Bundle</em> for a single PDF with one page per submission, or <em>Separate</em> for one file each. Tick the box in the table heading to take everything currently shown. Changing the date filter clears the ticks, so you never export something you can no longer see.',
         'export_tip' => 'If you open the CSV in Excel and see garbled characters, make sure you are double-clicking the file to open it rather than using File &gt; Import. The BOM ensures automatic detection when opening directly.',
 
         // Section 6: Settings
