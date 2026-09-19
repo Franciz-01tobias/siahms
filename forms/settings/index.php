@@ -270,55 +270,69 @@ $translationNamespaces = ['common', 'forms'];
         .ai-form .test-status { font-size: 13px; margin-left: 8px; }
         /* Collections. Every colour is a token from theme.css — a var() with a
            fallback fails SILENTLY to that fallback, so a name that does not
-           exist paints a light panel on a dark page and nothing says so. */
-        .coll-list { display: flex; flex-direction: column; gap: 10px; max-width: 900px; }
-        .coll-row {
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--surface);
-            padding: 14px 16px;
-        }
-        .coll-row.is-closed { background: var(--surface-2); }
-        .coll-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        .coll-name { font-weight: 600; font-size: 15px; color: var(--text); }
-        .coll-row.is-closed .coll-name { color: var(--text-muted); }
+           exist paints a light panel on a dark page and nothing says so.
+
+           🔴 NO max-width anywhere here. This tab first shipped with a 900px
+           cap on the list "so it reads nicely"; the page container is already
+           edge to edge and the cap was mine. A tasteful content cap is still a
+           cap. The one exception is the modal, which inherits its own. */
+        .coll-name { font-weight: 600; color: var(--text); }
+        .coll-row-closed .coll-name { color: var(--text-muted); }
+        .coll-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
         .coll-meta { font-size: 12px; color: var(--text-dim); }
-        .coll-spacer { flex: 1; }
-        .coll-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
-        .coll-pill {
+        .coll-num { text-align: right; white-space: nowrap; }
+
+        .coll-state {
             font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
-            background: var(--surface-hover); color: var(--text-muted);
+            white-space: nowrap;
         }
-        .coll-forms {
-            margin-top: 10px; padding-top: 10px;
-            border-top: 1px solid var(--border-soft);
-            font-size: 13px; color: var(--text-muted);
-            display: flex; flex-wrap: wrap; gap: 6px 14px;
-        }
+        .coll-state.open   { background: var(--success-bg); color: var(--success-text); }
+        .coll-state.closed { background: var(--surface-hover); color: var(--text-muted); }
+
         .coll-forms a { color: var(--forms-accent, #00897b); text-decoration: none; }
         .coll-forms a:hover { text-decoration: underline; }
-        .coll-btn {
-            background: none; border: 1px solid var(--border); border-radius: 4px;
-            padding: 4px 10px; font-size: 12px; cursor: pointer;
-            color: var(--text-muted); font-family: inherit;
-        }
-        .coll-btn:hover { border-color: var(--forms-accent, #00897b); color: var(--forms-accent, #00897b); }
-        .coll-btn.danger:hover { border-color: var(--danger-text); color: var(--danger-text); }
-        .coll-btn[disabled] { opacity: .5; cursor: not-allowed; }
-        .coll-empty { color: var(--text-dim); font-size: 14px; padding: 18px 0; }
+        .coll-forms .sep { color: var(--text-faint); margin: 0 6px; }
+        .coll-none { color: var(--text-dim); font-style: italic; }
 
-        /* The editor row. ⚠️ Not `display:flex` with [hidden] — an element with
-           its own display rule ignores the hidden attribute entirely. */
-        .coll-editor { display: none; gap: 10px; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; }
-        .coll-editor.open { display: flex; }
-        .coll-editor input {
-            padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px;
-            background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px;
-        }
-        .coll-editor input.name { min-width: 240px; }
-        .coll-editor input.desc { flex: 1; min-width: 260px; }
+        .coll-actions { text-align: right; white-space: nowrap; }
 
-        .coll-effect { max-width: 760px; margin-top: 28px; }
+        /* The same .action-btn the other settings screens use — defined per page
+           in this codebase, so this is tickets/settings' copy rather than a
+           fourth invention. */
+        .tab-content .action-btn {
+            background: none;
+            border: 1px solid var(--border, #ddd);
+            color: var(--text-muted, #666);
+            cursor: pointer;
+            padding: 6px;
+            margin-left: 4px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .tab-content .action-btn:hover {
+            background: var(--surface-hover, #f0f0f0);
+            border-color: var(--accent, #00897b);
+            color: var(--accent, #00897b);
+        }
+        .tab-content .action-btn.delete { color: var(--danger-accent, #d13438); }
+        .tab-content .action-btn.delete:hover {
+            background: var(--danger-bg, #fdf3f3);
+            border-color: var(--danger-accent, #d13438);
+            color: var(--danger-text, #a00);
+        }
+        /* Disabled means "there is a reason", not "this is broken" — the reason
+           is the tooltip, so it must not look like a hover target. */
+        .tab-content .action-btn[disabled] { opacity: .35; cursor: not-allowed; }
+        .tab-content .action-btn[disabled]:hover {
+            background: none; border-color: var(--border, #ddd); color: var(--text-muted, #666);
+        }
+        .tab-content .action-btn svg { width: 16px; height: 16px; }
+
+        .coll-empty { color: var(--text-dim); font-size: 14px; padding: 24px 12px; }
+
         .coll-effect label {
             display: flex; gap: 10px; align-items: flex-start;
             padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
@@ -332,7 +346,7 @@ $translationNamespaces = ['common', 'forms'];
             border: 1px solid var(--warning-border, var(--border));
             background: var(--warning-bg, var(--surface-2));
             color: var(--warning-text, var(--text));
-            padding: 14px 16px; border-radius: 6px; max-width: 760px; font-size: 14px;
+            padding: 14px 16px; border-radius: 6px; font-size: 14px;
         }
     </style>
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
@@ -407,17 +421,22 @@ $translationNamespaces = ['common', 'forms'];
 
             <div id="collBody">
                 <div style="margin-bottom: 14px;">
-                    <button class="btn btn-primary" onclick="collStartNew()"><?php echo htmlspecialchars(t('forms.collections.add')); ?></button>
+                    <button class="btn btn-primary" onclick="collOpenModal(0)"><?php echo htmlspecialchars(t('forms.collections.add')); ?></button>
                 </div>
 
-                <div class="coll-editor" id="collEditor">
-                    <input type="text" class="name" id="collName" maxlength="255" placeholder="<?php echo htmlspecialchars(t('forms.collections.name_ph')); ?>" aria-label="<?php echo htmlspecialchars(t('forms.collections.name')); ?>">
-                    <input type="text" class="desc" id="collDesc" maxlength="500" placeholder="<?php echo htmlspecialchars(t('forms.collections.description_ph')); ?>" aria-label="<?php echo htmlspecialchars(t('forms.collections.description')); ?>">
-                    <button class="btn btn-primary" onclick="collSave()"><?php echo htmlspecialchars(t('forms.collections.save')); ?></button>
-                    <button class="coll-btn" onclick="collCancel()"><?php echo htmlspecialchars(t('forms.collections.cancel')); ?></button>
-                </div>
-
-                <div class="coll-list" id="collList"></div>
+                <table class="settings-table" id="collTable">
+                    <thead>
+                        <tr>
+                            <th><?php echo htmlspecialchars(t('forms.collections.name')); ?></th>
+                            <th><?php echo htmlspecialchars(t('forms.collections.col_forms')); ?></th>
+                            <th class="coll-num"><?php echo htmlspecialchars(t('forms.collections.col_submissions')); ?></th>
+                            <th><?php echo htmlspecialchars(t('forms.collections.col_status')); ?></th>
+                            <th class="coll-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="collRows"></tbody>
+                </table>
+                <div class="coll-empty" id="collEmpty" style="display:none"></div>
 
                 <div class="coll-effect">
                     <div class="section-header" style="margin-top: 8px;">
@@ -441,6 +460,27 @@ $translationNamespaces = ['common', 'forms'];
             </div>
         </div>
         <?php endif; ?>
+    <!-- Create / rename a collection. Uses the shared `.modal` + `.active`
+         convention from inbox.css, as every other settings screen does. -->
+    <div class="modal" id="collModal">
+        <div class="modal-content" style="max-width: 560px;">
+            <div class="modal-header" id="collModalTitle"><?php echo htmlspecialchars(t('forms.collections.add_title')); ?></div>
+            <form id="collForm" onsubmit="event.preventDefault(); collSave();">
+                <div class="form-group">
+                    <label for="collName"><?php echo htmlspecialchars(t('forms.collections.name')); ?></label>
+                    <input type="text" id="collName" maxlength="255" required placeholder="<?php echo htmlspecialchars(t('forms.collections.name_ph')); ?>">
+                </div>
+                <div class="form-group">
+                    <label for="collDesc"><?php echo htmlspecialchars(t('forms.collections.description')); ?></label>
+                    <textarea id="collDesc" maxlength="500" placeholder="<?php echo htmlspecialchars(t('forms.collections.description_ph')); ?>"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="collCloseModal()"><?php echo htmlspecialchars(t('forms.collections.cancel')); ?></button>
+                    <button type="submit" class="btn btn-primary" id="collSaveBtn"><?php echo htmlspecialchars(t('forms.collections.save')); ?></button>
+                </div>
+            </form>
+        </div>
+    </div>
         <?php if (settingsTabVisible($visibleTabs, 'ai')): ?>
         <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo Cap::FORMS_AI; ?>">
             <div class="section-header">
@@ -471,10 +511,14 @@ $translationNamespaces = ['common', 'forms'];
 
         document.addEventListener('DOMContentLoaded', function() {
             loadSettings();
-            // Only when the tab is actually on the page - it is behind its own
-            // capability, so somebody may be looking at a settings page that
-            // has no Collections tab at all.
-            if (document.getElementById('collList')) loadCollections();
+            /* Only when the tab is actually on the page - it is behind its own
+               capability, so somebody may be looking at a settings page that
+               has no Collections tab at all.
+               ⚠️ Keyed on the element the renderer WRITES TO. It was pointing at
+               the old card list, which the table replaced, so this quietly
+               stopped firing and the tab rendered empty - a guard that silently
+               turns a feature off is worse than no guard. */
+            if (document.getElementById('collRows')) loadCollections();
         });
 
         // AI provider/model/key for the form builder's AI Assist is now handled
@@ -536,17 +580,29 @@ $translationNamespaces = ['common', 'forms'];
             }
         }
 
+        /* Inline SVGs rather than a shared sprite, matching the other settings
+           screens. Pencil / box-arrow / reopen-arrow / bin. */
+        const COLL_ICON_EDIT   = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+        const COLL_ICON_CLOSE  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
+        const COLL_ICON_REOPEN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>';
+        const COLL_ICON_DELETE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+
         function renderCollections() {
-            const el = document.getElementById('collList');
+            const tbody = document.getElementById('collRows');
+            const table = document.getElementById('collTable');
+            const empty = document.getElementById('collEmpty');
+
             if (!collections.length) {
-                el.innerHTML = `<div class="coll-empty">${collEsc(window.t('forms.collections.empty'))}
-                    <div style="margin-top:4px">${collEsc(window.t('forms.collections.empty_hint'))}</div></div>`;
+                table.style.display = 'none';
+                empty.style.display = '';
+                empty.textContent = window.t('forms.collections.empty') + ' ' + window.t('forms.collections.empty_hint');
                 return;
             }
+            table.style.display = '';
+            empty.style.display = 'none';
 
-            el.innerHTML = collections.map(c => {
+            tbody.innerHTML = collections.map(c => {
                 const closed = !!c.closed_datetime;
-                const forms  = Number(c.form_count) || 0;
                 const subs   = Number(c.submission_count) || 0;
 
                 /* 🔑 fmtDate, not fmtNaiveDate: closed_datetime is a real instant
@@ -558,61 +614,58 @@ $translationNamespaces = ['common', 'forms'];
                         who: c.closed_by_name || '—' })
                     : '';
 
-                const formList = (c.forms || []).map(f =>
-                    `<a href="../submissions.php?id=${f.id}">${collEsc(f.title)}</a>`).join('');
+                const formLinks = (c.forms || []).length
+                    ? (c.forms || []).map(f =>
+                        `<a href="../submissions.php?id=${f.id}">${collEsc(f.title)}</a>`).join('<span class="sep">·</span>')
+                    : `<span class="coll-none">${collEsc(window.t('forms.collections.no_forms_short'))}</span>`;
 
                 /* Delete is offered only while nothing is stamped into it. The
-                   service and the database both refuse otherwise; disabling the
-                   button as well means nobody has to discover that by pressing it. */
+                   service and the database both refuse otherwise; disabling it
+                   here means nobody has to discover that by pressing it, and the
+                   reason is the tooltip rather than a toast after the fact. */
                 const canDelete = subs === 0;
 
-                return `<div class="coll-row${closed ? ' is-closed' : ''}">
-                    <div class="coll-head">
-                        <span class="coll-name">${collEsc(c.name)}</span>
-                        ${closed ? `<span class="coll-pill">${collEsc(window.t('forms.collections.closed_badge'))}</span>` : ''}
-                        <span class="coll-meta">${collEsc(
-                            window.t(forms === 1 ? 'forms.collections.form_count_one' : 'forms.collections.form_count', { n: forms })
-                            + ' · ' +
-                            window.t(subs === 1 ? 'forms.collections.sub_count_one' : 'forms.collections.sub_count', { n: subs })
-                        )}</span>
-                        <span class="coll-spacer"></span>
-                        <button class="coll-btn" onclick="collStartEdit(${c.id})">${collEsc(window.t('forms.collections.edit'))}</button>
-                        <button class="coll-btn" onclick="collSetClosed(${c.id}, ${closed ? 'false' : 'true'})">${
-                            collEsc(window.t(closed ? 'forms.collections.reopen' : 'forms.collections.close'))}</button>
-                        <button class="coll-btn danger" onclick="collDelete(${c.id})"${canDelete ? '' :
-                            ` disabled title="${collEsc(window.t('forms.collections.has_submissions'))}"`}>${
-                            collEsc(window.t('forms.collections.delete'))}</button>
-                    </div>
-                    ${c.description ? `<div class="coll-desc">${collEsc(c.description)}</div>` : ''}
-                    ${closedOn ? `<div class="coll-meta" style="margin-top:4px">${collEsc(closedOn)}</div>` : ''}
-                    <div class="coll-forms">${formList || collEsc(window.t('forms.collections.no_forms'))}</div>
-                </div>`;
+                return `<tr${closed ? ' class="coll-row-closed"' : ''}>
+                    <td>
+                        <div class="coll-name">${collEsc(c.name)}</div>
+                        ${c.description ? `<div class="coll-desc">${collEsc(c.description)}</div>` : ''}
+                        ${closedOn ? `<div class="coll-meta">${collEsc(closedOn)}</div>` : ''}
+                    </td>
+                    <td class="coll-forms">${formLinks}</td>
+                    <td class="coll-num">${subs}</td>
+                    <td><span class="coll-state ${closed ? 'closed' : 'open'}">${
+                        collEsc(window.t(closed ? 'forms.collections.closed_badge' : 'forms.collections.state_open'))}</span></td>
+                    <td class="coll-actions">
+                        <button class="action-btn" onclick="collOpenModal(${c.id})" title="${collEsc(window.t('forms.collections.edit'))}">${COLL_ICON_EDIT}</button>
+                        <button class="action-btn" onclick="collSetClosed(${c.id}, ${closed ? 'false' : 'true'})" title="${
+                            collEsc(window.t(closed ? 'forms.collections.reopen' : 'forms.collections.close'))}">${
+                            closed ? COLL_ICON_REOPEN : COLL_ICON_CLOSE}</button>
+                        <button class="action-btn delete" onclick="collDelete(${c.id})"${canDelete
+                            ? ` title="${collEsc(window.t('forms.collections.delete'))}"`
+                            : ` disabled title="${collEsc(window.t('forms.collections.has_submissions'))}"`}>${COLL_ICON_DELETE}</button>
+                    </td>
+                </tr>`;
             }).join('');
         }
 
-        function collStartNew() {
-            collEditingId = 0;
-            document.getElementById('collName').value = '';
-            document.getElementById('collDesc').value = '';
-            document.getElementById('collEditor').classList.add('open');
+        /* id 0 = create. One modal for both, because "rename" and "new" differ
+           only in what is already in the boxes. */
+        function collOpenModal(id) {
+            collEditingId = Number(id) || 0;
+            const c = collEditingId ? collections.find(x => Number(x.id) === collEditingId) : null;
+
+            document.getElementById('collModalTitle').textContent =
+                window.t(collEditingId ? 'forms.collections.edit_title' : 'forms.collections.add_title');
+            document.getElementById('collName').value = c ? (c.name || '') : '';
+            document.getElementById('collDesc').value = c ? (c.description || '') : '';
+            document.getElementById('collModal').classList.add('active');
             document.getElementById('collName').focus();
         }
 
-        function collStartEdit(id) {
-            const c = collections.find(x => Number(x.id) === Number(id));
-            if (!c) return;
-            collEditingId = Number(id);
-            document.getElementById('collName').value = c.name || '';
-            document.getElementById('collDesc').value = c.description || '';
-            document.getElementById('collEditor').classList.add('open');
-            document.getElementById('collName').focus();
-        }
-
-        function collCancel() {
-            document.getElementById('collEditor').classList.remove('open');
+        function collCloseModal() {
+            document.getElementById('collModal').classList.remove('active');
             collEditingId = 0;
         }
-
         async function collSave() {
             const name = document.getElementById('collName').value.trim();
             if (!name) { document.getElementById('collName').focus(); return; }
@@ -629,7 +682,7 @@ $translationNamespaces = ['common', 'forms'];
                 const data = await res.json();
                 if (!data.success) { showToast(data.error || window.t('forms.collections.save_failed'), 'error'); return; }
                 showToast(window.t('forms.collections.saved'), 'success');
-                collCancel();
+                collCloseModal();
                 loadCollections();
             } catch (e) {
                 showToast(window.t('forms.collections.save_failed'), 'error');

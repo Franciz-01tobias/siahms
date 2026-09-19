@@ -452,6 +452,15 @@ return [
         'reopen'           => 'Reopen',
         'delete'           => 'Delete',
         'edit'             => 'Rename',
+        /* Table headings. 🌍 One word each where English allows it, but the
+           column they head is what gives them meaning - keep them literal. */
+        'col_forms'        => 'Forms',
+        'col_submissions'  => 'Submissions',
+        'col_status'       => 'Status',
+        'state_open'       => 'Open',
+        'add_title'        => 'New collection',
+        'edit_title'       => 'Rename collection',
+        'no_forms_short'   => 'None',
         'empty'            => 'No collections yet.',
         'empty_hint'       => 'Create one, then pair forms with it from the forms list.',
         'closed_badge'     => 'Closed',
