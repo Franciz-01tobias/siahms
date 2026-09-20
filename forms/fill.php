@@ -31,14 +31,14 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- Shared with the builder preview and the portal: field types + conditional
          visibility. Mirrors includes/form_logic.php, which decides on submit. -->
-    <script src="../assets/js/form-logic.js?v=6"></script>
+    <script src="../assets/js/form-logic.js?v=7"></script>
     <script src="../assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <!-- Presentation shared with the portal and the builder preview: blocks
          (notes, images) and label position. A notice panel and a picture have no
          reason to look different in the three places; an INPUT does. -->
-    <link rel="stylesheet" href="../assets/css/form-shared.css?v=3">
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=4">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -387,6 +387,113 @@ $translationNamespaces = ['common', 'forms'];
             }
         }
 
+        /* ══ A table question ═══════════════════════════════════════════════
+           🔑 A cell is addressed by COLUMN ID (data-col), never by its position
+           in the row. Reordering the columns in the builder must not re-point a
+           single answer already stored, which is the whole reason columns carry
+           a stable id. */
+
+        /** One row of cells. Values, when given, are keyed by column id. */
+        function gridRowHtml(f, cols, values) {
+            const v = values || {};
+            return `<tr>
+                ${cols.map(c => `<td data-col="${c.id}">${gridCellHtml(f.id, c, v[c.id])}</td>`).join('')}
+                <td class="form-grid-rowaction">
+                    <button type="button" class="form-grid-remove" onclick="removeGridRow(this)"
+                            title="${escAttr(window.t('forms.grid.remove_row'))}">&times;</button>
+                </td>
+            </tr>`;
+        }
+
+        /** One cell's control, from the restricted palette a table column may be. */
+        function gridCellHtml(fieldId, c, value) {
+            const val = value === undefined || value === null ? '' : String(value);
+            switch (c.type) {
+                case 'number':
+                    return `<input type="number" step="any" value="${escAttr(val)}">`;
+                case 'datetime':
+                    return `<input type="date" value="${escAttr(val)}">`;
+                case 'checkbox':
+                    return `<input type="checkbox"${val === '1' ? ' checked' : ''}>`;
+                case 'dropdown':
+                    return `<select><option value=""></option>${(c.options || []).map(o =>
+                        `<option value="${escAttr(o)}"${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+                case 'radio':
+                    /* The radio group is scoped to the field, the column AND the
+                       row, or every row's radios would be one group and choosing
+                       in the second row would clear the first. */
+                    return (c.options || []).map((o, n) =>
+                        `<label class="grid-radio"><input type="radio" name="g_${fieldId}_${c.id}_${gridRadioSeq++}"
+                            value="${escAttr(o)}"${o === val ? ' checked' : ''}> ${esc(o)}</label>`).join('');
+                default:
+                    return `<input type="text" value="${escAttr(val)}">`;
+            }
+        }
+        let gridRadioSeq = 0;
+
+        function addGridRow(fieldId) {
+            const wrap = document.querySelector(`.form-grid-field[data-field-id="${fieldId}"]`);
+            if (!wrap) return;
+            const body = wrap.querySelector('tbody');
+            const f    = formData.fields.find(x => Number(x.id) === Number(fieldId));
+            if (!body || !f) return;
+            if (body.rows.length >= 500) {
+                showMsg(window.t('forms.grid.too_many_rows'), 'error');
+                return;
+            }
+            /* ⚠️ Radio groups have to stay unique across rows, and gridRowHtml
+               allocates names from a counter — so the row is built the same way
+               a first row is rather than cloned from an existing one. Cloning
+               would duplicate the name and silently join the two rows' radios. */
+            body.insertAdjacentHTML('beforeend', gridRowHtml(f, FormLogic.gridLiveColumns(f)));
+            applyVisibility();
+        }
+
+        function removeGridRow(btn) {
+            const row  = btn.closest('tr');
+            const body = row && row.parentNode;
+            if (!body) return;
+            // Never leave a table with no rows: an empty one reads as broken and
+            // gives nowhere to type.
+            if (body.rows.length <= 1) {
+                row.querySelectorAll('input, select').forEach(el => {
+                    if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+                    else el.value = '';
+                });
+                return;
+            }
+            row.remove();
+            applyVisibility();
+        }
+
+        /** Every row's answers, keyed by column id. Empty rows are dropped. */
+        function readGridValue(f) {
+            const wrap = document.querySelector(`.form-grid-field[data-field-id="${f.id}"]`);
+            if (!wrap) return null;
+            const rows = [];
+            wrap.querySelectorAll('tbody tr').forEach(tr => {
+                const row = {};
+                let any = false;
+                tr.querySelectorAll('td[data-col]').forEach(td => {
+                    const cid = td.getAttribute('data-col');
+                    const cb  = td.querySelector('input[type="checkbox"]');
+                    if (cb) { row[cid] = cb.checked ? '1' : '0'; if (cb.checked) any = true; return; }
+                    const radio = td.querySelector('input[type="radio"]:checked');
+                    if (radio) { row[cid] = radio.value; any = true; return; }
+                    if (td.querySelector('input[type="radio"]')) { row[cid] = ''; return; }
+                    const el = td.querySelector('input, select');
+                    if (!el) return;
+                    row[cid] = el.value;
+                    if (String(el.value).trim() !== '') any = true;
+                });
+                /* 🔑 A row nobody typed anything into is not an answer. Dropping
+                   it here is what lets a table start with one empty row without
+                   that row becoming a blank record on every submission. */
+                if (any) rows.push(row);
+            });
+            return rows;
+        }
+
         function renderForm() {
             const card = document.getElementById('formCard');
             const alignClass = 'align-' + logoAlignment;
@@ -417,6 +524,37 @@ $translationNamespaces = ['common', 'forms'];
                 switch (f.field_type) {
                     case 'section':
                         return `<div class="form-section" ${wrap}><h2>${esc(f.label)}</h2></div>`;
+                    case 'grid': {
+                        /* A table question: headings, and rows the person adds
+                           as they go. One row is drawn to start with, because an
+                           empty table with an Add button reads as broken.
+                           🔑 Every cell is named by its COLUMN ID, never by its
+                           position — reordering the columns later must not
+                           re-point a single stored answer. */
+                        const gcols = FormLogic.gridLiveColumns(f);
+                        if (!gcols.length) {
+                            return `<div class="form-field" ${wrap} ${reqAttr}>
+                                <label>${esc(f.label)}${reqStar}</label>
+                                <div class="form-grid-empty">${esc(window.t('forms.grid.not_configured'))}</div>
+                            </div>`;
+                        }
+                        return `<div class="form-field form-grid-field" ${wrap} ${reqAttr} data-field-id="${f.id}" data-field-kind="grid">
+                            <label>${esc(f.label)}${reqStar}</label>
+                            <div class="form-grid-wrap">
+                                <table class="form-grid">
+                                    <thead><tr>
+                                        ${gcols.map(c => `<th>${esc(c.label)}${c.required ? '<span class="required-star">*</span>' : ''}</th>`).join('')}
+                                        <th class="form-grid-rowaction"></th>
+                                    </tr></thead>
+                                    <tbody>${gridRowHtml(f, gcols)}</tbody>
+                                </table>
+                            </div>
+                            <div class="form-grid-actions">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="addGridRow(${f.id})">${esc(window.t('forms.grid.add_row'))}</button>
+                            </div>
+                            <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
+                        </div>`;
+                    }
                     case 'image': {
                         /* The picture is fetched BY FIELD ID — the stored path
                            never leaves the server. See api/forms/image.php.
@@ -592,6 +730,22 @@ $translationNamespaces = ['common', 'forms'];
             const wrapper = document.querySelector(`.form-field[data-field-id="${f.id}"]`);
             const el = wrapper ? null : document.querySelector(`[data-field-id="${f.id}"]`);
 
+            if (f.field_type === 'grid') {
+                /* A table's answer is a LIST OF ROWS, each a map of column id to
+                   value — so it is sent as JSON in the one field_value, which is
+                   what the service stores and reads back.
+                   🔑 "Empty" means no row had anything typed into it. A table
+                   starts with one blank row so there is somewhere to type; that
+                   blank row must not make a required table look answered. */
+                const gridValue = readGridValue(f);
+                if (gridValue === null) return null;
+                return {
+                    value: JSON.stringify(gridValue),
+                    isEmpty: gridValue.length === 0,
+                    wrapper: document.querySelector(`.form-grid-field[data-field-id="${f.id}"]`),
+                    el: null
+                };
+            }
             if (f.field_type === 'checkbox') {
                 // Single yes/no toggle — '1' or '0'.
                 if (!el) return null;

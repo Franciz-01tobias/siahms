@@ -261,6 +261,36 @@ document.addEventListener('DOMContentLoaded', function () {
                     return '<div class="cat-section" ' + ctx.wrapAttrs + '><h2>'
                          + esc(f.label || '') + '</h2></div>';
                 }
+                /* A table question. Same shape as the analyst filler and the
+                   same shared table styling — only the surrounding wrapper
+                   differs. Cells are addressed by COLUMN ID, never by position. */
+                if (f.field_type === 'grid') {
+                    var gcols = FormLogic.gridLiveColumns(f);
+                    /* ⚠️ Its OWN caption, not the shared `label` below. Two
+                       reasons: that one is declared further down and using it
+                       here is a temporal-dead-zone throw that takes the whole
+                       form out, and it carries for="fN" pointing at a single
+                       input — which a table does not have. */
+                    var gLabel = '<span class="cat-label">' + esc(f.label || '')
+                               + (f.is_required == 1 ? '<span class="cat-req">*</span>' : '') + '</span>';
+                    if (!gcols.length) {
+                        return '<div class="cat-field" ' + ctx.wrapAttrs + '>' + gLabel
+                             + '<div class="form-grid-empty">' + esc(window.t('forms.grid.not_configured')) + '</div></div>';
+                    }
+                    return '<div class="cat-field form-grid-field" ' + ctx.wrapAttrs
+                         + ' data-field-id="' + f.id + '" data-group="grid">' + gLabel
+                         + '<div class="form-grid-wrap"><table class="form-grid"><thead><tr>'
+                         +   gcols.map(function (c) {
+                                 return '<th>' + esc(c.label)
+                                      + (c.required ? '<span class="cat-req">*</span>' : '') + '</th>';
+                             }).join('')
+                         +   '<th class="form-grid-rowaction"></th></tr></thead>'
+                         +   '<tbody>' + catGridRowHtml(f, gcols) + '</tbody></table></div>'
+                         + '<div class="form-grid-actions">'
+                         +   '<button type="button" class="btn btn-secondary btn-sm" onclick="addCatGridRow(' + f.id + ')">'
+                         +     esc(window.t('forms.grid.add_row')) + '</button>'
+                         + '</div></div>';
+                }
                 /* A picture on the form. Fetched by field id through the same
                    authorising endpoint the analyst side uses — which checks a
                    PORTAL session against the form's own visibility, so an image
@@ -411,6 +441,95 @@ document.addEventListener('DOMContentLoaded', function () {
         // includeHidden is for the evaluator itself, which needs every current answer
         // to decide what should be shown; the submit path leaves hidden fields out,
         // so what is recorded is what the person was actually asked.
+        /* ══ A table question, portal side ══════════════════════════════════
+           The same shape as forms/fill.php's, because it is the same answer
+           going into the same column — a customer's rows and an analyst's must
+           be indistinguishable once stored. */
+
+        function catGridRowHtml(f, cols, values) {
+            var v = values || {};
+            return '<tr>'
+                 + cols.map(function (c) {
+                       return '<td data-col="' + c.id + '">' + catGridCellHtml(f.id, c, v[c.id]) + '</td>';
+                   }).join('')
+                 + '<td class="form-grid-rowaction">'
+                 +   '<button type="button" class="form-grid-remove" onclick="removeCatGridRow(this)" title="'
+                 +   esc(window.t('forms.grid.remove_row')) + '">&times;</button>'
+                 + '</td></tr>';
+        }
+
+        var catGridRadioSeq = 0;
+        function catGridCellHtml(fieldId, c, value) {
+            var val = (value === undefined || value === null) ? '' : String(value);
+            switch (c.type) {
+                case 'number':   return '<input type="number" step="any" value="' + esc(val) + '">';
+                case 'datetime': return '<input type="date" value="' + esc(val) + '">';
+                case 'checkbox': return '<input type="checkbox"' + (val === '1' ? ' checked' : '') + '>';
+                case 'dropdown': return '<select><option value=""></option>'
+                    + (c.options || []).map(function (o) {
+                          return '<option value="' + esc(o) + '"' + (o === val ? ' selected' : '') + '>' + esc(o) + '</option>';
+                      }).join('') + '</select>';
+                case 'radio':
+                    /* Scoped to field + column + ROW, or every row's radios are
+                       one group and choosing in row two clears row one. */
+                    return (c.options || []).map(function (o) {
+                        return '<label class="grid-radio"><input type="radio" name="cg_' + fieldId + '_' + c.id + '_' + (catGridRadioSeq++)
+                             + '" value="' + esc(o) + '"' + (o === val ? ' checked' : '') + '> ' + esc(o) + '</label>';
+                    }).join('');
+                default:         return '<input type="text" value="' + esc(val) + '">';
+            }
+        }
+
+        function addCatGridRow(fieldId) {
+            var wrap = document.querySelector('.form-grid-field[data-field-id="' + fieldId + '"]');
+            if (!wrap || !currentForm) return;
+            var body = wrap.querySelector('tbody');
+            var f = (currentForm.fields || []).find(function (x) { return Number(x.id) === Number(fieldId); });
+            if (!body || !f || body.rows.length >= 500) return;
+            /* Built fresh rather than cloned: cloning would duplicate a radio
+               group's name and silently join the two rows together. */
+            body.insertAdjacentHTML('beforeend', catGridRowHtml(f, FormLogic.gridLiveColumns(f)));
+            applyVisibility();
+        }
+
+        function removeCatGridRow(btn) {
+            var row = btn.closest('tr');
+            var body = row && row.parentNode;
+            if (!body) return;
+            if (body.rows.length <= 1) {
+                // Never leave a table with nowhere to type.
+                row.querySelectorAll('input, select').forEach(function (el) {
+                    if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+                    else el.value = '';
+                });
+                return;
+            }
+            row.remove();
+            applyVisibility();
+        }
+
+        /** Rows keyed by column id. A row nobody typed into is not an answer. */
+        function readCatGridValue(wrap) {
+            var rows = [];
+            wrap.querySelectorAll('tbody tr').forEach(function (tr) {
+                var row = {}, any = false;
+                tr.querySelectorAll('td[data-col]').forEach(function (td) {
+                    var cid = td.getAttribute('data-col');
+                    var cb = td.querySelector('input[type="checkbox"]');
+                    if (cb) { row[cid] = cb.checked ? '1' : '0'; if (cb.checked) any = true; return; }
+                    var picked = td.querySelector('input[type="radio"]:checked');
+                    if (picked) { row[cid] = picked.value; any = true; return; }
+                    if (td.querySelector('input[type="radio"]')) { row[cid] = ''; return; }
+                    var el = td.querySelector('input, select');
+                    if (!el) return;
+                    row[cid] = el.value;
+                    if (String(el.value).trim() !== '') any = true;
+                });
+                if (any) rows.push(row);
+            });
+            return rows;
+        }
+
         function collectAnswers(includeHidden) {
             const data = {};
             document.querySelectorAll('#catForm [data-field-id]').forEach(el => {
@@ -420,7 +539,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (wrap && wrap.classList.contains('is-hidden')) return;
                 }
                 const group = el.getAttribute('data-group');
-                if (group === 'radio') {
+                if (group === 'grid') {
+                    /* A table's answer is a list of rows keyed by column id,
+                       sent as JSON in the one value — the same shape the analyst
+                       filler produces and the service stores.
+                       ⚠️ Handled FIRST because the wrapper also matches the
+                       `el.value` fallback below, which would send "undefined". */
+                    data[id] = JSON.stringify(readCatGridValue(el));
+                } else if (group === 'radio') {
                     const picked = el.querySelector('input[type="radio"]:checked');
                     if (picked) data[id] = picked.value;
                 } else if (group === 'checkboxes') {

@@ -69,13 +69,13 @@ foreach ($formActionDefs as $def) {
     <!-- The builder did NOT load these, which is why it kept its own copy of the
          width list — a third hand-maintained list of the same six numbers. The
          preview now shares the walk with the filler and the portal. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=6"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=7"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
     <!-- Blocks (notes) - shared with the filler and the portal. -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=3">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=4">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -1673,6 +1673,61 @@ foreach ($formActionDefs as $def) {
                                 onchange="setNoteBody(${i}, this.value)">${esc(FormLogic.noteBody(f))}</textarea>
                         </div>`;
 
+                /* A table question's columns.
+                   🔑 Identified by a STABLE ID, never by position or label. That
+                   is what lets a column be reordered, renamed AND retired without
+                   orphaning a single value ever stored against it — the same rule
+                   form_fields already follows for questions, one level down.
+                   🔴 Retiring is a SOFT delete. A retired column is still shown
+                   here, greyed, because its old answers still carry its label and
+                   an author needs to know the id is spoken for. */
+                const gridHtml = f.field_type !== 'grid' ? '' : (() => {
+                    const cols = FormLogic.gridColumns(f);
+                    const live = cols.filter(c => !c.deleted).length;
+                    const rows = cols.map((c, n) => {
+                        const opts = FormLogic.GRID_CELL_TYPES_WITH_OPTIONS.indexOf(c.type) === -1 ? '' : `
+                                <input type="text" class="grid-col-options"
+                                       value="${escAttr((c.options || []).join(', '))}"
+                                       placeholder="${escAttr(window.t('forms.grid.options_ph'))}"
+                                       onchange="setGridColumnOptions(${i}, ${c.id}, this.value)">`;
+                        return `
+                            <div class="grid-col-row${c.deleted ? ' is-retired' : ''}">
+                                <span class="grid-col-move">
+                                    <button type="button" onclick="moveGridColumn(${i}, ${c.id}, -1)" ${n === 0 ? 'disabled' : ''} title="${escAttr(window.t('forms.grid.move_up'))}">&#9650;</button>
+                                    <button type="button" onclick="moveGridColumn(${i}, ${c.id}, 1)" ${n === cols.length - 1 ? 'disabled' : ''} title="${escAttr(window.t('forms.grid.move_down'))}">&#9660;</button>
+                                </span>
+                                <input type="text" class="grid-col-label" value="${escAttr(c.label || '')}"
+                                       placeholder="${escAttr(window.t('forms.grid.label_ph'))}"
+                                       ${c.deleted ? 'disabled' : ''}
+                                       onchange="setGridColumnLabel(${i}, ${c.id}, this.value)">
+                                <select class="grid-col-type" ${c.deleted ? 'disabled' : ''} onchange="setGridColumnType(${i}, ${c.id}, this.value)">
+                                    ${FormLogic.GRID_CELL_TYPES.map(t => `<option value="${esc(t)}"${c.type === t ? ' selected' : ''}>${esc(window.t('forms.grid.celltype_' + t))}</option>`).join('')}
+                                </select>
+                                <label class="grid-col-required">
+                                    <input type="checkbox" ${c.required ? 'checked' : ''} ${c.deleted ? 'disabled' : ''}
+                                           onchange="toggleGridColumnRequired(${i}, ${c.id}, this.checked)">
+                                    ${esc(window.t('forms.grid.required'))}
+                                </label>
+                                ${opts}
+                                <button type="button" class="grid-col-retire"
+                                        onclick="${c.deleted ? `restoreGridColumn(${i}, ${c.id})` : `retireGridColumn(${i}, ${c.id})`}"
+                                        title="${escAttr(window.t(c.deleted ? 'forms.grid.restore' : 'forms.grid.retire'))}">
+                                    ${esc(window.t(c.deleted ? 'forms.grid.restore' : 'forms.grid.retire'))}
+                                </button>
+                            </div>`;
+                    }).join('');
+
+                    return `
+                        <div class="field-grid-settings">
+                            <div class="grid-col-head">${esc(window.t('forms.grid.columns'))}</div>
+                            ${rows || `<div class="grid-col-empty">${esc(window.t('forms.grid.no_columns'))}</div>`}
+                            <div class="grid-col-actions">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="addGridColumn(${i})">${esc(window.t('forms.grid.add_column'))}</button>
+                                <span class="grid-col-count">${esc(window.t('forms.grid.count', { n: live }))}</span>
+                            </div>
+                        </div>`;
+                })();
+
                 /* The picture, and how wide it may draw. The file uploads on
                    choosing it rather than on Save, because an author needs to see
                    what they picked — but what is STORED is only the reference the
@@ -1739,6 +1794,7 @@ foreach ($formActionDefs as $def) {
                         ${optionsHtml}
                         ${noteHtml}
                         ${imageHtml}
+                        ${gridHtml}
                         ${dateModeHtml}${lookupHtml}
                         ${renderConditionEditor(f, i)}
                     </li>`;
@@ -1778,6 +1834,127 @@ foreach ($formActionDefs as $def) {
            not rebuild, so a setting added here survives a save without anything
            being added there. That inversion is exactly what stops a key added
            tomorrow being deleted by somebody opening a form and pressing Save. */
+        /* ══ A table question's columns ═════════════════════════════════════
+           🔑 EVERY ONE OF THESE FINDS ITS COLUMN BY ID, never by index. The
+           array order is the display order and changes when somebody reorders;
+           the id is what a stored answer points at. Looking one up by position
+           would work perfectly until the first drag, then quietly edit the
+           wrong column — and the damage would only surface when an old
+           submission was read back under a heading that had moved. */
+
+        /** The columns array, created on demand so an untouched grid stores nothing. */
+        function gridConfigOf(i) {
+            if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
+            if (!Array.isArray(fields[i].config.columns)) fields[i].config.columns = [];
+            return fields[i].config;
+        }
+
+        function gridColumnById(i, cid) {
+            const cfg = gridConfigOf(i);
+            return cfg.columns.find(c => Number(c.id) === Number(cid)) || null;
+        }
+
+        function addGridColumn(i) {
+            const cfg = gridConfigOf(i);
+            const live = cfg.columns.filter(c => !c.deleted).length;
+            if (live >= 12) {
+                showToast(window.t('forms.grid.too_many'), 'error');
+                return;
+            }
+            /* 🔴 next_column_id NEVER GOES BACKWARDS. Reusing a retired column's
+               id would make its old answers reappear under a new heading — the
+               one failure a soft delete exists to prevent. The server enforces
+               the same rule on save; this keeps the two in step so the builder
+               does not propose an id the service will bump past. */
+            const maxId = cfg.columns.reduce((m, c) => Math.max(m, Number(c.id) || 0), 0);
+            const next  = Math.max(Number(cfg.next_column_id) || 0, maxId + 1);
+            cfg.columns.push({ id: next, label: '', type: 'text', required: false });
+            cfg.next_column_id = next + 1;
+            markDirty(); renderFields(); updatePreview();
+        }
+
+        function setGridColumnLabel(i, cid, val) {
+            const col = gridColumnById(i, cid);
+            if (!col) return;
+            col.label = val;
+            markDirty(); updatePreview();
+        }
+
+        function setGridColumnType(i, cid, val) {
+            const col = gridColumnById(i, cid);
+            if (!col) return;
+            col.type = FormLogic.GRID_CELL_TYPES.indexOf(val) !== -1 ? val : 'text';
+            // Options belong to a dropdown or a radio and nowhere else; dropped
+            // rather than left behind looking meaningful on a text column.
+            if (FormLogic.GRID_CELL_TYPES_WITH_OPTIONS.indexOf(col.type) === -1) delete col.options;
+            markDirty(); renderFields(); updatePreview();
+        }
+
+        function toggleGridColumnRequired(i, cid, val) {
+            const col = gridColumnById(i, cid);
+            if (!col) return;
+            col.required = !!val;
+            markDirty(); updatePreview();
+        }
+
+        function setGridColumnOptions(i, cid, val) {
+            const col = gridColumnById(i, cid);
+            if (!col) return;
+            col.options = String(val || '').split(',').map(s => s.trim()).filter(Boolean);
+            markDirty(); updatePreview();
+        }
+
+        /**
+         * Retire a column — a SOFT delete.
+         *
+         * 🔴 The row is kept, marked, and keeps its id forever. Answers already
+         * given to it still carry that id, and reading one back needs the label
+         * to say what was asked. Hard-deleting the definition would leave those
+         * values pointing at nothing, which is how "a removed question destroyed
+         * every past respondent's answer" happened once already.
+         */
+        async function retireGridColumn(i, cid) {
+            const cfg = gridConfigOf(i);
+            const col = gridColumnById(i, cid);
+            if (!col) return;
+            if (cfg.columns.filter(c => !c.deleted).length <= 1) {
+                showToast(window.t('forms.grid.need_one'), 'error');
+                return;
+            }
+            const ok = await showConfirm({
+                title:   window.t('forms.grid.retire_title'),
+                message: window.t('forms.grid.retire_message', { label: col.label || '' }),
+                okLabel: window.t('forms.grid.retire'),
+                okClass: 'danger'
+            });
+            if (!ok) return;
+            col.deleted = true;
+            markDirty(); renderFields(); updatePreview();
+        }
+
+        function restoreGridColumn(i, cid) {
+            const col = gridColumnById(i, cid);
+            if (!col) return;
+            const live = gridConfigOf(i).columns.filter(c => !c.deleted).length;
+            if (live >= 12) {
+                showToast(window.t('forms.grid.too_many'), 'error');
+                return;
+            }
+            delete col.deleted;
+            markDirty(); renderFields(); updatePreview();
+        }
+
+        /** Reorder. Position is display only — the id is what answers point at. */
+        function moveGridColumn(i, cid, delta) {
+            const cfg = gridConfigOf(i);
+            const at  = cfg.columns.findIndex(c => Number(c.id) === Number(cid));
+            const to  = at + delta;
+            if (at === -1 || to < 0 || to >= cfg.columns.length) return;
+            const [moved] = cfg.columns.splice(at, 1);
+            cfg.columns.splice(to, 0, moved);
+            markDirty(); renderFields(); updatePreview();
+        }
+
         /**
          * Upload a picture for an image block.
          *
@@ -2115,6 +2292,20 @@ foreach ($formActionDefs as $def) {
             preview.innerHTML = html;
         }
 
+        /** One disabled cell in the preview's sample row, by column type. */
+        function gridPreviewCell(c) {
+            switch (c.type) {
+                case 'number':   return '<input type="number" disabled>';
+                case 'datetime': return '<input type="date" disabled>';
+                case 'checkbox': return '<input type="checkbox" disabled>';
+                case 'dropdown': return '<select disabled><option></option>'
+                                      + (c.options || []).map(o => `<option>${esc(o)}</option>`).join('') + '</select>';
+                case 'radio':    return (c.options || []).map(o =>
+                                        `<label class="grid-radio"><input type="radio" disabled> ${esc(o)}</label>`).join('');
+                default:         return '<input type="text" disabled>';
+            }
+        }
+
         /* The markup for one field in the preview, WITHOUT its width wrapper.
            Every branch returns; none of them touches anything outside itself. */
         function previewBody(f) {
@@ -2129,6 +2320,26 @@ foreach ($formActionDefs as $def) {
             switch (f.field_type) {
                 case 'section':
                     return `<div class="preview-section"><h3>${label}</h3>${condFlag}</div>`;
+                case 'grid': {
+                    /* A table question in the preview: the headings and ONE
+                       empty row, so an author sees the shape without the preview
+                       pretending somebody has started filling it in. Retired
+                       columns are not drawn — nobody will be asked them again. */
+                    const gcols = FormLogic.gridLiveColumns(f);
+                    if (!gcols.length) {
+                        return `<div class="preview-field"><label>${label}${condFlag}</label>
+                            <div class="form-grid-empty">${esc(window.t('forms.grid.no_columns'))}</div></div>`;
+                    }
+                    return `<div class="preview-field"><label>${label}${condFlag}</label>
+                        <div class="form-grid-wrap">
+                            <table class="form-grid">
+                                <thead><tr>${gcols.map(c => `<th>${esc(c.label)}${c.required ? '<span class="required-star">*</span>' : ''}</th>`).join('')}</tr></thead>
+                                <tbody><tr>${gcols.map(c => `<td>${gridPreviewCell(c)}</td>`).join('')}</tr></tbody>
+                            </table>
+                        </div>
+                        <div class="form-grid-actions"><button type="button" class="btn btn-secondary btn-sm" disabled>${esc(window.t('forms.grid.add_row'))}</button></div>
+                    </div>`;
+                }
                 case 'image': {
                     /* The builder sits two levels down, hence the different
                        base. An image with nothing uploaded yet shows its empty

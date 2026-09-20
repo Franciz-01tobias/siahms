@@ -458,6 +458,44 @@ return [
         'ex_edit5_text'  => 'Remove the consent checkbox at the bottom.',
     ],
 
+    // ── Table questions: the column editor + the filler ─────────────
+    // A "grid" in the database; a TABLE QUESTION to a person. One question whose
+    // answer is many rows, with the rows added by whoever fills the form in.
+    'grid' => [
+        'columns'      => 'Columns',
+        'add_column'   => 'Add column',
+        'no_columns'   => 'No columns yet — add the first one.',
+        'label_ph'     => 'Column heading',
+        'options_ph'   => 'Choices, separated by commas',
+        'required'     => 'Required',
+        'move_up'      => 'Move up',
+        'move_down'    => 'Move down',
+        'count'        => '{n} columns',
+        'too_many'     => 'A table can have at most 12 columns.',
+        'need_one'     => 'A table needs at least one column.',
+        // Retiring is a SOFT delete: the column keeps its id forever so answers
+        // already given to it still say what they were answering.
+        'retire'         => 'Retire',
+        'restore'        => 'Restore',
+        'retire_title'   => 'Retire this column?',
+        'retire_message' => 'Nobody will be asked "{label}" again, but answers already given to it are kept and still shown on those submissions. You can restore it later.',
+        // The restricted cell palette. A file upload or a signature in a narrow
+        // column is unusable, so a table cell is deliberately one of these six.
+        'celltype_text'     => 'Text',
+        'celltype_number'   => 'Number',
+        'celltype_dropdown' => 'Dropdown',
+        'celltype_radio'    => 'Choose one',
+        'celltype_checkbox' => 'Tick box',
+        'celltype_datetime' => 'Date',
+        // Filling one in
+        'add_row'        => 'Add row',
+        'remove_row'     => 'Remove this row',
+        'too_many_rows'  => 'That is as many rows as this table can take.',
+        // Shown where the table would be, if somebody published the form before
+        // giving it any columns. Says what is wrong rather than drawing nothing.
+        'not_configured' => 'This table has no columns yet.',
+    ],
+
     // ── Image blocks (the builder + all three renderers) ────────────
     'image' => [
         // Shown where the picture would be, both in the builder before one is

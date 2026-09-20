@@ -149,6 +149,48 @@
     var IMAGE_MAX_WIDTHS = [100, 75, 50, 25];
     var IMAGE_MAX_DEFAULT = 100;
 
+    /* ── A table question's columns ──────────────────────────────────────────
+       Mirrors FormsService::GRID_CELL_TYPES. Deliberately RESTRICTED: a file
+       upload or a signature pad in a 200px column is unusable, and per-cell
+       conditional logic is combinatorial. Widening later is easy; narrowing
+       after people have built forms is not. */
+    var GRID_CELL_TYPES = ['text', 'number', 'dropdown', 'radio', 'checkbox', 'datetime'];
+    var GRID_CELL_TYPES_WITH_OPTIONS = ['dropdown', 'radio'];
+
+    /**
+     * A table question's columns AS STORED — retired ones included.
+     *
+     * 🔑 Reading out an old answer needs the retired ones: a value stored
+     * against a withdrawn column must still say what it was, or a submission
+     * from last year silently loses a field. Use gridLiveColumns() for anything
+     * somebody is about to FILL IN.
+     */
+    function gridColumns(field) {
+        var cols = configOf(field).columns;
+        return Array.isArray(cols) ? cols.filter(function (c) { return c && c.id; }) : [];
+    }
+
+    /** The columns still being asked — what a filler draws. */
+    function gridLiveColumns(field) {
+        return gridColumns(field).filter(function (c) { return !c.deleted; });
+    }
+
+    /**
+     * A table question's answer: always a list of rows, each a map of
+     * column id → value.
+     *
+     * ⚠️ Never throws. An unreadable answer should cost its rows, not the form.
+     */
+    function gridRows(raw) {
+        if (raw === null || raw === undefined || raw === '') return [];
+        var parsed = raw;
+        if (typeof raw === 'string') {
+            try { parsed = JSON.parse(raw); } catch (e) { return []; }
+        }
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter(function (r) { return r && typeof r === 'object' && !Array.isArray(r); });
+    }
+
     /** A note's optional longer text, beneath its title. */
     function noteBody(field) {
         var b = configOf(field).note_body;
@@ -392,6 +434,11 @@
         IMAGE_MAX_DEFAULT: IMAGE_MAX_DEFAULT,
         imageUrl: imageUrl,
         imageMaxWidth: imageMaxWidth,
+        GRID_CELL_TYPES: GRID_CELL_TYPES,
+        GRID_CELL_TYPES_WITH_OPTIONS: GRID_CELL_TYPES_WITH_OPTIONS,
+        gridColumns: gridColumns,
+        gridLiveColumns: gridLiveColumns,
+        gridRows: gridRows,
         hasOptions: hasOptions,
         isMultiValue: isMultiValue,
         dateMode: dateMode,
