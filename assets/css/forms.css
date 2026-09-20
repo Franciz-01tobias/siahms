@@ -785,6 +785,37 @@
     margin: 0 0 16px;
 }
 
+/* The preview's 12-column grid. Mirrors .fill-grid in forms/fill.php so the
+   author sees the layout they will actually get — before this, the Preview tab
+   ignored widths entirely and stacked everything full width, which made the one
+   screen whose job is showing you what you built the one screen that did not. */
+.preview-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0 18px;
+    align-items: start;
+}
+/* Anything without a width spans the row, including a type added later. */
+.preview-grid > * { grid-column: span 12; }
+.preview-grid > [data-width="9"] { grid-column: span 9; }
+.preview-grid > [data-width="8"] { grid-column: span 8; }
+.preview-grid > [data-width="6"] { grid-column: span 6; }
+.preview-grid > [data-width="4"] { grid-column: span 4; }
+.preview-grid > [data-width="3"] { grid-column: span 3; }
+
+/* 🔴 ONE COLUMN ON A PHONE, always — the same non-negotiable rule the filler
+   and the portal follow. Equal specificity and later in the file, so it wins
+   without !important. */
+@media (max-width: 768px) {
+    .preview-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .preview-grid > *,
+    .preview-grid > [data-width="9"],
+    .preview-grid > [data-width="8"],
+    .preview-grid > [data-width="6"],
+    .preview-grid > [data-width="4"],
+    .preview-grid > [data-width="3"] { grid-column: span 1; }
+}
+
 .preview-field {
     margin-bottom: 14px;
 }

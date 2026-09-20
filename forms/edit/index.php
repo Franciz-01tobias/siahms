@@ -1910,56 +1910,72 @@ foreach ($formActionDefs as $def) {
             let html = `<img src="<?php echo htmlspecialchars(brandingLogoUrl()); ?>" alt="${escAttr(window.t('forms.preview.logo_alt'))}" class="preview-logo ${alignClass}">`;
             html += `<p class="preview-title">${esc(title)}</p>`;
             if (desc) html += `<p class="preview-desc">${esc(desc)}</p>`;
-            html += fields.map(f => {
-                const reqStar = f.is_required ? '<span class="required-star">*</span>' : '';
-                const label = esc(f.label || window.t('forms.field.untitled_field'));
-                // Conditional fields are SHOWN here, with a marker, rather than
-                // evaluated. Nothing has been answered in a preview, so every
-                // condition would be false and the form would look broken — the
-                // author needs to see what they have built, not an empty page.
-                const condFlag = (f.config && f.config.visible_if && f.config.visible_if.rules.length)
-                    ? `<span class="preview-cond" title="${escAttr(window.t('forms.preview.conditional_hint'))}">${esc(window.t('forms.preview.conditional'))}</span>` : '';
-                switch (f.field_type) {
-                    case 'section':
-                        return `<div class="preview-section"><h3>${label}</h3>${condFlag}</div>`;
-                    case 'text':
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="text" disabled placeholder="${escAttr(window.t('forms.preview.text_ph'))}"></div>`;
-                    case 'textarea':
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><textarea disabled placeholder="${escAttr(window.t('forms.preview.textarea_ph'))}"></textarea></div>`;
-                    case 'email':
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="email" disabled placeholder="${escAttr(window.t('forms.preview.email_ph'))}"></div>`;
-                    case 'number':
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="number" disabled placeholder="${escAttr(window.t('forms.preview.number_ph'))}"></div>`;
-                    case 'lookup':
-                        // Preview only — the real control searches live records.
-                        html += `<input type="text" disabled placeholder="${esc(window.t('forms.fill.lookup_placeholder'))}">`;
-                        break;
-                    case 'datetime': {
-                        const m = dateModeOf(f);
-                        const t = m === 'time' ? 'time' : (m === 'datetime' ? 'datetime-local' : 'date');
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="${t}" disabled></div>`;
-                    }
-                    case 'checkbox':
-                        return `<div class="preview-field"><div class="checkbox-row"><input type="checkbox" disabled> <label>${label}${reqStar}${condFlag}</label></div></div>`;
-                    case 'dropdown': {
-                        const opts = (f.options || []).filter(o => o).map(o => `<option>${esc(o)}</option>`).join('');
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><select disabled><option value="">${esc(window.t('forms.preview.select_ph'))}</option>${opts}</select></div>`;
-                    }
-                    case 'radio': {
-                        const items = (f.options || []).filter(o => o).map(o =>
-                            `<div class="checkbox-row"><input type="radio" disabled> <label>${esc(o)}</label></div>`).join('');
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label>${items || '<small style="color:var(--text-faint, #999)">' + esc(window.t('forms.preview.no_options')) + '</small>'}</div>`;
-                    }
-                    case 'checkboxes': {
-                        const items = (f.options || []).filter(o => o).map(o =>
-                            `<div class="checkbox-row"><input type="checkbox" disabled> <label>${esc(o)}</label></div>`).join('');
-                        return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label>${items || '<small style="color:var(--text-faint, #999)">' + esc(window.t('forms.preview.no_options')) + '</small>'}</div>`;
-                    }
-                    default:
-                        return '';
-                }
-            }).join('');
+            /* 🔑 ONE wrap for every field type, the same trick forms/fill.php uses:
+               the width is applied HERE, once, so it covers all eleven types and
+               any added later. Applying it inside the switch would be eleven edits
+               and the twelfth type would silently render full width. */
+            html += '<div class="preview-grid">' + fields.map(f => {
+                const body = previewBody(f);
+                return body ? `<div class="preview-slot" data-width="${widthOf(f)}">${body}</div>` : '';
+            }).join('') + '</div>';
             preview.innerHTML = html;
+        }
+
+        /* The markup for one field in the preview, WITHOUT its width wrapper.
+           Every branch returns; none of them touches anything outside itself. */
+        function previewBody(f) {
+            const reqStar = f.is_required ? '<span class="required-star">*</span>' : '';
+            const label = esc(f.label || window.t('forms.field.untitled_field'));
+            // Conditional fields are SHOWN here, with a marker, rather than
+            // evaluated. Nothing has been answered in a preview, so every
+            // condition would be false and the form would look broken — the
+            // author needs to see what they have built, not an empty page.
+            const condFlag = (f.config && f.config.visible_if && f.config.visible_if.rules.length)
+                ? `<span class="preview-cond" title="${escAttr(window.t('forms.preview.conditional_hint'))}">${esc(window.t('forms.preview.conditional'))}</span>` : '';
+            switch (f.field_type) {
+                case 'section':
+                    return `<div class="preview-section"><h3>${label}</h3>${condFlag}</div>`;
+                case 'text':
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="text" disabled placeholder="${escAttr(window.t('forms.preview.text_ph'))}"></div>`;
+                case 'textarea':
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><textarea disabled placeholder="${escAttr(window.t('forms.preview.textarea_ph'))}"></textarea></div>`;
+                case 'email':
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="email" disabled placeholder="${escAttr(window.t('forms.preview.email_ph'))}"></div>`;
+                case 'number':
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="number" disabled placeholder="${escAttr(window.t('forms.preview.number_ph'))}"></div>`;
+                case 'lookup':
+                    // Preview only — the real control searches live records.
+                    // ⚠️ This branch used to do `html += ...; break;` inside a
+                    // .map() where every other branch returns — so a lookup was
+                    // INVISIBLE in the preview. `html += fields.map(...)` reads
+                    // html BEFORE running the map, so the append made during it
+                    // was overwritten by the assignment that followed. The field
+                    // did not move or render wrong; it silently vanished.
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="text" disabled placeholder="${escAttr(window.t('forms.fill.lookup_placeholder'))}"></div>`;
+                case 'datetime': {
+                    const m = dateModeOf(f);
+                    const t = m === 'time' ? 'time' : (m === 'datetime' ? 'datetime-local' : 'date');
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="${t}" disabled></div>`;
+                }
+                case 'checkbox':
+                    return `<div class="preview-field"><div class="checkbox-row"><input type="checkbox" disabled> <label>${label}${reqStar}${condFlag}</label></div></div>`;
+                case 'dropdown': {
+                    const opts = (f.options || []).filter(o => o).map(o => `<option>${esc(o)}</option>`).join('');
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><select disabled><option value="">${esc(window.t('forms.preview.select_ph'))}</option>${opts}</select></div>`;
+                }
+                case 'radio': {
+                    const items = (f.options || []).filter(o => o).map(o =>
+                        `<div class="checkbox-row"><input type="radio" disabled> <label>${esc(o)}</label></div>`).join('');
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label>${items || '<small style="color:var(--text-faint, #999)">' + esc(window.t('forms.preview.no_options')) + '</small>'}</div>`;
+                }
+                case 'checkboxes': {
+                    const items = (f.options || []).filter(o => o).map(o =>
+                        `<div class="checkbox-row"><input type="checkbox" disabled> <label>${esc(o)}</label></div>`).join('');
+                    return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label>${items || '<small style="color:var(--text-faint, #999)">' + esc(window.t('forms.preview.no_options')) + '</small>'}</div>`;
+                }
+                default:
+                    return '';
+            }
         }
 
         // ===== Save =====
