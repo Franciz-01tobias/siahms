@@ -1778,12 +1778,23 @@ body {
        slide from, so it rises and fades instead. */
     transform: translateY(14px) scale(0.995);
     opacity: 0;
-    transition: opacity 0.18s ease, transform 0.18s ease;
+    /* 🔴 opacity:0 hides this window but STILL TAKES THE CLICKS. Unlike the
+       drawer, which closes by sliding itself off the screen, the closed large
+       window is still lying across 94% of the viewport at z-index 1000 — so
+       without these two lines every click on the board behind it is swallowed,
+       and the only way out is a page reload. It looked like "the board stops
+       responding after you delete a task", because closeDetailPanel() leaves
+       `as-modal` on the element and only removes `open`. */
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
 }
 /* Three classes, so this beats `.detail-panel.open`'s translateX(0). */
 .detail-panel.as-modal.open {
     transform: none;
     opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
 
 /* Two columns: prose on the left with room to breathe, the short fields
