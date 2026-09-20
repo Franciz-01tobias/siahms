@@ -38,7 +38,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Presentation shared with the portal and the builder preview: blocks
          (notes, images) and label position. A notice panel and a picture have no
          reason to look different in the three places; an INPUT does. -->
-    <link rel="stylesheet" href="../assets/css/form-shared.css?v=4">
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=5">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -398,8 +398,8 @@ $translationNamespaces = ['common', 'forms'];
             const v = values || {};
             return `<tr>
                 ${cols.map(c => `<td data-col="${c.id}">${gridCellHtml(f.id, c, v[c.id])}</td>`).join('')}
-                <td class="form-grid-rowaction">
-                    <button type="button" class="form-grid-remove" onclick="removeGridRow(this)"
+                <td class="form-table-rowaction">
+                    <button type="button" class="form-table-remove" onclick="removeGridRow(this)"
                             title="${escAttr(window.t('forms.grid.remove_row'))}">&times;</button>
                 </td>
             </tr>`;
@@ -432,7 +432,7 @@ $translationNamespaces = ['common', 'forms'];
         let gridRadioSeq = 0;
 
         function addGridRow(fieldId) {
-            const wrap = document.querySelector(`.form-grid-field[data-field-id="${fieldId}"]`);
+            const wrap = document.querySelector(`.form-table-field[data-field-id="${fieldId}"]`);
             if (!wrap) return;
             const body = wrap.querySelector('tbody');
             const f    = formData.fields.find(x => Number(x.id) === Number(fieldId));
@@ -468,7 +468,7 @@ $translationNamespaces = ['common', 'forms'];
 
         /** Every row's answers, keyed by column id. Empty rows are dropped. */
         function readGridValue(f) {
-            const wrap = document.querySelector(`.form-grid-field[data-field-id="${f.id}"]`);
+            const wrap = document.querySelector(`.form-table-field[data-field-id="${f.id}"]`);
             if (!wrap) return null;
             const rows = [];
             wrap.querySelectorAll('tbody tr').forEach(tr => {
@@ -535,21 +535,21 @@ $translationNamespaces = ['common', 'forms'];
                         if (!gcols.length) {
                             return `<div class="form-field" ${wrap} ${reqAttr}>
                                 <label>${esc(f.label)}${reqStar}</label>
-                                <div class="form-grid-empty">${esc(window.t('forms.grid.not_configured'))}</div>
+                                <div class="form-table-empty">${esc(window.t('forms.grid.not_configured'))}</div>
                             </div>`;
                         }
-                        return `<div class="form-field form-grid-field" ${wrap} ${reqAttr} data-field-id="${f.id}" data-field-kind="grid">
+                        return `<div class="form-field form-table-field" ${wrap} ${reqAttr} data-field-id="${f.id}" data-field-kind="grid">
                             <label>${esc(f.label)}${reqStar}</label>
-                            <div class="form-grid-wrap">
-                                <table class="form-grid">
+                            <div class="form-table-wrap">
+                                <table class="form-table">
                                     <thead><tr>
                                         ${gcols.map(c => `<th>${esc(c.label)}${c.required ? '<span class="required-star">*</span>' : ''}</th>`).join('')}
-                                        <th class="form-grid-rowaction"></th>
+                                        <th class="form-table-rowaction"></th>
                                     </tr></thead>
                                     <tbody>${gridRowHtml(f, gcols)}</tbody>
                                 </table>
                             </div>
-                            <div class="form-grid-actions">
+                            <div class="form-table-actions">
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="addGridRow(${f.id})">${esc(window.t('forms.grid.add_row'))}</button>
                             </div>
                             <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
@@ -742,7 +742,7 @@ $translationNamespaces = ['common', 'forms'];
                 return {
                     value: JSON.stringify(gridValue),
                     isEmpty: gridValue.length === 0,
-                    wrapper: document.querySelector(`.form-grid-field[data-field-id="${f.id}"]`),
+                    wrapper: document.querySelector(`.form-table-field[data-field-id="${f.id}"]`),
                     el: null
                 };
             }

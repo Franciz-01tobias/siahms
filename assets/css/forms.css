@@ -1241,12 +1241,30 @@
     color: var(--text-muted, #666);
 }
 
+/* 🔴 A GRID, not a flex row, so every column's controls line up down the list.
+   As flex with an elastic label, a row WITHOUT a choices box (a text, number,
+   tick box or date column) let its label absorb the free space and shoved its
+   type picker far to the right of the rows that had one — so a table mixing a
+   dropdown with a number looked broken. Reported by Ed within minutes of first
+   building one, which is exactly the kind of thing a rendering test does not
+   catch: every element was present and correct, and the arrangement was wrong.
+
+   Fixed tracks: reorder ▲▼ · heading · type · required · choices · retire. The
+   choices cell stays empty rather than collapsing, which is what holds the
+   alignment for the rows that do not have one. */
 .grid-col-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(120px, 1.2fr) 120px auto minmax(0, 1.4fr) auto;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
     padding: 4px 0;
+}
+
+/* Below the editor's comfortable width the six tracks stop fitting, so the row
+   wraps to a simple stack rather than squeezing every control to nothing. */
+@media (max-width: 1100px) {
+    .grid-col-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .grid-col-row .grid-col-options { grid-column: 2 / -1; }
 }
 
 .grid-col-row.is-retired {
@@ -1266,8 +1284,13 @@
 }
 .grid-col-move button:disabled { opacity: 0.35; cursor: default; }
 
-.grid-col-label   { flex: 1 1 160px; min-width: 120px; }
-.grid-col-options { flex: 1 1 200px; min-width: 140px; }
+/* The grid gives these their widths now; min-width only stops a very narrow
+   editor squeezing them to nothing. */
+.grid-col-label   { min-width: 0; }
+.grid-col-options { min-width: 0; }
+/* The placeholder that holds the choices track open on a column type that has
+   no choices. Occupies its cell and draws nothing. */
+.grid-col-options.is-na { display: block; }
 
 .grid-col-row input[type="text"],
 .grid-col-row select {

@@ -75,7 +75,7 @@ foreach ($formActionDefs as $def) {
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
     <!-- Blocks (notes) - shared with the filler and the portal. -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=4">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=5">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -1694,8 +1694,14 @@ foreach ($formActionDefs as $def) {
                     const cols = FormLogic.gridColumns(f);
                     const live = cols.filter(c => !c.deleted).length;
                     const rows = cols.map((c, n) => {
-                        const opts = FormLogic.GRID_CELL_TYPES_WITH_OPTIONS.indexOf(c.type) === -1 ? '' : `
-                                <input type="text" class="grid-col-options"
+                        /* ⚠️ An EMPTY PLACEHOLDER when the type takes no choices,
+                           not nothing at all. The row is a fixed six-track grid,
+                           so an absent cell would pull the Retire button left
+                           into the choices track and only on the rows without
+                           one — which is the ragged alignment this replaced. */
+                        const opts = FormLogic.GRID_CELL_TYPES_WITH_OPTIONS.indexOf(c.type) === -1
+                            ? '<span class="grid-col-options is-na"></span>'
+                            : `<input type="text" class="grid-col-options"
                                        value="${escAttr((c.options || []).join(', '))}"
                                        placeholder="${escAttr(window.t('forms.grid.options_ph'))}"
                                        onchange="setGridColumnOptions(${i}, ${c.id}, this.value)">`;
@@ -2337,16 +2343,16 @@ foreach ($formActionDefs as $def) {
                     const gcols = FormLogic.gridLiveColumns(f);
                     if (!gcols.length) {
                         return `<div class="preview-field"><label>${label}${condFlag}</label>
-                            <div class="form-grid-empty">${esc(window.t('forms.grid.no_columns'))}</div></div>`;
+                            <div class="form-table-empty">${esc(window.t('forms.grid.no_columns'))}</div></div>`;
                     }
                     return `<div class="preview-field"><label>${label}${condFlag}</label>
-                        <div class="form-grid-wrap">
-                            <table class="form-grid">
+                        <div class="form-table-wrap">
+                            <table class="form-table">
                                 <thead><tr>${gcols.map(c => `<th>${esc(c.label)}${c.required ? '<span class="required-star">*</span>' : ''}</th>`).join('')}</tr></thead>
                                 <tbody><tr>${gcols.map(c => `<td>${gridPreviewCell(c)}</td>`).join('')}</tr></tbody>
                             </table>
                         </div>
-                        <div class="form-grid-actions"><button type="button" class="btn btn-secondary btn-sm" disabled>${esc(window.t('forms.grid.add_row'))}</button></div>
+                        <div class="form-table-actions"><button type="button" class="btn btn-secondary btn-sm" disabled>${esc(window.t('forms.grid.add_row'))}</button></div>
                     </div>`;
                 }
                 case 'image': {

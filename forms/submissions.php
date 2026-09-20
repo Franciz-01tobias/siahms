@@ -42,10 +42,10 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/form-pdf.js?v=2"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <!-- The detail panel draws a table QUESTION as a real table, and .form-grid
+    <!-- The detail panel draws a table QUESTION as a real table, and .form-table
          lives in the shared sheet. Without this the markup is right and the
          table renders unstyled - borderless rows running into each other. -->
-    <link rel="stylesheet" href="../assets/css/form-shared.css?v=4">
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=5">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -719,7 +719,7 @@ $translationNamespaces = ['common', 'forms'];
                        heading is marked rather than dropped. */
                     html += p.empty
                         ? `<div class="detail-field-value empty">${esc(window.t('forms.subs.no_response'))}</div>`
-                        : `<div class="detail-field-value"><div class="form-grid-wrap"><table class="form-grid">
+                        : `<div class="detail-field-value"><div class="form-table-wrap"><table class="form-table">
                                <thead><tr>${p.columns.map(c => `<th>${esc(c.label)}${c.deleted
                                    ? ` <span class="col-retired" title="${escAttr(window.t('forms.subs.retired_hint'))}">${esc(window.t('forms.subs.retired'))}</span>` : ''}</th>`).join('')}</tr></thead>
                                <tbody>${p.rows.map(r => `<tr>${p.columns.map(c =>

@@ -275,18 +275,18 @@ document.addEventListener('DOMContentLoaded', function () {
                                + (f.is_required == 1 ? '<span class="cat-req">*</span>' : '') + '</span>';
                     if (!gcols.length) {
                         return '<div class="cat-field" ' + ctx.wrapAttrs + '>' + gLabel
-                             + '<div class="form-grid-empty">' + esc(window.t('forms.grid.not_configured')) + '</div></div>';
+                             + '<div class="form-table-empty">' + esc(window.t('forms.grid.not_configured')) + '</div></div>';
                     }
-                    return '<div class="cat-field form-grid-field" ' + ctx.wrapAttrs
+                    return '<div class="cat-field form-table-field" ' + ctx.wrapAttrs
                          + ' data-field-id="' + f.id + '" data-group="grid">' + gLabel
-                         + '<div class="form-grid-wrap"><table class="form-grid"><thead><tr>'
+                         + '<div class="form-table-wrap"><table class="form-table"><thead><tr>'
                          +   gcols.map(function (c) {
                                  return '<th>' + esc(c.label)
                                       + (c.required ? '<span class="cat-req">*</span>' : '') + '</th>';
                              }).join('')
-                         +   '<th class="form-grid-rowaction"></th></tr></thead>'
+                         +   '<th class="form-table-rowaction"></th></tr></thead>'
                          +   '<tbody>' + catGridRowHtml(f, gcols) + '</tbody></table></div>'
-                         + '<div class="form-grid-actions">'
+                         + '<div class="form-table-actions">'
                          +   '<button type="button" class="btn btn-secondary btn-sm" onclick="addCatGridRow(' + f.id + ')">'
                          +     esc(window.t('forms.grid.add_row')) + '</button>'
                          + '</div></div>';
@@ -400,7 +400,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 + '<div class="cat-form">'
                 +   '<h1>' + esc(form.title || '') + '</h1>'
                 +   (form.description ? '<div class="cat-form-desc">' + esc(form.description) + '</div>' : '')
-                +   '<form id="catForm" class="cat-form-grid" onsubmit="return false;">' + fields + '</form>'
+                +   '<form id="catForm" class="cat-form-table" onsubmit="return false;">' + fields + '</form>'
                 +   '<div class="cat-actions">'
                 +     '<button type="button" class="btn btn-primary" id="catSubmit" onclick="submitForm(' + form.id + ')">'
                 +       esc(window.t('self-service.catalogue.submit')) + '</button>'
@@ -452,8 +452,8 @@ document.addEventListener('DOMContentLoaded', function () {
                  + cols.map(function (c) {
                        return '<td data-col="' + c.id + '">' + catGridCellHtml(f.id, c, v[c.id]) + '</td>';
                    }).join('')
-                 + '<td class="form-grid-rowaction">'
-                 +   '<button type="button" class="form-grid-remove" onclick="removeCatGridRow(this)" title="'
+                 + '<td class="form-table-rowaction">'
+                 +   '<button type="button" class="form-table-remove" onclick="removeCatGridRow(this)" title="'
                  +   esc(window.t('forms.grid.remove_row')) + '">&times;</button>'
                  + '</td></tr>';
         }
@@ -481,7 +481,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         function addCatGridRow(fieldId) {
-            var wrap = document.querySelector('.form-grid-field[data-field-id="' + fieldId + '"]');
+            var wrap = document.querySelector('.form-table-field[data-field-id="' + fieldId + '"]');
             if (!wrap || !currentForm) return;
             var body = wrap.querySelector('tbody');
             var f = (currentForm.fields || []).find(function (x) { return Number(x.id) === Number(fieldId); });
