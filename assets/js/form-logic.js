@@ -109,6 +109,21 @@
     var NOTE_STYLES = ['plain', 'info', 'warning', 'danger', 'success'];
     var NOTE_STYLE_DEFAULT = 'info';
 
+    /**
+     * Where a question's label sits. Mirrors FormsService::LABEL_POSITIONS.
+     *
+     * Anything off the list falls back to 'above' rather than being trusted
+     * through — the service refuses a bad value on save, but a hand-edited row
+     * can still carry one, and an unknown position would reach the DOM as an
+     * attribute selector matching no rule.
+     */
+    function labelPosition(field) {
+        var p = configOf(field).label_position;
+        return LABEL_POSITIONS.indexOf(p) !== -1 ? p : LABEL_POSITION_DEFAULT;
+    }
+    var LABEL_POSITIONS = ['above', 'beside'];
+    var LABEL_POSITION_DEFAULT = 'above';
+
     /** A note's optional longer text, beneath its title. */
     function noteBody(field) {
         var b = configOf(field).note_body;
@@ -345,6 +360,9 @@
         NOTE_STYLE_DEFAULT: NOTE_STYLE_DEFAULT,
         noteStyle: noteStyle,
         noteBody: noteBody,
+        LABEL_POSITIONS: LABEL_POSITIONS,
+        LABEL_POSITION_DEFAULT: LABEL_POSITION_DEFAULT,
+        labelPosition: labelPosition,
         hasOptions: hasOptions,
         isMultiValue: isMultiValue,
         dateMode: dateMode,

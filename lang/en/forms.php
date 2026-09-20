@@ -222,6 +222,12 @@ return [
         'datetime'   => 'Date / time',
         'section'    => 'Section',
         'note'       => 'Note',
+        /* ⚠️ MISSING until #1823, so every lookup field's badge in the builder
+           read the literal text "forms.typename.lookup". i18n surfaces the key
+           on a miss by design, and 'lookup' was on the builder's known-types
+           list — so it asked for a name that had never been written. Found by
+           driving the type list rather than by looking at the screen. */
+        'lookup'     => 'Lookup',
         // The badge shows the MODE, so a glance down the field list tells you what
         // each date field actually asks for without opening it.
         'date_date'     => 'Date',
@@ -261,6 +267,14 @@ return [
         'width_4'          => 'Third',
         'width_3'          => 'Quarter',
         'width_hint'       => 'Fields narrower than the full row sit side by side, up to a full line. Everything is full width on a phone.',
+        /* Where a question's label sits. "Beside" is what turns two half-width
+           questions into a row reading | First name | [input] | Surname | [input] |
+           which is the shape a paper form usually wants. */
+        'label_pos'        => 'Label',
+        'label_pos_above'  => 'Above',
+        'label_pos_beside' => 'Beside',
+        'label_pos_hint'   => 'Where the label sits. Beside puts it on the same line as the answer box, which is how a printed form usually reads. Labels go back above on a phone.',
+
         /* A note's appearance. 🔴 NAMES, never colours — each resolves to theme
            tokens defined for both light and dark mode, which is not something a
            form author can be asked to get right by picking a value. The names

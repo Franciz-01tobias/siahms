@@ -60,13 +60,21 @@
                layout the two are identical — the derivation reads the field's own
                width — but once a form has been laid out deliberately, where a
                question sits is a property of the LAYOUT and must win. */
+            /* 🔑 EVERYTHING THAT APPLIES TO EVERY FIELD TYPE GOES IN HERE, ONCE.
+               The width covered all eleven types from one line for this reason,
+               and the label position now does the same across all three
+               surfaces. Putting either inside a surface's switch would be eleven
+               edits per surface and a silently unstyled twelfth type. */
+            var pos = global.FormLogic ? global.FormLogic.labelPosition(cell.field) : 'above';
             var ctx = {
                 width: cell.width,
+                labelPosition: pos,
                 /* data-wrap-id is deliberately separate from data-field-id, which
                    the value-reading code uses with two different meanings (on the
                    input for simple types, on the wrapper for groups). Conditional
                    visibility only ever looks for data-wrap-id. */
                 wrapAttrs: 'data-wrap-id="' + cell.field.id + '" data-width="' + cell.width + '"'
+                         + (pos === 'above' ? '' : ' data-label-pos="' + pos + '"')
             };
 
             var markup = surface.field(cell.field, ctx);

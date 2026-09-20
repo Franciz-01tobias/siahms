@@ -142,7 +142,7 @@ $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal')
     <!-- Form blocks (notes). In the HEAD rather than beside form-logic.js in the
          footer: a stylesheet in the body risks a flash of unstyled content, and
          $needsFormLogic is set by the page long before this include runs. -->
-    <link rel="stylesheet" href="../assets/css/form-blocks.css?v=1">
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=2">
 <?php endif; ?>
     <?php if ($pageStyles !== ''): ?>
     <style><?php echo $pageStyles; ?></style>

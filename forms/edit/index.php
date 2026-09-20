@@ -69,13 +69,13 @@ foreach ($formActionDefs as $def) {
     <!-- The builder did NOT load these, which is why it kept its own copy of the
          width list — a third hand-maintained list of the same six numbers. The
          preview now shares the walk with the filler and the portal. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=4"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=2"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=5"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
     <!-- Blocks (notes) - shared with the filler and the portal. -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-blocks.css?v=1">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=2">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -438,10 +438,13 @@ foreach ($formActionDefs as $def) {
 
         /* Sits with the Required toggle in the field header. Deliberately
            quiet: it is a layout detail, not a property of the question. */
+        /* Same treatment as the width picker beside it - consistency over bespoke. */
+        .field-labelpos-picker,
         .field-width-picker {
             display: inline-flex; align-items: center; gap: 6px;
             font-size: 12px; color: var(--text-muted, #666); white-space: nowrap;
         }
+        .field-labelpos-picker select,
         .field-width-picker select {
             padding: 3px 6px; font-size: 12px; font-family: inherit;
             border: 1px solid var(--border, #ddd); border-radius: 4px;
@@ -1665,6 +1668,17 @@ foreach ($formActionDefs as $def) {
                                 onchange="setNoteBody(${i}, this.value)">${esc(FormLogic.noteBody(f))}</textarea>
                         </div>`;
 
+                /* Where the label sits. Offered only on questions: a block has no
+                   control for its text to sit beside, and a picker that does
+                   nothing is worse than no picker. */
+                const labelPosSel = !FormLogic.isAnswerable(f.field_type) ? '' : `
+                                <label class="field-labelpos-picker" title="${escAttr(window.t('forms.field.label_pos_hint'))}">
+                                    ${esc(window.t('forms.field.label_pos'))}
+                                    <select onchange="setLabelPosition(${i}, this.value)">
+                                        ${FormLogic.LABEL_POSITIONS.map(p => `<option value="${esc(p)}"${FormLogic.labelPosition(f) === p ? ' selected' : ''}>${esc(window.t('forms.field.label_pos_' + p))}</option>`).join('')}
+                                    </select>
+                                </label>`;
+
                 /* Width applies to everything, including a heading — a heading
                    spanning half a row beside another is a real layout. */
                 const widthSel = `
@@ -1689,6 +1703,7 @@ foreach ($formActionDefs as $def) {
                             <input type="text" class="field-label-input" value="${esc(f.label)}" placeholder="${escAttr(isSection(f.field_type) ? window.t('forms.field.section_ph') : window.t('forms.field.label_ph'))}" onchange="updateLabel(${i}, this.value)">
                             <div class="field-controls">
                                 ${widthSel}
+                                ${labelPosSel}
                                 ${requiredToggle}
                                 <button class="field-delete-btn" onclick="deleteField(${i})" title="${escAttr(window.t('forms.field.remove_field'))}">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -1736,6 +1751,19 @@ foreach ($formActionDefs as $def) {
            not rebuild, so a setting added here survives a save without anything
            being added there. That inversion is exactly what stops a key added
            tomorrow being deleted by somebody opening a form and pressing Save. */
+        function setLabelPosition(i, val) {
+            if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
+            /* 'above' is the DEFAULT, so it is removed rather than stored — the
+               same rule full width follows, and for the same reasons: `config`
+               stays empty for a form that never asked, and the default lives in
+               one place instead of copied into every row. */
+            if (val === FormLogic.LABEL_POSITION_DEFAULT || FormLogic.LABEL_POSITIONS.indexOf(val) === -1) {
+                delete fields[i].config.label_position;
+            } else {
+                fields[i].config.label_position = val;
+            }
+            markDirty(); renderFields(); updatePreview();
+        }
         function setNoteStyle(i, val) {
             if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
             fields[i].config.note_style = FormLogic.NOTE_STYLES.indexOf(val) !== -1
@@ -1994,7 +2022,11 @@ foreach ($formActionDefs as $def) {
                    without the data-wrap-id the two live surfaces need. */
                 field: (f, ctx) => {
                     const body = previewBody(f);
-                    return body ? `<div class="preview-slot" data-width="${ctx.width}">${body}</div>` : null;
+                    /* data-label-pos, but still not data-wrap-id: the preview has
+                       no conditional visibility to drive, and it DOES have to show
+                       the author where their labels will sit. */
+                    const pos = ctx.labelPosition === 'above' ? '' : ` data-label-pos="${escAttr(ctx.labelPosition)}"`;
+                    return body ? `<div class="preview-slot" data-width="${ctx.width}"${pos}>${body}</div>` : null;
                 }
             }) + '</div>';
             preview.innerHTML = html;

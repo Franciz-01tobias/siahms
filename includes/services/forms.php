@@ -87,6 +87,22 @@ class FormsService
     /** How long a note's optional body may be. An abuse ceiling, not a feature. */
     const NOTE_BODY_MAX = 4000;
 
+    /**
+     * Where a question's label sits relative to its control.
+     *
+     * 'above' is what every form has always done and stays the default, so
+     * absent means unchanged and nothing needed migrating. 'beside' is what
+     * produces a row reading `| First name | [input] | Surname | [input] |`
+     * without any cell editor: two half-width questions with the label beside
+     * give exactly that, which is the shape a paper form usually wants.
+     *
+     * 🔴 BESIDE COLLAPSES TO ABOVE ON A PHONE, always. A label beside an input
+     * at 360px leaves roughly 200px for the control — the same objection that
+     * makes every width full on a phone, for the same reason.
+     */
+    const LABEL_POSITIONS = ['above', 'beside'];
+    const LABEL_POSITION_DEFAULT = 'above';
+
     /** Does this field type collect an answer? */
     public static function isAnswerable(?string $type): bool
     {
@@ -2171,6 +2187,30 @@ class FormsService
                 $config['width'] = (int)$w;
             }
         }
+        /* Where the label sits. Applies to anything with a label to place, which
+           is every ANSWERABLE type — a presentational block has no control for
+           its text to sit beside, so the setting is dropped there rather than
+           stored meaning nothing.
+
+           Absent stays absent rather than being written as 'above', for the same
+           reason a full-width field stores no width: it keeps `config` empty for
+           the forms that never asked, and keeps the default in one place. */
+        if (self::isAnswerable($type)) {
+            if (array_key_exists('label_position', $config)) {
+                $lp = $config['label_position'];
+                if ($lp === null || $lp === '' || $lp === self::LABEL_POSITION_DEFAULT) {
+                    unset($config['label_position']);
+                } elseif (!in_array($lp, self::LABEL_POSITIONS, true)) {
+                    throw new ServiceError('validation', 'invalid_field',
+                        "fields[{$i}]: unknown label_position '{$lp}'. One of: " . implode(', ', self::LABEL_POSITIONS) . '.');
+                } else {
+                    $config['label_position'] = $lp;
+                }
+            }
+        } else {
+            unset($config['label_position']);
+        }
+
         /* A note's appearance and its optional longer text. Both belong to a
            'note' and nowhere else, and are dropped from other types rather than
            stored looking meaningful — the same rule date_mode follows below. */
