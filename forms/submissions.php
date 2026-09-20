@@ -31,14 +31,21 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
-    <script src="../assets/js/form-logic.js?v=7"></script>
+    <script src="../assets/js/form-logic.js?v=8"></script>
     <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
+    <!-- autotable: a table QUESTION is drawn as a real table in the PDF rather
+         than flattened into a paragraph. Same versions as morning-checks. -->
+    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js"></script>
     <!-- The shared document builder, also used by forms/collection.php. One
          implementation of what a record looks like, so the two pages cannot
          disagree the first time a field type changes. -->
-    <script src="../assets/js/form-pdf.js?v=1"></script>
+    <script src="../assets/js/form-pdf.js?v=2"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <!-- The detail panel draws a table QUESTION as a real table, and .form-grid
+         lives in the shared sheet. Without this the markup is right and the
+         table renders unstyled - borderless rows running into each other. -->
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=4">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -704,7 +711,21 @@ $translationNamespaces = ['common', 'forms'];
                 html += `<div class="detail-field">
                     <div class="detail-field-label">${esc(f.label)}${retired}</div>`;
 
-                if (p.kind === 'bool') {
+                if (p.kind === 'grid') {
+                    /* Drawn as a real table. ⚠️ p.columns comes from
+                       FormLogic.gridColumns() and therefore INCLUDES retired
+                       ones that this answer used — a value given to a withdrawn
+                       column still has to say what it was answering, so the
+                       heading is marked rather than dropped. */
+                    html += p.empty
+                        ? `<div class="detail-field-value empty">${esc(window.t('forms.subs.no_response'))}</div>`
+                        : `<div class="detail-field-value"><div class="form-grid-wrap"><table class="form-grid">
+                               <thead><tr>${p.columns.map(c => `<th>${esc(c.label)}${c.deleted
+                                   ? ` <span class="col-retired" title="${escAttr(window.t('forms.subs.retired_hint'))}">${esc(window.t('forms.subs.retired'))}</span>` : ''}</th>`).join('')}</tr></thead>
+                               <tbody>${p.rows.map(r => `<tr>${p.columns.map(c =>
+                                   `<td>${esc(FormPdf.gridCellText(c, r[c.id])) || '<span style="color:var(--text-faint, #ccc)">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody>
+                           </table></div></div>`;
+                } else if (p.kind === 'bool') {
                     html += `<div class="detail-field-value"><span class="cb-value ${p.checked ? 'cb-yes' : 'cb-no'}">${p.checked ? '&#10003;' : '&#10007;'}</span> ${esc(p.text)}</div>`;
                 } else if (p.kind === 'list') {
                     html += p.empty
@@ -926,7 +947,23 @@ $translationNamespaces = ['common', 'forms'];
             if (!formData || filteredSubmissions.length === 0) return;
 
             const headers = [window.t('forms.subs.csv_num'), window.t('forms.subs.csv_submitted_by'), window.t('forms.subs.csv_date')];
-            formData.fields.forEach(f => headers.push(f.label));
+            /* 🔑 A table question becomes ONE COLUMN PER TABLE COLUMN, with that
+               column's values joined down the rows — not one column per table
+               ROW. A CSV needs a fixed header and rows are unbounded, so a
+               column per row cannot survive the second submission having a
+               different number of them.
+               ⚠️ gridColumns(), so the header includes RETIRED columns: the
+               header must be the same for every submission in the file, and an
+               older record may well have answered one. */
+            const csvGridCols = {};
+            formData.fields.forEach(f => {
+                if (f.field_type === 'grid') {
+                    csvGridCols[f.id] = FormLogic.gridColumns(f);
+                    csvGridCols[f.id].forEach(c => headers.push(f.label + ' — ' + (c.label || '')));
+                } else {
+                    headers.push(f.label);
+                }
+            });
 
             const rows = [headers.map(h => csvCell(h)).join(',')];
 
@@ -939,15 +976,28 @@ $translationNamespaces = ['common', 'forms'];
 
                 formData.fields.forEach(f => {
                     const val = sub.data[f.id] ?? '';
-                    if (f.field_type === 'checkbox') {
+                    if (f.field_type === 'grid') {
+                        // One cell per table column, that column's values joined
+                        // down the rows. Must push EXACTLY as many cells as the
+                        // header loop above added, or every later column shifts.
+                        const gr = FormLogic.gridRows(val);
+                        (csvGridCols[f.id] || []).forEach(c => {
+                            row.push(gr.map(r => FormPdf.gridCellText(c, r[c.id]))
+                                       .filter(v => String(v).trim() !== '').join('; '));
+                        });
+                    } else if (f.field_type === 'checkbox') {
                         row.push(val === '1' ? window.t('forms.subs.csv_yes') : window.t('forms.subs.csv_no'));
                     } else if (f.field_type === 'checkboxes') {
                         row.push(decodeMultiValue(val).join('; '));
                     } else if (f.field_type === 'lookup') {
-                        // Show the label the person actually chose. The id stays
-                        // in the stored JSON for anything that wants the record.
-                        const lbl = FormLogic.lookupLabel(val);
-                        html += `<td title="${esc(lbl)}">${esc(lbl) || '<span style="color:var(--text-faint, #ccc)">—</span>'}</td>`;
+                        /* 🔴 THIS BRANCH USED TO DO `html += '<td>…'` — copied
+                           from the on-screen table into the CSV builder, where
+                           there is no `html` and no cell is pushed at all. The
+                           script is not in strict mode, so it silently created a
+                           global and the row came out ONE CELL SHORT: every
+                           column after a lookup shifted left, under the wrong
+                           heading, in every export. Same shape as #1812. */
+                        row.push(FormLogic.lookupLabel(val));
                     } else if (f.field_type === 'datetime') {
                         // 'T' swapped for a space so Excel recognises it as a date/time
                         // rather than importing it as a lump of text. Still not

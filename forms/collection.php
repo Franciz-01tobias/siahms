@@ -41,13 +41,20 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
-    <script src="../assets/js/form-logic.js?v=7"></script>
+    <script src="../assets/js/form-logic.js?v=8"></script>
     <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
+    <!-- autotable: a table QUESTION is drawn as a real table in the PDF rather
+         than flattened into a paragraph. Same versions as morning-checks. -->
+    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js"></script>
     <!-- The shared document builder. Same code as the single-form page, so a
          record exported from here is identical to one exported from there. -->
-    <script src="../assets/js/form-pdf.js?v=1"></script>
+    <script src="../assets/js/form-pdf.js?v=2"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <!-- The detail panel draws a table QUESTION as a real table, and .form-grid
+         lives in the shared sheet. Without this the markup is right and the
+         table renders unstyled - borderless rows running into each other. -->
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=4">
     <style>
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
 
@@ -363,7 +370,21 @@ $translationNamespaces = ['common', 'forms'];
                 const retired = f.is_deleted == 1
                     ? ` <span class="col-retired" title="${escAttr(window.t('forms.subs.retired_hint'))}">${esc(window.t('forms.subs.retired'))}</span>` : '';
                 html += `<div class="detail-field"><div class="detail-field-label">${esc(f.label)}${retired}</div>`;
-                if (p.kind === 'list') {
+                if (p.kind === 'grid') {
+                    /* Drawn as a real table, the same as the single-form
+                       submissions panel. ⚠️ Without this branch a table fell
+                       through to the plain-text case below and showed its
+                       one-line summary ("3 rows") as if that were the answer —
+                       technically a record, and useless. */
+                    html += p.empty
+                        ? `<div class="detail-field-value empty">${esc(window.t('forms.subs.no_response'))}</div>`
+                        : `<div class="detail-field-value"><div class="form-grid-wrap"><table class="form-grid">
+                               <thead><tr>${p.columns.map(c => `<th>${esc(c.label)}${c.deleted
+                                   ? ` <span class="col-retired">${esc(window.t('forms.subs.retired'))}</span>` : ''}</th>`).join('')}</tr></thead>
+                               <tbody>${p.rows.map(r => `<tr>${p.columns.map(c =>
+                                   `<td>${esc(FormPdf.gridCellText(c, r[c.id])) || '—'}</td>`).join('')}</tr>`).join('')}</tbody>
+                           </table></div></div>`;
+                } else if (p.kind === 'list') {
                     html += p.empty
                         ? `<div class="detail-field-value empty">${esc(window.t('forms.subs.no_response'))}</div>`
                         : `<div class="detail-field-value"><ul style="margin:0;padding-left:18px">${p.list.map(v => `<li>${esc(v)}</li>`).join('')}</ul></div>`;

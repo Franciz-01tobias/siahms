@@ -35,6 +35,36 @@
      * what KIND of thing it is, its text, and whether it is actually empty.
      * `empty` is not the same as falsy — an unticked checkbox has a real answer.
      */
+    /**
+     * A table's answer in one line, for a list cell or anywhere a whole table
+     * will not fit: "3 rows".
+     *
+     * ⚠️ Deliberately not the contents. A submissions list is one row per
+     * submission and every other column is a single value; flattening thirty
+     * cells into one of them makes the whole row unreadable and still does not
+     * show the table. The count says there is something to open.
+     */
+    function gridSummary(f, rows) {
+        var n = rows.length;
+        if (!n) return '';
+        return window.t(n === 1 ? 'forms.grid.one_row' : 'forms.grid.n_rows', { n: n });
+    }
+
+    /** One cell's stored value as text, by the column's own type. */
+    function gridCellText(col, value) {
+        var v = (value === null || value === undefined) ? '' : String(value);
+        if (col.type === 'checkbox') {
+            return v === '1' ? window.t('forms.subs.yes') : window.t('forms.subs.no');
+        }
+        if (col.type === 'datetime') {
+            /* ⚠️ The naive helper, like a datetime ANSWER above: a date somebody
+               typed into a cell is a calendar value, not an instant, and must
+               not be shifted into the reader's timezone. */
+            return (window.FormLogic ? FormLogic.formatDateValue(v) : v) || '';
+        }
+        return v;
+    }
+
     function fieldValueParts(f, raw) {
         var val = (raw === null || raw === undefined) ? '' : raw;
 
@@ -50,6 +80,36 @@
         if (f.field_type === 'checkboxes') {
             var list = decodeMultiValue(val);
             return { kind: 'list', list: list, text: list.join(', '), empty: list.length === 0 };
+        }
+        if (f.field_type === 'grid') {
+            /* A table's answer: rows of cells keyed by column id.
+               🔴 gridColumns(), NOT gridLiveColumns(). Reading a record back
+               needs the RETIRED columns too — a value stored against a column
+               that has since been withdrawn must still say what it was
+               answering, or last year's submission silently loses a field and
+               nobody can tell that it ever had one. The filler uses the live
+               list; a reader must not. */
+            var gcols = window.FormLogic ? FormLogic.gridColumns(f) : [];
+            var grows = window.FormLogic ? FormLogic.gridRows(val) : [];
+            /* Only the columns this answer actually has something in, plus every
+               live one — so a table that gained a column last week does not show
+               an empty stripe down every older record, and one that lost a
+               column still shows what was answered. */
+            var used = {};
+            grows.forEach(function (r) {
+                Object.keys(r).forEach(function (cid) {
+                    if (String(r[cid]) !== '' && r[cid] !== null && r[cid] !== undefined) used[cid] = true;
+                });
+            });
+            var shown = gcols.filter(function (c) { return !c.deleted || used[String(c.id)]; });
+            return {
+                kind: 'grid',
+                columns: shown,
+                rows: grows,
+                // A one-line summary for anywhere a whole table will not fit.
+                text: gridSummary(f, grows),
+                empty: grows.length === 0
+            };
         }
         if (f.field_type === 'lookup') {
             /* The label the person actually chose. The id stays in the stored
@@ -250,6 +310,39 @@
             var label = (f.label || '') +
                 (f.is_deleted == 1 ? ' (' + window.t('forms.subs.retired') + ')' : '');
             var labelLines = doc.splitTextToSize(label, contentW);
+
+            /* A table's answer is drawn AS A TABLE. Flattening thirty cells into
+               a paragraph is technically a record and practically unreadable —
+               and a purchase requisition's whole point is the table. */
+            if (p.kind === 'grid' && !p.empty && typeof doc.autoTable === 'function') {
+                room(labelLines.length * 5 + 20);
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(100, 116, 139);
+                doc.text(labelLines, margin, y);
+                y += labelLines.length * 5 + 1;
+
+                doc.autoTable({
+                    startY: y,
+                    /* A retired column is MARKED rather than dropped: the answers
+                       under it are real and the reader needs to know the question
+                       is no longer asked. */
+                    head: [p.columns.map(function (c) {
+                        return (c.label || '') + (c.deleted ? ' (' + window.t('forms.subs.retired') + ')' : '');
+                    })],
+                    body: p.rows.map(function (r) {
+                        return p.columns.map(function (c) { return gridCellText(c, r[c.id]); });
+                    }),
+                    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+                    headStyles: { fillColor: [100, 116, 139], textColor: [255, 255, 255], fontStyle: 'bold' },
+                    alternateRowStyles: { fillColor: [248, 250, 252] },
+                    margin: { left: margin, right: margin }
+                });
+                // autoTable paginates itself, so take the cursor it ends on.
+                y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : y) + 6;
+                return;
+            }
+
             room(labelLines.length * 5 + valueLines.length * 5 + 6);
 
             doc.setFontSize(9);
@@ -330,6 +423,11 @@
     window.FormPdf = {
         decodeMultiValue: decodeMultiValue,
         fieldValueParts: fieldValueParts,
+        /* Shared so the submissions table, the detail panel and the CSV all render
+           a cell the same way — a date in a cell must not be shifted into the
+           reader's timezone in one place and not another. */
+        gridCellText: gridCellText,
+        gridSummary: gridSummary,
         approvalParts: approvalParts,
         cleanForFileName: cleanForFileName,
         submissionFileName: submissionFileName,

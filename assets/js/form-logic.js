@@ -17,7 +17,7 @@
 
     // Every type the module knows. 'section' is presentational — a heading that owns
     // the fields below it until the next section, and never produces an answer.
-    var TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note', 'image'];
+    var TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note', 'image', 'grid'];
 
     /* The types that are READ, not answered. Mirrors
        FormsService::PRESENTATIONAL_TYPES — see isAnswerable() for why this is a

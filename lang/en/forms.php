@@ -209,6 +209,7 @@ return [
         'note'       => 'Note or warning',
         // A picture on the form: a logo, a diagram, a floor plan.
         'image'      => 'Image',
+        'grid'       => 'Table',
     ],
 
     // Short type-name badges shown on each field row + proposal diff
@@ -231,6 +232,7 @@ return [
            driving the type list rather than by looking at the screen. */
         'lookup'     => 'Lookup',
         'image'      => 'Image',
+        'grid'       => 'Table',
         // The badge shows the MODE, so a glance down the field list tells you what
         // each date field actually asks for without opening it.
         'date_date'     => 'Date',
@@ -494,6 +496,11 @@ return [
         // Shown where the table would be, if somebody published the form before
         // giving it any columns. Says what is wrong rather than drawing nothing.
         'not_configured' => 'This table has no columns yet.',
+        /* Reading one back. A submissions list is one row per submission with a
+           single value in every other column, so a table is summarised by its
+           COUNT there and drawn properly in the detail panel. */
+        'one_row'        => '1 row',
+        'n_rows'         => '{n} rows',
     ],
 
     // ── Image blocks (the builder + all three renderers) ────────────

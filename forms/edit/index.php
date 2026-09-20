@@ -69,7 +69,7 @@ foreach ($formActionDefs as $def) {
     <!-- The builder did NOT load these, which is why it kept its own copy of the
          width list — a third hand-maintained list of the same six numbers. The
          preview now shares the walk with the filler and the portal. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=7"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=8"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
@@ -576,6 +576,15 @@ foreach ($formActionDefs as $def) {
                                  goes through includes/uploads.php, which is the one
                                  place the upload rules live. SVG is not accepted. -->
                             <button onclick="addField('image')"><span class="field-type-badge image">&#128247;</span> <?php echo htmlspecialchars(t('forms.fieldtypes.image')); ?></button>
+                            <!-- ⭐ THE LAST STEP OF THE TABLE QUESTION, added only
+                                 once it could be defined, filled in AND read back
+                                 out. It was deliberately absent from here through
+                                 #1808 and #1826-#1828: a table you can define and
+                                 fill but cannot read on a submission, a PDF or an
+                                 export takes real answers from real people and
+                                 then loses them. The button is what makes the
+                                 feature exist, so it goes on last. -->
+                            <button onclick="addField('grid')"><span class="field-type-badge grid">&#9638;</span> <?php echo htmlspecialchars(t('forms.fieldtypes.grid')); ?></button>
                         </div>
                     </div>
                 </div>
@@ -1801,7 +1810,7 @@ foreach ($formActionDefs as $def) {
             }).join('');
         }
         function typeName(type) {
-            const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section', 'note', 'image'];
+            const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section', 'note', 'image', 'grid'];
             return known.includes(type) ? window.t('forms.typename.' + type) : type;
         }
         /* ⭐ THIS WAS A THIRD COPY of the same six numbers, alongside

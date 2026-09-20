@@ -1221,6 +1221,7 @@
 
 /* The badge, matching what an image block actually looks like on the form. */
 .field-type-badge.image { background: var(--surface-3, #f8f8f8); color: var(--text-muted, #666); }
+.field-type-badge.grid  { background: var(--forms-accent-soft, #e0f2f1); color: var(--forms-accent-hover, #00695c); }
 
 /* ── A table question's column editor ──────────────────────────────────────
    One row per column, beneath the field row. A retired column stays visible,

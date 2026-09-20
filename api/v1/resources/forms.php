@@ -131,7 +131,7 @@ function apiSerializeFormSubmission(PDO $conn, array $r): array {
     // Answers joined to their field definitions; checkboxes values are
     // stored as JSON array strings — decode them for machine consumers.
     $stmt = $conn->prepare(
-        "SELECT d.field_id, d.field_value, ff.label, ff.field_type
+        "SELECT d.field_id, d.field_value, ff.label, ff.field_type, ff.config
          FROM form_submission_data d
          JOIN form_fields ff ON ff.id = d.field_id
          WHERE d.submission_id = ?
@@ -147,12 +147,34 @@ function apiSerializeFormSubmission(PDO $conn, array $r): array {
                 $value = $decoded;
             }
         }
-        $answers[] = [
+        $entry = [
             'field_id'   => (int)$d['field_id'],
             'label'      => $d['label'],
             'field_type' => $d['field_type'],
             'value'      => $value,
         ];
+        if ($d['field_type'] === 'grid') {
+            /* A table's answer is rows keyed by COLUMN ID, which is meaningless
+               to a consumer on its own — "7" is not a heading. Decoded into real
+               rows and accompanied by the column definitions, so a machine can
+               read it without also having to fetch the form and decode its
+               config.
+               🔴 gridColumns(), so RETIRED columns are included and marked: a
+               value stored against a withdrawn column must still say what it was
+               answering. A consumer that silently dropped it would be reading a
+               different record from the one a person sees on screen. */
+            $field = ['config' => $d['config']];
+            $entry['value'] = FormsService::gridRows($value);
+            $entry['columns'] = array_values(array_map(function ($c) {
+                return [
+                    'id'      => (int)$c['id'],
+                    'label'   => (string)($c['label'] ?? ''),
+                    'type'    => (string)($c['type'] ?? 'text'),
+                    'retired' => !empty($c['deleted']),
+                ];
+            }, FormsService::gridColumns($field)));
+        }
+        $answers[] = $entry;
     }
     return [
         'id'           => (int)$r['id'],
