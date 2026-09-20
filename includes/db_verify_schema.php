@@ -3550,6 +3550,23 @@ return [
         // dropped this would silently unpair the form the moment somebody
         // pressed Save - exactly how approval gating was lost before #95.
         'collection_id'      => 'INT NULL',
+        // WHERE this form's questions go, as opposed to what they are. JSON:
+        // {"type":"flow|grid","rows":[{"cells":[{"field":<id>,"width":1-12,"rowspan":n}]}]}.
+        //
+        // 🔑 NULL is meaningful and is the normal case. It means "never laid out",
+        // and the layout is then DERIVED from sort_order plus each field's width —
+        // which is exactly what the form already draws. That is what makes this
+        // migration-free: every existing form stores NULL and renders unchanged.
+        //
+        // 🔑 'flow' and 'grid' are the same format. A grid cell may span rows and
+        // may hold no question; a flow layout is one where every rowspan is 1. That
+        // is deliberate — it is what lets a cell designer be added later as a UI
+        // rather than as a rewrite. See docs/design/form-designer.md.
+        //
+        // ⚠️ Carried forward by createVersion(), like collection_id and the action
+        // lists above it. A per-form setting left out of that INSERT is a setting
+        // that pressing Save deletes.
+        'layout'             => 'LONGTEXT NULL',
         'submission_actions' => 'TEXT NULL',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],

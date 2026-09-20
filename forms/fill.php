@@ -32,7 +32,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Shared with the builder preview and the portal: field types + conditional
          visibility. Mirrors includes/form_logic.php, which decides on submit. -->
     <script src="../assets/js/form-logic.js?v=3"></script>
-    <script src="../assets/js/form-render.js?v=1"></script>
+    <script src="../assets/js/form-render.js?v=2"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <style>
@@ -524,7 +524,10 @@ $translationNamespaces = ['common', 'forms'];
                         return null;
                 }
               }
-            });
+            /* The layout decides WHERE the questions go; the server resolves it
+               (stored or derived) so all three surfaces get the same answer.
+               Absent means walk the pool, which is what this did before. */
+            }, formData.layout);
 
             html += `<div class="form-actions">
                 <button type="submit" class="btn btn-primary">${esc(window.t('forms.fill.submit'))}</button>

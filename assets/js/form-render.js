@@ -32,46 +32,108 @@
     'use strict';
 
     /**
-     * Walk a form's fields and build its markup.
+     * Walk a form and build its markup.
      *
-     * @param {Array}  fields   the form's fields, in order
+     * @param {Array}  fields   the form's questions — the POOL
      * @param {Object} surface  { name, field(f, ctx) }
      *                          `field` returns the markup for ONE field, or null
      *                          if this surface cannot draw that type.
      *                          ctx = { width, wrapAttrs }
+     * @param {Object} [layout] { type, rows:[{cells:[{field,width,rowspan}]}] }
+     *                          from the server, already reconciled against the
+     *                          pool. Absent means "walk the pool in its own
+     *                          order", which is what every caller did before
+     *                          layouts existed and is still the fallback if an
+     *                          endpoint has not been taught to send one.
      * @returns {string} html
      */
-    function render(fields, surface) {
+    function render(fields, surface, layout) {
         if (!surface || typeof surface.field !== 'function') {
             throw new Error('FormRender.render: surface must provide field()');
         }
         var name = surface.name || 'unnamed surface';
+        var cells = layout ? cellsOf(layout, fields) : poolCells(fields);
         var html = '';
 
-        (fields || []).forEach(function (f) {
-            /* The width, in twelfths, on the wrapper every surface already uses —
-               one decision covering every field type present and future. Absent
-               means full width, which is every field predating the layout work. */
-            var width = global.FormLogic ? global.FormLogic.fieldWidth(f) : 12;
-
-            /* data-wrap-id is deliberately separate from data-field-id, which the
-               value-reading code uses with two different meanings (on the input
-               for simple types, on the wrapper for groups). Visibility only ever
-               looks for data-wrap-id. */
+        cells.forEach(function (cell) {
+            /* 🔑 THE WIDTH COMES FROM THE CELL, not from the field. For a derived
+               layout the two are identical — the derivation reads the field's own
+               width — but once a form has been laid out deliberately, where a
+               question sits is a property of the LAYOUT and must win. */
             var ctx = {
-                width: width,
-                wrapAttrs: 'data-wrap-id="' + f.id + '" data-width="' + width + '"'
+                width: cell.width,
+                /* data-wrap-id is deliberately separate from data-field-id, which
+                   the value-reading code uses with two different meanings (on the
+                   input for simple types, on the wrapper for groups). Conditional
+                   visibility only ever looks for data-wrap-id. */
+                wrapAttrs: 'data-wrap-id="' + cell.field.id + '" data-width="' + cell.width + '"'
             };
 
-            var markup = surface.field(f, ctx);
+            var markup = surface.field(cell.field, ctx);
             if (markup === null || markup === undefined || markup === '') {
-                html += unknown(f, ctx, name);
+                html += unknown(cell.field, ctx, name);
                 return;
             }
             html += markup;
         });
 
         return html;
+    }
+
+    /** The pool in its own order, each field at its own width. */
+    function poolCells(fields) {
+        return (fields || []).map(function (f) {
+            return { field: f, width: global.FormLogic ? global.FormLogic.fieldWidth(f) : 12 };
+        });
+    }
+
+    /**
+     * A layout, flattened to the stream of cells the surfaces draw.
+     *
+     * 🔴 A FLOW LAYOUT EMITS NO ROW ELEMENTS. Its rows are structural — they
+     * record which questions share a line — but the CSS grid already wraps at
+     * twelve columns, so drawing real rows would change how every existing form
+     * renders for no gain. Row elements arrive only when rowspan does, which is
+     * the one thing a CSS grid cannot express by wrapping alone.
+     *
+     * ⚠️ A cell holding no question is a spacer (a grid layout's empty or merged
+     * box). It occupies its width in the model and draws nothing here, which is
+     * exactly what a part-filled row already does.
+     */
+    function cellsOf(layout, fields) {
+        var byId = {};
+        (fields || []).forEach(function (f) { byId[String(f.id)] = f; });
+
+        var out = [];
+        var placed = {};
+        (layout.rows || []).forEach(function (row) {
+            (row.cells || []).forEach(function (cell) {
+                if (!cell || cell.field === null || cell.field === undefined) return;   // spacer
+                var f = byId[String(cell.field)];
+                if (!f) return;                    // reconciled away server-side already
+                if (placed[String(cell.field)]) return;   // never draw one question twice
+                placed[String(cell.field)] = true;
+                out.push({ field: f, width: cell.width || 12 });
+            });
+        });
+
+        /* 🔴 ANYTHING THE LAYOUT DID NOT PLACE IS STILL DRAWN, at the end.
+           The server already reconciles a layout against the pool, so this should
+           never find anything — which is exactly why it is here. If a layout ever
+           arrives unreconciled (a stale cached response, an endpoint that was
+           never taught, a hand-written one) the alternative is a question that
+           silently does not appear, and a required question that cannot be
+           answered because nobody can see it. That is the same silent drop this
+           whole file exists to stop, arriving one layer further in. */
+        (fields || []).forEach(function (f) {
+            if (placed[String(f.id)]) return;
+            if (global.console && console.warn) {
+                console.warn('FormRender: field ' + f.id + ' is not placed by the layout — appended');
+            }
+            out.push({ field: f, width: global.FormLogic ? global.FormLogic.fieldWidth(f) : 12 });
+        });
+
+        return out;
     }
 
     /**

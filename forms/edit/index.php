@@ -70,7 +70,7 @@ foreach ($formActionDefs as $def) {
          width list — a third hand-maintained list of the same six numbers. The
          preview now shares the walk with the filler and the portal. -->
     <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=3"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=1"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=2"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
@@ -1921,6 +1921,17 @@ foreach ($formActionDefs as $def) {
                the width is applied HERE, once, so it covers all eleven types and
                any added later. Applying it inside the switch would be eleven edits
                and the twelfth type would silently render full width. */
+            /* ⚠️ NO LAYOUT ARGUMENT, deliberately. The other two surfaces render
+               a form as saved; this one renders what is being edited right now —
+               a field dragged, added or re-widthed a second ago is in `fields`
+               and cannot be in a layout the server resolved before the edit. The
+               pool IS the layout while the simple builder is open.
+
+               🔴 When the full-screen designer lands and forms start carrying
+               explicit layouts, this builder must not open one it cannot
+               represent — see docs/design/form-designer.md §6. Passing the stored
+               layout here would paper over that and show an author a layout their
+               next Save would destroy. */
             html += '<div class="preview-grid">' + FormRender.render(fields, {
                 name: 'builder preview',
                 /* ctx.width, not ctx.wrapAttrs: the preview has no conditional

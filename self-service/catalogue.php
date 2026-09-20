@@ -335,7 +335,9 @@ document.addEventListener('DOMContentLoaded', function () {
                    missing or bad width means. */
                 return '<div class="cat-field" ' + ctx.wrapAttrs + '>' + label + input + '</div>';
               }
-            });
+            /* Same resolved layout the analyst side renders: a customer sees the
+               form laid out as designed, not a portal-specific guess. */
+            }, form.layout);
 
             container.innerHTML = backBtn()
                 + '<div class="cat-form">'

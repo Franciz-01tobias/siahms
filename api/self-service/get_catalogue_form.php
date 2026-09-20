@@ -56,6 +56,20 @@ try {
     $fStmt->execute([$formId]);
     $form['fields'] = $fStmt->fetchAll(PDO::FETCH_ASSOC);
 
+    /* The same resolved layout the analyst side gets, from the same service —
+       a customer must see the form laid out the way it was designed, not a
+       portal-specific guess. ⚠️ Guarded, because before Database Verification
+       the column does not exist and the catalogue must still open. */
+    require_once __DIR__ . '/../../includes/services/forms.php';
+    $storedLayout = null;
+    if (FormsService::layoutAvailable($conn)) {
+        $ls = $conn->prepare("SELECT layout FROM forms WHERE id = ?");
+        $ls->execute([$formId]);
+        $storedLayout = $ls->fetchColumn();
+        if ($storedLayout === false) $storedLayout = null;
+    }
+    $form['layout'] = FormsService::layoutFor($storedLayout, $form['fields']);
+
     echo json_encode(['success' => true, 'form' => $form]);
 
 } catch (Exception $e) {

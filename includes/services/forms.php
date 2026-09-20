@@ -101,6 +101,27 @@ class FormsService
     const FIELD_WIDTHS = [12, 9, 8, 6, 4, 3];
     const FIELD_WIDTH_DEFAULT = 12;
 
+    /* ── Layout ──────────────────────────────────────────────────────────────
+       A form's layout says WHERE its questions go; the questions themselves are
+       a pool in form_fields. Separating the two is what lets an existing form be
+       re-laid-out without touching a question, a condition or a stored answer.
+
+       🔑 'flow' and 'grid' are THE SAME FORMAT. A grid cell may span rows and may
+       hold no question at all; a flow layout is a grid where every rowspan is 1.
+       That is deliberate and is the whole reason a cell designer can be added
+       later as a UI rather than as a rewrite — see docs/design/form-designer.md.
+
+       🔴 A flow layout's rows are STRUCTURAL, NOT MARKUP. The renderers flatten
+       them back to a stream of cells, because the CSS grid already wraps at 12
+       columns and emitting row elements would change how every existing form
+       draws. Real row elements arrive only when rowspan does. */
+    const LAYOUT_TYPES = ['flow', 'grid'];
+    const LAYOUT_TYPE_DEFAULT = 'flow';
+    const LAYOUT_COLUMNS = 12;
+
+    /* An abuse ceiling, not a feature — the same reasoning as GRID_MAX_ROWS. */
+    const LAYOUT_MAX_ROWS = 500;
+
     const DATE_MODES = ['date', 'time', 'datetime'];
     const DATE_MODE_DEFAULT = 'date';
 
@@ -1071,12 +1092,27 @@ class FormsService
 
         $conn->beginTransaction();
         try {
+            /* ⚠️ THE COLUMN LIST IS THE TRAP. Every per-form setting has to be
+               named here or pressing Save deletes it on the new version — that is
+               exactly how approval gating was lost before #95, and why
+               collection_id had to be added in 2.2.0.
+
+               The two optional columns are appended in a fixed order, each guarded
+               by its own feature-detect, because a positional array that matches
+               only one of the four possible shapes writes values into the wrong
+               columns without complaining. */
+            $optionalCols = [];
+            if (self::collectionsAvailable($conn)) $optionalCols[] = 'collection_id';
+            if (self::layoutAvailable($conn))      $optionalCols[] = 'layout';
+
+            $colSql  = $optionalCols ? ', ' . implode(', ', $optionalCols) : '';
+            $markSql = str_repeat(', ?', count($optionalCols));
+
             $conn->prepare(
-                self::collectionsAvailable($conn)
-                    ? "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval, approver_id, submission_actions, created_by, modified_by, parent_form_id, version_number, collection_id, created_date, modified_date)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
-                    : "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval, approver_id, submission_actions, created_by, modified_by, parent_form_id, version_number, created_date, modified_date)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+                "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval,
+                                    approver_id, submission_actions, created_by, modified_by,
+                                    parent_form_id, version_number{$colSql}, created_date, modified_date)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?{$markSql}, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
             )->execute([
                 $src['title'],
                 $src['description'],
@@ -1117,8 +1153,20 @@ class FormsService
                 // because the INSERT has two shapes and a positional array
                 // that matches only one of them writes version_number into
                 // collection_id without complaining.
+                /* Spread in the SAME order the column list was built above, and
+                   each under the same condition. Appending inline was what made
+                   the old two-shape version fragile. */
                 ...(self::collectionsAvailable($conn)
                     ? [isset($src['collection_id']) && $src['collection_id'] !== null ? (int)$src['collection_id'] : null]
+                    : []),
+                /* The layout travels with the version exactly as the questions do.
+                   A new version that dropped it would throw away a form somebody
+                   had laid out, the moment they pressed Save — and because a NULL
+                   layout silently DERIVES a plausible one, the form would still
+                   look fine. That is the worst shape of this bug: not an error,
+                   just a design quietly replaced by a default. */
+                ...(self::layoutAvailable($conn)
+                    ? [isset($src['layout']) && $src['layout'] !== null ? (string)$src['layout'] : null]
                     : []),
             ]);
             $newId = (int)$conn->lastInsertId();
@@ -1161,6 +1209,20 @@ class FormsService
                 }
                 $updCfg->execute([json_encode($config), $idMap[(int)$f['id']]]);
             }
+
+            /* 🔴 THE LAYOUT REFERENCES FIELDS BY ID, and every field above was
+               just given a NEW one. Copying the layout verbatim — which the
+               INSERT did — leaves every cell pointing at the previous version's
+               fields, and because an unreadable cell is dropped and unplaced
+               fields are appended, the form would come back looking laid out
+               while actually being in default order. Silent, and indistinguishable
+               from "the designer was never used". Remapped through the SAME id map
+               the conditional rules use, and for the same reason. */
+            if (self::layoutAvailable($conn) && !empty($src['layout'])) {
+                $conn->prepare("UPDATE forms SET layout = ? WHERE id = ?")
+                     ->execute([self::remapLayoutFields((string)$src['layout'], $idMap), $newId]);
+            }
+
             $conn->commit();
         } catch (Exception $e) {
             if ($conn->inTransaction()) $conn->rollBack();
@@ -1812,6 +1874,203 @@ class FormsService
         }
         return $out;
     }
+    /* ══ Layout ══════════════════════════════════════════════════════════════
+       See the LAYOUT_* constants for the shape and why flow and grid share it. */
+
+    /**
+     * Does this database have the layout column yet?
+     *
+     * 🔴 Everything below must work with it ABSENT. A new column that only works
+     * after Database Verification breaks every install between the upgrade and
+     * the moment somebody remembers to run it — and the failure would be a form
+     * that will not open.
+     */
+    public static function layoutAvailable(PDO $conn): bool
+    {
+        static $known = null;
+        if ($known !== null) return $known;
+        try {
+            $q = $conn->prepare(
+                "SELECT COUNT(*) FROM information_schema.columns
+                  WHERE table_schema = DATABASE() AND table_name = 'forms' AND column_name = 'layout'"
+            );
+            $q->execute();
+            $known = ((int)$q->fetchColumn() === 1);
+        } catch (Exception $e) {
+            $known = false;
+        }
+        return $known;
+    }
+
+    /**
+     * The flow layout a form has implicitly always had: its fields in
+     * sort_order, packed into rows of twelve by their widths.
+     *
+     * 🔑 This is what makes the whole change migration-free. Every form that
+     * predates layouts stores NULL, derives this, and renders exactly as it did
+     * — the packing here is the same arithmetic the CSS grid already does when
+     * it wraps, so the derived rows describe what is already on the screen.
+     */
+    public static function deriveLayout(array $fields): array
+    {
+        $rows = [];
+        $row  = [];
+        $used = 0;
+
+        foreach ($fields as $f) {
+            $w = self::fieldWidthOf($f);
+            if ($used > 0 && $used + $w > self::LAYOUT_COLUMNS) {
+                $rows[] = ['cells' => $row];
+                $row = []; $used = 0;
+            }
+            $row[] = ['field' => (int)$f['id'], 'width' => $w, 'rowspan' => 1];
+            $used += $w;
+            if ($used >= self::LAYOUT_COLUMNS) {
+                $rows[] = ['cells' => $row];
+                $row = []; $used = 0;
+            }
+        }
+        if ($row) $rows[] = ['cells' => $row];
+
+        return ['type' => self::LAYOUT_TYPE_DEFAULT, 'rows' => $rows];
+    }
+
+    /** A field's width in twelfths, defaulting to full. Absent is every old field. */
+    public static function fieldWidthOf(array $field): int
+    {
+        $config = $field['config'] ?? null;
+        if (is_string($config)) $config = json_decode($config, true);
+        if (!is_array($config)) $config = [];
+        $w = isset($config['width']) ? (int)$config['width'] : self::FIELD_WIDTH_DEFAULT;
+        return in_array($w, self::FIELD_WIDTHS, true) ? $w : self::FIELD_WIDTH_DEFAULT;
+    }
+
+    /**
+     * The layout to render a form with: the stored one if it has one, otherwise
+     * the derived flow.
+     *
+     * ⚠️ A stored layout is AUTHORITATIVE for order and width. sort_order is
+     * then only the pool's own ordering, which is what the simple builder edits.
+     * Two sources that can disagree is the drift this codebase keeps being bitten
+     * by, so the rule is one sentence long and written down here: **if a layout
+     * exists, it wins; if it does not, sort_order does.**
+     */
+    public static function layoutFor($stored, array $fields): array
+    {
+        if ($stored === null || $stored === '') return self::deriveLayout($fields);
+
+        $layout = is_string($stored) ? json_decode($stored, true) : $stored;
+        if (!is_array($layout) || empty($layout['rows']) || !is_array($layout['rows'])) {
+            // Unreadable rather than absent. Deriving beats refusing to draw the
+            // form at all, and the form is still editable afterwards.
+            return self::deriveLayout($fields);
+        }
+        return self::reconcileLayout($layout, $fields);
+    }
+
+    /**
+     * Make a stored layout agree with the fields that actually exist.
+     *
+     * 🔴 THE CASE THAT MATTERS: a question added or retired since the layout was
+     * saved. A field the layout does not mention would silently never render —
+     * the same silent-drop failure as an untaught type, arriving by a different
+     * road. Unplaced fields are therefore appended as their own rows, and cells
+     * pointing at a field that is gone are dropped.
+     */
+    private static function reconcileLayout(array $layout, array $fields): array
+    {
+        $byId = [];
+        foreach ($fields as $f) $byId[(int)$f['id']] = $f;
+
+        $seen = [];
+        $rows = [];
+        foreach (array_slice($layout['rows'], 0, self::LAYOUT_MAX_ROWS) as $row) {
+            if (!is_array($row) || !isset($row['cells']) || !is_array($row['cells'])) continue;
+            $cells = [];
+            foreach ($row['cells'] as $cell) {
+                if (!is_array($cell)) continue;
+                $fid = isset($cell['field']) ? (int)$cell['field'] : 0;
+                // A cell with no question is a legitimate spacer, and is what a
+                // grid layout uses for a merged or empty box. Keep it.
+                if ($fid === 0) { $cells[] = self::normaliseCell($cell, null); continue; }
+                if (!isset($byId[$fid]) || isset($seen[$fid])) continue;   // gone, or already placed
+                $seen[$fid] = true;
+                $cells[] = self::normaliseCell($cell, $byId[$fid]);
+            }
+            if ($cells) $rows[] = ['cells' => $cells];
+        }
+
+        // Anything the layout never mentioned, in the pool's own order.
+        $unplaced = [];
+        foreach ($fields as $f) {
+            if (!isset($seen[(int)$f['id']])) $unplaced[] = $f;
+        }
+        if ($unplaced) {
+            foreach (self::deriveLayout($unplaced)['rows'] as $r) $rows[] = $r;
+        }
+
+        $type = (isset($layout['type']) && in_array($layout['type'], self::LAYOUT_TYPES, true))
+            ? $layout['type'] : self::LAYOUT_TYPE_DEFAULT;
+
+        return ['type' => $type, 'rows' => $rows];
+    }
+
+    /** One cell, with every value forced into range. */
+    private static function normaliseCell(array $cell, ?array $field): array
+    {
+        $w = isset($cell['width']) ? (int)$cell['width'] : null;
+        if (!in_array($w, self::FIELD_WIDTHS, true)) {
+            // Fall back to the FIELD's own width, which is what a derived layout
+            // would have used — never to 12, or a half-width field placed by the
+            // designer would silently grow to fill the row.
+            $w = $field ? self::fieldWidthOf($field) : self::FIELD_WIDTH_DEFAULT;
+        }
+        $span = isset($cell['rowspan']) ? (int)$cell['rowspan'] : 1;
+        if ($span < 1) $span = 1;
+
+        return [
+            'field'   => $field ? (int)$field['id'] : null,
+            'width'   => $w,
+            'rowspan' => $span,
+        ];
+    }
+
+    /**
+     * Rewrite a stored layout's field references through an id map.
+     *
+     * Used by createVersion(), where every copied field gets a new id. A cell
+     * whose field is not in the map keeps its old id and is therefore dropped on
+     * read — which is right: it refers to a field that did not come forward
+     * (a retired one), and inventing a reference would place the wrong question.
+     */
+    public static function remapLayoutFields(string $json, array $idMap): string
+    {
+        $layout = json_decode($json, true);
+        if (!is_array($layout) || empty($layout['rows']) || !is_array($layout['rows'])) return $json;
+
+        foreach ($layout['rows'] as $r => $row) {
+            if (!isset($row['cells']) || !is_array($row['cells'])) continue;
+            foreach ($row['cells'] as $c => $cell) {
+                if (!is_array($cell) || empty($cell['field'])) continue;
+                $old = (int)$cell['field'];
+                $layout['rows'][$r]['cells'][$c]['field'] = $idMap[$old] ?? $old;
+            }
+        }
+        return json_encode($layout);
+    }
+
+    /** Every field id a layout places, in the order it places them. */
+    public static function layoutFieldOrder(array $layout): array
+    {
+        $out = [];
+        foreach ($layout['rows'] ?? [] as $row) {
+            foreach ($row['cells'] ?? [] as $cell) {
+                if (!empty($cell['field'])) $out[] = (int)$cell['field'];
+            }
+        }
+        return $out;
+    }
+
     private static function validateFieldConfig($config, int $i, array $fields, array $indexById, string $type = 'text'): ?array
     {
         if ($config === null || $config === '') {

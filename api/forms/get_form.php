@@ -74,6 +74,22 @@ try {
     $stmt->execute([$formId]);
     $form['fields'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    /* WHERE the questions go, as opposed to what they are. Resolved server-side
+       rather than sent raw, so the three renderers all receive the same already
+       reconciled answer — a field added since the layout was saved is placed
+       here, once, instead of three pages each having to remember to.
+       ⚠️ Read through layoutAvailable(): before Database Verification the column
+       does not exist, and every form must still open. */
+    require_once __DIR__ . '/../../includes/services/forms.php';
+    $storedLayout = null;
+    if (FormsService::layoutAvailable($conn)) {
+        $ls = $conn->prepare("SELECT layout FROM forms WHERE id = ?");
+        $ls->execute([$formId]);
+        $storedLayout = $ls->fetchColumn();
+        if ($storedLayout === false) $storedLayout = null;
+    }
+    $form['layout'] = FormsService::layoutFor($storedLayout, $form['fields']);
+
     echo json_encode(['success' => true, 'form' => $form]);
 
 } catch (Exception $e) {

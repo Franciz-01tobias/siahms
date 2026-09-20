@@ -4710,6 +4710,23 @@ CREATE TABLE IF NOT EXISTS `forms` (
     -- dropped this would silently unpair the form the moment somebody
     -- pressed Save - exactly how approval gating was lost before #95.
     `collection_id`     INT NULL,
+    -- WHERE this form's questions go, as opposed to what they are. JSON:
+    --   {"type":"flow|grid","rows":[{"cells":[{"field":<id>,"width":1-12,"rowspan":n}]}]}
+    --
+    -- NULL is meaningful and is the normal case: "never laid out". The layout is
+    -- then DERIVED from sort_order plus each field's width, which is precisely
+    -- what the form already draws — so this ships with no data migration and
+    -- every existing form renders unchanged.
+    --
+    -- 'flow' and 'grid' are the SAME format. A grid cell may span rows and may
+    -- hold no question at all; a flow layout is one where every rowspan is 1.
+    -- That is deliberate: it is what lets a cell designer arrive later as a UI
+    -- rather than a rewrite. See docs/design/form-designer.md.
+    --
+    -- Carried forward by createVersion(), like collection_id and
+    -- submission_actions. A per-form setting left out of that INSERT is a
+    -- setting that pressing Save deletes — that is how approval gating was lost.
+    `layout`            LONGTEXT NULL,
     `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,   -- set by the demo data importer (#1297)
     PRIMARY KEY (`id`),
     -- RESTRICT (no delete rule): a frozen version can't be deleted while
