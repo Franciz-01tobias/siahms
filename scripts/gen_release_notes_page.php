@@ -266,6 +266,11 @@ ob_start();
     </footer>
 
     <script src="js/main.js"></script>
+    <!-- Ko-fi floating support button. One of four pages that load it (with
+         index.html, ethos.html and deep-dive/index.html) — see js/kofi.js.
+         It belongs HERE and not in the built releases.html, which this script
+         overwrites on every release. -->
+    <script src="js/kofi.js?v=20260920f"></script>
 </body>
 </html>
 <?php
