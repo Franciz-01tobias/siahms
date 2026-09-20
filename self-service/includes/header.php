@@ -138,6 +138,12 @@ $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal')
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="../assets/css/self-service.css?v=15">
+<?php if (!empty($needsFormLogic)): ?>
+    <!-- Form blocks (notes). In the HEAD rather than beside form-logic.js in the
+         footer: a stylesheet in the body risks a flash of unstyled content, and
+         $needsFormLogic is set by the page long before this include runs. -->
+    <link rel="stylesheet" href="../assets/css/form-blocks.css?v=1">
+<?php endif; ?>
     <?php if ($pageStyles !== ''): ?>
     <style><?php echo $pageStyles; ?></style>
     <?php endif; ?>

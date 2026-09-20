@@ -35,6 +35,9 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/form-render.js?v=2"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <!-- Blocks (notes) - shared with the portal and the builder preview, because
+         a notice panel has no reason to look different in the three places. -->
+    <link rel="stylesheet" href="../assets/css/form-blocks.css?v=1">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -413,6 +416,19 @@ $translationNamespaces = ['common', 'forms'];
                 switch (f.field_type) {
                     case 'section':
                         return `<div class="form-section" ${wrap}><h2>${esc(f.label)}</h2></div>`;
+                    case 'note': {
+                        /* Standing text, not a question. Its classes and styling
+                           live in assets/css/form-blocks.css, shared with the
+                           portal and the preview — a notice panel has no reason
+                           to look different in the three places, unlike an input.
+                           🔴 The style is a NAME resolved from the theme, never a
+                           colour the author typed: see FormsService::NOTE_STYLES. */
+                        const body = FormLogic.noteBody(f);
+                        return `<div class="form-note" data-note-style="${escAttr(FormLogic.noteStyle(f))}" ${wrap}>
+                            <p class="form-note-title">${esc(f.label)}</p>
+                            ${body ? `<p class="form-note-body">${esc(body)}</p>` : ''}
+                        </div>`;
+                    }
                     case 'text':
                         return `<div class="form-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>

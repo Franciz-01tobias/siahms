@@ -204,6 +204,9 @@ return [
         'checkboxes' => 'Checkboxes (many of)',
         'datetime'   => 'Date / time',
         'section'    => 'Section heading',
+        // Standing text. NOT a heading: unlike a section it does not own the fields
+        // below it, it is simply there to be read before the next question.
+        'note'       => 'Note or warning',
     ],
 
     // Short type-name badges shown on each field row + proposal diff
@@ -218,6 +221,7 @@ return [
         'radio'      => 'Radio',
         'datetime'   => 'Date / time',
         'section'    => 'Section',
+        'note'       => 'Note',
         // The badge shows the MODE, so a glance down the field list tells you what
         // each date field actually asks for without opening it.
         'date_date'     => 'Date',
@@ -257,6 +261,18 @@ return [
         'width_4'          => 'Third',
         'width_3'          => 'Quarter',
         'width_hint'       => 'Fields narrower than the full row sit side by side, up to a full line. Everything is full width on a phone.',
+        /* A note's appearance. 🔴 NAMES, never colours — each resolves to theme
+           tokens defined for both light and dark mode, which is not something a
+           form author can be asked to get right by picking a value. The names
+           describe what the note IS ("a warning"), not what it looks like ("an
+           amber box"), so a re-skin does not make every label a lie. */
+        'note_style'         => 'Style',
+        'note_style_plain'   => 'Plain',
+        'note_style_info'    => 'Information',
+        'note_style_warning' => 'Warning',
+        'note_style_danger'  => 'Important',
+        'note_style_success' => 'Success',
+        'note_body_ph'       => 'Longer text, if the heading above is not enough (optional)',
         'required'          => 'Required',
         'remove_field'      => 'Remove field',
         'untitled_field'    => 'Untitled field',

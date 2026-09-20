@@ -74,6 +74,8 @@ foreach ($formActionDefs as $def) {
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
+    <!-- Blocks (notes) - shared with the filler and the portal. -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-blocks.css?v=1">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -560,6 +562,12 @@ foreach ($formActionDefs as $def) {
                                  config, for the same reason the date field has a mode. -->
                             <button onclick="addField('lookup')"><span class="field-type-badge lookup">&#128269;</span> <?php echo htmlspecialchars(t('forms.fieldtypes.lookup')); ?></button>
                             <button onclick="addField('section')"><span class="field-type-badge section">&#9647;</span> <?php echo htmlspecialchars(t('forms.fieldtypes.section')); ?></button>
+                            <!-- Standing text: an instruction, or a warning that has to
+                                 be read before the next question is answered. Like a
+                                 section it collects nothing, but it does NOT own the
+                                 fields below it — it is just there to be read.
+                                 Its appearance is a NAMED style, never a colour. -->
+                            <button onclick="addField('note')"><span class="field-type-badge note">&#9432;</span> <?php echo htmlspecialchars(t('forms.fieldtypes.note')); ?></button>
                         </div>
                     </div>
                 </div>
@@ -1638,6 +1646,25 @@ foreach ($formActionDefs as $def) {
                                     ${esc(window.t('forms.field.required'))}
                                 </label>`;
 
+                /* A note's appearance and its optional longer text.
+                   🔴 A NAMED STYLE, never a colour picker. Each name resolves to
+                   theme tokens defined for light AND dark; a hex an author typed
+                   can only be right in one of them, and in dark mode the pair
+                   inverts rather than shifting. It also keeps every form looking
+                   like FreeITSM and survives a re-skin. */
+                const noteHtml = f.field_type !== 'note' ? '' : `
+                        <div class="field-note-settings">
+                            <label class="field-note-style">
+                                ${esc(window.t('forms.field.note_style'))}
+                                <select onchange="setNoteStyle(${i}, this.value)">
+                                    ${FormLogic.NOTE_STYLES.map(s => `<option value="${esc(s)}"${FormLogic.noteStyle(f) === s ? ' selected' : ''}>${esc(window.t('forms.field.note_style_' + s))}</option>`).join('')}
+                                </select>
+                            </label>
+                            <textarea class="field-note-body" rows="2"
+                                placeholder="${escAttr(window.t('forms.field.note_body_ph'))}"
+                                onchange="setNoteBody(${i}, this.value)">${esc(FormLogic.noteBody(f))}</textarea>
+                        </div>`;
+
                 /* Width applies to everything, including a heading — a heading
                    spanning half a row beside another is a real layout. */
                 const widthSel = `
@@ -1669,13 +1696,14 @@ foreach ($formActionDefs as $def) {
                             </div>
                         </div>
                         ${optionsHtml}
+                        ${noteHtml}
                         ${dateModeHtml}${lookupHtml}
                         ${renderConditionEditor(f, i)}
                     </li>`;
             }).join('');
         }
         function typeName(type) {
-            const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section'];
+            const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section', 'note'];
             return known.includes(type) ? window.t('forms.typename.' + type) : type;
         }
         /* ⭐ THIS WAS A THIRD COPY of the same six numbers, alongside
@@ -1701,6 +1729,27 @@ foreach ($formActionDefs as $def) {
             if (w === 12) delete fields[i].config.width;
             else fields[i].config.width = w;
             markDirty(); renderFields(); updatePreview();
+        }
+        /* A note's named style and its optional longer text.
+           ⭐ Neither is listed in buildRulesForSave()'s MANAGED array, and that is
+           correct: since #1806 that function PRESERVES every config key it does
+           not rebuild, so a setting added here survives a save without anything
+           being added there. That inversion is exactly what stops a key added
+           tomorrow being deleted by somebody opening a form and pressing Save. */
+        function setNoteStyle(i, val) {
+            if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
+            fields[i].config.note_style = FormLogic.NOTE_STYLES.indexOf(val) !== -1
+                ? val : FormLogic.NOTE_STYLE_DEFAULT;
+            markDirty(); renderFields(); updatePreview();
+        }
+        function setNoteBody(i, val) {
+            if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
+            // Empty is absent, not an empty string — the service does the same on
+            // the way in, so a one-line note keeps a small config.
+            const body = String(val == null ? '' : val).trim();
+            if (body === '') delete fields[i].config.note_body;
+            else fields[i].config.note_body = body;
+            markDirty(); updatePreview();
         }
         function updateLabel(i, val)    { fields[i].label = val;       markDirty(); updatePreview(); }
         function toggleRequired(i, val) { fields[i].is_required = val; markDirty(); updatePreview(); }
@@ -1965,6 +2014,17 @@ foreach ($formActionDefs as $def) {
             switch (f.field_type) {
                 case 'section':
                     return `<div class="preview-section"><h3>${label}</h3>${condFlag}</div>`;
+                case 'note': {
+                    /* The same markup and the same shared stylesheet the two
+                       live surfaces use, so an author previewing a note sees
+                       what a customer will actually see — not an approximation
+                       of it drawn by a third set of rules. */
+                    const noteBody = FormLogic.noteBody(f);
+                    return `<div class="form-note" data-note-style="${escAttr(FormLogic.noteStyle(f))}">
+                        <p class="form-note-title">${label}${condFlag}</p>
+                        ${noteBody ? `<p class="form-note-body">${esc(noteBody)}</p>` : ''}
+                    </div>`;
+                }
                 case 'text':
                     return `<div class="preview-field"><label>${label}${reqStar}${condFlag}</label><input type="text" disabled placeholder="${escAttr(window.t('forms.preview.text_ph'))}"></div>`;
                 case 'textarea':

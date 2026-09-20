@@ -119,6 +119,7 @@ You may use ONLY these field types — no others exist:
 - "datetime" — a real date and/or time picker. ALWAYS use this for any date or time question — start dates, needed-by dates, appointment slots, last working day, when an error occurred. NEVER ask for a date as "text". Set "date_mode" to one of: "date" (a calendar date — the usual choice), "time" (a clock time only, with no date), "datetime" (both together, for a specific moment).
 - "lookup" — a search box that looks up a REAL RECORD already held in FreeITSM, so the answer is the record itself rather than someone's description of it. Use whenever the question is "which one?" about something the ITSM system already knows: which laptop, which server, which person. Set "lookup_source" to one of: "asset" (a piece of equipment — laptop, desktop, phone, monitor, printer; searchable by name, asset tag or serial), "cmdb" (an infrastructure item — a server, service, application, database), "user" (a person on the staff directory). PREFER this over "text" for questions like "Which machine is affected?", "Which server is down?", "Who is the new starter's manager?". Do NOT use it for something the system does not hold, such as a supplier name or a room number — use "text" for those.
 - "section" — NOT a question. A heading that groups every field after it until the next "section". It collects no answer, so it must NEVER be "is_required": true and its "options" must be []. Use 2-4 of these to break a long form (roughly 8+ fields) into named groups such as "Your details", "Equipment needed", "Approval". Do not use any on a short form.
+- "note" — NOT a question, and NOT a heading. Standing text the person must read before answering: a rule, a deadline, a consequence. Its "label" is the message itself, kept to one sentence. It collects no answer, so it must NEVER be "is_required": true and its "options" must be []. Set "note_style" to one of: "info" (the default — guidance), "warning" (something that will delay them, such as "requests after 3pm are handled the next working day"), "danger" (a consequence that cannot be undone, or a spending threshold that needs sign-off), "success", "plain". Use AT MOST ONE, and only when the form genuinely carries a rule a person would otherwise get wrong — a note on every form is noise, and a form full of warnings is a form nobody reads.
 
 # RULES
 
@@ -246,7 +247,10 @@ try {
     // 'section' is allowed so the generator can group a long form under headings.
     // It is presentational — no options, never required — and the generator is not
     // asked to propose conditional rules, which stay something the author sets.
-    $allowedTypes = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'radio', 'dropdown', 'datetime', 'lookup', 'section'];
+    // 'note' is allowed for the same reason as 'section' — presentational, never
+    // required — but its named style has to be whitelisted too, below, or a model
+    // could propose a colour word that no stylesheet matches.
+    $allowedTypes = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'radio', 'dropdown', 'datetime', 'lookup', 'section', 'note'];
     $typesWithOptions = ['dropdown', 'radio', 'checkboxes'];
     // A 'datetime' field may arrive with a mode. Anything else is dropped, and an
     // absent or unrecognised one falls back to a plain date — the common case.
@@ -289,6 +293,18 @@ try {
         if ($type === 'datetime') {
             $mode = $f['date_mode'] ?? '';
             $clean['config'] = ['date_mode' => in_array($mode, $dateModes, true) ? $mode : 'date'];
+        }
+        if ($type === 'note') {
+            /* Whitelisted against the service's own list, never trusted through.
+               A model asked for a "style" will happily answer "amber" or "red",
+               and an unrecognised value reaches the DOM as an attribute selector
+               that matches no rule — an unstyled box that looks like a bug.
+               ⚠️ note_body is deliberately NOT taken from the model: the label is
+               the message, and a generator that writes two paragraphs of policy
+               it invented is worse than one that writes a single sentence. */
+            $style = $f['note_style'] ?? '';
+            $clean['config'] = ['note_style' => in_array($style, FormsService::NOTE_STYLES, true)
+                ? $style : FormsService::NOTE_STYLE_DEFAULT];
         }
         if ($type === 'lookup') {
             $src = $f['lookup_source'] ?? '';

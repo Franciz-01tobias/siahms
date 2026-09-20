@@ -269,9 +269,14 @@ if (preg_match('/var\s+PRESENTATIONAL\s*=\s*\[([^\]]*)\]/', $js, $m)) {
     check('form-logic.js declares a presentational list', false, 'pattern did not match — renamed?');
 }
 
-/* CONTROL: the comparison must be able to fail. */
+/* CONTROL: the comparison must be able to fail.
+   ⚠️ Uses a type that can never exist rather than a plausible one — an earlier
+   version named a real candidate and the control started failing the day that
+   type was added, which is a control asserting the wrong thing. */
 check('CONTROL — a differing list does NOT compare equal',
-    ['section', 'note'] !== FormsService::PRESENTATIONAL_TYPES);
+    ['section', '__not_a_real_type__'] !== FormsService::PRESENTATIONAL_TYPES);
+check('CONTROL — an identical list DOES compare equal',
+    FormsService::PRESENTATIONAL_TYPES === FormsService::PRESENTATIONAL_TYPES);
 
 echo "\n" . str_repeat('=', 64) . "\n";
 echo "$pass passed, $fail failed\n";

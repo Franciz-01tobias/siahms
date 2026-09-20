@@ -40,7 +40,7 @@ require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 class FormsService
 {
     // 'section' is a heading, not a question — see ANSWERABLE_TYPES.
-    const FIELD_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'grid'];
+    const FIELD_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note', 'grid'];
 
     /**
      * ⚠️ THIS LIST IS NARROWER THAN ITS NAME. It is what a conditional-visibility
@@ -66,7 +66,26 @@ class FormsService
      * correct is code that draws a heading specifically, because that is about
      * what the thing IS, not about whether it collects anything.
      */
-    const PRESENTATIONAL_TYPES = ['section'];
+    const PRESENTATIONAL_TYPES = ['section', 'note'];
+
+    /**
+     * What a 'note' may look like. 🔴 A NAMED LIST, NEVER A COLOUR.
+     *
+     * Every one of these resolves to theme tokens that are defined twice, once
+     * per mode. A hex an author typed can only be right in one of them: in dark
+     * mode an informational panel's background has to sit DARKER than the page
+     * and its text LIGHTER, so the pair inverts rather than shifting. Nobody
+     * building a form should be asked to get that right, and a form built by
+     * someone who was not asked is a form that looks broken at night.
+     *
+     * It also keeps forms looking like FreeITSM, and it means a re-skin carries
+     * every form with it.
+     */
+    const NOTE_STYLES = ['plain', 'info', 'warning', 'danger', 'success'];
+    const NOTE_STYLE_DEFAULT = 'info';
+
+    /** How long a note's optional body may be. An abuse ceiling, not a feature. */
+    const NOTE_BODY_MAX = 4000;
 
     /** Does this field type collect an answer? */
     public static function isAnswerable(?string $type): bool
@@ -1785,12 +1804,17 @@ class FormsService
                 throw new ServiceError('validation', 'invalid_field', "fields[{$i}]: 'options' must be an array.");
             }
 
-            // A heading collects nothing, so "required" would be a promise we could
-            // never keep — reject it rather than store a flag the renderers ignore.
+            /* A presentational item collects nothing, so "required" would be a
+               promise we could never keep — reject it rather than store a flag
+               the renderers ignore and a submit check would then enforce against
+               an answer that can never be given.
+               🔑 Asked of the LIST, not of 'section' by name, so a block added
+               later cannot arrive here still able to be marked required. */
             $isRequired = (int)(bool)($field['is_required'] ?? false);
-            if ($type === 'section') {
+            if (!self::isAnswerable($type)) {
                 if ($isRequired) {
-                    throw new ServiceError('validation', 'invalid_field', "fields[{$i}]: a 'section' heading cannot be required.");
+                    throw new ServiceError('validation', 'invalid_field',
+                        "fields[{$i}]: a '{$type}' is presentational and cannot be required.");
                 }
                 $options = null;
             }
@@ -2147,6 +2171,35 @@ class FormsService
                 $config['width'] = (int)$w;
             }
         }
+        /* A note's appearance and its optional longer text. Both belong to a
+           'note' and nowhere else, and are dropped from other types rather than
+           stored looking meaningful — the same rule date_mode follows below. */
+        if ($type === 'note') {
+            $style = $config['note_style'] ?? self::NOTE_STYLE_DEFAULT;
+            if (!in_array($style, self::NOTE_STYLES, true)) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "fields[{$i}]: unknown note_style '{$style}'. One of: " . implode(', ', self::NOTE_STYLES) . '.');
+            }
+            /* 🔴 A NAME, never a colour. The whole point is that the author does
+               not choose a value: every style resolves to theme tokens defined
+               for light AND dark, and a hex can only be right in one of them. */
+            $config['note_style'] = $style;
+
+            $body = $config['note_body'] ?? '';
+            if (is_array($body) || is_object($body)) {
+                throw new ServiceError('validation', 'invalid_field', "fields[{$i}]: 'note_body' must be text.");
+            }
+            $body = trim((string)$body);
+            if (mb_strlen($body) > self::NOTE_BODY_MAX) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "fields[{$i}]: 'note_body' is longer than " . self::NOTE_BODY_MAX . ' characters.');
+            }
+            // Absent stays absent, so a one-line note keeps an empty-ish config.
+            if ($body === '') unset($config['note_body']); else $config['note_body'] = $body;
+        } else {
+            unset($config['note_style'], $config['note_body']);
+        }
+
         // date_mode belongs to a 'datetime' field and nowhere else — dropped rather
         // than stored on other types, so it can never sit there looking meaningful.
         if ($type === 'datetime') {

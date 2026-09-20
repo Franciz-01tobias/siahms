@@ -261,6 +261,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     return '<div class="cat-section" ' + ctx.wrapAttrs + '><h2>'
                          + esc(f.label || '') + '</h2></div>';
                 }
+                /* A note is standing text — an instruction or a warning the
+                   customer needs before answering. Shared classes with the
+                   analyst side deliberately: a notice panel has no reason to
+                   look different here, unlike an input. */
+                if (f.field_type === 'note') {
+                    var noteBody = FormLogic.noteBody(f);
+                    return '<div class="form-note" data-note-style="' + esc(FormLogic.noteStyle(f)) + '" ' + ctx.wrapAttrs + '>'
+                         + '<p class="form-note-title">' + esc(f.label || '') + '</p>'
+                         + (noteBody ? '<p class="form-note-body">' + esc(noteBody) + '</p>' : '')
+                         + '</div>';
+                }
                 const req = f.is_required == 1
                     ? '<span class="cat-req" title="' + esc(window.t('self-service.catalogue.required')) + '">*</span>' : '';
                 const label = '<label class="cat-label" for="f' + f.id + '">' + esc(f.label || '') + req + '</label>';

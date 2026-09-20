@@ -17,12 +17,12 @@
 
     // Every type the module knows. 'section' is presentational — a heading that owns
     // the fields below it until the next section, and never produces an answer.
-    var TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section'];
+    var TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note'];
 
     /* The types that are READ, not answered. Mirrors
        FormsService::PRESENTATIONAL_TYPES — see isAnswerable() for why this is a
        list rather than a comparison written out in thirteen places. */
-    var PRESENTATIONAL = ['section'];
+    var PRESENTATIONAL = ['section', 'note'];
     var WITH_OPTIONS = ['dropdown', 'radio', 'checkboxes'];
     var MULTI_VALUE  = ['checkboxes'];
 
@@ -92,6 +92,28 @@
     function isAnswerable(type) { return PRESENTATIONAL.indexOf(type) === -1; }
     function hasOptions(type)   { return WITH_OPTIONS.indexOf(type) !== -1; }
     function isMultiValue(type) { return MULTI_VALUE.indexOf(type) !== -1; }
+
+    /**
+     * A note's named style, defaulting when unset or unrecognised.
+     *
+     * 🔴 A NAME, never a colour. Mirrors FormsService::NOTE_STYLES. Anything not
+     * on the list falls back rather than being trusted through — the service
+     * refuses a bad value on save, but a hand-edited row can still carry one,
+     * and an unknown style must not reach the DOM as an attribute selector that
+     * matches no rule and renders an unstyled box.
+     */
+    function noteStyle(field) {
+        var s = configOf(field).note_style;
+        return NOTE_STYLES.indexOf(s) !== -1 ? s : NOTE_STYLE_DEFAULT;
+    }
+    var NOTE_STYLES = ['plain', 'info', 'warning', 'danger', 'success'];
+    var NOTE_STYLE_DEFAULT = 'info';
+
+    /** A note's optional longer text, beneath its title. */
+    function noteBody(field) {
+        var b = configOf(field).note_body;
+        return (b === null || b === undefined) ? '' : String(b);
+    }
 
     /** The mode of a datetime field, defaulting when unset. Mirrors FormsService::dateModeOf(). */
     function dateMode(field) {
@@ -319,6 +341,10 @@
         DATE_MODE_DEFAULT: DATE_MODE_DEFAULT,
         isAnswerable: isAnswerable,
         PRESENTATIONAL_TYPES: PRESENTATIONAL,
+        NOTE_STYLES: NOTE_STYLES,
+        NOTE_STYLE_DEFAULT: NOTE_STYLE_DEFAULT,
+        noteStyle: noteStyle,
+        noteBody: noteBody,
         hasOptions: hasOptions,
         isMultiValue: isMultiValue,
         dateMode: dateMode,

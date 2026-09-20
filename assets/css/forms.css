@@ -411,6 +411,9 @@
 .field-type-badge.checkboxes { background: #dcedc8; color: #33691e; }
 .field-type-badge.radio      { background: #fff8e1; color: #ff8f00; }
 .field-type-badge.section    { background: #eceff1; color: #455a64; }
+/* Standing text. Uses the theme's informational pair so the badge matches what
+   a note actually looks like on the form, in both modes. */
+.field-type-badge.note       { background: var(--info-bg, #e0f2fe); color: var(--info-text, #075985); }
 .field-type-badge.datetime   { background: #ede7f6; color: #4527a0; }
 
 [data-theme-mode="dark"] .field-type-badge.text       { background: #14283a; color: #8ec5f0; }
@@ -1121,4 +1124,50 @@
     .fa-arg select {
         font-size: 16px;
     }
+}
+
+/* ── A note's settings in the builder ──────────────────────────────────────
+   The style picker and the optional longer text, beneath the field row. */
+.field-note-settings {
+    padding: 10px 14px 12px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.field-note-style {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted, #666);
+}
+
+.field-note-style select {
+    padding: 4px 8px;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    background: var(--surface, #fff);
+    color: var(--text, #333);
+}
+
+.field-note-body {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    box-sizing: border-box;
+    resize: vertical;
+    background: var(--surface, #fff);
+    color: var(--text, #333);
+}
+
+.field-note-body:focus,
+.field-note-style select:focus {
+    outline: none;
+    border-color: var(--forms-accent, #00897b);
 }
