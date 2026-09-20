@@ -32,6 +32,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Shared with the builder preview and the portal: field types + conditional
          visibility. Mirrors includes/form_logic.php, which decides on submit. -->
     <script src="../assets/js/form-logic.js?v=3"></script>
+    <script src="../assets/js/form-render.js?v=1"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <style>
@@ -393,65 +394,58 @@ $translationNamespaces = ['common', 'forms'];
 
             html += '<form id="fillForm" class="fill-grid" onsubmit="submitForm(event)">';
 
-            formData.fields.forEach(f => {
+            /* The WALK is shared (FormRender); the MARKUP is not. See
+               assets/js/form-render.js for why those two are separated — in
+               short, the three surfaces genuinely look different, but a type
+               none of them was taught used to fail three different silent ways.
+               Returning null below is what makes this one loud. */
+            html += FormRender.render(formData.fields, {
+              name: 'analyst filler',
+              field: (f, ctx) => {
                 const req = f.is_required == 1;
                 const reqStar = req ? '<span class="required-star">*</span>' : '';
                 const reqAttr = req ? 'data-required="1"' : '';
-                // data-wrap-id goes on EVERY wrapper so applyVisibility() has one
-                // thing to look for. It is deliberately separate from data-field-id,
-                // which the value-reading code below already uses with two different
-                // meanings (on the input for simple types, on the wrapper for groups).
-                /* The width, in twelfths, on the SAME wrapper every case already
-                   uses — so one line covers all eleven field types and any added
-                   later. Absent means full width, which is every field that
-                   predates this, so nothing needed migrating.
-                   ⚠️ An attribute, not an inline style: an inline style can only
-                   be overridden with !important, and the mobile layer would then
-                   need it on every rule. */
-                const wrap = `data-wrap-id="${f.id}" data-width="${FormLogic.fieldWidth(f)}"`;
+                /* data-wrap-id and the width both come from the shared walker now,
+                   so one decision covers all three surfaces rather than one
+                   covering all eleven types on this one. */
+                const wrap = ctx.wrapAttrs;
 
                 switch (f.field_type) {
                     case 'section':
-                        html += `<div class="form-section" ${wrap}><h2>${esc(f.label)}</h2></div>`;
-                        break;
+                        return `<div class="form-section" ${wrap}><h2>${esc(f.label)}</h2></div>`;
                     case 'text':
-                        html += `<div class="form-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>
                             <input type="text" name="field_${f.id}" data-field-id="${f.id}">
                             <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
                         </div>`;
-                        break;
                     case 'textarea':
-                        html += `<div class="form-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>
                             <textarea name="field_${f.id}" data-field-id="${f.id}"></textarea>
                             <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
                         </div>`;
-                        break;
                     case 'email':
-                        html += `<div class="form-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>
                             <input type="email" name="field_${f.id}" data-field-id="${f.id}" placeholder="${escAttr(window.t('forms.fill.email_ph'))}">
                             <div class="field-error">${esc(window.t('forms.fill.err_email'))}</div>
                         </div>`;
-                        break;
                     case 'number':
-                        html += `<div class="form-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>
                             <input type="number" name="field_${f.id}" data-field-id="${f.id}" inputmode="decimal" step="any">
                             <div class="field-error">${esc(window.t('forms.fill.err_number'))}</div>
                         </div>`;
-                        break;
                     case 'datetime': {
                         // One field type, three shapes — date / time / date and time.
                         // The browser's own picker produces exactly the value we store.
                         const dtMode = FormLogic.dateMode(f);
-                        html += `<div class="form-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>
                             <input type="${FormLogic.dateInputType(dtMode)}" name="field_${f.id}" data-field-id="${f.id}">
                             <div class="field-error">${esc(window.t('forms.fill.err_' + dtMode))}</div>
                         </div>`;
-                        break;
                     }
                     case 'lookup': {
                         // Search-as-you-type over records we already hold. The
@@ -459,7 +453,7 @@ $translationNamespaces = ['common', 'forms'];
                         // hidden input as {"id":…,"label":…} and is only written
                         // when something is chosen from the list — so a typed
                         // string that matches nothing is not an answer.
-                        html += `<div class="form-field lookup-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field lookup-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>
                             <div class="lookup-wrap">
                                 <input type="text" class="lookup-search" autocomplete="off"
@@ -470,18 +464,16 @@ $translationNamespaces = ['common', 'forms'];
                             </div>
                             <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
                         </div>`;
-                        break;
                     }
                     case 'checkbox':
-                        html += `<div class="form-field checkbox-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field checkbox-field" ${wrap} ${reqAttr}>
                             <input type="checkbox" name="field_${f.id}" data-field-id="${f.id}" id="cb_${f.id}">
                             <label for="cb_${f.id}">${esc(f.label)}${reqStar}</label>
                             <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
                         </div>`;
-                        break;
                     case 'dropdown': {
                         const opts = FormLogic.parseOptions(f.options);
-                        html += `<div class="form-field" ${wrap} ${reqAttr}>
+                        return `<div class="form-field" ${wrap} ${reqAttr}>
                             <label>${esc(f.label)}${reqStar}</label>
                             <select name="field_${f.id}" data-field-id="${f.id}">
                                 <option value="">${esc(window.t('forms.fill.select_ph'))}</option>
@@ -489,7 +481,6 @@ $translationNamespaces = ['common', 'forms'];
                             </select>
                             <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
                         </div>`;
-                        break;
                     }
                     case 'radio': {
                         const opts = FormLogic.parseOptions(f.options);
@@ -497,7 +488,7 @@ $translationNamespaces = ['common', 'forms'];
                         // single-select. data-field-id on the wrapper
                         // (not the individual inputs) so submitForm can
                         // read the chosen value via name=field_X.
-                        html += `<div class="form-field choice-field" ${wrap} ${reqAttr} data-field-id="${f.id}" data-field-kind="radio">
+                        return `<div class="form-field choice-field" ${wrap} ${reqAttr} data-field-id="${f.id}" data-field-kind="radio">
                             <label>${esc(f.label)}${reqStar}</label>
                             ${opts.map((o, i) => `
                                 <div class="choice-row">
@@ -507,7 +498,6 @@ $translationNamespaces = ['common', 'forms'];
                             `).join('')}
                             <div class="field-error">${esc(window.t('forms.fill.err_required'))}</div>
                         </div>`;
-                        break;
                     }
                     case 'checkboxes': {
                         const opts = FormLogic.parseOptions(f.options);
@@ -515,7 +505,7 @@ $translationNamespaces = ['common', 'forms'];
                         // <input type="checkbox">; submitForm reads the
                         // wrapper's [data-field-kind="checkboxes"] and
                         // collects every checked value into an array.
-                        html += `<div class="form-field choice-field" ${wrap} ${reqAttr} data-field-id="${f.id}" data-field-kind="checkboxes">
+                        return `<div class="form-field choice-field" ${wrap} ${reqAttr} data-field-id="${f.id}" data-field-kind="checkboxes">
                             <label>${esc(f.label)}${reqStar}</label>
                             ${opts.map((o, i) => `
                                 <div class="choice-row">
@@ -525,9 +515,15 @@ $translationNamespaces = ['common', 'forms'];
                             `).join('')}
                             <div class="field-error">${esc(window.t('forms.fill.err_checkboxes'))}</div>
                         </div>`;
-                        break;
                     }
+                    default:
+                        /* 🔴 There was no default here at all, so a type this page
+                           had never been taught was simply left out of the form —
+                           a required question silently absent. Returning null hands
+                           it to FormRender, which draws a visible notice and logs. */
+                        return null;
                 }
+              }
             });
 
             html += `<div class="form-actions">

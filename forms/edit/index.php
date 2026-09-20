@@ -66,6 +66,11 @@ foreach ($formActionDefs as $def) {
     <script src="<?php echo BASE_URL; ?>assets/js/i18n.js?v=2"></script>
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo BASE_URL; ?>assets/js/tz.js?v=5"></script>
+    <!-- The builder did NOT load these, which is why it kept its own copy of the
+         width list — a third hand-maintained list of the same six numbers. The
+         preview now shares the walk with the filler and the portal. -->
+    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=3"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=1"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
@@ -1667,15 +1672,17 @@ foreach ($formActionDefs as $def) {
             const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section'];
             return known.includes(type) ? window.t('forms.typename.' + type) : type;
         }
-        /* Mirrors FormsService::FIELD_WIDTHS and FormLogic's copy. Three lists
-           that must agree — a test asserts it, because a guard a human has to
-           remember is not a guard. */
-        const FIELD_WIDTHS = [12, 9, 8, 6, 4, 3];
+        /* ⭐ THIS WAS A THIRD COPY of the same six numbers, alongside
+           FormsService::FIELD_WIDTHS and FormLogic's. Three hand-maintained lists
+           that must agree is the shape that produced the index-list drift three
+           times; the builder now reads FormLogic's, so there are two — the service
+           (what may be saved) and FormLogic (what every surface renders). The test
+           still asserts those two agree. */
+        const FIELD_WIDTHS = FormLogic.FIELD_WIDTHS;
 
         /** A field's width, defaulting to full. Absent is every pre-existing field. */
         function widthOf(f) {
-            const w = parseInt((f.config || {}).width, 10);
-            return FIELD_WIDTHS.includes(w) ? w : 12;
+            return FormLogic.fieldWidth(f);
         }
 
         function setFieldWidth(i, val) {
@@ -1914,10 +1921,16 @@ foreach ($formActionDefs as $def) {
                the width is applied HERE, once, so it covers all eleven types and
                any added later. Applying it inside the switch would be eleven edits
                and the twelfth type would silently render full width. */
-            html += '<div class="preview-grid">' + fields.map(f => {
-                const body = previewBody(f);
-                return body ? `<div class="preview-slot" data-width="${widthOf(f)}">${body}</div>` : '';
-            }).join('') + '</div>';
+            html += '<div class="preview-grid">' + FormRender.render(fields, {
+                name: 'builder preview',
+                /* ctx.width, not ctx.wrapAttrs: the preview has no conditional
+                   visibility to drive, so it takes the shared width decision
+                   without the data-wrap-id the two live surfaces need. */
+                field: (f, ctx) => {
+                    const body = previewBody(f);
+                    return body ? `<div class="preview-slot" data-width="${ctx.width}">${body}</div>` : null;
+                }
+            }) + '</div>';
             preview.innerHTML = html;
         }
 

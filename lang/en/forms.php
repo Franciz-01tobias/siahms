@@ -416,6 +416,14 @@ return [
         'ex_edit5_text'  => 'Remove the consent checkbox at the bottom.',
     ],
 
+    // ── Shared renderer (assets/js/form-render.js) ──────────────────
+    // Shown in place of a question whose type this page cannot draw. Deliberately
+    // NOT an input: the portal used to fall back to a text box, which looks like a
+    // working question and stores whatever is typed as that field's answer.
+    'render' => [
+        'unsupported_type' => 'This question cannot be shown here.',
+    ],
+
     // ── Fill page (forms/fill.php) ──────────────────────────────────
     'fill' => [
         'page_title'       => 'Service Desk - Fill Form',

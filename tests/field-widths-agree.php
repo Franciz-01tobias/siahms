@@ -40,23 +40,35 @@ function intList(string $path, string $pattern): ?array {
     return $out ?: null;
 }
 
-echo "Field widths — three lists, one meaning\n";
+echo "Field widths — two lists, one meaning\n";
 echo str_repeat('=', 60) . "\n";
 
 require_once $root . '/includes/services/forms.php';
 $service = FormsService::FIELD_WIDTHS;
 
-$logic   = intList($root . '/assets/js/form-logic.js',  '/var\s+WIDTHS\s*=\s*\[([0-9,\s]+)\]/');
-$builder = intList($root . '/forms/edit/index.php',     '/const\s+FIELD_WIDTHS\s*=\s*\[([0-9,\s]+)\]/');
+$logic = intList($root . '/assets/js/form-logic.js',  '/var\s+WIDTHS\s*=\s*\[([0-9,\s]+)\]/');
 
 check('the service defines a width list', !empty($service));
 check('form-logic.js defines one',        $logic !== null,   'pattern did not match — was the variable renamed?');
-check('the builder defines one',          $builder !== null, 'pattern did not match — was the constant renamed?');
 
-if ($logic !== null)   check('form-logic agrees with the service', $service === $logic,
+if ($logic !== null) check('form-logic agrees with the service', $service === $logic,
     'service=' . implode(',', $service) . '  logic=' . implode(',', $logic));
-if ($builder !== null) check('the builder agrees with the service', $service === $builder,
-    'service=' . implode(',', $service) . '  builder=' . implode(',', $builder));
+
+/* ⭐ THERE USED TO BE A THIRD LIST, in forms/edit/index.php. The builder now
+   reads FormLogic's instead of declaring its own, so the drift it could suffer
+   is gone rather than guarded. What has to be asserted now is that it really
+   does defer — a future edit that reintroduces a literal list here would
+   silently recreate the third source this test was written for. */
+$builderSrc = (string)@file_get_contents($root . '/forms/edit/index.php');
+check('the builder defers to FormLogic for widths',
+    (bool)preg_match('/const\s+FIELD_WIDTHS\s*=\s*FormLogic\.FIELD_WIDTHS\s*;/', $builderSrc),
+    'the builder should read FormLogic.FIELD_WIDTHS, not declare its own');
+check('the builder declares NO literal width list of its own',
+    !preg_match('/const\s+FIELD_WIDTHS\s*=\s*\[/', $builderSrc),
+    'a literal list reappeared in forms/edit/index.php — that is the third source again');
+check('the builder loads form-logic.js (or FormLogic is undefined at runtime)',
+    strpos($builderSrc, 'assets/js/form-logic.js') !== false,
+    'the builder reads FormLogic but never loads it');
 
 /* The default must be on the list, and it must be the widest — a default that
    is not full width would silently re-lay out every existing form, since every

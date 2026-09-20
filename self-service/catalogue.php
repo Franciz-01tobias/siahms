@@ -25,6 +25,14 @@
 $pageTitleKey = 'self-service.catalogue.title';   // a KEY: i18n starts in header.php
 $activeNav    = 'catalogue';
 
+/* 🔴 The 'forms' namespace, on top of header.php's default ['common','self-service'].
+   This page renders a form and already calls window.t('forms.fill.lookup_placeholder'),
+   but that namespace was never exported to it — and i18n.js surfaces the KEY on a
+   miss, deliberately. So a customer opening a form with a lookup field saw a search
+   box whose placeholder read "forms.fill.lookup_placeholder", in every language.
+   The shared renderer's unsupported-type message lives in the same namespace. */
+$translationNamespaces = ['common', 'self-service', 'forms'];
+
 // Deep link to one form: /catalogue.php?id=3. Values reach the script through
 // $pageData → window.PAGE, never interpolated into $pageScripts (a nowdoc — a
 // PHP tag inside it is emitted verbatim and kills the whole block).
@@ -242,10 +250,15 @@ document.addEventListener('DOMContentLoaded', function () {
         function renderForm(form) {
             const container = document.getElementById('catContent');
             currentForm = form;
-            const fields = (form.fields || []).map(f => {
+            /* The WALK is shared with the filler and the builder preview
+               (FormRender); this page keeps its own markup, which is the point —
+               see assets/js/form-render.js. */
+            const fields = FormRender.render(form.fields, {
+              name: 'self-service portal',
+              field: function (f, ctx) {
                 // A section is a heading, not a question: no label element, no answer.
                 if (f.field_type === 'section') {
-                    return '<div class="cat-section" data-wrap-id="' + f.id + '" data-width="' + FormLogic.fieldWidth(f) + '"><h2>'
+                    return '<div class="cat-section" ' + ctx.wrapAttrs + '><h2>'
                          + esc(f.label || '') + '</h2></div>';
                 }
                 const req = f.is_required == 1
@@ -303,14 +316,26 @@ document.addEventListener('DOMContentLoaded', function () {
                                   + esc(o) + '</label>').join('')
                               + '</div>';
                         break;
-                    default:   // text
+                    case 'text':
                         input = '<input type="text" id="f' + f.id + '" data-field-id="' + f.id + '">';
+                        break;
+                    default:
+                        /* 🔴 THIS USED TO BE `default: // text`, so a type the
+                           portal had never been taught was drawn as a text box —
+                           a control that looks like it works, takes whatever is
+                           typed, and stores it as that field's answer. A customer
+                           would have no way of knowing. Of the three surfaces this
+                           was the worst failure, because the other two only ever
+                           dropped the question. 'text' now has its own case and
+                           anything unknown goes loudly to FormRender. */
+                        return null;
                 }
-                /* Same width attribute as the analyst filler. Two renderers, one
-                   meaning — FormLogic.fieldWidth is the single place that decides
-                   what a missing or bad width becomes. */
-                return '<div class="cat-field" data-wrap-id="' + f.id + '" data-width="' + FormLogic.fieldWidth(f) + '">' + label + input + '</div>';
-            }).join('');
+                /* The wrapper's id and width come from the shared walker, so the
+                   filler, the portal and the preview cannot disagree about what a
+                   missing or bad width means. */
+                return '<div class="cat-field" ' + ctx.wrapAttrs + '>' + label + input + '</div>';
+              }
+            });
 
             container.innerHTML = backBtn()
                 + '<div class="cat-form">'

@@ -49,6 +49,7 @@ $pageData    = $pageData ?? [];
          includes/form_logic.php, which is what actually decides on submit. Loaded
          per-page: only the catalogue renders a form. -->
     <script src="../assets/js/form-logic.js?v=3"></script>
+    <script src="../assets/js/form-render.js?v=1"></script>
     <?php endif; ?>
     <?php if (!empty($needsRecorder)): ?>
     <!-- Screen recording, for the pages that offer it (raising a ticket and
