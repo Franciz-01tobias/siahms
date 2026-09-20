@@ -69,9 +69,9 @@ foreach ($formActionDefs as $def) {
     <!-- The builder did NOT load these, which is why it kept its own copy of the
          width list — a third hand-maintained list of the same six numbers. The
          preview now shares the walk with the filler and the portal. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=3"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=4"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=2"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
     <style>
@@ -1248,9 +1248,15 @@ foreach ($formActionDefs as $def) {
         const FIELD_TYPES_MULTI_VALUE = ['checkboxes'];
         function isMultiValue(type) { return FIELD_TYPES_MULTI_VALUE.includes(type); }
 
-        // A section is a heading: it takes no answer, so it has no options, no
-        // "required" toggle, and nothing may depend on what was typed into it.
-        function isSection(type) { return type === 'section'; }
+        /* A presentational item is there to be read: no options, no "required"
+           toggle, and nothing may depend on what was typed into it — because
+           nothing is.
+
+           🔴 This was `type === 'section'`. Asked of FormLogic now, so a second
+           presentational type cannot arrive in the builder still offering a
+           required toggle for an answer it will never collect. The name is kept
+           short because it appears in a dozen conditions below. */
+        function isSection(type) { return !FormLogic.isAnswerable(type); }
 
         // ===== Date / time fields =====
         // One field type carrying a mode, rather than three separate types. field_type

@@ -28,7 +28,7 @@ $translationNamespaces = ['common', 'change-management'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('change-management.page.calendar')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="../assets/css/calendar-grid.css?v=1">
     <link rel="stylesheet" href="../assets/css/itsm_calendar.css?v=7">

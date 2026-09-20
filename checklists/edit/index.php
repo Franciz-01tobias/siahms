@@ -49,7 +49,7 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - Checklist template</title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
     <style>
         html, body { height: auto !important; min-height: 100vh; overflow-y: auto !important; overflow-x: hidden; margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }

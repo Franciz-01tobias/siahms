@@ -50,7 +50,7 @@ $translationNamespaces = ['common', 'forms'];
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/ai-settings.js?v=2"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
     <style>
         /* Module accent (teal) — tabs, toggles, focus rings, shared buttons. */

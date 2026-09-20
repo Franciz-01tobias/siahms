@@ -55,7 +55,7 @@ $toolMethod = strtoupper($tool['method'] ?? 'GET');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars($tool['id'] . ' · ' . $tool['title']); ?></title>
-    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/inbox.css?v=70">
     <style>
         body {

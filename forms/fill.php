@@ -31,9 +31,9 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- Shared with the builder preview and the portal: field types + conditional
          visibility. Mirrors includes/form_logic.php, which decides on submit. -->
-    <script src="../assets/js/form-logic.js?v=3"></script>
+    <script src="../assets/js/form-logic.js?v=4"></script>
     <script src="../assets/js/form-render.js?v=2"></script>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
     <style>
         /* Module accent (teal). */
@@ -588,7 +588,7 @@ $translationNamespaces = ['common', 'forms'];
         function collectValues() {
             const values = {};
             formData.fields.forEach(f => {
-                if (f.field_type === 'section') return;
+                if (!FormLogic.isAnswerable(f.field_type)) return;
                 const read = readField(f);
                 if (read) values[f.id] = read.value;
             });
@@ -625,7 +625,7 @@ $translationNamespaces = ['common', 'forms'];
             formData.fields.forEach(f => {
                 // Headings collect nothing; a question that was never shown was never
                 // asked, so it is neither sent nor required.
-                if (f.field_type === 'section' || vis[f.id] === false) return;
+                if (!FormLogic.isAnswerable(f.field_type) || vis[f.id] === false) return;
 
                 const read = readField(f);
                 if (!read) return;

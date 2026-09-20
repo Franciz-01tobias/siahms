@@ -279,9 +279,11 @@ try {
         $clean = [
             'field_type'  => $type,
             'label'       => $label,
-            // A section is a heading and collects nothing, so it can never be required
+            // A presentational item collects nothing, so it can never be required
             // however the model labelled it — the service rejects that outright.
-            'is_required' => $type !== 'section' && !empty($f['is_required']),
+            // Asked of the one list rather than by naming 'section', so a second
+            // presentational type cannot arrive here still marked required.
+            'is_required' => FormsService::isAnswerable($type) && !empty($f['is_required']),
             'options'     => $options,
         ];
         if ($type === 'datetime') {

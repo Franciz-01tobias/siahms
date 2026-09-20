@@ -18,6 +18,11 @@
     // Every type the module knows. 'section' is presentational — a heading that owns
     // the fields below it until the next section, and never produces an answer.
     var TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section'];
+
+    /* The types that are READ, not answered. Mirrors
+       FormsService::PRESENTATIONAL_TYPES — see isAnswerable() for why this is a
+       list rather than a comparison written out in thirteen places. */
+    var PRESENTATIONAL = ['section'];
     var WITH_OPTIONS = ['dropdown', 'radio', 'checkboxes'];
     var MULTI_VALUE  = ['checkboxes'];
 
@@ -72,7 +77,19 @@
     var WIDTHS = [12, 9, 8, 6, 4, 3];
     var WIDTH_DEFAULT = 12;
 
-    function isAnswerable(type) { return type !== 'section'; }
+    /**
+     * Does this field type collect an answer?
+     *
+     * 🔴 This was `type !== 'section'`, written out again in PHP, in SQL and in
+     * two more JavaScript files. One presentational type made that harmless;
+     * a second makes every un-updated copy treat standing text as a question —
+     * collected on submit, required if somebody ticked required, and a column in
+     * every export. Mirrors FormsService::PRESENTATIONAL_TYPES.
+     *
+     * ⚠️ NOT the same question as "may a condition depend on this". A grid
+     * collects an answer and still cannot be a condition trigger.
+     */
+    function isAnswerable(type) { return PRESENTATIONAL.indexOf(type) === -1; }
     function hasOptions(type)   { return WITH_OPTIONS.indexOf(type) !== -1; }
     function isMultiValue(type) { return MULTI_VALUE.indexOf(type) !== -1; }
 
@@ -301,6 +318,7 @@
         DATE_MODES: DATE_MODES,
         DATE_MODE_DEFAULT: DATE_MODE_DEFAULT,
         isAnswerable: isAnswerable,
+        PRESENTATIONAL_TYPES: PRESENTATIONAL,
         hasOptions: hasOptions,
         isMultiValue: isMultiValue,
         dateMode: dateMode,

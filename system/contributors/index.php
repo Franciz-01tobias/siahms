@@ -39,7 +39,7 @@ $contributors = getContributors();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('system.contributors.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
     <style>

@@ -42,8 +42,50 @@ class FormsService
     // 'section' is a heading, not a question — see ANSWERABLE_TYPES.
     const FIELD_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'grid'];
 
-    /** The types that actually collect an answer. A 'section' never produces submission data. */
+    /**
+     * ⚠️ THIS LIST IS NARROWER THAN ITS NAME. It is what a conditional-visibility
+     * rule may DEPEND ON, not everything that collects an answer — 'grid' stores
+     * a real answer and is deliberately absent, because a table cannot be a
+     * condition trigger. Do not reach for it to mean "is this a question";
+     * isAnswerable() below is that question.
+     */
     const ANSWERABLE_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup'];
+
+    /**
+     * The types that are there to be READ, not answered.
+     *
+     * 🔴 WHY THIS EXISTS AS A LIST. "Is this a question?" was asked in thirteen
+     * places by writing `=== 'section'`, in PHP, in SQL and in three JavaScript
+     * renderers. That is fine while there is exactly one presentational type and
+     * becomes a silent bug the moment there are two: every site that was never
+     * updated treats the new one as a question, and a block of standing text
+     * turns into a column in an export, a row in a submission, or something a
+     * required-field check refuses to let anyone past.
+     *
+     * Ask isAnswerable() instead. The one place a literal 'section' is still
+     * correct is code that draws a heading specifically, because that is about
+     * what the thing IS, not about whether it collects anything.
+     */
+    const PRESENTATIONAL_TYPES = ['section'];
+
+    /** Does this field type collect an answer? */
+    public static function isAnswerable(?string $type): bool
+    {
+        return $type !== null && !in_array($type, self::PRESENTATIONAL_TYPES, true);
+    }
+
+    /**
+     * A SQL fragment excluding the presentational types: `field_type NOT IN (…)`.
+     *
+     * 🔑 Written as an EXCLUSION rather than a list of questions on purpose. A
+     * new question type is then included automatically, and only a new
+     * presentational type has to be declared — which is the direction that fails
+     * safe. The opposite shape is what left 'grid' out of three lists.
+     */
+    public static function presentationalSqlExclusion(string $column = 'field_type'): string
+    {
+        return $column . " NOT IN ('" . implode("','", self::PRESENTATIONAL_TYPES) . "')";
+    }
 
     /**
      * What a 'datetime' field actually asks for, held in config.date_mode.
@@ -669,7 +711,7 @@ class FormsService
         $fq = $conn->prepare(
             "SELECT id, form_id, label, field_type, options, config, is_deleted, sort_order
                FROM form_fields
-              WHERE form_id IN ($in) AND field_type <> 'section'
+              WHERE form_id IN ($in) AND " . self::presentationalSqlExclusion() . "
               ORDER BY form_id, sort_order, id"
         );
         $fq->execute($formIds);
@@ -1296,7 +1338,7 @@ class FormsService
             if (!isset($fieldsById[(int)$fieldId])) {
                 throw new ServiceError('validation', 'invalid_field', "Unknown field id for this form: {$fieldId}");
             }
-            if ($fieldsById[(int)$fieldId]['field_type'] === 'section') {
+            if (!self::isAnswerable($fieldsById[(int)$fieldId]['field_type'])) {
                 throw new ServiceError('validation', 'invalid_field', "Field {$fieldId} is a section heading and takes no answer.");
             }
         }
@@ -1338,7 +1380,7 @@ class FormsService
             $type = $field['field_type'];
 
             // Headings collect nothing; hidden questions were never asked.
-            if ($type === 'section' || empty($visible[$fid])) {
+            if (!self::isAnswerable($type) || empty($visible[$fid])) {
                 continue;
             }
 

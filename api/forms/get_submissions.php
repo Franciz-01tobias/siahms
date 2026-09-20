@@ -5,6 +5,7 @@
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/services/forms.php';   // presentationalSqlExclusion() - one decision about what is a question
 
 header('Content-Type: application/json');
 
@@ -47,7 +48,7 @@ try {
     $stmt = $conn->prepare(
         "SELECT id, field_type, label, is_deleted
            FROM form_fields
-          WHERE form_id = ? AND field_type <> 'section'
+          WHERE form_id = ? AND " . FormsService::presentationalSqlExclusion() . "
           ORDER BY is_deleted, sort_order, id"
     );
     $stmt->execute([$formId]);

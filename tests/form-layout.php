@@ -229,6 +229,50 @@ $l = FormsService::layoutFor(FormsService::remapLayoutFields($withGone, [7 => 10
 check('a field left behind by the version copy drops out cleanly',
     FormsService::layoutFieldOrder($l) === [107], shape($l));
 
+/* ── 7. "Is this a question?" is ONE decision ────────────────────────────── */
+echo "\nPresentational types\n";
+
+/* 🔴 This used to be `=== 'section'`, written out in thirteen places across PHP,
+   SQL and three JavaScript renderers. With one presentational type that is
+   harmless; with two, every site nobody updated treats standing text as a
+   question — collected on submit, demanded if somebody ticked required, and a
+   column in every export. The lists are now one each side, and they must agree. */
+check('a section is not answerable',       FormsService::isAnswerable('section') === false);
+check('a text field is answerable',        FormsService::isAnswerable('text') === true);
+check('a grid IS answerable',              FormsService::isAnswerable('grid') === true,
+    'a grid stores a real answer — it is only barred from being a CONDITION trigger');
+check('an unknown type is treated as a question',
+    FormsService::isAnswerable('somethingnew') === true,
+    'failing towards "it collects something" is the safe direction');
+check('null is not answerable',            FormsService::isAnswerable(null) === false);
+
+/* The SQL exclusion must name every presentational type and nothing else. */
+$sql = FormsService::presentationalSqlExclusion();
+check('the SQL exclusion covers every presentational type',
+    count(array_filter(FormsService::PRESENTATIONAL_TYPES,
+        fn($t) => strpos($sql, "'" . $t . "'") !== false)) === count(FormsService::PRESENTATIONAL_TYPES),
+    $sql);
+check('the SQL exclusion is an exclusion, not an inclusion',
+    strpos($sql, 'NOT IN') !== false, $sql);
+
+/* PHP and JavaScript keep separate copies because they run in different places.
+   A test is the cheaper guard — the same reasoning as the width lists. */
+$js = (string)@file_get_contents($root . '/assets/js/form-logic.js');
+if (preg_match('/var\s+PRESENTATIONAL\s*=\s*\[([^\]]*)\]/', $js, $m)) {
+    $jsList = array_values(array_filter(array_map(
+        fn($s) => trim($s, " \t'\""), explode(',', $m[1])
+    ), fn($s) => $s !== ''));
+    check('form-logic.js agrees with the service about what is presentational',
+        $jsList === FormsService::PRESENTATIONAL_TYPES,
+        'php=' . implode(',', FormsService::PRESENTATIONAL_TYPES) . '  js=' . implode(',', $jsList));
+} else {
+    check('form-logic.js declares a presentational list', false, 'pattern did not match — renamed?');
+}
+
+/* CONTROL: the comparison must be able to fail. */
+check('CONTROL — a differing list does NOT compare equal',
+    ['section', 'note'] !== FormsService::PRESENTATIONAL_TYPES);
+
 echo "\n" . str_repeat('=', 64) . "\n";
 echo "$pass passed, $fail failed\n";
 exit($fail > 0 ? 1 : 0);

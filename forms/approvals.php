@@ -32,7 +32,7 @@ $translationNamespaces = ['common', 'forms'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('forms.approval.inbox_title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <!-- inbox.css carries the shared header/nav styles (.header, .nav-btn); forms.css
          the module chrome. Same set forms/index.php loads. -->
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">

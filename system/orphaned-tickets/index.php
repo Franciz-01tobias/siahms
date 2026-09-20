@@ -32,7 +32,7 @@ if (!isset($_SESSION['analyst_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - Orphaned tickets</title>
-    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/inbox.css?v=70">
     <style>
         /* System module accent (blue-grey) — shared primitives pick this up. */

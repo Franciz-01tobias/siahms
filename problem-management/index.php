@@ -31,7 +31,7 @@ $translationNamespaces = ['common'];
     <script src="<?php echo BASE_URL; ?>assets/js/i18n.js?v=2"></script>
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/record-preview.css?v=1">
     <script src="<?php echo BASE_URL; ?>assets/js/record-preview.js?v=1"></script>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=23">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <style>
         /* Pin the shared accent to the module red so shared components on this
