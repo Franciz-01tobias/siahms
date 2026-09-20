@@ -3492,6 +3492,28 @@ return [
        means, it is evaluated when asked and NEVER written onto the forms. If
        closing stamped is_portal_visible = 0 on three forms, reopening would
        turn all three back on, including one deliberately kept off the portal. */
+    /* A form somebody started and did not finish.
+       🔴 A SEPARATE TABLE, deliberately, not a status on form_submissions —
+       that table is read by the submissions list, the collection view, the
+       counts, the exports, the approval inbox, the workflow triggers and the
+       REST API, and a draft appearing in any of them is a half-filled record
+       presented as a real one. Here it is invisible to all of them.
+       ⚠️ Pinned to the exact form VERSION: createVersion() renumbers every
+       field, so answers keyed by old ids would attach to the wrong questions. */
+    'form_drafts' => [
+        'id'            => 'INT NOT NULL AUTO_INCREMENT',
+        'form_id'       => 'INT NOT NULL',
+        // 'analyst' | 'portal'. The kind is stored, not inferred: `analysts`
+        // and `users` are separate id spaces. One pair rather than two nullable
+        // ids because a UNIQUE key over nullable columns constrains nothing in
+        // MySQL — NULLs compare as distinct and duplicates slip through.
+        'owner_kind'    => "VARCHAR(10) NOT NULL",
+        'owner_id'      => 'INT NOT NULL',
+        'answers'       => 'LONGTEXT NULL',
+        'created_date'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'modified_date' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
     'form_collections' => [
         'id'              => 'INT NOT NULL AUTO_INCREMENT',
         'name'            => 'VARCHAR(255) NOT NULL',

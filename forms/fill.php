@@ -31,7 +31,7 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- Shared with the builder preview and the portal: field types + conditional
          visibility. Mirrors includes/form_logic.php, which decides on submit. -->
-    <script src="../assets/js/form-logic.js?v=8"></script>
+    <script src="../assets/js/form-logic.js?v=9"></script>
     <script src="../assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
@@ -379,12 +379,113 @@ $translationNamespaces = ['common', 'forms'];
                 if (data.success) {
                     formData = data.form;
                     renderForm();
+                    restoreDraft();
                 } else {
                     document.getElementById('formCard').innerHTML = '<p style="color:var(--danger-text, #c00);text-align:center">' + esc(data.error) + '</p>';
                 }
             } catch (e) {
                 console.error(e);
             }
+        }
+
+        /* ══ Drafts ═════════════════════════════════════════════════════════
+           A form you started and have not finished — because the cost code is
+           with finance, or the serial number is on a machine you are not sitting
+           at. Saved on demand only; nothing is stored until somebody asks. */
+
+        /**
+         * Save what is typed so far.
+         *
+         * 🔑 collectValues() reads EVERY answerable field, including ones a
+         * condition is currently hiding — which is what a draft wants and is
+         * why it is used here rather than submitForm's own collection. A draft
+         * is a snapshot of the typing, not of the answer: tick a box, fill the
+         * branch it reveals, untick it, and that typing should still be there
+         * tomorrow. Submit deliberately does the opposite and drops hidden
+         * answers, because it is recording what the person was actually asked.
+         */
+        async function saveDraft() {
+            try {
+                const res = await fetch(API_BASE + 'draft.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ form_id: formData.id, answers: collectValues() })
+                });
+                const data = await res.json();
+                showMsg(data.success ? window.t('forms.draft.saved')
+                                     : (data.error || window.t('forms.draft.failed')),
+                        data.success ? 'success' : 'error');
+            } catch (e) {
+                showMsg(window.t('forms.draft.failed'), 'error');
+            }
+        }
+
+        /**
+         * Put a saved draft back on screen, if there is one.
+         *
+         * 🔴 A STALE DRAFT IS NOT LOADED. The form has had a new version since
+         * it was saved, and createVersion() renumbers every field — so those
+         * answers would attach to whichever questions now hold those ids, or to
+         * none. Saying so and leaving the form blank is the only honest option;
+         * silently filling in the wrong boxes is the worst one.
+         */
+        async function restoreDraft() {
+            try {
+                const res  = await fetch(API_BASE + 'draft.php?form_id=' + formData.id);
+                const data = await res.json();
+                const d    = data && data.draft;
+                if (!d) return;
+
+                if (d.stale) {
+                    showMsg(window.t('forms.draft.stale'), 'error');
+                    return;
+                }
+                applyDraftValues(d.answers || {});
+                applyVisibility();
+                showMsg(window.t('forms.draft.restored', { when: d.modified_date }), 'success');
+            } catch (e) { /* no draft is not a failure worth reporting */ }
+        }
+
+        /** Write saved answers back into the controls, by field type. */
+        function applyDraftValues(answers) {
+            formData.fields.forEach(f => {
+                if (!Object.prototype.hasOwnProperty.call(answers, String(f.id))) return;
+                const val = answers[String(f.id)];
+
+                if (f.field_type === 'grid') {
+                    /* Rebuild the rows the person had, rather than the single
+                       empty starter row. Values are keyed by column id, which is
+                       why reordering the columns since does not matter. */
+                    const wrap = document.querySelector(`.form-table-field[data-field-id="${f.id}"] tbody`);
+                    if (!wrap) return;
+                    const rows = FormLogic.gridRows(val);
+                    if (!rows.length) return;
+                    const cols = FormLogic.gridLiveColumns(f);
+                    wrap.innerHTML = rows.map(r => gridRowHtml(f, cols, r)).join('');
+                    return;
+                }
+
+                const wrapper = document.querySelector(`.form-field[data-field-id="${f.id}"]`);
+                if (f.field_type === 'radio') {
+                    const hit = wrapper && wrapper.querySelector(`input[type="radio"][value="${CSS.escape(String(val))}"]`);
+                    if (hit) hit.checked = true;
+                    return;
+                }
+                if (f.field_type === 'checkboxes') {
+                    let list = [];
+                    try { const p = JSON.parse(val); if (Array.isArray(p)) list = p.map(String); } catch (e) { /* legacy CSV */ }
+                    if (!list.length && val) list = String(val).split(',').map(s => s.trim());
+                    (wrapper ? wrapper.querySelectorAll('input[type="checkbox"]') : []).forEach(cb => {
+                        cb.checked = list.indexOf(cb.value) !== -1;
+                    });
+                    return;
+                }
+
+                const el = document.querySelector(`[data-field-id="${f.id}"]`);
+                if (!el || !('value' in el)) return;
+                if (el.type === 'checkbox') el.checked = (String(val) === '1');
+                else el.value = val;
+            });
         }
 
         /* ══ A table question ═══════════════════════════════════════════════
@@ -699,6 +800,7 @@ $translationNamespaces = ['common', 'forms'];
 
             html += `<div class="form-actions">
                 <button type="submit" class="btn btn-primary">${esc(window.t('forms.fill.submit'))}</button>
+                <button type="button" class="btn btn-secondary" onclick="saveDraft()">${esc(window.t('forms.draft.save'))}</button>
                 <a href="./" class="btn btn-secondary">${esc(window.t('forms.fill.cancel'))}</a>
             </div>`;
             html += '</form>';
@@ -836,6 +938,15 @@ $translationNamespaces = ['common', 'forms'];
                 const result = await res.json();
 
                 if (result.success) {
+                    /* 🔑 The draft has served its purpose — throw it away, or
+                       "Submit another" reloads the answers that were just sent
+                       and the person submits them twice. Deliberately not
+                       awaited and its failure ignored: the submission has
+                       already succeeded and must not be reported as failed
+                       because a tidy-up did not. */
+                    fetch(API_BASE + 'draft.php?form_id=' + formData.id, { method: 'DELETE' })
+                        .catch(() => {});
+
                     document.getElementById('fillForm').style.display = 'none';
                     const msgEl = document.getElementById('submitMessage');
                     msgEl.className = 'submit-message success';

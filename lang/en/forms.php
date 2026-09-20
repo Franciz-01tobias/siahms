@@ -503,6 +503,21 @@ return [
         'n_rows'         => '{n} rows',
     ],
 
+    // ── Drafts: a form somebody started and has not finished ────────
+    'draft' => [
+        'save'     => 'Save draft',
+        'saved'    => 'Draft saved. You can come back to this later.',
+        'failed'   => 'That draft could not be saved',
+        // {when} is when they last saved it, so "is this the right one?" is
+        // answerable without opening anything.
+        'restored' => 'Picked up your draft from {when}. Nothing has been submitted yet.',
+        /* 🔴 The form has had a new version since the draft was saved, and a new
+           version renumbers every question — so those answers would land in the
+           wrong boxes. Says what happened rather than silently filling them in
+           or silently discarding them. */
+        'stale'    => 'You had a draft of this form, but the form has changed since you saved it — so it cannot be filled back in. Please start again.',
+    ],
+
     // ── Image blocks (the builder + all three renderers) ────────────
     'image' => [
         // Shown where the picture would be, both in the builder before one is

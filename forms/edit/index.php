@@ -69,7 +69,7 @@ foreach ($formActionDefs as $def) {
     <!-- The builder did NOT load these, which is why it kept its own copy of the
          width list — a third hand-maintained list of the same six numbers. The
          preview now shares the walk with the filler and the portal. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=8"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=9"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">

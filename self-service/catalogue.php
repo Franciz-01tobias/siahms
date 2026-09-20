@@ -404,6 +404,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 +   '<div class="cat-actions">'
                 +     '<button type="button" class="btn btn-primary" id="catSubmit" onclick="submitForm(' + form.id + ')">'
                 +       esc(window.t('self-service.catalogue.submit')) + '</button>'
+                +     '<button type="button" class="btn btn-secondary" onclick="saveCatDraft(' + form.id + ')">'
+                +       esc(window.t('forms.draft.save')) + '</button>'
                 +   '</div>'
                 + '</div>';
 
@@ -418,6 +420,90 @@ document.addEventListener('DOMContentLoaded', function () {
             FormLogic.attachLookups(formEl, '../api/forms/lookup_search.php');
 
             applyVisibility();
+            restoreCatDraft(form.id);
+        }
+
+        /* ══ Drafts ═════════════════════════════════════════════════════════
+           A request somebody started and could not finish — the cost centre is
+           with their manager, the serial number is on a machine upstairs. Saved
+           on demand only: nothing a customer has half-typed is stored until
+           they ask for it to be. */
+
+        /** Save what is typed so far, hidden branches included. */
+        async function saveCatDraft(formId) {
+            try {
+                const res = await fetch('../api/self-service/draft.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    /* collectAnswers(TRUE) — including fields a condition is
+                       currently hiding. A draft is a snapshot of the typing;
+                       submit is the one that records what was actually asked. */
+                    body: JSON.stringify({ form_id: formId, answers: collectAnswers(true) })
+                });
+                const data = await res.json();
+                notice(data.success ? window.t('forms.draft.saved')
+                                    : (data.error || window.t('forms.draft.failed')), !data.success);
+            } catch (e) {
+                notice(window.t('forms.draft.failed'), true);
+            }
+        }
+
+        /**
+         * Put a saved draft back, if there is one.
+         *
+         * 🔴 A STALE one is NOT loaded — the form has had a new version and a
+         * new version renumbers every question, so the answers would land in
+         * the wrong boxes. Say so; do not guess.
+         */
+        async function restoreCatDraft(formId) {
+            try {
+                const res  = await fetch('../api/self-service/draft.php?form_id=' + formId);
+                const data = await res.json();
+                const d    = data && data.draft;
+                if (!d) return;
+                if (d.stale) { notice(window.t('forms.draft.stale'), true); return; }
+                applyCatDraftValues(d.answers || {});
+                applyVisibility();
+                notice(window.t('forms.draft.restored', { when: d.modified_date }), false);
+            } catch (e) { /* no draft is not a failure */ }
+        }
+
+        /** Write saved answers back into the controls, by field type. */
+        function applyCatDraftValues(answers) {
+            (currentForm.fields || []).forEach(function (f) {
+                if (!Object.prototype.hasOwnProperty.call(answers, String(f.id))) return;
+                var val = answers[String(f.id)];
+
+                if (f.field_type === 'grid') {
+                    var body = document.querySelector('.form-table-field[data-field-id="' + f.id + '"] tbody');
+                    if (!body) return;
+                    var rows = FormLogic.gridRows(val);
+                    if (!rows.length) return;
+                    var cols = FormLogic.gridLiveColumns(f);
+                    body.innerHTML = rows.map(function (r) { return catGridRowHtml(f, cols, r); }).join('');
+                    return;
+                }
+
+                var wrap = document.querySelector('[data-field-id="' + f.id + '"]');
+                if (!wrap) return;
+
+                if (f.field_type === 'radio') {
+                    var hit = wrap.querySelector('input[type="radio"][value="' + CSS.escape(String(val)) + '"]');
+                    if (hit) hit.checked = true;
+                    return;
+                }
+                if (f.field_type === 'checkboxes') {
+                    var list = [];
+                    try { var p = JSON.parse(val); if (Array.isArray(p)) list = p.map(String); } catch (e) { /* legacy */ }
+                    if (!list.length && val) list = String(val).split(',').map(function (s) { return s.trim(); });
+                    wrap.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+                        cb.checked = list.indexOf(cb.value) !== -1;
+                    });
+                    return;
+                }
+                if (wrap.type === 'checkbox') { wrap.checked = (String(val) === '1'); return; }
+                if ('value' in wrap) wrap.value = val;
+            });
         }
 
         function parseOptions(raw) {
@@ -579,6 +665,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     notice(data.error || window.t('self-service.catalogue.failed'), true);
                     return;
                 }
+                /* The draft has done its job. Not awaited and its failure
+                   ignored: the request HAS been sent, and a tidy-up that did
+                   not work must never make a customer think it was not. */
+                fetch('../api/self-service/draft.php?form_id=' + formId, { method: 'DELETE' })
+                    .catch(function () {});
+
                 document.getElementById('catContent').innerHTML = backBtn()
                     + '<div class="cat-empty">'
                     + '<div class="cat-empty-title">' + esc(window.t('self-service.catalogue.sent')) + '</div>'

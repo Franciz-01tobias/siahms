@@ -41,7 +41,7 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
-    <script src="../assets/js/form-logic.js?v=8"></script>
+    <script src="../assets/js/form-logic.js?v=9"></script>
     <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
     <!-- autotable: a table QUESTION is drawn as a real table in the PDF rather
          than flattened into a paragraph. Same versions as morning-checks. -->

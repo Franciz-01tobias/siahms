@@ -1968,6 +1968,161 @@ class FormsService
         }
         return $out;
     }
+    /* ══ Drafts ═════════════════════════════════════════════════════════════
+       A form somebody started and did not finish. Kept in its own table so a
+       draft is invisible to the submissions list, the collection view, the
+       counts, the exports, the approval inbox, the workflow triggers and the
+       REST API — none of which had to learn anything. */
+
+    const DRAFT_OWNER_KINDS = ['analyst', 'portal'];
+
+    /** Does this database have the drafts table yet? */
+    public static function draftsAvailable(PDO $conn): bool
+    {
+        static $known = null;
+        if ($known !== null) return $known;
+        try {
+            $q = $conn->prepare(
+                "SELECT COUNT(*) FROM information_schema.tables
+                  WHERE table_schema = DATABASE() AND table_name = 'form_drafts'"
+            );
+            $q->execute();
+            $known = ((int)$q->fetchColumn() === 1);
+        } catch (Exception $e) {
+            $known = false;
+        }
+        return $known;
+    }
+
+    /**
+     * Save (or overwrite) somebody's draft of a form.
+     *
+     * 🔴 NOTHING HERE IS VALIDATED AGAINST THE FORM. Not being finished is the
+     * whole point: a required field may be empty, a conditional branch may be
+     * half-answered, a number box may hold the word "tbc". Validation happens on
+     * SUBMIT, which is a different act. What IS enforced is the shape — keys
+     * must be field ids belonging to this form, so a crafted post cannot use a
+     * draft as somewhere to park arbitrary data.
+     */
+    public static function saveDraft(PDO $conn, int $formId, string $ownerKind, int $ownerId, array $answers): array
+    {
+        if (!self::draftsAvailable($conn)) {
+            /* ⚠️ 'conflict' (409), not a new kind. serviceErrorHttpStatus() has a
+               fixed switch and anything it does not know falls silently through
+               to 422, which would say "you sent something invalid" when the
+               truth is "this install has not been verified yet". */
+            throw new ServiceError('conflict', 'not_ready',
+                'Drafts need Database Verification to be run first.');
+        }
+        if (!in_array($ownerKind, self::DRAFT_OWNER_KINDS, true)) {
+            throw new ServiceError('validation', 'invalid_owner', 'Unknown draft owner kind.');
+        }
+        if ($formId <= 0 || $ownerId <= 0) {
+            throw new ServiceError('validation', 'missing_field', 'A draft needs a form and an owner.');
+        }
+
+        $fq = $conn->prepare("SELECT id FROM form_fields WHERE form_id = ? AND is_deleted = 0");
+        $fq->execute([$formId]);
+        $known = array_flip(array_map('intval', $fq->fetchAll(PDO::FETCH_COLUMN)));
+        if (!$known) {
+            throw new ServiceError('not_found', 'no_form', 'That form has no questions.');
+        }
+
+        /* Keys filtered to this form's own live fields. An id that is not one
+           of them is dropped rather than refused: a draft is a convenience and
+           losing a stale key should not cost somebody the rest of their typing. */
+        $clean = [];
+        foreach ($answers as $fieldId => $value) {
+            $fid = (int)$fieldId;
+            if (!isset($known[$fid])) continue;
+            if (is_array($value) || is_object($value)) $value = json_encode($value);
+            $clean[$fid] = (string)$value;
+        }
+
+        $json = json_encode($clean);
+        if (strlen($json) > self::DRAFT_MAX_BYTES) {
+            throw new ServiceError('validation', 'too_large', 'That draft is too large to save.');
+        }
+
+        /* One row per person per form version, so saving again overwrites.
+           ON DUPLICATE KEY rather than a read-then-write, which would race two
+           tabs into two rows and then fail the unique key anyway. */
+        $conn->prepare(
+            "INSERT INTO form_drafts (form_id, owner_kind, owner_id, answers, created_date, modified_date)
+             VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE answers = VALUES(answers), modified_date = UTC_TIMESTAMP()"
+        )->execute([$formId, $ownerKind, $ownerId, $json]);
+
+        return ['saved' => true, 'fields' => count($clean)];
+    }
+
+    /** An abuse ceiling. A draft is typing, not an upload. */
+    const DRAFT_MAX_BYTES = 256 * 1024;
+
+    /**
+     * Somebody's draft of a form, or null.
+     *
+     * 🔴 ALSO REPORTS WHETHER THE FORM HAS MOVED ON. createVersion() renumbers
+     * every field, so a draft's answers only mean anything against the version
+     * they were typed into. `stale` true means that version is no longer the
+     * one people fill in — the caller must SAY SO rather than load the answers
+     * into a newer form, where they would attach to whatever now holds those
+     * ids, or to nothing at all.
+     */
+    public static function loadDraft(PDO $conn, int $formId, string $ownerKind, int $ownerId): ?array
+    {
+        if (!self::draftsAvailable($conn)) return null;
+        if (!in_array($ownerKind, self::DRAFT_OWNER_KINDS, true)) return null;
+
+        $q = $conn->prepare(
+            "SELECT id, form_id, answers,
+                    DATE_FORMAT(modified_date, '%Y-%m-%d %H:%i:%s') AS modified_date
+               FROM form_drafts
+              WHERE form_id = ? AND owner_kind = ? AND owner_id = ?"
+        );
+        $q->execute([$formId, $ownerKind, $ownerId]);
+        $row = $q->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return null;
+
+        $answers = json_decode((string)$row['answers'], true);
+        if (!is_array($answers)) $answers = [];
+
+        $leaf = $conn->prepare("SELECT COUNT(*) FROM forms WHERE parent_form_id = ?");
+        $leaf->execute([$formId]);
+
+        return [
+            'id'            => (int)$row['id'],
+            'form_id'       => (int)$row['form_id'],
+            'answers'       => $answers,
+            'modified_date' => $row['modified_date'],
+            'stale'         => ((int)$leaf->fetchColumn() > 0),
+        ];
+    }
+
+    /** Throw a draft away. Idempotent — deleting one that is gone is not an error. */
+    public static function deleteDraft(PDO $conn, int $formId, string $ownerKind, int $ownerId): void
+    {
+        if (!self::draftsAvailable($conn)) return;
+        if (!in_array($ownerKind, self::DRAFT_OWNER_KINDS, true)) return;
+        $conn->prepare("DELETE FROM form_drafts WHERE form_id = ? AND owner_kind = ? AND owner_id = ?")
+             ->execute([$formId, $ownerKind, $ownerId]);
+    }
+
+    /** Which of these forms this person has a draft of, as form_id => modified_date. */
+    public static function draftsForOwner(PDO $conn, string $ownerKind, int $ownerId): array
+    {
+        if (!self::draftsAvailable($conn)) return [];
+        if (!in_array($ownerKind, self::DRAFT_OWNER_KINDS, true)) return [];
+        $q = $conn->prepare(
+            "SELECT form_id, DATE_FORMAT(modified_date, '%Y-%m-%d %H:%i:%s') AS modified_date
+               FROM form_drafts WHERE owner_kind = ? AND owner_id = ?"
+        );
+        $q->execute([$ownerKind, $ownerId]);
+        $out = [];
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(int)$r['form_id']] = $r['modified_date'];
+        return $out;
+    }
+
     /* ══ Layout ══════════════════════════════════════════════════════════════
        See the LAYOUT_* constants for the shape and why flow and grid share it. */
 

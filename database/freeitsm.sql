@@ -4645,6 +4645,53 @@ CREATE TABLE IF NOT EXISTS `task_tag_map` (
 -- all three back on, including one deliberately kept off the portal.
 --
 -- Declared before `forms` because forms.collection_id references it.
+-- A form somebody has started and not finished.
+--
+-- 🔴 A SEPARATE TABLE, NOT A STATUS ON form_submissions. That table is read by
+-- the submissions list, the collection view, every count, the CSV and PDF
+-- exports, the approval inbox, the workflow triggers and the REST API. Putting
+-- drafts in it would mean teaching every one of those to exclude them, and any
+-- reader that was missed would present a half-filled record as a real
+-- submission - to an approver, in an export, or as a ticket. Here, a draft is
+-- simply invisible to all of them and nothing existing had to change.
+--
+-- A draft holds RAW answers and is never validated: not being finished is the
+-- entire point, so a required field may be empty and a conditional branch may
+-- be half-answered.
+CREATE TABLE IF NOT EXISTS `form_drafts` (
+    `id`            INT NOT NULL AUTO_INCREMENT,
+    -- The EXACT form version this was started against.
+    -- ⚠️ createVersion() gives every copied field a NEW id, so answers keyed by
+    -- the old ids would silently attach to the wrong questions on a newer
+    -- version. The draft is therefore pinned to the version it was typed into,
+    -- and a draft whose version is no longer the current one is offered back as
+    -- "this form has changed" rather than quietly mis-mapped.
+    `form_id`       INT NOT NULL,
+    -- WHOSE draft. `analysts` and `users` are separate id spaces, so the kind
+    -- has to be stored alongside the id rather than inferred - the same trap
+    -- form_submissions documents with its two separate submitted_by columns.
+    -- One column pair rather than two nullable ids because a UNIQUE key over
+    -- nullable columns does not constrain anything in MySQL: NULLs compare as
+    -- distinct, so duplicate drafts would slip straight through.
+    `owner_kind`    VARCHAR(10) NOT NULL,          -- 'analyst' | 'portal'
+    `owner_id`      INT NOT NULL,
+    -- {"<fieldId>": "<value>"} exactly as the filler holds it, including a
+    -- table question's rows as their own JSON. No new shape to teach anything.
+    `answers`       LONGTEXT NULL,
+    `created_date`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `modified_date` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    -- One draft per person per form version. Saving again overwrites, which is
+    -- what "continue where I left off" means; several named drafts of one form
+    -- is a different feature and a much larger one.
+    UNIQUE KEY `uq_form_drafts_owner` (`form_id`, `owner_kind`, `owner_id`),
+    -- Deleting a form takes its drafts with it. They are worthless without it.
+    -- ⚠️ No FK on owner_id: it points at `analysts` OR `users` depending on
+    -- owner_kind, and a column cannot reference two tables. Orphans are cleaned
+    -- up by the owner's own deletion path, not by the database.
+    CONSTRAINT `fk_form_drafts_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `form_collections` (
     `id`              INT NOT NULL AUTO_INCREMENT,
     `name`            VARCHAR(255) NOT NULL,
