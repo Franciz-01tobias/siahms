@@ -261,6 +261,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     return '<div class="cat-section" ' + ctx.wrapAttrs + '><h2>'
                          + esc(f.label || '') + '</h2></div>';
                 }
+                /* A picture on the form. Fetched by field id through the same
+                   authorising endpoint the analyst side uses — which checks a
+                   PORTAL session against the form's own visibility, so an image
+                   on an unpublished form is a 404 here. */
+                if (f.field_type === 'image') {
+                    var imgSrc = FormLogic.imageUrl(f, '../');
+                    if (!imgSrc) {
+                        return '<div class="form-image is-empty" ' + ctx.wrapAttrs + '>'
+                             + esc(window.t('forms.image.none')) + '</div>';
+                    }
+                    var imgPct = FormLogic.imageMaxWidth(f);
+                    return '<div class="form-image" ' + ctx.wrapAttrs
+                         + (imgPct === 100 ? '' : ' data-image-max="' + imgPct + '"') + '>'
+                         + '<img src="' + esc(imgSrc) + '" alt="' + esc(f.label || '') + '" loading="lazy">'
+                         + '</div>';
+                }
                 /* A note is standing text — an instruction or a warning the
                    customer needs before answering. Shared classes with the
                    analyst side deliberately: a notice panel has no reason to

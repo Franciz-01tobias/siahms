@@ -17,12 +17,12 @@
 
     // Every type the module knows. 'section' is presentational — a heading that owns
     // the fields below it until the next section, and never produces an answer.
-    var TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note'];
+    var TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note', 'image'];
 
     /* The types that are READ, not answered. Mirrors
        FormsService::PRESENTATIONAL_TYPES — see isAnswerable() for why this is a
        list rather than a comparison written out in thirteen places. */
-    var PRESENTATIONAL = ['section', 'note'];
+    var PRESENTATIONAL = ['section', 'note', 'image'];
     var WITH_OPTIONS = ['dropdown', 'radio', 'checkboxes'];
     var MULTI_VALUE  = ['checkboxes'];
 
@@ -123,6 +123,31 @@
     }
     var LABEL_POSITIONS = ['above', 'beside'];
     var LABEL_POSITION_DEFAULT = 'above';
+
+    /**
+     * The URL an image block's picture is fetched from.
+     *
+     * 🔴 BY FIELD ID, never by path. api/forms/image.php reads the stored path
+     * out of that field's own config server-side, so no caller-supplied string
+     * goes anywhere near the filesystem — directory traversal is removed as a
+     * category rather than filtered for. Returning '' when there is no image
+     * lets a renderer draw its empty state rather than a broken picture.
+     *
+     * @param {string} base path prefix, because the three surfaces sit at
+     *                 different depths and none of them can assume a root.
+     */
+    function imageUrl(field, base) {
+        if (!configOf(field).image_path) return '';
+        return (base || '') + 'api/forms/image.php?field=' + encodeURIComponent(field.id);
+    }
+
+    /** How wide an image may draw, as a percentage of its column. */
+    function imageMaxWidth(field) {
+        var m = parseInt(configOf(field).image_max, 10);
+        return IMAGE_MAX_WIDTHS.indexOf(m) !== -1 ? m : IMAGE_MAX_DEFAULT;
+    }
+    var IMAGE_MAX_WIDTHS = [100, 75, 50, 25];
+    var IMAGE_MAX_DEFAULT = 100;
 
     /** A note's optional longer text, beneath its title. */
     function noteBody(field) {
@@ -363,6 +388,10 @@
         LABEL_POSITIONS: LABEL_POSITIONS,
         LABEL_POSITION_DEFAULT: LABEL_POSITION_DEFAULT,
         labelPosition: labelPosition,
+        IMAGE_MAX_WIDTHS: IMAGE_MAX_WIDTHS,
+        IMAGE_MAX_DEFAULT: IMAGE_MAX_DEFAULT,
+        imageUrl: imageUrl,
+        imageMaxWidth: imageMaxWidth,
         hasOptions: hasOptions,
         isMultiValue: isMultiValue,
         dateMode: dateMode,

@@ -1171,3 +1171,53 @@
     outline: none;
     border-color: var(--forms-accent, #00897b);
 }
+
+/* ── An image block's settings in the builder ──────────────────────────────
+   The file chooser and the size picker, beneath the field row. */
+.field-image-settings {
+    padding: 10px 14px 12px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.field-image-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.field-image-row input[type="file"] {
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--text-muted, #666);
+    max-width: 100%;
+}
+
+.field-imagemax-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted, #666);
+    white-space: nowrap;
+}
+
+.field-imagemax-picker select {
+    padding: 3px 6px;
+    font-size: 12px;
+    font-family: inherit;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+    background: var(--surface, #fff);
+    color: var(--text, #333);
+}
+
+.field-image-name {
+    font-size: 12px;
+    color: var(--text-faint, #999);
+}
+
+/* The badge, matching what an image block actually looks like on the form. */
+.field-type-badge.image { background: var(--surface-3, #f8f8f8); color: var(--text-muted, #666); }

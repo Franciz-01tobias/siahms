@@ -31,13 +31,14 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- Shared with the builder preview and the portal: field types + conditional
          visibility. Mirrors includes/form_logic.php, which decides on submit. -->
-    <script src="../assets/js/form-logic.js?v=5"></script>
+    <script src="../assets/js/form-logic.js?v=6"></script>
     <script src="../assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <!-- Blocks (notes) - shared with the portal and the builder preview, because
-         a notice panel has no reason to look different in the three places. -->
-    <link rel="stylesheet" href="../assets/css/form-shared.css?v=2">
+    <!-- Presentation shared with the portal and the builder preview: blocks
+         (notes, images) and label position. A notice panel and a picture have no
+         reason to look different in the three places; an INPUT does. -->
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=3">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -416,6 +417,19 @@ $translationNamespaces = ['common', 'forms'];
                 switch (f.field_type) {
                     case 'section':
                         return `<div class="form-section" ${wrap}><h2>${esc(f.label)}</h2></div>`;
+                    case 'image': {
+                        /* The picture is fetched BY FIELD ID — the stored path
+                           never leaves the server. See api/forms/image.php.
+                           alt falls back to the field's label, which is what an
+                           author typed to describe it; an image with no text
+                           alternative is unusable to anyone on a screen reader. */
+                        const src = FormLogic.imageUrl(f, '../');
+                        if (!src) return `<div class="form-image is-empty" ${wrap}>${esc(window.t('forms.image.none'))}</div>`;
+                        const pct = FormLogic.imageMaxWidth(f);
+                        return `<div class="form-image" ${wrap}${pct === 100 ? '' : ` data-image-max="${pct}"`}>
+                            <img src="${escAttr(src)}" alt="${escAttr(f.label || '')}" loading="lazy">
+                        </div>`;
+                    }
                     case 'note': {
                         /* Standing text, not a question. Its classes and styling
                            live in assets/css/form-shared.css, shared with the

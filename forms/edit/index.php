@@ -69,13 +69,13 @@ foreach ($formActionDefs as $def) {
     <!-- The builder did NOT load these, which is why it kept its own copy of the
          width list — a third hand-maintained list of the same six numbers. The
          preview now shares the walk with the filler and the portal. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=5"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=6"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
     <!-- Blocks (notes) - shared with the filler and the portal. -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=2">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=3">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -571,6 +571,11 @@ foreach ($formActionDefs as $def) {
                                  fields below it — it is just there to be read.
                                  Its appearance is a NAMED style, never a colour. -->
                             <button onclick="addField('note')"><span class="field-type-badge note">&#9432;</span> <?php echo htmlspecialchars(t('forms.fieldtypes.note')); ?></button>
+                            <!-- A picture on the form: a logo, a diagram, a floor
+                                 plan. Presentational like a note; the file itself
+                                 goes through includes/uploads.php, which is the one
+                                 place the upload rules live. SVG is not accepted. -->
+                            <button onclick="addField('image')"><span class="field-type-badge image">&#128247;</span> <?php echo htmlspecialchars(t('forms.fieldtypes.image')); ?></button>
                         </div>
                     </div>
                 </div>
@@ -1668,6 +1673,27 @@ foreach ($formActionDefs as $def) {
                                 onchange="setNoteBody(${i}, this.value)">${esc(FormLogic.noteBody(f))}</textarea>
                         </div>`;
 
+                /* The picture, and how wide it may draw. The file uploads on
+                   choosing it rather than on Save, because an author needs to see
+                   what they picked — but what is STORED is only the reference the
+                   upload returned, and that is saved with the field like any
+                   other setting. */
+                const imageHtml = f.field_type !== 'image' ? '' : `
+                        <div class="field-image-settings">
+                            <div class="field-image-row">
+                                <input type="file" accept="image/*" onchange="uploadFieldImage(${i}, this)">
+                                <label class="field-imagemax-picker">
+                                    ${esc(window.t('forms.field.image_max'))}
+                                    <select onchange="setImageMax(${i}, this.value)">
+                                        ${FormLogic.IMAGE_MAX_WIDTHS.map(p => `<option value="${p}"${FormLogic.imageMaxWidth(f) === p ? ' selected' : ''}>${esc(window.t('forms.field.image_max_' + p))}</option>`).join('')}
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="field-image-name">${(f.config && f.config.image_path)
+                                ? esc(f.config.image_name || window.t('forms.image.chosen'))
+                                : esc(window.t('forms.image.none'))}</div>
+                        </div>`;
+
                 /* Where the label sits. Offered only on questions: a block has no
                    control for its text to sit beside, and a picker that does
                    nothing is worse than no picker. */
@@ -1712,13 +1738,14 @@ foreach ($formActionDefs as $def) {
                         </div>
                         ${optionsHtml}
                         ${noteHtml}
+                        ${imageHtml}
                         ${dateModeHtml}${lookupHtml}
                         ${renderConditionEditor(f, i)}
                     </li>`;
             }).join('');
         }
         function typeName(type) {
-            const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section', 'note'];
+            const known = ['text', 'textarea', 'checkbox', 'dropdown', 'email', 'number', 'checkboxes', 'radio', 'datetime', 'lookup', 'section', 'note', 'image'];
             return known.includes(type) ? window.t('forms.typename.' + type) : type;
         }
         /* ⭐ THIS WAS A THIRD COPY of the same six numbers, alongside
@@ -1751,6 +1778,62 @@ foreach ($formActionDefs as $def) {
            not rebuild, so a setting added here survives a save without anything
            being added there. That inversion is exactly what stops a key added
            tomorrow being deleted by somebody opening a form and pressing Save. */
+        /**
+         * Upload a picture for an image block.
+         *
+         * ⚠️ The file goes up immediately rather than waiting for Save, because
+         * an author has to see what they chose. What is STORED on the field is
+         * only the reference the endpoint returns, and that is saved with the
+         * field like any other setting — so a form abandoned without saving
+         * leaves a few hundred unreferenced kilobytes on disk, which is the
+         * right way round: the opposite is a field pointing at a file that was
+         * never written, which is a broken form.
+         */
+        async function uploadFieldImage(i, input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            if (!currentFormId) {
+                showToast(window.t('forms.toast.save_first'), 'error');
+                input.value = '';
+                return;
+            }
+            const body = new FormData();
+            body.append('form_id', currentFormId);
+            body.append('image', file);
+            try {
+                const res  = await fetch(API_BASE + 'upload_image.php', { method: 'POST', body });
+                const data = await res.json();
+                if (!data.success) {
+                    /* The endpoint's message is written for the person choosing
+                       the file ("That file type is not allowed. Accepted: …"),
+                       so show it rather than something vaguer. */
+                    showToast(data.error || window.t('forms.image.failed'), 'error');
+                    input.value = '';
+                    return;
+                }
+                if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
+                fields[i].config.image_path = data.image.path;
+                fields[i].config.image_name = data.image.name;
+                markDirty(); renderFields(); updatePreview();
+                showToast(window.t('forms.image.uploaded'), 'success');
+            } catch (e) {
+                showToast(window.t('forms.image.failed'), 'error');
+                input.value = '';
+            }
+        }
+
+        function setImageMax(i, val) {
+            if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
+            const p = parseInt(val, 10);
+            // 100% is the default, so it stores nothing — same rule as full width.
+            if (p === FormLogic.IMAGE_MAX_DEFAULT || FormLogic.IMAGE_MAX_WIDTHS.indexOf(p) === -1) {
+                delete fields[i].config.image_max;
+            } else {
+                fields[i].config.image_max = p;
+            }
+            markDirty(); renderFields(); updatePreview();
+        }
+
         function setLabelPosition(i, val) {
             if (!fields[i].config || typeof fields[i].config !== 'object') fields[i].config = {};
             /* 'above' is the DEFAULT, so it is removed rather than stored — the
@@ -2046,6 +2129,20 @@ foreach ($formActionDefs as $def) {
             switch (f.field_type) {
                 case 'section':
                     return `<div class="preview-section"><h3>${label}</h3>${condFlag}</div>`;
+                case 'image': {
+                    /* The builder sits two levels down, hence the different
+                       base. An image with nothing uploaded yet shows its empty
+                       state rather than a broken picture — which is the normal
+                       state of a block the author has just added. */
+                    const imgSrc = FormLogic.imageUrl(f, '<?php echo BASE_URL; ?>');
+                    if (!imgSrc) {
+                        return `<div class="form-image is-empty">${esc(window.t('forms.image.none'))}${condFlag}</div>`;
+                    }
+                    const imgPct = FormLogic.imageMaxWidth(f);
+                    return `<div class="form-image"${imgPct === 100 ? '' : ` data-image-max="${imgPct}"`}>
+                        <img src="${escAttr(imgSrc)}" alt="${escAttr(f.label || '')}">${condFlag}
+                    </div>`;
+                }
                 case 'note': {
                     /* The same markup and the same shared stylesheet the two
                        live surfaces use, so an author previewing a note sees

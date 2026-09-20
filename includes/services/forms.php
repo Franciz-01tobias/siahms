@@ -40,7 +40,7 @@ require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 class FormsService
 {
     // 'section' is a heading, not a question — see ANSWERABLE_TYPES.
-    const FIELD_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note', 'grid'];
+    const FIELD_TYPES = ['text', 'textarea', 'email', 'number', 'checkbox', 'checkboxes', 'dropdown', 'radio', 'datetime', 'lookup', 'section', 'note', 'image', 'grid'];
 
     /**
      * ⚠️ THIS LIST IS NARROWER THAN ITS NAME. It is what a conditional-visibility
@@ -66,7 +66,7 @@ class FormsService
      * correct is code that draws a heading specifically, because that is about
      * what the thing IS, not about whether it collects anything.
      */
-    const PRESENTATIONAL_TYPES = ['section', 'note'];
+    const PRESENTATIONAL_TYPES = ['section', 'note', 'image'];
 
     /**
      * What a 'note' may look like. 🔴 A NAMED LIST, NEVER A COLOUR.
@@ -102,6 +102,18 @@ class FormsService
      */
     const LABEL_POSITIONS = ['above', 'beside'];
     const LABEL_POSITION_DEFAULT = 'above';
+
+    /**
+     * How wide an image block's picture may draw, as a percentage of its column.
+     *
+     * 🔑 A percentage, not pixels. Everything else on a form is sized in
+     * twelfths of the row and reflows; asking an author for "480px" produces a
+     * picture that is right on their screen and wrong on a phone. 100 is the
+     * default and stores nothing, so an image simply fits its column unless
+     * somebody deliberately holds it back.
+     */
+    const IMAGE_MAX_WIDTHS = [100, 75, 50, 25];
+    const IMAGE_MAX_DEFAULT = 100;
 
     /** Does this field type collect an answer? */
     public static function isAnswerable(?string $type): bool
@@ -2238,6 +2250,44 @@ class FormsService
             if ($body === '') unset($config['note_body']); else $config['note_body'] = $body;
         } else {
             unset($config['note_style'], $config['note_body']);
+        }
+
+        /* An image block's picture. The PATH is the only part that matters for
+           safety, and it is never trusted from here — it is re-checked against
+           the one shape api/forms/upload_image.php ever writes, and checked
+           again by api/forms/image.php before a byte is read.
+           🔴 Validated in BOTH places deliberately. This one stops a bad value
+           being stored; that one stops a bad value already in a row being
+           served. A single check would be a single point of failure, and the
+           row is the thing an attacker who reached the database would edit. */
+        if ($type === 'image') {
+            $path = trim((string)($config['image_path'] ?? ''));
+            if ($path === '') {
+                unset($config['image_path'], $config['image_name'], $config['image_max']);
+            } elseif (!preg_match('~^[0-9]+/[0-9a-f]{32}\.[a-z0-9]{1,5}$~', $path)) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "fields[{$i}]: 'image_path' is not a stored image reference.");
+            } else {
+                $config['image_path'] = $path;
+
+                /* The name the author recognises. Display only — it is never
+                   used to build a filesystem path, which is the whole reason
+                   uploadStoreFile() generates its own stored name. */
+                $name = trim((string)($config['image_name'] ?? ''));
+                if ($name === '') unset($config['image_name']);
+                else              $config['image_name'] = mb_substr($name, 0, 255);
+
+                /* How wide the picture may draw, as a percentage of its column.
+                   A picture is the one block whose natural size has nothing to
+                   do with the form, so a 2000px diagram needs holding back
+                   without asking an author for pixels. */
+                $max = isset($config['image_max']) ? (int)$config['image_max'] : self::IMAGE_MAX_DEFAULT;
+                if (!in_array($max, self::IMAGE_MAX_WIDTHS, true)) $max = self::IMAGE_MAX_DEFAULT;
+                if ($max === self::IMAGE_MAX_DEFAULT) unset($config['image_max']);
+                else                                  $config['image_max'] = $max;
+            }
+        } else {
+            unset($config['image_path'], $config['image_name'], $config['image_max']);
         }
 
         // date_mode belongs to a 'datetime' field and nowhere else — dropped rather

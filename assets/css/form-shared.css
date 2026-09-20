@@ -181,3 +181,54 @@
     }
     .form-field.checkbox-field[data-label-pos="beside"] { display: flex; }
 }
+
+/* ══ 3. The image block ═════════════════════════════════════════════════════
+   A picture on the form — a logo, a diagram, a floor plan. Shared across the
+   three surfaces for the same reason a notice panel is: it is presentational,
+   so there is no reason for it to look different in three places. */
+.form-image {
+    margin-bottom: 18px;
+    box-sizing: border-box;
+}
+
+/* 🔑 max-width, never width. A picture smaller than its column is drawn at its
+   own size rather than stretched — upscaling a 200px logo to fill a row makes
+   it blurry, and nobody asked for it to be bigger. height:auto keeps the
+   aspect ratio whatever the column does. */
+.form-image img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+/* An author holding a large picture back, as a percentage of its column rather
+   than in pixels: everything else on a form is sized in twelfths and reflows,
+   and "480px" is right on one screen and wrong on the next. */
+.form-image[data-image-max="75"] img { max-width: 75%; }
+.form-image[data-image-max="50"] img { max-width: 50%; }
+.form-image[data-image-max="25"] img { max-width: 25%; }
+
+/* A block with nothing uploaded yet — the normal state of one just added.
+   Shown rather than hidden, so the author can see where it will sit. */
+.form-image.is-empty {
+    border: 1px dashed var(--border, #ddd);
+    border-radius: 6px;
+    padding: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-faint, #999);
+    background: var(--surface-2, #fafafa);
+}
+
+.form-image.is-hidden { display: none; }
+
+/* 🔴 A held-back picture goes back to full width on a phone. At 25% of a
+   360px column a diagram is 90px wide, which is not a diagram. The reason to
+   hold one back is that it looked silly stretched across a desktop row; that
+   reason does not exist here. */
+@media (max-width: 768px) {
+    .form-image[data-image-max="75"] img,
+    .form-image[data-image-max="50"] img,
+    .form-image[data-image-max="25"] img { max-width: 100%; }
+}

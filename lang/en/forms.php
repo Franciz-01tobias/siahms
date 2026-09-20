@@ -207,6 +207,8 @@ return [
         // Standing text. NOT a heading: unlike a section it does not own the fields
         // below it, it is simply there to be read before the next question.
         'note'       => 'Note or warning',
+        // A picture on the form: a logo, a diagram, a floor plan.
+        'image'      => 'Image',
     ],
 
     // Short type-name badges shown on each field row + proposal diff
@@ -228,6 +230,7 @@ return [
            list — so it asked for a name that had never been written. Found by
            driving the type list rather than by looking at the screen. */
         'lookup'     => 'Lookup',
+        'image'      => 'Image',
         // The badge shows the MODE, so a glance down the field list tells you what
         // each date field actually asks for without opening it.
         'date_date'     => 'Date',
@@ -287,6 +290,15 @@ return [
         'note_style_danger'  => 'Important',
         'note_style_success' => 'Success',
         'note_body_ph'       => 'Longer text, if the heading above is not enough (optional)',
+
+        /* An image block. The size is a PERCENTAGE of the column, not pixels:
+           everything else on a form is sized in twelfths and reflows, and a
+           pixel width is right on one screen and wrong on the next. */
+        'image_max'        => 'Size',
+        'image_max_100'    => 'Full width',
+        'image_max_75'     => 'Three-quarters',
+        'image_max_50'     => 'Half',
+        'image_max_25'     => 'Quarter',
         'required'          => 'Required',
         'remove_field'      => 'Remove field',
         'untitled_field'    => 'Untitled field',
@@ -444,6 +456,17 @@ return [
         'ex_edit4_text'  => 'Rewrite the description to one short, neutral sentence (under 25 words).',
         'ex_edit5_label' => 'Remove the consent checkbox',
         'ex_edit5_text'  => 'Remove the consent checkbox at the bottom.',
+    ],
+
+    // ── Image blocks (the builder + all three renderers) ────────────
+    'image' => [
+        // Shown where the picture would be, both in the builder before one is
+        // chosen and on a form whose image has gone missing. Visible rather than
+        // hidden, so an author can see where the block sits.
+        'none'     => 'No image chosen',
+        'chosen'   => 'Image uploaded',
+        'uploaded' => 'Image uploaded',
+        'failed'   => 'That image could not be uploaded',
     ],
 
     // ── Shared renderer (assets/js/form-render.js) ──────────────────

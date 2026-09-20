@@ -31,7 +31,7 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
-    <script src="../assets/js/form-logic.js?v=5"></script>
+    <script src="../assets/js/form-logic.js?v=6"></script>
     <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
     <!-- The shared document builder, also used by forms/collection.php. One
          implementation of what a record looks like, so the two pages cannot
