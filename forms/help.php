@@ -100,6 +100,34 @@ $translationNamespaces = ['common', 'forms'];
 
             <div class="help-content">
 
+                <?php /* In-depth topics, each on its own page.
+                     🔑 WHY THESE ARE NOT SECTIONS HERE. This guide already had
+                     eight sections and was the longest in the product; the six
+                     areas added in 2.3.0 would have doubled it into something
+                     nobody reads to the end of. Ed: "maybe it should have its
+                     own help pages so the help screen does not turn into war
+                     and peace." The basics stay here; the depth is a click away.
+                     ⚠️ The cards are built from forms/help/_registry.php, so the
+                     guide cannot offer a topic that does not exist. */ ?>
+                <?php require_once __DIR__ . '/help/_registry.php'; ?>
+                <div class="help-section" id="topics">
+                    <div class="help-section-header">
+                        <span class="help-section-num"></span>
+                        <div>
+                            <h3><?php echo htmlspecialchars(t('forms.help.topics_title')); ?></h3>
+                            <p><?php echo htmlspecialchars(t('forms.help.topics_body')); ?></p>
+                        </div>
+                    </div>
+                    <div class="help-cards">
+                        <?php foreach (formsHelpTopics() as $slug => $t): ?>
+                            <a class="help-card" href="help/<?php echo htmlspecialchars($slug); ?>.php">
+                                <strong><?php echo htmlspecialchars($t['title']); ?></strong>
+                                <span><?php echo htmlspecialchars($t['blurb']); ?></span>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
                 <!-- Section 1: Overview -->
                 <div class="help-section" id="overview">
                     <div class="help-section-header">

@@ -1329,3 +1329,38 @@
 
 .grid-col-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ── Who may request a form (GH #145) ──────────────────────────────────────
+   The group picker inside the audience modal. */
+.aud-list {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 6px;
+    background: var(--surface, #fff);
+}
+
+.aud-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text, #333);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-soft, #f0f0f0);
+}
+.aud-row:last-child { border-bottom: none; }
+.aud-row:hover { background: var(--surface-hover, #f5f5f5); }
+
+.aud-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* How many CUSTOMERS are in the group. A group of analysts only would restrict
+   the form to nobody, and this is the cheapest way to see that before saving. */
+.aud-count { font-size: 11px; color: var(--text-faint, #999); white-space: nowrap; }
+
+.aud-loading { padding: 12px; font-size: 13px; color: var(--text-faint, #999); }
+
+/* A row icon that is currently "on" — the same treatment the portal toggle
+   uses, so the two read as the same kind of state. */
+.ft-action-btn.is-on { color: var(--info-accent, #0284c7); }

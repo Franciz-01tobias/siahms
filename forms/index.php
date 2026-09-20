@@ -361,6 +361,33 @@ $translationNamespaces = ['common', 'forms'];
         </div>
     </div>
 
+    <!-- Who may request this form from the catalogue (GH #145). Deliberately
+         beside the approval settings and the catalogue toggle: all three answer
+         questions about the PORTAL, and a customer-facing setting hidden inside
+         the form builder is one nobody finds. -->
+    <div id="audienceModal" class="ca-modal-overlay" onclick="if(event.target===this)closeAudienceModal()">
+        <div class="ca-modal-box">
+            <div class="ca-modal-header"><?php echo htmlspecialchars(t('forms.audience.modal_title')); ?></div>
+            <div class="ca-modal-body">
+                <p class="ca-modal-intro"><?php echo htmlspecialchars(t('forms.audience.modal_intro')); ?></p>
+                <label class="ca-check">
+                    <input type="checkbox" id="audienceRestricted" onchange="onAudienceRestrictedChange()">
+                    <span><?php echo htmlspecialchars(t('forms.audience.restrict_label')); ?></span>
+                </label>
+                <div class="ca-field" id="audienceGroupsField" style="display:none;">
+                    <label><?php echo htmlspecialchars(t('forms.audience.groups_label')); ?></label>
+                    <div id="audienceGroupList" class="aud-list"></div>
+                    <small class="ca-hint"><?php echo htmlspecialchars(t('forms.audience.groups_hint')); ?></small>
+                </div>
+                <p class="ca-note" id="audiencePortalNote" style="display:none;"><?php echo htmlspecialchars(t('forms.audience.not_portal_note')); ?></p>
+            </div>
+            <div class="ca-modal-footer">
+                <button class="ca-btn ca-btn-secondary" onclick="closeAudienceModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button class="ca-btn ca-btn-primary" id="audienceSaveBtn" onclick="saveAudience()"><?php echo htmlspecialchars(t('forms.audience.save')); ?></button>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         const API_BASE = '<?php echo BASE_URL; ?>api/forms/';
@@ -383,6 +410,9 @@ $translationNamespaces = ['common', 'forms'];
         // nearest thing the icon set already has to what this means.
         const ICON_COLLECTION = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
         const ICON_APPROVAL = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>';
+        // Two people — "who is this for". Restricting a form is about an
+        // AUDIENCE, not about locking it, so deliberately not a padlock.
+        const ICON_AUDIENCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>';
 
         document.addEventListener('DOMContentLoaded', function() {
             loadForms();
@@ -491,6 +521,16 @@ $translationNamespaces = ['common', 'forms'];
                       + escAttr(window.t('forms.list.approval_on_title', { name: f.approver_name || '' })) + '">'
                       + esc(window.t('forms.list.approval_on')) + '</span>'
                     : '';
+
+                /* Restricted to a group of people (GH #145). Its own pill rather
+                   than only the row icon: whether customers can all see a form
+                   is the kind of thing somebody needs to spot while scanning,
+                   not find by clicking each row in turn. */
+                const audiencePill = Number(f.audience_count) > 0
+                    ? '<span class="ft-pill" style="background:var(--info-bg,#e0f2fe);color:var(--info-text,#075985);" title="'
+                      + escAttr(window.t('forms.list.audience_on_title')) + '">'
+                      + esc(window.t('forms.list.audience_on')) + '</span>'
+                    : '';
                 /* The collection, readable without opening anything. A closed one
                    is marked here too: otherwise the first person to learn the
                    form is not accepting submissions is whoever tried to fill it
@@ -514,7 +554,7 @@ $translationNamespaces = ['common', 'forms'];
                              a collection name is a sentence, and four pills in 100px
                              wrapped to one word per line. This column is the wide
                              one, and the pills describe the form. -->
-                        <div class="ft-pills">${statusPill}${portalPill}${approvalPill}${collectionPill}</div>
+                        <div class="ft-pills">${statusPill}${portalPill}${approvalPill}${audiencePill}${collectionPill}</div>
                     </td>
                     <td><span class="ft-pill version">v${f.version_number || 1}</span></td>
                     <td style="text-align: right;">${f.field_count}</td>
@@ -526,6 +566,7 @@ $translationNamespaces = ['common', 'forms'];
                         <a class="ft-action-btn" href="<?php echo BASE_URL; ?>forms/submissions.php?id=${f.id}" title="${escAttr(window.t('forms.list.subs_title'))}">${ICON_SUBS}</a>
                         <button class="ft-action-btn" onclick="togglePortal(${f.id}, ${f.is_portal_visible == 1 ? 0 : 1})" title="${escAttr(window.t(f.is_portal_visible == 1 ? 'forms.list.portal_remove_title' : 'forms.list.portal_add_title'))}">${f.is_portal_visible == 1 ? ICON_PORTAL_ON : ICON_PORTAL_OFF}</button>
                         <button class="ft-action-btn" onclick="openApprovalModal(${f.id})" title="${escAttr(window.t('forms.list.approval_title'))}">${ICON_APPROVAL}</button>
+                        <button class="ft-action-btn${Number(f.audience_count) > 0 ? ' is-on' : ''}" onclick="openAudienceModal(${f.id})" title="${escAttr(window.t(Number(f.audience_count) > 0 ? 'forms.list.audience_on_title' : 'forms.list.audience_title'))}">${ICON_AUDIENCE}</button>
                         <button class="ft-action-btn" onclick="openCollectionModal(${f.id})" title="${escAttr(window.t('forms.pairing.title'))}">${ICON_COLLECTION}</button>
                         <button class="ft-action-btn danger" onclick="confirmDelete(${f.id})" title="${escAttr(window.t('forms.list.delete_title'))}">${ICON_DELETE}</button>
                     </td>
@@ -627,6 +668,103 @@ $translationNamespaces = ['common', 'forms'];
                 approvalAnalysts = (data.success ? data.analysts : []).filter(a => a.is_active);
             } catch (e) { approvalAnalysts = []; }
             return approvalAnalysts;
+        }
+
+        /* ══ Who may request this form (GH #145) ════════════════════════════
+           Benjamin asked for it. The groups are PEOPLE groups, managed in
+           Tickets → Users → Groups — the only group kind in this product that
+           holds portal users as well as analysts, which is why they are the
+           right thing to point at. */
+        let audienceFormId = null;
+
+        async function openAudienceModal(id) {
+            const form = allForms.find(f => f.id == id);
+            if (!form) return;
+            audienceFormId = id;
+
+            const list = document.getElementById('audienceGroupList');
+            list.innerHTML = '<div class="aud-loading">' + esc(window.t('forms.list.loading')) + '</div>';
+            document.getElementById('audienceModal').style.display = 'flex';
+
+            /* A restriction only bites on the CATALOGUE, so say so when the form
+               is not in it — otherwise the setting is a silent no-op, which is
+               the same trap the approval modal already guards against. */
+            document.getElementById('audiencePortalNote').style.display =
+                (form.is_portal_visible == 1) ? 'none' : '';
+
+            try {
+                const res  = await fetch(API_BASE + 'audience.php?form_id=' + id);
+                const data = await res.json();
+                if (!data.success) {
+                    list.innerHTML = '<div class="aud-loading">' + esc(data.error || '') + '</div>';
+                    return;
+                }
+                const chosen = new Set((data.selected || []).map(Number));
+                document.getElementById('audienceRestricted').checked = chosen.size > 0;
+
+                list.innerHTML = (data.groups || []).length
+                    ? data.groups.map(g => `
+                        <label class="aud-row">
+                            <input type="checkbox" value="${g.id}"${chosen.has(g.id) ? ' checked' : ''}>
+                            <span class="aud-name">${esc(g.name)}</span>
+                            <span class="aud-count">${esc(window.t(
+                                g.customer_count === 1 ? 'forms.audience.one_customer' : 'forms.audience.n_customers',
+                                { n: g.customer_count }))}</span>
+                        </label>`).join('')
+                    : `<div class="aud-loading">${esc(window.t('forms.audience.no_groups'))}</div>`;
+
+                onAudienceRestrictedChange();
+            } catch (e) {
+                list.innerHTML = '<div class="aud-loading">' + esc(window.t('forms.audience.save_failed')) + '</div>';
+            }
+        }
+
+        function onAudienceRestrictedChange() {
+            const on = document.getElementById('audienceRestricted').checked;
+            document.getElementById('audienceGroupsField').style.display = on ? '' : 'none';
+        }
+
+        function closeAudienceModal() {
+            document.getElementById('audienceModal').style.display = 'none';
+            audienceFormId = null;
+        }
+
+        async function saveAudience() {
+            if (!audienceFormId) return;
+            const on  = document.getElementById('audienceRestricted').checked;
+            /* Unticking "restrict" sends an EMPTY list, which is how the form
+               goes back to everyone. It does not mean "leave it as it was". */
+            const ids = on
+                ? Array.from(document.querySelectorAll('#audienceGroupList input:checked')).map(c => Number(c.value))
+                : [];
+
+            if (on && !ids.length) {
+                showToast(window.t('forms.audience.need_group'), 'error');
+                return;
+            }
+
+            const btn = document.getElementById('audienceSaveBtn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + 'audience.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ form_id: audienceFormId, group_ids: ids })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast(data.error || window.t('forms.audience.save_failed'), 'error');
+                    btn.disabled = false;
+                    return;
+                }
+                showToast(window.t(ids.length ? 'forms.audience.saved_restricted' : 'forms.audience.saved_everyone'), 'success');
+                closeAudienceModal();
+                loadForms();
+            } catch (e) {
+                showToast(window.t('forms.audience.save_failed'), 'error');
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         async function openApprovalModal(id) {

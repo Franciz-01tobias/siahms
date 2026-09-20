@@ -32,15 +32,22 @@ if (!$formId) {
 try {
     $conn = connectToDatabase();
 
+    /* 🔴 The AUDIENCE gate too (GH #145). The catalogue list already hides a
+       restricted form, and a list hiding a card has never been a check — this
+       is the path a bookmarked link or a colleague's URL takes. In the QUERY,
+       so "not for you" and "does not exist" are the same answer. */
+    require_once __DIR__ . '/../../includes/services/forms.php';
+
     $stmt = $conn->prepare(
         "SELECT f.id, f.title, f.description
          FROM forms f
-         WHERE f.id = ?
+         WHERE f.id = :fid
            AND f.is_portal_visible = 1
            AND f.is_active = 1
-           AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)"
+           AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)
+           AND " . FormsService::portalAudienceSql($conn, 'f')
     );
-    $stmt->execute([$formId]);
+    $stmt->execute([':fid' => $formId, ':audUser' => (int)$_SESSION['ss_user_id']]);
     $form = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$form) {

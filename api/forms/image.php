@@ -24,6 +24,7 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/uploads.php';
+require_once '../../includes/services/forms.php';   // portalAudienceSql() - the ONE audience decision
 
 /** Everything that is not a served image ends here, identically. */
 function imageNotFound(): void
@@ -52,14 +53,21 @@ try {
     $sql = "SELECT ff.config, ff.field_type, ff.form_id
               FROM form_fields ff
               JOIN forms f ON f.id = ff.form_id
-             WHERE ff.id = ?";
+             WHERE ff.id = :fieldId";
+    $params = [':fieldId' => $fieldId];
     if (!$isAnalyst) {
+        /* 🔴 The AUDIENCE gate too (GH #145). A picture on a form restricted to
+           one group must not be fetchable by a customer outside it — an image
+           can carry the very thing the restriction exists for, a price list or
+           a site plan. Same clause the catalogue and the form endpoint use. */
         $sql .= " AND f.is_portal_visible = 1
                   AND f.is_active = 1
-                  AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)";
+                  AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)
+                  AND " . FormsService::portalAudienceSql($conn, 'f');
+        $params[':audUser'] = (int)$_SESSION['ss_user_id'];
     }
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$fieldId]);
+    $stmt->execute($params);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$row) imageNotFound();

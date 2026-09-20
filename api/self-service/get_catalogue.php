@@ -44,15 +44,23 @@ try {
        one that was deliberately kept off. */
     $collectionGate = FormsService::portalCatalogueFilter($conn, 'f');
 
-    $stmt = $conn->query(
+    /* 🔴 And the AUDIENCE gate (GH #145): a form restricted to a group of
+       people is not in this customer's catalogue at all. Filtered in the QUERY
+       rather than after the fetch, so a restricted form is indistinguishable
+       from one that does not exist. No rows in form_audiences means everyone,
+       which is every form that predates the feature. */
+    $audienceGate = ' AND ' . FormsService::portalAudienceSql($conn, 'f');
+
+    $stmt = $conn->prepare(
         "SELECT f.id, f.title, f.description
          FROM forms f
          WHERE f.is_portal_visible = 1
            AND f.is_active = 1
            AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)"
-         . $collectionGate .
+         . $collectionGate . $audienceGate .
         " ORDER BY f.title ASC"
     );
+    $stmt->execute([':audUser' => (int)$_SESSION['ss_user_id']]);
     $forms = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Descriptions are author-written plain text; strip any markup so the

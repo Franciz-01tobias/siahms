@@ -3492,6 +3492,23 @@ return [
        means, it is evaluated when asked and NEVER written onto the forms. If
        closing stamped is_portal_visible = 0 on three forms, reopening would
        turn all three back on, including one deliberately kept off the portal. */
+    /* WHO may request a form from the self-service catalogue (GH #145).
+       🔑 NO ROWS MEANS EVERYONE — the normal case and every pre-existing form,
+       so this ships with no migration and nothing silently disappearing.
+       ⚠️ It restricts the CATALOGUE, not the module: analysts reach forms
+       through module access and are unaffected.
+       🔴 Carried forward by createVersion(), or pressing Save would republish a
+       restricted form to every customer. */
+    'form_audiences' => [
+        'id'             => 'INT NOT NULL AUTO_INCREMENT',
+        'form_id'        => 'INT NOT NULL',
+        // 'user_group' today. A column rather than a form_user_groups table
+        // because naming individuals is the obvious next ask, and the column
+        // costs nothing now where a migration would cost something then.
+        'principal_type' => 'VARCHAR(12) NOT NULL',
+        'principal_id'   => 'INT NOT NULL',
+    ],
+
     /* A form somebody started and did not finish.
        🔴 A SEPARATE TABLE, deliberately, not a status on form_submissions —
        that table is read by the submissions list, the collection view, the

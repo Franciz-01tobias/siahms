@@ -53,10 +53,11 @@ try {
        form ids exist by watching which deletes succeed. */
     $vis = $conn->prepare(
         "SELECT f.id FROM forms f
-          WHERE f.id = ? AND f.is_portal_visible = 1 AND f.is_active = 1
-            AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)"
+          WHERE f.id = :fid AND f.is_portal_visible = 1 AND f.is_active = 1
+            AND NOT EXISTS (SELECT 1 FROM forms ch WHERE ch.parent_form_id = f.id)
+            AND " . FormsService::portalAudienceSql($conn, 'f')
     );
-    $vis->execute([$formId]);
+    $vis->execute([':fid' => $formId, ':audUser' => $ownerId]);
     if (!$vis->fetchColumn()) {
         echo json_encode(['success' => false, 'error' => 'Form not found']);
         exit;

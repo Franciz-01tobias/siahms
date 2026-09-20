@@ -58,6 +58,10 @@ return [
         'approval_title'     => 'Approval settings',
         'approval_on'        => 'Needs approval',
         'approval_on_title'  => 'Catalogue requests wait for {name} to approve before a ticket is raised',
+        // Restricted to a group of people (GH #145).
+        'audience_title'     => 'Who can request this form',
+        'audience_on'        => 'Restricted',
+        'audience_on_title'  => 'Only certain groups can request this form',
         'delete_title'       => 'Delete form',
         'relative_just_now'  => 'Just now',
         'relative_min_ago'   => '{n} min ago',
@@ -503,6 +507,27 @@ return [
         'n_rows'         => '{n} rows',
     ],
 
+    // ── Who may request a form from the catalogue (GH #145) ─────────
+    // The groups are PEOPLE groups, managed in Tickets → Users → Groups.
+    'audience' => [
+        'modal_title'   => 'Who can request this form',
+        'modal_intro'   => 'By default every customer who can reach the request catalogue can request this form. Restrict it and only people in the groups you choose will see it.',
+        'restrict_label'=> 'Only let certain groups request this form',
+        'groups_label'  => 'Groups',
+        'groups_hint'   => 'Groups are managed in Tickets → Users → Groups. Somebody in any one of the groups you tick can request the form.',
+        'no_groups'     => 'There are no groups yet. Create one in Tickets → Users → Groups.',
+        'one_customer'  => '1 customer',
+        'n_customers'   => '{n} customers',
+        'need_group'    => 'Choose at least one group, or turn the restriction off.',
+        'save'          => 'Save',
+        'saved_restricted' => 'Only those groups can request this form now',
+        'saved_everyone'   => 'Anyone can request this form now',
+        'save_failed'   => 'Could not save who can request this form',
+        // The restriction only bites on the catalogue, so say so rather than
+        // letting somebody set it on a form customers cannot reach anyway.
+        'not_portal_note' => 'This form is not in the request catalogue, so this will only take effect once customers can request it.',
+    ],
+
     // ── Drafts: a form somebody started and has not finished ────────
     'draft' => [
         'save'     => 'Save draft',
@@ -780,6 +805,10 @@ return [
     'help' => [
         'page_title'   => 'Service Desk - Forms Guide',
         'guide'        => 'Guide',
+        // The card grid linking to the in-depth topic pages under forms/help/.
+        'topics_title'   => 'In depth',
+        'topics_body'    => 'Longer guides to the parts of a form that need more explaining than a paragraph.',
+        'back_to_guide'  => 'Back to the Forms guide',
         'nav_overview'    => 'Overview',
         'nav_building'    => 'Building forms',
         'nav_filling'     => 'Filling in forms',

@@ -256,6 +256,8 @@ return [
     ['task_collaborators', 'uq_task_collaborator', 'unique', '(`task_id`,`analyst_id`)'],
     ['task_collaborators', 'ix_task_collaborators_analyst', 'key', '(`analyst_id`)'],
     ['task_tags', 'uq_task_tags_name', 'unique', '(`name`)'],
+    ['form_audiences', 'idx_form_audiences_form', 'key', '(`form_id`)'],
+    ['form_audiences', 'uq_form_audiences', 'unique', '(`form_id`,`principal_type`,`principal_id`)'],
     ['form_drafts', 'uq_form_drafts_owner', 'unique', '(`form_id`,`owner_kind`,`owner_id`)'],
     ['form_submissions', 'idx_form_submissions_user', 'key', '(`submitted_by_user_id`)'],
     ['form_submissions', 'idx_form_submissions_ticket', 'key', '(`ticket_id`)'],

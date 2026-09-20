@@ -4645,6 +4645,40 @@ CREATE TABLE IF NOT EXISTS `task_tag_map` (
 -- all three back on, including one deliberately kept off the portal.
 --
 -- Declared before `forms` because forms.collection_id references it.
+-- WHO may request a form from the self-service catalogue (GH #145).
+--
+-- 🔑 NO ROWS MEANS EVERYONE. That is the normal case and every form that
+-- predates this, so the feature ships with no migration and no form silently
+-- becoming invisible. A form is restricted only once somebody names an
+-- audience for it.
+--
+-- ⚠️ This restricts the CATALOGUE, not the module. Analysts reach forms through
+-- module access and are unaffected: an audience answers "which customers may
+-- request this", not "who may administer it".
+--
+-- principal_type is 'user_group' today and nothing else. It exists as a column
+-- rather than the table being form_user_groups because naming individuals is
+-- the obvious next ask, and the column costs nothing now where a migration
+-- would cost something then. Same shape knowledge_acl uses.
+--
+-- 🔴 Carried forward by createVersion(). A per-form setting left out of that
+-- copy is a setting that pressing Save deletes - and here deleting it would
+-- silently republish a restricted form to every customer.
+CREATE TABLE IF NOT EXISTS `form_audiences` (
+    `id`             INT NOT NULL AUTO_INCREMENT,
+    `form_id`        INT NOT NULL,
+    `principal_type` VARCHAR(12) NOT NULL,   -- 'user_group'
+    `principal_id`   INT NOT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_form_audiences_form` (`form_id`),
+    -- The same audience cannot be added to a form twice.
+    UNIQUE KEY `uq_form_audiences` (`form_id`, `principal_type`, `principal_id`),
+    -- No FK on principal_id: it is polymorphic by design, so there is no single
+    -- table to point at. A group that is deleted simply stops matching, which
+    -- fails CLOSED - the form narrows rather than opening up.
+    CONSTRAINT `fk_form_audiences_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- A form somebody has started and not finished.
 --
 -- 🔴 A SEPARATE TABLE, NOT A STATUS ON form_submissions. That table is read by

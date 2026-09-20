@@ -1312,6 +1312,23 @@ class FormsService
                      ->execute([self::remapLayoutFields((string)$src['layout'], $idMap), $newId]);
             }
 
+            /* 🔴 THE AUDIENCE COMES TOO (GH #145). It lives in its own table
+               rather than a column, so the INSERT above cannot carry it and it
+               is easy to forget — and forgetting is not a neutral loss here.
+               An audience that did not come forward means NO rows, and no rows
+               means EVERYONE: a form restricted to the HR group would be
+               republished to every customer in the catalogue the moment
+               somebody pressed "Save as new version". A restriction that a
+               routine edit silently removes is not a restriction.
+               ⚠️ No id remapping needed, unlike the layout — these point at
+               people groups, which the copy does not touch. */
+            if (self::audiencesAvailable($conn)) {
+                $conn->prepare(
+                    "INSERT INTO form_audiences (form_id, principal_type, principal_id)
+                     SELECT ?, principal_type, principal_id FROM form_audiences WHERE form_id = ?"
+                )->execute([$newId, $parentId]);
+            }
+
             $conn->commit();
         } catch (Exception $e) {
             if ($conn->inTransaction()) $conn->rollBack();
@@ -1348,6 +1365,18 @@ class FormsService
         // Checked HERE, not just in the adapter, so the rule holds however this
         // is reached — knowing a hidden form's id must not be enough.
         if ($portalUserId !== null && !(int)($form['is_portal_visible'] ?? 0)) {
+            throw new ServiceError('not_found', 'not_found', 'Form not found.');
+        }
+
+        /* 🔴 And the AUDIENCE (GH #145). Same reasoning one line up, and the
+           reason this is here rather than only in the catalogue query: the list
+           hiding a card has never been a check. Somebody who was in the group
+           yesterday, or who has a colleague's link, reaches this path with a
+           perfectly valid form id.
+           ⚠️ 'not_found', not 'forbidden' — a refusal that distinguishes "not
+           for you" from "does not exist" tells a customer which forms exist
+           that they are not allowed to see. */
+        if ($portalUserId !== null && !self::portalCanUseForm($conn, $formId, $portalUserId)) {
             throw new ServiceError('not_found', 'not_found', 'Form not found.');
         }
 
@@ -1968,6 +1997,141 @@ class FormsService
         }
         return $out;
     }
+    /* ══ Who may request a form (GH #145) ═══════════════════════════════════
+       Benjamin, by email: "How can I restrict a form to a specific group of
+       people?"
+
+       🔑 An audience restricts the CATALOGUE, not the module. It answers "which
+       customers may request this", never "who may administer it" — analysts
+       reach forms through module access and are untouched by any of this.
+
+       🔑 NO ROWS MEANS EVERYONE, which is every form that predates the feature.
+       No migration, and no form silently vanishing from anybody's catalogue. */
+
+    /** The principal kinds an audience may name. 'user_group' is a PEOPLE group
+     *  (knowledge_user_groups) — the only one of the three groups in this
+     *  product that holds portal users as well as analysts, which is exactly
+     *  why it is the right one here. See the Groups-of-People developer guide.
+     *  ⚠️ Adding 'user' later needs no schema change, only this list and a UI. */
+    const AUDIENCE_TYPES = ['user_group'];
+
+    public static function audiencesAvailable(PDO $conn): bool
+    {
+        static $known = null;
+        if ($known !== null) return $known;
+        try {
+            $q = $conn->prepare(
+                "SELECT COUNT(*) FROM information_schema.tables
+                  WHERE table_schema = DATABASE() AND table_name = 'form_audiences'"
+            );
+            $q->execute();
+            $known = ((int)$q->fetchColumn() === 1);
+        } catch (Exception $e) {
+            $known = false;
+        }
+        return $known;
+    }
+
+    /** The people groups a form is restricted to. Empty means everyone. */
+    public static function formAudiences(PDO $conn, int $formId): array
+    {
+        if (!self::audiencesAvailable($conn)) return [];
+        $q = $conn->prepare(
+            "SELECT principal_id FROM form_audiences
+              WHERE form_id = ? AND principal_type = 'user_group' ORDER BY principal_id"
+        );
+        $q->execute([$formId]);
+        return array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Replace a form's audience. An empty list means everyone.
+     *
+     * ⚠️ Ids are checked against real, active groups rather than trusted. A
+     * typo that stored a group id which does not exist would restrict the form
+     * to nobody — and it would look identical to "restricted to a group" from
+     * the outside, which is the worst kind of wrong.
+     */
+    public static function setFormAudiences(PDO $conn, int $formId, array $groupIds): void
+    {
+        if (!self::audiencesAvailable($conn)) {
+            throw new ServiceError('conflict', 'not_ready',
+                'Restricting a form needs Database Verification to be run first.');
+        }
+        $wanted = array_values(array_unique(array_map('intval', $groupIds)));
+        $wanted = array_values(array_filter($wanted, fn($g) => $g > 0));
+
+        if ($wanted) {
+            $in = implode(',', array_fill(0, count($wanted), '?'));
+            $q = $conn->prepare("SELECT id FROM knowledge_user_groups WHERE id IN ($in) AND is_active = 1");
+            $q->execute($wanted);
+            $real = array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN));
+            $missing = array_diff($wanted, $real);
+            if ($missing) {
+                throw new ServiceError('validation', 'unknown_group',
+                    'Unknown group: ' . implode(', ', $missing) . '.');
+            }
+            $wanted = $real;
+        }
+
+        $conn->beginTransaction();
+        try {
+            $conn->prepare("DELETE FROM form_audiences WHERE form_id = ? AND principal_type = 'user_group'")
+                 ->execute([$formId]);
+            if ($wanted) {
+                $ins = $conn->prepare(
+                    "INSERT INTO form_audiences (form_id, principal_type, principal_id) VALUES (?, 'user_group', ?)"
+                );
+                foreach ($wanted as $g) $ins->execute([$formId, $g]);
+            }
+            $conn->commit();
+        } catch (Exception $e) {
+            if ($conn->inTransaction()) $conn->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * 🔴 THE ONE PLACE THAT DECIDES. Every portal entry point asks this — the
+     * catalogue list, opening a form by id, saving a draft, fetching an image,
+     * and submitting. A restriction enforced in four places is a restriction
+     * that will be enforced in three of them by the end of the year.
+     *
+     * Returns a SQL fragment for `WHERE …`, with `:audUser` to bind. Written as
+     * a fragment rather than a helper that runs its own query because the list
+     * has to FILTER rather than ask once per row.
+     *
+     * ⚠️ The membership check honours `expires_at`: a people group carries a
+     * per-member expiry and a lapsed member is not a member.
+     */
+    public static function portalAudienceSql(PDO $conn, string $formAlias = 'f'): string
+    {
+        if (!self::audiencesAvailable($conn)) return '1 = 1';
+        return "(NOT EXISTS (SELECT 1 FROM form_audiences fa WHERE fa.form_id = {$formAlias}.id)
+                 OR EXISTS (
+                     SELECT 1
+                       FROM form_audiences fa2
+                       JOIN knowledge_user_group_members gm
+                         ON gm.group_id = fa2.principal_id
+                        AND gm.member_type = 'user'
+                        AND gm.member_id = :audUser
+                        AND (gm.expires_at IS NULL OR gm.expires_at > UTC_TIMESTAMP())
+                       JOIN knowledge_user_groups g ON g.id = fa2.principal_id AND g.is_active = 1
+                      WHERE fa2.form_id = {$formAlias}.id
+                        AND fa2.principal_type = 'user_group'
+                 ))";
+    }
+
+    /** The same decision as a yes/no, for an endpoint that already has one form. */
+    public static function portalCanUseForm(PDO $conn, int $formId, int $userId): bool
+    {
+        if (!self::audiencesAvailable($conn)) return true;
+        $sql = "SELECT 1 FROM forms f WHERE f.id = :fid AND " . self::portalAudienceSql($conn, 'f');
+        $q = $conn->prepare($sql);
+        $q->execute([':fid' => $formId, ':audUser' => $userId]);
+        return (bool)$q->fetchColumn();
+    }
+
     /* ══ Drafts ═════════════════════════════════════════════════════════════
        A form somebody started and did not finish. Kept in its own table so a
        draft is invisible to the submissions list, the collection view, the

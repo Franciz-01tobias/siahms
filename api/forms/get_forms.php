@@ -34,6 +34,17 @@ try {
         ? "                   f.collection_id, col.name AS collection_name,
                    col.closed_datetime AS collection_closed_datetime,"
         : '';
+    /* Whether this form is restricted to a group of people (GH #145).
+       A COUNT, not the groups themselves: the list only needs to show THAT a
+       restriction exists, and fetching every audience for every row to render
+       one pill would be a query per form. Guarded, because the table does not
+       exist until Database Verification has run. */
+    $audienceSelect = FormsService::audiencesAvailable($conn)
+        ? ",
+                   (SELECT COUNT(*) FROM form_audiences fa WHERE fa.form_id = f.id) AS audience_count"
+        : ",
+                   0 AS audience_count";
+
     $collectionJoin = $hasCollections
         ? "
             LEFT JOIN form_collections col ON col.id = f.collection_id"
@@ -47,7 +58,7 @@ try {
                    DATE_FORMAT(f.modified_date, '%Y-%m-%d %H:%i:%s') AS modified_date,
                    f.version_number," . $collectionSelect . "
                    (SELECT COUNT(*) FROM form_fields      WHERE form_id = f.id) AS field_count,
-                   (SELECT COUNT(*) FROM form_submissions WHERE form_id = f.id) AS submission_count
+                   (SELECT COUNT(*) FROM form_submissions WHERE form_id = f.id) AS submission_count" . $audienceSelect . "
             FROM forms f
             LEFT JOIN analysts ca  ON f.created_by  = ca.id
             LEFT JOIN analysts ma  ON f.modified_by = ma.id
