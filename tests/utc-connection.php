@@ -1,4 +1,12 @@
 <?php
+/* 🔴 NEVER OVER THE WEB. A test writes to the real tables — it creates forms,
+   assets, documents and even working analyst accounts, and only tidies them up
+   if it runs to the end. Served by a web server it is an unauthenticated write
+   endpoint, and the request can be cut off half way. FreeITSM is normally
+   deployed by putting the repository in the document root, so this file is
+   reachable unless it refuses. See tests/README.md. */
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+
 /**
  * The database connection's clock (GH #126).
  *

@@ -1,4 +1,12 @@
 <?php
+/* 🔴 NEVER OVER THE WEB. A test writes to the real tables — it creates forms,
+   assets, documents and even working analyst accounts, and only tidies them up
+   if it runs to the end. Served by a web server it is an unauthenticated write
+   endpoint, and the request can be cut off half way. FreeITSM is normally
+   deployed by putting the repository in the document root, so this file is
+   reachable unless it refuses. See tests/README.md. */
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+
 /**
  * The list of permitted field widths is written down THREE times, and all three
  * must agree.
@@ -108,6 +116,19 @@ foreach ($service as $w) {
    markup contained no mistake a reader would see. The guard has to assert the
    two halves MEET — that the class the page emits is the class the stylesheet
    defines, and that it carries a rule for every width that may be saved. */
+/* 🔴 A class is a WHOLE TOKEN. Matching `\bcat-form-grid\b` inside class="..."
+   looks right and is not: a hyphen is a regex word boundary, so the pattern
+   also matches `x-cat-form-grid`, which CSS would never style. Compared exactly,
+   the way the browser does. Same correction as tests/form-class-collisions.php,
+   which cried wolf over `.cat-form-grid` for precisely this reason. */
+function emitsClass(string $src, string $wanted): bool {
+    if (!preg_match_all('~class="([^"]*)"~', $src, $m)) return false;
+    foreach ($m[1] as $attr) {
+        if (in_array($wanted, preg_split('~\s+~', trim($attr)) ?: [], true)) return true;
+    }
+    return false;
+}
+
 $surfaces = [
     'analyst filler'  => [
         'markup' => 'forms/fill.php',
@@ -149,7 +170,7 @@ foreach ($surfaces as $name => $s) {
        satisfied it on its own: run against the broken markup as a control, it
        passed. A guard that its own documentation can satisfy is not a guard. */
     check("$name: emits the container class '{$s['class']}'",
-        (bool)preg_match('/class="[^"]*\b' . $cls . '\b[^"]*"/', $markup),
+        emitsClass($markup, $s['class']),
         "no element carries class=\"{$s['class']}\" in {$s['markup']} — was the container renamed?");
 
     /* ...and the stylesheet really defines it. Rename it in the CSS alone and

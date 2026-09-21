@@ -1,4 +1,9 @@
 <?php
+/* 🔴 Served ONLY by the built-in server that tests/azure-openai/run.php starts
+   with `php -S`. Under Apache, nginx or php-fpm this is an unauthenticated
+   endpoint that writes a file to disk, so it refuses there. */
+if (PHP_SAPI !== 'cli-server') { http_response_code(404); exit; }
+
 /**
  * A stand-in for an Azure OpenAI deployment-based endpoint.
  *

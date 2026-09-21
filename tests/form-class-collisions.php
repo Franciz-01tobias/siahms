@@ -1,4 +1,12 @@
 <?php
+/* 🔴 NEVER OVER THE WEB. A test writes to the real tables — it creates forms,
+   assets, documents and even working analyst accounts, and only tidies them up
+   if it runs to the end. Served by a web server it is an unauthenticated write
+   endpoint, and the request can be cut off half way. FreeITSM is normally
+   deployed by putting the repository in the document root, so this file is
+   reachable unless it refuses. See tests/README.md. */
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+
 /**
  * The Forms module's own CSS class names must not collide with the stylesheets
  * every page already loads.
@@ -88,16 +96,47 @@ check('form-shared.css does NOT define .form-grid',
     !in_array('form-grid', $ours, true),
     'that is the exact name that turned a <table> into a two-column grid');
 
-/* And the markup side: no Forms page should be emitting the colliding class. */
+/* And the markup side: no Forms page should be emitting the colliding class.
+ *
+ * 🔴 A CLASS IS A WHOLE TOKEN, and this check used to forget it. The test read
+ *     preg_match('~class="[^"]*\bform-grid\b~', $src)
+ * and `\b` treats a HYPHEN as a word boundary, so `class="cat-form-grid"` —
+ * a perfectly innocent name — matched and was reported as emitting `form-grid`.
+ * CSS does not work that way: `.form-grid` matches a class attribute only when
+ * one of its whitespace-separated tokens is exactly `form-grid`, so
+ * `cat-form-grid` can never be affected by it.
+ *
+ * It cost a false alarm the day `.cat-form-grid` was introduced (#1841). A test
+ * that cries wolf over a correct change gets ignored, which is how a real
+ * collision would then walk past. Tokens are compared exactly now.
+ */
+function emitsClass(string $src, string $wanted): bool {
+    if (!preg_match_all('~class="([^"]*)"~', $src, $m)) return false;
+    foreach ($m[1] as $attr) {
+        if (in_array($wanted, preg_split('~\s+~', trim($attr)) ?: [], true)) return true;
+    }
+    return false;
+}
+
 $pages = ['forms/fill.php', 'forms/edit/index.php', 'forms/submissions.php',
           'forms/collection.php', 'self-service/catalogue.php'];
 $emitting = [];
 foreach ($pages as $p) {
     $src = (string)@file_get_contents($root . '/' . $p);
-    if (preg_match('~class="[^"]*\bform-grid\b~', $src)) $emitting[] = $p;
+    if (emitsClass($src, 'form-grid')) $emitting[] = $p;
 }
 check('no Forms page emits class="form-grid"', $emitting === [],
     'still emitting: ' . implode(', ', $emitting));
+
+/* CONTROL — the matcher must still catch the real thing, and must not catch a
+   name that merely contains it. Without both halves the fix above could have
+   been "stop looking", which would pass for the wrong reason. */
+check('CONTROL — the matcher DOES catch a real class="form-grid"',
+    emitsClass('<table class="form-grid">', 'form-grid'));
+check('CONTROL — …and catches it beside other classes',
+    emitsClass('<div class="foo form-grid bar">', 'form-grid'));
+check('CONTROL — but NOT class="cat-form-grid", which CSS never matches',
+    !emitsClass('<form class="cat-form-grid">', 'form-grid'));
 
 echo "\n" . str_repeat('=', 64) . "\n";
 echo "$pass passed, $fail failed\n";

@@ -1,4 +1,12 @@
 <?php
+/* 🔴 NEVER OVER THE WEB. A test writes to the real tables — it creates forms,
+   assets, documents and even working analyst accounts, and only tidies them up
+   if it runs to the end. Served by a web server it is an unauthenticated write
+   endpoint, and the request can be cut off half way. FreeITSM is normally
+   deployed by putting the repository in the document root, so this file is
+   reachable unless it refuses. See tests/README.md. */
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+
 /**
  * Azure OpenAI deployment-based endpoints (discussion #86).
  *
@@ -26,7 +34,61 @@ chdir(dirname(__DIR__, 2));
 require_once 'config.php';
 require_once 'includes/ai_provider.php';
 
-$MOCK = 'http://localhost/freeitsm-app/tests/azure-openai/mock.php';
+/* ---- The mock server, started by this test -------------------------------
+ * 🔑 The mock USED TO BE FETCHED FROM THE APP'S OWN WEB SERVER, at the fixed
+ * URL http://localhost/freeitsm-app/tests/azure-openai/mock.php. Two things
+ * were wrong with that. It only worked on a machine where the checkout happened
+ * to sit at that path, so the test was unrunnable for anyone else; and it
+ * required tests/ to be SERVED, which is exactly what the CLI guard at the top
+ * of every file here now prevents, for good reason.
+ *
+ * So the test starts its own `php -S` on a free port, serving only this
+ * directory, and stops it again at the end. Nothing outside this process can
+ * reach it, and the real cURL path is still exercised rather than stubbed —
+ * which was the point of using HTTP in the first place. */
+$devNull = DIRECTORY_SEPARATOR === '\\' ? 'NUL' : '/dev/null';
+
+/** A port nothing is listening on, so two runs (or a busy machine) cannot clash. */
+function freePort(): int {
+    $sock = @stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
+    if (!$sock) { fwrite(STDERR, "could not find a free port: $errstr\n"); exit(1); }
+    $name = stream_socket_get_name($sock, false);
+    fclose($sock);
+    return (int)substr($name, strrpos($name, ':') + 1);
+}
+
+/* 🔴 bypass_shell IS NOT OPTIONAL ON WINDOWS. Without it proc_open runs the
+   command through `cmd /c`, so the direct child is cmd.exe and php.exe is a
+   GRANDchild. proc_terminate() then kills the wrapper and leaves the server
+   running, holding its port and the inherited console handles — the first
+   version of this left two orphaned servers behind and hung the terminal that
+   started them. With it, php.exe is the child we started and the one we stop. */
+$port = freePort();
+$mockProc = proc_open(
+    escapeshellarg(PHP_BINARY) . ' -S 127.0.0.1:' . $port . ' -t ' . escapeshellarg(__DIR__),
+    [0 => ['file', $devNull, 'r'], 1 => ['file', $devNull, 'w'], 2 => ['file', $devNull, 'w']],
+    $pipes,
+    null,
+    null,
+    ['bypass_shell' => true]
+);
+if (!is_resource($mockProc)) { fwrite(STDERR, "could not start the mock server\n"); exit(1); }
+
+/* Stopped however this script ends, including on a fatal — an orphaned server
+   holding a port is a worse legacy than a failed test. */
+register_shutdown_function(function () use (&$mockProc) {
+    if (is_resource($mockProc)) proc_terminate($mockProc);
+});
+
+// It is not ready the instant proc_open returns; wait for the port to answer.
+$ready = false;
+for ($i = 0; $i < 100 && !$ready; $i++) {
+    $c = @fsockopen('127.0.0.1', $port, $e1, $e2, 0.2);
+    if ($c) { $ready = true; fclose($c); } else { usleep(100000); }
+}
+if (!$ready) { fwrite(STDERR, "the mock server never came up on port $port\n"); exit(1); }
+
+$MOCK = "http://127.0.0.1:$port/mock.php";
 $LOG  = __DIR__ . '/last-request.json';   // see the note in mock.php
 
 $pass = 0; $fail = 0;
@@ -106,7 +168,7 @@ $cfg = [
     'provider'          => 'azure',
     'api_key'           => 'azure-test-key-123',
     'verify_ssl'        => false,
-    'azure_endpoint'    => 'http://localhost/freeitsm-app/tests/azure-openai/mock.php?x=',
+    'azure_endpoint'    => $MOCK . '?x=',
     'azure_deployment'  => 'ok',
     'azure_api_version' => '2024-02-01',
 ];
