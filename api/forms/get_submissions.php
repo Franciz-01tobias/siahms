@@ -45,8 +45,21 @@ try {
     // attached to it, and dropping its column would make those answers vanish from
     // the record without anything having actually deleted them. Sections are excluded
     // — they are headings and never held an answer.
+    /* 🔴 `config` IS NOT OPTIONAL HERE, and leaving it out broke a whole field
+       type silently. A table question keeps its COLUMNS in config, so without it
+       FormLogic.gridColumns() returns an empty list — and every reader of this
+       endpoint then draws a table with no columns: an empty <table> on screen,
+       an autoTable with `head: [[]]` in the PDF, and no cells in the CSV. The
+       answers were in the response the whole time; there was simply nothing to
+       lay them out against, so the record looked as though nobody had filled the
+       table in. Nothing errored, on any of the three.
+
+       `options` comes too, so this returns the same field shape as
+       FormsService::collectionSubmissions(), which already selected both. Two
+       sibling endpoints feeding the same JavaScript with different shapes is how
+       this went unnoticed: the collection view rendered tables correctly. */
     $stmt = $conn->prepare(
-        "SELECT id, field_type, label, is_deleted
+        "SELECT id, field_type, label, options, config, is_deleted
            FROM form_fields
           WHERE form_id = ? AND " . FormsService::presentationalSqlExclusion() . "
           ORDER BY is_deleted, sort_order, id"
