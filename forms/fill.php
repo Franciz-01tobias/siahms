@@ -519,13 +519,21 @@ $translationNamespaces = ['common', 'forms'];
                 case 'dropdown':
                     return `<select><option value=""></option>${(c.options || []).map(o =>
                         `<option value="${escAttr(o)}"${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
-                case 'radio':
+                case 'radio': {
                     /* The radio group is scoped to the field, the column AND the
                        row, or every row's radios would be one group and choosing
-                       in the second row would clear the first. */
-                    return (c.options || []).map((o, n) =>
-                        `<label class="grid-radio"><input type="radio" name="g_${fieldId}_${c.id}_${gridRadioSeq++}"
+                       in the second row would clear the first.
+                       🔴 The name is allocated ONCE PER CELL, before the options
+                       are walked. Incrementing the counter inside the loop gave
+                       every option its own group name, which is not a broken
+                       group — it is FOUR groups of one, so all four could be
+                       ticked at once and a "single select" column stopped being
+                       single. The cell is the group; the option is a member. */
+                    const group = `g_${fieldId}_${c.id}_${gridRadioSeq++}`;
+                    return (c.options || []).map(o =>
+                        `<label class="grid-radio"><input type="radio" name="${group}"
                             value="${escAttr(o)}"${o === val ? ' checked' : ''}> ${esc(o)}</label>`).join('');
+                }
                 default:
                     return `<input type="text" value="${escAttr(val)}">`;
             }

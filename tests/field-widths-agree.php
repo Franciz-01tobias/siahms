@@ -93,6 +93,90 @@ foreach ($service as $w) {
         in_array(12 - $w, $service, true));
 }
 
+/* ---- The GRID CONTAINER, which is what makes a width mean anything ---------
+   🔴 WHY THIS SECTION WAS ADDED (#1841). Guarding the width LIST turned out to
+   guard only half the mechanism. Every surface emits `data-width="6"` from the
+   shared walk in FormRender — but twelfths do nothing unless the element's
+   PARENT is the 12-column grid, and the portal's <form> carried
+   `class="cat-form-table"`, a class defined in no stylesheet in the repository.
+   Its real grid, `.cat-form-grid`, sat in self-service.css fully written and
+   referenced by nothing. So every width was calculated, written into the markup
+   and silently dropped, and the portal drew as one long column while the
+   analyst filler laid the same form out in two.
+
+   Nothing could catch it: an unrecognised class is not an error in CSS, and the
+   markup contained no mistake a reader would see. The guard has to assert the
+   two halves MEET — that the class the page emits is the class the stylesheet
+   defines, and that it carries a rule for every width that may be saved. */
+$surfaces = [
+    'analyst filler'  => [
+        'markup' => 'forms/fill.php',
+        'class'  => 'fill-grid',
+        // Its grid is an inline <style> in the page itself, so markup and CSS are one file.
+        'css'    => 'forms/fill.php',
+        'loader' => 'forms/fill.php',
+        'href'   => null,
+    ],
+    'portal'          => [
+        'markup' => 'self-service/catalogue.php',
+        'class'  => 'cat-form-grid',
+        'css'    => 'assets/css/self-service.css',
+        // The portal's stylesheets are pulled in by the shared header, not the page.
+        'loader' => 'self-service/includes/header.php',
+        'href'   => 'assets/css/self-service.css',
+    ],
+    'builder preview' => [
+        'markup' => 'forms/edit/index.php',
+        'class'  => 'preview-grid',
+        'css'    => 'assets/css/forms.css',
+        'loader' => 'forms/edit/index.php',
+        'href'   => 'assets/css/forms.css',
+    ],
+];
+
+foreach ($surfaces as $name => $s) {
+    $markup = (string)@file_get_contents($root . '/' . $s['markup']);
+    $css    = (string)@file_get_contents($root . '/' . $s['css']);
+    $loader = (string)@file_get_contents($root . '/' . $s['loader']);
+    $cls    = preg_quote($s['class'], '/');
+
+    /* The class is really emitted. Rename it in the markup alone and this fails,
+       which is the half that was missing when catalogue.php said cat-form-table.
+
+       🔴 Matched inside a class="..." ATTRIBUTE, not anywhere in the file. The
+       first draft of this check searched the whole source, and the explanatory
+       comment naming `.cat-form-grid` — added by the very fix this guards —
+       satisfied it on its own: run against the broken markup as a control, it
+       passed. A guard that its own documentation can satisfy is not a guard. */
+    check("$name: emits the container class '{$s['class']}'",
+        (bool)preg_match('/class="[^"]*\b' . $cls . '\b[^"]*"/', $markup),
+        "no element carries class=\"{$s['class']}\" in {$s['markup']} — was the container renamed?");
+
+    /* ...and the stylesheet really defines it. Rename it in the CSS alone and
+       this fails instead. Between them the two names cannot drift apart. */
+    check("$name: a stylesheet defines .{$s['class']} as a grid",
+        (bool)preg_match('/\.' . $cls . '\s*\{[^}]*display\s*:\s*grid/s', $css),
+        "no '.{$s['class']} { display: grid }' in {$s['css']}");
+
+    // Defining it somewhere the page never loads would be the same bug again.
+    if ($s['href'] !== null) {
+        check("$name: actually loads {$s['css']}",
+            strpos($loader, $s['href']) !== false,
+            "{$s['loader']} does not reference {$s['href']}");
+    }
+
+    /* Every saveable width needs a rule on THIS container. A width added to the
+       service and to two of the three grids renders full-width on the third —
+       silently, and only on one surface, which is the shape that took a user
+       report to find. */
+    foreach ($service as $w) {
+        if ($w === FormsService::FIELD_WIDTH_DEFAULT) continue;   // no width = the whole row
+        check("$name: .{$s['class']} has a rule for width $w",
+            (bool)preg_match('/\.' . $cls . '\s*>\s*\[data-width="' . $w . '"\]/', $css),
+            "no '.{$s['class']} > [data-width=\"$w\"]' in {$s['css']}");
+    }
+}
+
 /* CONTROL — the checker must be able to FAIL. A test that only ever passes is
    not evidence, and this one is entirely pattern-matching. */
 $fakeOk = ([12, 6] === [12, 6]);

@@ -400,7 +400,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 + '<div class="cat-form">'
                 +   '<h1>' + esc(form.title || '') + '</h1>'
                 +   (form.description ? '<div class="cat-form-desc">' + esc(form.description) + '</div>' : '')
-                +   '<form id="catForm" class="cat-form-table" onsubmit="return false;">' + fields + '</form>'
+                /* 🔴 cat-form-grid, NOT cat-form-table. Every field here carries
+                   data-width from the shared walk, but the twelfths only mean
+                   anything inside the grid container — and `cat-form-table` is
+                   defined in no stylesheet at all, so the widths were being
+                   emitted and then ignored. The portal drew every field full
+                   width while the analyst filler laid the same form out in two
+                   columns. See .cat-form-grid in assets/css/self-service.css. */
+                +   '<form id="catForm" class="cat-form-grid" onsubmit="return false;">' + fields + '</form>'
                 +   '<div class="cat-actions">'
                 +     '<button type="button" class="btn btn-primary" id="catSubmit" onclick="submitForm(' + form.id + ')">'
                 +       esc(window.t('self-service.catalogue.submit')) + '</button>'
@@ -555,13 +562,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     + (c.options || []).map(function (o) {
                           return '<option value="' + esc(o) + '"' + (o === val ? ' selected' : '') + '>' + esc(o) + '</option>';
                       }).join('') + '</select>';
-                case 'radio':
+                case 'radio': {
                     /* Scoped to field + column + ROW, or every row's radios are
-                       one group and choosing in row two clears row one. */
+                       one group and choosing in row two clears row one.
+                       🔴 Allocated ONCE PER CELL. Incrementing inside the loop
+                       named every option differently, making four groups of one
+                       instead of one group of four — so every option could be
+                       ticked at once. Same defect as forms/fill.php. */
+                    var group = 'cg_' + fieldId + '_' + c.id + '_' + (catGridRadioSeq++);
                     return (c.options || []).map(function (o) {
-                        return '<label class="grid-radio"><input type="radio" name="cg_' + fieldId + '_' + c.id + '_' + (catGridRadioSeq++)
+                        return '<label class="grid-radio"><input type="radio" name="' + group
                              + '" value="' + esc(o) + '"' + (o === val ? ' checked' : '') + '> ' + esc(o) + '</label>';
                     }).join('');
+                }
                 default:         return '<input type="text" value="' + esc(val) + '">';
             }
         }
