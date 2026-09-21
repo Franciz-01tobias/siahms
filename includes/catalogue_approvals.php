@@ -368,7 +368,7 @@ function catalogueRaiseTicketFromSubmissionId(PDO $conn, int $submissionId, arra
  * format to read their own inbox. `checkboxes` (plural) is a different field and
  * is stored as a JSON array of the chosen labels.
  */
-function catalogueAnswerText(?string $raw, ?string $fieldType): string {
+function catalogueAnswerText(?string $raw, ?string $fieldType, array $field = []): string {
     $val = (string)$raw;
 
     if ($fieldType === 'checkbox') {
@@ -376,8 +376,49 @@ function catalogueAnswerText(?string $raw, ?string $fieldType): string {
         return in_array(strtolower($val), ['1', 'true', 'yes', 'on'], true) ? 'Yes' : 'No';
     }
 
+    /* 🔴 A TABLE'S ANSWER IS A LIST OF OBJECTS, not a list of strings, and the
+       implode below cannot render it. It produced "Array, Array" AND emitted a
+       PHP warning per row — and on an install with display_errors on, that
+       warning is printed into the response body before the JSON, which is not
+       JSON any more. The approvals inbox then showed a bare "Error" while its
+       counts (fetched by the one filter with no rows to flatten) looked fine.
+
+       ⚠️ Reported by a user; not reproducible on an install whose pending
+       requests happen to contain no table question.
+
+       🔑 FormsService::gridToText() is the existing renderer for exactly this —
+       one line per row, cells labelled from the form's own column definitions.
+       There is no second flattener here. The require is lazy for the reason
+       given on catalogueFormActionLists() below: forms.php pulls in the
+       workflow engine at file level, and the engine lazily requires this file.
+
+       This same mistake is documented in FormsService::submitForm(), which
+       special-cases 'grid' before its own implode. The note was there; this
+       copy simply never received it. */
+    if ($fieldType === 'grid') {
+        try {
+            require_once __DIR__ . '/services/forms.php';
+            return FormsService::gridToText($field + ['config' => null], $raw);
+        } catch (Throwable $e) {
+            // A table we cannot label is still better said than crashed.
+            error_log('catalogueAnswerText: could not render a table answer: ' . $e->getMessage());
+            $rows = json_decode($val, true);
+            return is_array($rows) ? count($rows) . ' row(s)' : $val;
+        }
+    }
+
     $decoded = json_decode($val, true);          // checkboxes are stored as a JSON array
-    if (is_array($decoded)) $val = implode(', ', $decoded);
+    if (is_array($decoded)) {
+        /* Defence in depth, for a field type nobody has taught this function
+           yet. A nested value must never reach implode(): the warning it emits
+           breaks the JSON of every endpoint that calls this, which is how one
+           unhandled type took out a whole screen. */
+        $decoded = array_map(
+            fn($v) => is_scalar($v) || $v === null ? (string)$v : json_encode($v),
+            $decoded
+        );
+        $val = implode(', ', $decoded);
+    }
     return $val;
 }
 
@@ -428,7 +469,7 @@ function catalogueFormActionLists(PDO $conn, int $formId): array {
  */
 function catalogueSubmissionAnswerMap(PDO $conn, int $submissionId): array {
     $stmt = $conn->prepare(
-        "SELECT ff.label, ff.field_type, sd.field_value
+        "SELECT ff.label, ff.field_type, ff.config, sd.field_value
            FROM form_submission_data sd
            JOIN form_fields ff ON ff.id = sd.field_id
           WHERE sd.submission_id = ?
@@ -439,7 +480,7 @@ function catalogueSubmissionAnswerMap(PDO $conn, int $submissionId): array {
     $fields = [];
     $email  = '';
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $text = catalogueAnswerText($r['field_value'], $r['field_type']);
+        $text = catalogueAnswerText($r['field_value'], $r['field_type'], $r);
         $fields[$r['label']] = $text;
         if ($email === '' && $r['field_type'] === 'email' && $text !== '') {
             $email = $text;
@@ -452,7 +493,7 @@ function catalogueSubmissionAnswerMap(PDO $conn, int $submissionId): array {
 /** The submitted answers as a safe (fully-escaped) HTML summary for the ticket body. */
 function catalogueSubmissionBodyHtml(PDO $conn, int $submissionId, string $formTitle): string {
     $stmt = $conn->prepare(
-        "SELECT ff.label, ff.field_type, sd.field_value
+        "SELECT ff.label, ff.field_type, ff.config, sd.field_value
            FROM form_submission_data sd
            JOIN form_fields ff ON ff.id = sd.field_id
           WHERE sd.submission_id = ?
@@ -469,7 +510,7 @@ function catalogueSubmissionBodyHtml(PDO $conn, int $submissionId, string $formT
     $html = '<p>Submitted via the <strong>' . $esc($formTitle) . '</strong> form.</p>';
     $html .= '<table style="border-collapse:collapse;">';
     foreach ($rows as $r) {
-        $val = catalogueAnswerText($r['field_value'], $r['field_type']);
+        $val = catalogueAnswerText($r['field_value'], $r['field_type'], $r);
         $html .= '<tr>'
                . '<td style="padding:4px 14px 4px 0;vertical-align:top;color:#666;"><strong>' . $esc($r['label']) . '</strong></td>'
                . '<td style="padding:4px 0;">' . nl2br($esc($val)) . '</td>'
@@ -547,7 +588,7 @@ function catalogueApprovalsList(PDO $conn, int $analystId, string $filter = 'min
 /** label + value pairs for one submission (checkboxes flattened). */
 function catalogueSubmissionAnswers(PDO $conn, int $submissionId): array {
     $stmt = $conn->prepare(
-        "SELECT ff.label, ff.field_type, sd.field_value
+        "SELECT ff.label, ff.field_type, ff.config, sd.field_value
            FROM form_submission_data sd
            JOIN form_fields ff ON ff.id = sd.field_id
           WHERE sd.submission_id = ?
@@ -556,7 +597,7 @@ function catalogueSubmissionAnswers(PDO $conn, int $submissionId): array {
     $stmt->execute([$submissionId]);
     $out = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $out[] = ['label' => $r['label'], 'value' => catalogueAnswerText($r['field_value'], $r['field_type'])];
+        $out[] = ['label' => $r['label'], 'value' => catalogueAnswerText($r['field_value'], $r['field_type'], $r)];
     }
     return $out;
 }

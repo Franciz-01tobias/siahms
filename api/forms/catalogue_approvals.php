@@ -26,6 +26,14 @@ try {
     $conn = connectToDatabase();
     $res  = catalogueApprovalsList($conn, (int)$_SESSION['analyst_id'], $filter);
     echo json_encode(array_merge(['success' => true], $res));
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    /* 🔴 Throwable, not Exception. A PHP Error — a TypeError, a call to a
+       function that is not there — is NOT an Exception, so it walked straight
+       past this handler, and a fatal still answers HTTP 200 with an HTML error
+       page. The page could not parse that as JSON and fell back to printing the
+       word "Error" with nothing after it, which is what a user reported and what
+       left nobody any way to tell what had happened. Catching Throwable means
+       the screen can at least name the fault. */
+    error_log('catalogue_approvals: ' . $e->getMessage());
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
