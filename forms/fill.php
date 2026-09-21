@@ -38,7 +38,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Presentation shared with the portal and the builder preview: blocks
          (notes, images) and label position. A notice panel and a picture have no
          reason to look different in the three places; an INPUT does. -->
-    <link rel="stylesheet" href="../assets/css/form-shared.css?v=5">
+    <link rel="stylesheet" href="../assets/css/form-shared.css?v=6">
     <style>
         /* Module accent (teal). */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -51,7 +51,23 @@ $translationNamespaces = ['common', 'forms'];
 
         .fill-content {
             width: 100%;
-            max-width: 860px;
+            /* 🔑 THE TOKEN IS THE WIDTH OF THE FORM, NOT OF THIS BOX. Two lots
+               of padding sit between this element's max-width and the grid, and
+               BOTH count, because this page loads inbox.css — whose opening rule
+               is a global `* { box-sizing: border-box }`. The portal does not
+               load it, so the same number means different things on the two
+               surfaces: there, .cat-form is content-box and its max-width IS the
+               grid. That is why one shared token still produced two widths.
+                 this element's own padding   25px x 2 = 50
+                 .fill-card's padding         50px x 2 = 100
+               🔴 MEASURED, NOT CALCULATED. The first attempt reasoned it out as
+               100px and produced a 990px form against the portal's 1040px; only
+               putting both surfaces side by side in an iframe showed it. Use
+               mobile-probe/formwidths.php, which lifts the real CSS from both
+               pages and fails if the two grids differ.
+               ⚠️ Change either padding, or stop loading inbox.css, and this
+               number must change with it. */
+            max-width: calc(var(--form-card-max, 1040px) + 150px);
             margin: 0 auto;
             padding: 30px 25px;
         }

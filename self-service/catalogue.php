@@ -81,7 +81,10 @@ $pageStyles = <<<'CSS'
             border: 1px solid var(--border, #e5e7eb);
             border-radius: 8px;
             padding: 28px 32px;
-            max-width: 720px;
+            /* Shared with the analyst filler. This was 720px while the filler
+               was 860px, so the same form was 140px narrower for the customer
+               it was written for. See --form-card-max in form-shared.css. */
+            max-width: var(--form-card-max, 1040px);
         }
         .cat-form h1 {
             font-size: 20px;

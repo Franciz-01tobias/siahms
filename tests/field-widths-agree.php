@@ -198,6 +198,43 @@ foreach ($surfaces as $name => $s) {
     }
 }
 
+/* ---- How wide the CARD is, which is what twelfths are twelfths OF ----------
+   A field's width is relative to the form's own width, so two surfaces that
+   agree about the twelfths and disagree about the card still draw the same form
+   differently. They did: 860px on the analyst filler, 720px on the portal, so
+   every field was 16% narrower for the customer it was written for.
+
+   🔴 A PHANTOM TOKEN IS THE RISK HERE. `var(--form-card-max)` with nothing
+   defining it does not error — it silently falls back, and if there were no
+   fallback the card would have no max-width at all and run the full width of the
+   screen. So the token's DEFINITION is asserted, not just its use. */
+$shared = (string)@file_get_contents($root . '/assets/css/form-shared.css');
+check('form-shared.css defines --form-card-max',
+    (bool)preg_match('/--form-card-max\s*:\s*\d+px/', $shared),
+    'the token both filling surfaces read is not defined anywhere');
+
+foreach ([
+    'analyst filler' => ['forms/fill.php',               'forms/fill.php'],
+    'portal'         => ['self-service/catalogue.php',   'self-service/includes/header.php'],
+] as $name => [$file, $loader]) {
+    $src  = (string)@file_get_contents($root . '/' . $file);
+    $load = (string)@file_get_contents($root . '/' . $loader);
+
+    check("$name: takes its card width from the shared token",
+        strpos($src, 'var(--form-card-max') !== false,
+        "$file should read var(--form-card-max), not carry its own number");
+
+    /* A literal alongside the token is how this drifts back: somebody nudges one
+       surface, the other keeps the token, and they disagree again. */
+    check("$name: declares no literal max-width for the form card",
+        !preg_match('/\.(fill-content|cat-form)\s*\{[^}]*max-width\s*:\s*\d+px/s', $src),
+        "$file still hard-codes a card width");
+
+    check("$name: loads form-shared.css, where the token lives",
+        strpos($load, 'form-shared.css') !== false,
+        "$loader does not load it, so the token would be undefined at runtime");
+}
+
 /* CONTROL — the checker must be able to FAIL. A test that only ever passes is
    not evidence, and this one is entirely pattern-matching. */
 $fakeOk = ([12, 6] === [12, 6]);

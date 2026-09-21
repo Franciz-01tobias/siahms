@@ -16,6 +16,9 @@
  *   2. LABEL POSITION — whether a label sits above its control or beside it.
  *      That is one authored decision and must produce the same shape everywhere,
  *      even though the markup it applies to differs per surface.
+ *   3. HOW WIDE THE FORM ITSELF IS. Same argument: an author lays a form out
+ *      against a width, and a field's twelfths only mean something relative to
+ *      it. Held as ONE token below rather than a number in each surface.
  *
  * (This file was briefly called form-blocks.css. Label position is a property of
  * a QUESTION, not a block, so the name was already lying one commit in.)
@@ -24,6 +27,31 @@
  * Every value here is a theme token that is already defined for light AND dark;
  * a hex an author typed can only be right in one of them.
  */
+
+/* How wide a form may draw, on the analyst filler and on the portal alike.
+ *
+ * 🔑 ONE NUMBER, because a form is laid out ONCE by its author and then read by
+ * two different audiences. It used to be 860px on the filler and 720px on the
+ * portal, so the same form was 140px narrower for the customer it was written
+ * for — the same complaint that turned out to be #1841, arriving from the other
+ * direction.
+ *
+ * ⚠️ WHY IT IS NOT SMALLER. A field's width is in twelfths, so the narrow ones
+ * are only as usable as the card is wide. At 720px a quarter-width field came to
+ * 167px, which a `dd/mm/yyyy` input with its calendar button very nearly fills —
+ * fine for "Fecha", not fine for "Fälligkeitsdatum". The builder was offering a
+ * width the portal could not really honour. At 1040px a quarter is 247px.
+ *
+ * ⚠️ AND WHY NOT WIDER. Past about 1200px a half-width field becomes a 590px
+ * text box, which reads as a wall rather than a form.
+ *
+ * 🔴 A4 IS NOT THE CONSTRAINT HERE. Neither filling page has print styles; the
+ * pages that are actually printed are forms/submissions.php and
+ * forms/collection.php, which carry their own @media print. If a blank form ever
+ * needs printing, that wants a print stylesheet, not a narrow screen. */
+:root {
+    --form-card-max: 1040px;
+}
 
 .form-note {
     border: 1px solid var(--border, #ddd);
