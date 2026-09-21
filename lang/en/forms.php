@@ -93,6 +93,11 @@ return [
         'loading'          => 'Loading…',
         'empty_heading'    => 'Nothing waiting',
         'empty_text'       => 'There are no catalogue requests awaiting your approval.',
+        // When the list cannot be loaded at all. The detail is meant to be sent on
+        // to whoever maintains the install, which is why it is copyable.
+        'error_heading'    => 'The approvals list could not be loaded',
+        'error_intro'      => 'Something went wrong on the server rather than in this browser. The details below say what, and can be copied and sent to whoever looks after this FreeITSM.',
+        'error_note'       => 'This may contain technical detail such as file paths. Have a quick look before passing it on.',
         'requester'        => 'Requester',
         'submitted'        => 'Submitted',
         'approver'         => 'Approver',

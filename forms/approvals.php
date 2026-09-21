@@ -12,6 +12,7 @@ require_once '../includes/functions.php';
 require_once '../includes/i18n.php';
 require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
+require_once '../includes/version.php';   // named in the diagnostic report below
 I18n::initFromSession();
 Tz::init();
 
@@ -71,11 +72,25 @@ $translationNamespaces = ['common', 'forms'];
         .ca-empty { text-align: center; padding: 60px 20px; color: var(--text-faint, #999); }
         .ca-empty h3 { font-size: 16px; color: var(--text-muted, #666); margin: 0 0 6px; }
         .ca-empty p { font-size: 13px; margin: 0; }
+
+        /* The list could not be loaded. Left-aligned and plain rather than
+           centred like .ca-empty: this is something to read and copy, not a
+           decorative "nothing here" state. Every colour is a theme token, so it
+           is legible in dark mode too. */
+        .ca-error { max-width: 760px; margin: 24px auto; background: var(--surface, #fff); border: 1px solid var(--danger-border, #f3c9c9); border-left: 4px solid var(--danger-accent, #d13438); border-radius: 8px; padding: 20px 22px; }
+        .ca-error h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: var(--text, #333); }
+        .ca-error p { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--text-muted, #666); }
+        .ca-error pre { margin: 0; padding: 12px 14px; background: var(--surface-2, #fafafa); border: 1px solid var(--border-soft, #eee); border-radius: 6px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; line-height: 1.5; color: var(--text, #333); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
+        .ca-error-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+        .ca-error-note { font-size: 12px; color: var(--text-faint, #999); flex: 1 1 260px; }
     </style>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=2"></script>
+    <!-- The diagnostic box offers a Copy button. navigator.clipboard is undefined
+         outside a secure context, which a self-hosted install often is. -->
+    <script src="../assets/js/clipboard.js?v=1"></script>
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
@@ -110,6 +125,11 @@ $translationNamespaces = ['common', 'forms'];
     <script>
         // showToast is provided by the shared header (renderWaffleMenuJS loads toast.js).
         const API_BASE = '../api/forms/';
+        // Read from includes/version.php, never written out as a literal - a
+        // hardcoded number here would still say 2.3.1 three releases from now,
+        // and a diagnostic that misreports the version is worse than one that
+        // omits it.
+        const APP_VERSION = <?php echo json_encode(freeitsmVersion()); ?>;
         let currentFilter = 'mine';
 
         document.addEventListener('DOMContentLoaded', loadApprovals);
@@ -123,11 +143,22 @@ $translationNamespaces = ['common', 'forms'];
         async function loadApprovals() {
             const list = document.getElementById('caList');
             list.innerHTML = '<div class="ca-empty"><p>' + esc(window.t('forms.approval.loading')) + '</p></div>';
+            const url = API_BASE + 'catalogue_approvals.php?filter=' + currentFilter;
+            let res = null, body = '';
             try {
-                const res = await fetch(API_BASE + 'catalogue_approvals.php?filter=' + currentFilter);
-                const data = await res.json();
+                res = await fetch(url);
+                /* 🔴 TEXT FIRST, THEN PARSE — never res.json() straight off.
+                   res.json() throws on a body that is not JSON and throws the
+                   body away with it, leaving nothing to show and nothing to
+                   send. A body that is not JSON is exactly what #1850 looked
+                   like: a PHP warning printed ahead of the JSON, which this
+                   screen could only report as the bare word "Error". Reading
+                   the text first means the one thing that identifies the fault
+                   survives the failure. */
+                body = await res.text();
+                const data = JSON.parse(body);
                 if (!data.success) {
-                    list.innerHTML = '<div class="ca-empty"><p>' + esc(data.error || 'Error') + '</p></div>';
+                    showApprovalError(url, res, body, data.error || '');
                     return;
                 }
                 document.getElementById('cntMine').textContent = data.counts.mine;
@@ -135,8 +166,72 @@ $translationNamespaces = ['common', 'forms'];
                 document.getElementById('cntDecided').textContent = data.counts.decided;
                 renderApprovals(data.items);
             } catch (e) {
-                list.innerHTML = '<div class="ca-empty"><p>Error</p></div>';
+                showApprovalError(url, res, body, e && e.message ? e.message : String(e));
             }
+        }
+
+        /**
+         * What to show when the list cannot be loaded.
+         *
+         * 🔑 The point is not to look tidy, it is to end the round trip in which
+         * somebody reports "it says Error" and nobody can act on it. Everything
+         * here is what a maintainer would otherwise have to ask for: which
+         * screen, which request, the HTTP status, what the server actually sent,
+         * and the version it was sent by.
+         *
+         * ⚠️ The RAW BODY is the valuable part and the part with a cost: a PHP
+         * fatal names file paths, and a database failure can name the host and
+         * user. It is shown anyway — this screen already requires a signed-in
+         * analyst with Forms access, and a diagnostic that hides the diagnosis
+         * is not worth having — but the box says plainly that it should be
+         * glanced at before being passed on. Truncated, because nobody needs
+         * fifty kilobytes of stack trace to identify a fault.
+         */
+        function showApprovalError(url, res, body, problem) {
+            const MAX = 800;
+            const raw = (body || '').trim();
+            const shown = raw.length > MAX ? raw.slice(0, MAX) + '\n… (' + (raw.length - MAX) + ' more characters)' : raw;
+
+            const report = [
+                'FreeITSM ' + APP_VERSION,
+                'When:    ' + new Date().toISOString(),
+                'Screen:  Forms > Approvals (showing: ' + currentFilter + ')',
+                'Request: ' + url,
+                'Status:  ' + (res ? res.status + ' ' + res.statusText : 'no response - the request did not complete'),
+                'Problem: ' + (problem || 'unknown'),
+                'Browser: ' + navigator.userAgent,
+                '',
+                'Server response:',
+                raw === '' ? '(empty)' : shown
+            ].join('\n');
+
+            const list = document.getElementById('caList');
+            list.innerHTML =
+                '<div class="ca-error">'
+              +   '<h3>' + esc(window.t('forms.approval.error_heading')) + '</h3>'
+              +   '<p>' + esc(window.t('forms.approval.error_intro')) + '</p>'
+              +   '<pre id="caErrReport"></pre>'
+              +   '<div class="ca-error-actions">'
+              +     '<button type="button" class="btn btn-secondary" id="caErrCopy">'
+              +       esc(window.t('common.copy')) + '</button>'
+              +     '<span class="ca-error-note">' + esc(window.t('forms.approval.error_note')) + '</span>'
+              +   '</div>'
+              + '</div>';
+
+            // textContent, not innerHTML: the body may be an HTML error page, and
+            // pasting a server's HTML into the DOM is how a diagnostic becomes a
+            // second bug.
+            document.getElementById('caErrReport').textContent = report;
+
+            document.getElementById('caErrCopy').addEventListener('click', function () {
+                const btn = this;
+                // The one clipboard helper — navigator.clipboard is undefined
+                // outside a secure context, which a self-hosted install often is.
+                window.copyToClipboard(report).then(function (ok) {
+                    btn.textContent = window.t(ok ? 'common.copied' : 'common.copy');
+                    setTimeout(function () { btn.textContent = window.t('common.copy'); }, 2000);
+                });
+            });
         }
 
         function renderApprovals(items) {

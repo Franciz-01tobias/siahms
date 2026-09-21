@@ -4,6 +4,11 @@
  * Missing keys fall back to lang/en/forms.php per-key.
  */
 return [
+    'approval' => [
+        'error_heading' => 'Daftar persetujuan tidak dapat dimuat',
+        'error_intro' => 'Kesalahan terjadi di server, bukan di peramban ini. Rincian berikut menjelaskannya dan dapat disalin lalu dikirim kepada pengelola FreeITSM ini.',
+        'error_note' => 'Dapat memuat rincian teknis seperti jalur berkas. Sebaiknya periksa dahulu sebelum mengirimkannya.',
+    ],
     'title' => 'Formulir',
 
     'nav' => [
