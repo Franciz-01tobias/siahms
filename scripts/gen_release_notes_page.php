@@ -270,7 +270,7 @@ ob_start();
          index.html, ethos.html and deep-dive/index.html) — see js/kofi.js.
          It belongs HERE and not in the built releases.html, which this script
          overwrites on every release. -->
-    <script src="js/kofi.js?v=20260920j"></script>
+    <script src="js/kofi.js?v=20260922a"></script>
 </body>
 </html>
 <?php
