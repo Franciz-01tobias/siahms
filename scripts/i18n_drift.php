@@ -45,6 +45,23 @@ const PAIRS = [
         ['ikkje', 'ikke'], ['kva', 'hva'], ['frå', 'fra'], ['nokon', 'noen'],
         ['kven', 'hvem'], ['vere', 'være'], ['viss', 'hvis'], ['eg', 'jeg'],
     ],
+    /**
+     * ⚠️ uk:ru is NOT the same kind of pair as the two below. Ukrainian and
+     * Russian are separate languages, not two written standards of one, so a
+     * translation does not "drift" between them the way bokmål slides into
+     * nynorsk. What this catches is surzhyk — Russianisms reaching for a
+     * cognate where standard literary Ukrainian has its own word.
+     *
+     * Every form on the right was measured at zero in the existing locale
+     * before being listed, and every form on the left was measured present, so
+     * the list reflects what this product already does rather than a position
+     * on what Ukrainian ought to be.
+     */
+    'uk:ru' => [
+        ['отримати', 'получити'], ['скасувати', 'відмінити'],
+        ['за замовчуванням', 'по замовчуванню'], ['налаштування', 'настройки'],
+        ['помилка', 'ошибка'], ['користувач', 'пользователь'],
+    ],
     'ms:id' => [
         // 🔴 `bisa` vs `boleh` is the decisive one: a finished Bahasa Melayu
         // locale came out with `boleh` 432 times and `bisa` zero.
@@ -55,8 +72,17 @@ const PAIRS = [
     ],
 ];
 
-/** Letters that count as part of a word, for the languages handled here. */
-const ALPHA = 'A-Za-zÀ-ÖØ-öø-ÿĀ-ž';
+/**
+ * Letters that count as part of a word, for the languages handled here:
+ * Latin with diacritics, plus Cyrillic for the uk/ru pair.
+ *
+ * ⚠️ The \x{...} escapes need their backslashes. An edit that lost them left
+ * the class as a literal "x{0400}-x{04FF}", which PCRE read as an out-of-order
+ * range and refused to compile — so every count came back 0 and the run
+ * reported "neither form occurs". --self-test caught it immediately, 9 of 13
+ * cases failing, which is the entire reason that self-test exists.
+ */
+const ALPHA = 'A-Za-zÀ-ÖØ-öø-ÿĀ-ž\x{0400}-\x{04FF}';
 
 function flatten(array $a): array
 {

@@ -103,7 +103,7 @@ $dir  = rtrim($args[1] ?? ($root . '/.i18n-work/chunks'), '/\\') . '/';
 
 if (!is_dir($dir)) { fwrite(STDERR, "no such directory: $dir\n"); exit(2); }
 
-$fixed = $refused = $files = 0;
+$fixed = $refused = $files = $stripped = 0;
 
 foreach (glob($dir . "*.$loc.tsv") as $t) {
     $en = preg_replace('/\.' . preg_quote($loc, '/') . '\.tsv$/', '.en.tsv', $t);
@@ -124,6 +124,28 @@ foreach (glob($dir . "*.$loc.tsv") as $t) {
     foreach ($lines as $n => $l) {
         if ($l !== '' && strpos($l, "\t") === false) {
             $key = $l;
+
+            /* 🔑 SCAFFOLDING, NOT A LOST TRANSLATION.
+             *
+             * Agents occasionally leak a fragment of their own tool-call syntax
+             * into the file they are writing — a trailing `</content>` or
+             * `</invoke>` on its own line. Seen twice: a French agent caught it
+             * in its own output, and a Ukrainian one did not, putting the same
+             * artefact in all four of its chunks.
+             *
+             * This is safe to delete and nothing else is, because a TSV line is
+             * `key<TAB>value` and **a key never starts with `<`** — so a tabless
+             * line that looks like a closing tag cannot be a key whose
+             * translation went missing. Anything else tabless is still refused.
+             */
+            if (preg_match('~^</[A-Za-z][A-Za-z0-9_-]*>$~', $key) && !array_key_exists($key, $enMap)) {
+                $touched = true;
+                $stripped++;
+                printf("  %s  %-40s line %-4d %s\n", $dry ? 'would strip' : '  stripped',
+                    basename($t), $n + 1, $key);
+                continue;   // drop the line entirely
+            }
+
             if (array_key_exists($key, $enMap) && $enMap[$key] === '') {
                 $out[] = $key . "\t";
                 $touched = true;
@@ -146,6 +168,10 @@ foreach (glob($dir . "*.$loc.tsv") as $t) {
     }
 }
 
+if ($stripped) {
+    printf("\n%s%d scaffolding line(s) — agent tool syntax, never a translation\n",
+        $dry ? 'would strip ' : 'stripped ', $stripped);
+}
 printf("\n%s%d line(s), %d refused%s\n",
     $dry ? 'would repair ' : 'repaired ', $fixed, $refused,
     $dry ? '  (dry run - nothing written)' : ", across $files file(s)");
