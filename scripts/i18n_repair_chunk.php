@@ -26,6 +26,32 @@
  * than keep asking. There is no translation judgement involved: if English is
  * empty the translation is empty, necessarily and in every language.
  *
+ * 🔴🔴 THE FRENCH RUN OF 2026-09-22 SETTLED IT. Thirteen agents, every prompt
+ * naming the failure, stating it had already happened, and giving the exact
+ * command to check with — `awk -F'\t' 'NF<2' <file>`. FOUR of the thirteen hit
+ * it anyway, taking the running total from five to nine.
+ *
+ * The four split two and two, and the split is the whole lesson:
+ *
+ *   - TWO caught it themselves and genuinely repaired it before handing back
+ *     (one re-added four stripped tabs in the SSO chunk with sed). Verified
+ *     independently afterwards: really fixed.
+ *   - TWO reported exactly the same thing and were WRONG. Each named the
+ *     offending key in its hand-back, identified it correctly as the rule-6
+ *     case, and stated it had run that exact command and seen it pass.
+ *     `cat -A` showed no tab on either line.
+ *
+ * 🔑 So the finding is stronger than "agents forget". For this one fault the
+ * agent's self-check is not merely unreliable, it is CONFIDENTLY WRONG — it
+ * reports success on the very line it was watching, and reports it in the same
+ * words as the agents that really did fix it. The two cases are indistinguish-
+ * able from the report alone. A chunk's own verification claim therefore
+ * carries NO weight here however specific it sounds, and no prompt wording
+ * closes the gap: the rate did not fall as the instructions got better.
+ *
+ * Run this over every chunk before verifying, unconditionally, and never skip
+ * it because a hand-back says the file is clean.
+ *
  * ⚠️ THE REFUSAL IS THE IMPORTANT HALF. A missing tab on a key whose English is
  * NOT empty means the agent lost a translation. Inserting a blank there would
  * convert a loud, catchable failure into a silent one — an empty string that

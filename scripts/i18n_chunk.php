@@ -33,11 +33,36 @@ chdir($root);
 $argvRest = array_slice($argv, 1);
 $locales = [];
 $max = 260;
+
+/**
+ * 🔴 BYTES ARE THE REAL LIMIT, NOT KEYS. Measured on the French run of
+ * 2026-09-22, in the units i18nRowBytes() counts (key + tab + value + newline):
+ *
+ *   contracts.rfp   597 keys, 39,847 bytes, short labels   -> COMPLETED, ~2 min
+ *   tickets.settings 629 keys, 59,934 bytes, mixed          -> AGENT KILLED
+ *   tickets.help    358 keys, 63,787 bytes, help prose      -> AGENT KILLED
+ *
+ * Both deaths were the 64,000 output-token ceiling, and both agents were killed
+ * before writing anything at all. Key count predicted neither: the 597-key
+ * chunk survived and the 358-key one did not. Size predicted both.
+ *
+ * ⚠️ SO THE TRUE THRESHOLD IS ONLY KNOWN TO LIE BETWEEN 40 KB AND 60 KB, and
+ * it is not a clean line — prose is more expensive per byte than labels,
+ * because the agent reasons more per line and the translation itself runs
+ * 15-20% longer than its English. 24 KB sits 40% under the largest chunk known
+ * to survive and 60% under the smallest known to die.
+ *
+ * Do not raise this to squeeze out a few agents. A chunk that dies costs a full
+ * re-run and a manual split; a chunk that is too small costs one more agent
+ * re-reading the brief. Those are not comparable.
+ */
+$maxBytes = 24000;
 $out = $root . '/.i18n-work';
 
 for ($i = 0; $i < count($argvRest); $i++) {
     $a = $argvRest[$i];
     if ($a === '--max') { $max = max(20, (int)$argvRest[++$i]); continue; }
+    if ($a === '--maxbytes') { $maxBytes = max(2000, (int)$argvRest[++$i]); continue; }
     if ($a === '--out') { $out = rtrim($argvRest[++$i], '/\\'); continue; }
     if ($a === '--indian') {
         $locales = array_merge($locales, ['hi','bn','ta','te','mr','pa','gu','kn','ml']);
@@ -84,22 +109,36 @@ foreach ($locales as $loc) {
             $sections[$top][$k] = $v;
         }
 
-        // Pack whole sections together up to --max, never splitting one.
+        // Pack whole sections together up to --max keys AND --maxbytes bytes.
         $batches = [];
-        $cur = []; $curN = 0; $curNames = [];
+        $cur = []; $curN = 0; $curB = 0; $curNames = [];
         foreach ($sections as $name => $rows) {
             $n = count($rows);
-            if ($n > $max) {
-                $oversized[] = ['locale'=>$loc, 'ns'=>$ns, 'section'=>$name, 'keys'=>$n];
-                if ($cur) { $batches[] = [$curNames, $cur]; $cur = []; $curN = 0; $curNames = []; }
-                $batches[] = [[$name], $rows];        // its own agent
+            $b = i18nRowBytes($rows);
+
+            if ($n > $max || $b > $maxBytes) {
+                $oversized[] = ['locale'=>$loc, 'ns'=>$ns, 'section'=>$name, 'keys'=>$n, 'bytes'=>$b];
+                if ($cur) { $batches[] = [$curNames, $cur]; $cur = []; $curN = 0; $curB = 0; $curNames = []; }
+
+                // ⚠️ A section over the BYTE limit must be split or its agent dies
+                // with nothing written — so split it at SECOND-level key boundaries,
+                // which keeps each dialogue or panel whole. A section that is merely
+                // over the KEY limit still gets one agent, as it always did.
+                if ($b > $maxBytes) {
+                    foreach (i18nSplitSection($rows, $maxBytes) as $pi => $part) {
+                        $batches[] = [[$name . '_p' . ($pi + 1)], $part];
+                    }
+                } else {
+                    $batches[] = [[$name], $rows];    // its own agent
+                }
                 continue;
             }
-            if ($curN + $n > $max && $cur) {
-                $batches[] = [$curNames, $cur]; $cur = []; $curN = 0; $curNames = [];
+
+            if (($curN + $n > $max || $curB + $b > $maxBytes) && $cur) {
+                $batches[] = [$curNames, $cur]; $cur = []; $curN = 0; $curB = 0; $curNames = [];
             }
             foreach ($rows as $k => $v) $cur[$k] = $v;
-            $curN += $n; $curNames[] = $name;
+            $curN += $n; $curB += $b; $curNames[] = $name;
         }
         if ($cur) $batches[] = [$curNames, $cur];
 
@@ -114,6 +153,7 @@ foreach ($locales as $loc) {
                 'section'   => $label,
                 'sections'  => $names,
                 'keys'      => count($rows),
+                'bytes'     => i18nRowBytes($rows),
                 'whole_file'=> $whole,
                 'en_tsv'    => "chunks/$file",
                 'out_tsv'   => 'chunks/' . str_replace('.en.tsv', ".$loc.tsv", $file),
@@ -130,6 +170,7 @@ file_put_contents($out . '/_worklist.json', json_encode([
     'generated'   => gmdate('c'),
     'locales'     => $locales,
     'max_chunk'   => $max,
+    'max_bytes'   => $maxBytes,
     'total_keys'  => $totalKeys,
     'total_chunks'=> count($worklist),
     'oversized'   => $oversized,
@@ -139,15 +180,26 @@ file_put_contents($out . '/_worklist.json', json_encode([
 printf("locales      : %s\n", implode(' ', $locales));
 printf("chunks       : %d\n", count($worklist));
 printf("keys         : %s\n", number_format($totalKeys));
-printf("max/chunk    : %d\n", $max);
+printf("max/chunk    : %d keys, %s bytes\n", $max, number_format($maxBytes));
 printf("out          : %s\n", $out);
 if ($oversized) {
-    printf("\noversized sections (own agent each, NOT split):\n");
+    printf("\noversized sections:\n");
     foreach (array_slice($oversized, 0, 12) as $o) {
-        printf("  %-3s %-20s %-24s %d keys\n", $o['locale'], $o['ns'], $o['section'], $o['keys']);
+        printf("  %-3s %-20s %-24s %5d keys %7s bytes  %s\n",
+            $o['locale'], $o['ns'], $o['section'], $o['keys'], number_format($o['bytes']),
+            $o['bytes'] > $maxBytes ? 'SPLIT at second-level boundaries' : 'own agent, not split');
     }
     if (count($oversized) > 12) printf("  ... and %d more\n", count($oversized) - 12);
 }
+
+// The number that actually predicts whether an agent survives. A chunk over the
+// byte limit here is one that should have been split and was not — which means a
+// single second-level group is itself too big and wants a human.
+$worst = 0;
+foreach ($worklist as $w) $worst = max($worst, $w['bytes']);
+printf("\nlargest chunk: %s bytes (limit %s)%s\n",
+    number_format($worst), number_format($maxBytes),
+    $worst > $maxBytes ? '   ⚠️ OVER - an agent may die on it' : '   ok');
 printf("\nper-locale totals:\n");
 $byLoc = [];
 foreach ($worklist as $w) { $byLoc[$w['locale']]['k'] = ($byLoc[$w['locale']]['k'] ?? 0) + $w['keys']; $byLoc[$w['locale']]['c'] = ($byLoc[$w['locale']]['c'] ?? 0) + 1; }

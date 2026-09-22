@@ -37,6 +37,37 @@
  *  7. IDENTICAL    >25% byte-identical to English is flagged, not failed —
  *                  "Email", "OK" and product names legitimately do not change
  *
+ * ──────────────────────────────────────────────────────────────────────────
+ * ⚠️ WHAT IT DELIBERATELY DOES NOT CHECK: HTML ENTITIES.
+ *
+ * This looks like an obvious gap — it compares TAGS but ignores `&mdash;`,
+ * `&rsquo;`, `&amp;` and friends, so a dropped entity passes. It was measured
+ * before being left out, on the 13-agent French run of 2026-09-22.
+ *
+ * Across 39 translated chunks, 34 lines had an entity sequence differing from
+ * the English. Every single one was CORRECT:
+ *
+ *   - 33 were typographic. English writes a possessive with `&rsquo;` —
+ *     "the service&rsquo;s impact" — and French rephrases to "le niveau
+ *     d'impact de ce service", which has no possessive apostrophe to carry.
+ *     Others swapped `&ldquo;&rdquo;` for `&laquo;&raquo;`, which is simply
+ *     what French quotation marks are. Some merely reordered entities because
+ *     the sentence reorders.
+ *   - The 1 remaining case looked structural and was not: English had
+ *     "(printers, TVs, headsets) &amp; importing" — an ampersand used as the
+ *     word "and" — and French wrote "et". A French heading says "et".
+ *
+ * 🔑 So the check would have been 34 false positives and zero findings. That is
+ * the same mistake `i18n_audit.php` already made once with the printf space
+ * flag, and the same lesson: a checker that cries wolf gets ignored, and then
+ * the real fault it eventually finds gets ignored with it. Prefer missing an
+ * exotic case to reporting a common one wrongly.
+ *
+ * If you add it anyway, scope it to entities a translation cannot legitimately
+ * change and compare them as a SORTED MULTISET, never in sequence — and expect
+ * `&amp;` to still need a human, because "and" is a translatable word.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
  * 🔑 SELF-TEST IT IN BOTH DIRECTIONS BEFORE TRUSTING IT. A verifier that has
  * never been shown to fail is decoration. `--self-test` builds a deliberately
  * broken chunk, asserts this script rejects it, then fixes it and asserts it

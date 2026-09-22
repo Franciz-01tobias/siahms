@@ -236,3 +236,51 @@ function i18nLoad(string $path): array
     $v = require $path;
     return is_array($v) ? $v : [];
 }
+
+/**
+ * Bytes a set of rows will occupy as TSV — key, tab, value, newline.
+ *
+ * 🔴 This is the number that decides whether an agent survives its chunk.
+ * See the --maxbytes note in i18n_chunk.php: key count predicted neither of
+ * the two output-token deaths on the French run; size predicted both.
+ */
+function i18nRowBytes(array $rows): int
+{
+    $b = 0;
+    foreach ($rows as $k => $v) $b += strlen((string)$k) + strlen((string)$v) + 2;
+    return $b;
+}
+
+/**
+ * Split one oversized section into parts under $maxBytes, cutting only at
+ * SECOND-level key boundaries.
+ *
+ * 🔑 The boundary choice is the whole point. `tickets.settings` is one section
+ * of 39 KB, far too big for one agent, but `settings.modals`, `settings.sla`
+ * and `settings.numbering` are each a coherent screen. Cutting there keeps a
+ * dialogue whole; cutting at an arbitrary key count is how you get the first
+ * half of a screen in one register and the second half in another.
+ *
+ * A single second-level group that is itself over the limit is returned whole
+ * rather than cut mid-screen — it is reported as oversized and wants a human
+ * deciding how to divide it.
+ */
+function i18nSplitSection(array $rows, int $maxBytes): array
+{
+    $groups = [];
+    foreach ($rows as $k => $v) {
+        $p = explode(I18N_SEP, (string)$k);
+        $g = isset($p[1]) ? $p[0] . I18N_SEP . $p[1] : $p[0];
+        $groups[$g][$k] = $v;
+    }
+
+    $parts = []; $cur = []; $curB = 0;
+    foreach ($groups as $g) {
+        $b = i18nRowBytes($g);
+        if ($cur && $curB + $b > $maxBytes) { $parts[] = $cur; $cur = []; $curB = 0; }
+        foreach ($g as $k => $v) $cur[$k] = $v;
+        $curB += $b;
+    }
+    if ($cur) $parts[] = $cur;
+    return $parts;
+}
