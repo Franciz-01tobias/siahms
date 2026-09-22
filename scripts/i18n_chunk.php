@@ -92,6 +92,7 @@ sort($enFiles);
 $worklist = [];
 $oversized = [];
 $totalKeys = 0;
+$blankSkipped = 0;   // blank-English keys withheld from translators; see below
 $chunkDir = $out . '/chunks';
 @mkdir($chunkDir, 0777, true);
 
@@ -107,6 +108,31 @@ foreach ($locales as $loc) {
         // value is never re-translated, however poor — that is a review job,
         // not a gap-filling job, and conflating the two loses work.
         $gap = array_diff_key($en, $have);
+
+        /* 🔴 BLANK-ENGLISH KEYS ARE NEVER SENT TO A TRANSLATOR.
+         *
+         * Seven keys in the whole product have an empty English value — a blank
+         * column header, a hint deliberately unset. They need no translation:
+         * if the English is empty the translation is empty, necessarily and in
+         * every language. i18n_merge.php fills them itself.
+         *
+         * 🔑 Asking for them anyway was the most persistent fault in this
+         * pipeline — ELEVEN failures, every one of them on one of these seven
+         * keys. `software.inventory.col_actions` alone failed in fr, pt-BR and
+         * nb, the last time in an agent whose prompt named that exact key as
+         * the thing to watch. The output format is `key<TAB>value`, and a tab
+         * followed by nothing is not reliably producible; two agents reported
+         * checking that very line and were wrong.
+         *
+         * Removing the request removes the failure. That is worth more than any
+         * amount of warning about it.
+         */
+        $blank = 0;
+        foreach ($gap as $k => $v) {
+            if ($v === '') { unset($gap[$k]); $blank++; }
+        }
+        if ($blank) $blankSkipped += $blank;
+
         if (!$gap) continue;
 
         $whole = !is_file("lang/$loc/$ns.php");
@@ -191,6 +217,9 @@ printf("chunks       : %d\n", count($worklist));
 printf("keys         : %s\n", number_format($totalKeys));
 printf("max/chunk    : %d keys, %s bytes\n", $max, number_format($maxBytes));
 printf("out          : %s\n", $out);
+if ($blankSkipped) {
+    printf("blank-English: %d key(s) withheld from translators — i18n_merge.php fills them\n", $blankSkipped);
+}
 if ($oversized) {
     printf("\noversized sections:\n");
     foreach (array_slice($oversized, 0, 12) as $o) {

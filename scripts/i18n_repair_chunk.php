@@ -52,6 +52,32 @@
  * Run this over every chunk before verifying, unconditionally, and never skip
  * it because a hand-back says the file is clean.
  *
+ * ──────────────────────────────────────────────────────────────────────────
+ * 🔑 THE MECHANISM, FOUND ON THE ELEVENTH OCCURRENCE — AND THE REAL FIX
+ *
+ * An agent on the nb run diagnosed it in one line: **the Write tool strips
+ * trailing whitespace.** A line whose correct content is `key` + TAB + nothing
+ * therefore cannot be written by that tool at all. The tab is removed after the
+ * agent composes the line and before the bytes land on disk.
+ *
+ * That reframes every earlier finding. The agents were not careless, and the
+ * two that "checked and were wrong" were not lying — they verified content they
+ * had genuinely produced, and the tool discarded it on the way out. No prompt
+ * wording could ever have fixed this, which is exactly what eleven attempts
+ * demonstrated.
+ *
+ * 🔴 SO THE FIX IS NOT TO REPAIR IT, IT IS NOT TO ASK. As of 2026-09-22:
+ *
+ *   - i18n_chunk.php WITHHOLDS blank-English keys from chunks entirely.
+ *   - i18n_merge.php FILLS them itself, because a blank English value has
+ *     exactly one correct translation in every language.
+ *
+ * There are seven such keys in the whole product, and all eleven failures were
+ * on those seven. This script remains the net for chunks generated before that
+ * change, and for anything produced by hand — but the failure it was written
+ * for can no longer occur through the normal pipeline.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
  * ⚠️ THE REFUSAL IS THE IMPORTANT HALF. A missing tab on a key whose English is
  * NOT empty means the agent lost a translation. Inserting a blank there would
  * convert a loud, catchable failure into a silent one — an empty string that

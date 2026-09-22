@@ -25,20 +25,25 @@ so they are worth more than any stylistic judgement.
 4. **Keep line breaks.** A `\n` in the English means a real line break; keep the
    same number.
 5. **Never leave a non-empty string empty.** If English has a value, so must you.
-   If English is empty, leave it empty — but **the line still needs its tab**:
-   write the key, a tab, and nothing after it.
 
-   > 🔴 This is the most-failed rule in the whole brief. It has been broken five
-   > times across five different translators and two languages, always on a key
-   > whose English is blank, and every one of those translators had checked their
-   > own work and reported it correct. There is nothing after the tab to make the
-   > tab look necessary, which is exactly why it goes missing.
+   > ✅ **You will no longer be given a key whose English is blank.** For a long
+   > time you were, and it was the most-failed rule here: broken eleven times,
+   > across eleven translators and several languages, always on one of the seven
+   > keys in the product whose English is empty. Every translator had checked
+   > their own work and reported it correct, and two of them named the offending
+   > key and quoted the command they had run.
    >
-   > The orchestrator repairs this automatically now
-   > (`scripts/i18n_repair_chunk.php`), so it is no longer fatal — but only for
-   > keys whose English is genuinely blank. A missing tab on a key that *does*
-   > have English text is treated as a lost translation, refused, and the chunk
-   > is sent back.
+   > 🔑 They were not careless. **The Write tool strips trailing whitespace**, so
+   > a line whose correct content is `key` + TAB + nothing cannot survive being
+   > written — the tab is removed after you compose the line and before it
+   > reaches the disk. No amount of care could have fixed that, which is what
+   > eleven attempts showed.
+   >
+   > So the pipeline stopped asking. `i18n_chunk.php` withholds those keys and
+   > `i18n_merge.php` fills them, since a blank English value has exactly one
+   > correct translation in every language. If you ever *do* see a blank English
+   > value, something upstream is wrong — say so in your reply rather than
+   > guessing.
 6. **UTF-8, written directly.** Never HTML entities, never escapes for letters.
 
 ## What to leave in English
