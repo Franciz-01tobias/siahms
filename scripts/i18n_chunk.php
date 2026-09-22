@@ -46,17 +46,26 @@ $max = 260;
  * before writing anything at all. Key count predicted neither: the 597-key
  * chunk survived and the 358-key one did not. Size predicted both.
  *
- * ⚠️ SO THE TRUE THRESHOLD IS ONLY KNOWN TO LIE BETWEEN 40 KB AND 60 KB, and
- * it is not a clean line — prose is more expensive per byte than labels,
- * because the agent reasons more per line and the translation itself runs
- * 15-20% longer than its English. 24 KB sits 40% under the largest chunk known
- * to survive and 60% under the smallest known to die.
+ * ⚠️ BUT SIZE WAS NOT THE ONLY THING THAT CHANGED. The re-split also added an
+ * instruction: write the file once, and do not echo it back. Both deaths were
+ * agents producing the same content twice. That confound was then resolved
+ * deliberately, on the pt-BR run the same day: seven bundles packed to ~45 KB
+ * — larger than one chunk that had died — WITH the write-once rule.
  *
- * Do not raise this to squeeze out a few agents. A chunk that dies costs a full
- * re-run and a manual split; a chunk that is too small costs one more agent
+ *   6 of 6 large bundles survived, at 44,007 to 44,996 bytes.
+ *
+ * 🔑 So the write-once instruction was the fix, not the smaller chunk. That is
+ * why it now lives in scripts/i18n_BRIEF.md as its own section rather than in
+ * an orchestrator's prompt: THIS LIMIT ASSUMES EVERY AGENT READS AND FOLLOWS
+ * IT. If you translate without the brief, halve this number.
+ *
+ * 40,000 is under the 44,007 lowest proven survivor, with margin for prose
+ * being costlier per byte than labels. 60 KB remains untested with the rule and
+ * is not worth finding out on a real run: a chunk that dies costs a full re-run
+ * and a manual split, while a chunk that is too small costs one more agent
  * re-reading the brief. Those are not comparable.
  */
-$maxBytes = 24000;
+$maxBytes = 40000;
 $out = $root . '/.i18n-work';
 
 for ($i = 0; $i < count($argvRest); $i++) {

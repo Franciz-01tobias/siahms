@@ -103,6 +103,26 @@ So:
 - **A key with blank English** is a blank column header or spacer. Keep it blank,
   and **keep the tab** in the output line — a line with no tab is rejected.
 
+## 🔴 How to write the file — this is not style advice
+
+Two agents on this pipeline were **killed outright** by the 64,000 output-token
+limit, both before writing a single line of their file. Neither had done
+anything unusual; they simply produced the same content more than once.
+
+- **Write each output file exactly ONCE, in a single write.** Do not write it,
+  read it back, and write it again. A second full write of the same content is
+  what exhausts the budget, and you are killed without warning and without
+  output — your work is lost entirely, not truncated.
+- **Never echo translated lines in your reply.** Your final message is one line
+  per file: the filename and the number of lines. Nothing else.
+- **To correct a line after writing, edit that line.** Never rewrite the whole
+  file for a single fix.
+
+> 🔑 These three rules are why a chunk can be as large as it is. Measured on the
+> 2026-09-22 runs: chunks of ~45 KB completed comfortably **with** these rules,
+> while ~60 KB chunks died **without** them. The size limit the orchestrator
+> uses assumes you are following this section.
+
 ## The output format
 
 One key per line: **the key, a tab, your translation.** Nothing else — no

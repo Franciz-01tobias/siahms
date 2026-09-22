@@ -1,9 +1,15 @@
 <?php
 /**
- * Português (Brasil) (pt-BR) — Process Mapper module.
- * Falls back per-key to lang/en/process-mapper.php for anything missing here.
- * Key order mirrors lang/en/process-mapper.php.
+ * FreeITSM — process-mapper strings (pt-BR).
+ *
+ * Keys mirror lang/en/process-mapper.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php pt-BR
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Mapeador de processos',
     'nav' => [
@@ -29,6 +35,13 @@ return [
         'new_process' => '+ Novo processo',
         'search_placeholder' => 'Pesquisar processos…',
         'no_processes_yet' => 'Ainda não há processos',
+    ],
+    'new_modal' => [
+        'title' => 'Novo processo',
+        'field_title' => 'Nome do processo',
+        'placeholder' => 'ex.: Triagem de incidentes',
+        'create' => 'Criar',
+        'failed' => 'Não foi possível criar o processo.',
     ],
     'toolbar' => [
         'process' => 'Processo',
