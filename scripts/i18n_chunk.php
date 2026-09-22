@@ -66,6 +66,49 @@ $max = 260;
  * re-reading the brief. Those are not comparable.
  */
 $maxBytes = 40000;
+
+/**
+ * 🔴 THE LIMIT ABOVE IS IN *ENGLISH* BYTES, BUT THE CEILING IS ON *OUTPUT*.
+ * A locale whose script costs more bytes per character hits it sooner, and
+ * 40,000 was calibrated entirely on Latin-script runs.
+ *
+ * Measured, output bytes per English byte, over whole completed locales:
+ *
+ *   nb  x1.04     Norwegian      Latin
+ *   ms  x1.12     Malay          Latin
+ *   fr  x1.18     French         Latin
+ *   uk  x1.64     Ukrainian      Cyrillic, 2 bytes/char
+ *   gu  x2.04     Gujarati       Indic, 3 bytes/char
+ *   ml  x2.42     Malayalam      Indic, 3 bytes/char + long conjuncts
+ *
+ * A 45,000-byte English bundle is ~53 KB of French and ~109 KB of Malayalam.
+ * That is exactly how a Malayalam agent was killed on the 64,000 output-token
+ * ceiling after the same size had been completing comfortably in French,
+ * Norwegian, Malay, Portuguese and Ukrainian.
+ *
+ * 🔑 So the budget is scaled by the locale's measured expansion, relative to
+ * the Latin baseline the 40,000 was derived from. Unknown locales get the
+ * Latin default, which is the safe direction to be wrong in only for Latin
+ * scripts — add a measured figure before running a new script family.
+ */
+const LATIN_BASELINE = 1.18;
+const EXPANSION = [
+    'ml' => 2.42, 'gu' => 2.04,
+    // The other Indic scripts are the same 3-bytes-per-character shape. Given
+    // gu measured 2.04 and ml 2.42, 2.40 is used until each is measured for
+    // real — erring towards the larger, because the cost of being wrong is an
+    // agent dying with nothing written.
+    'kn' => 2.40, 'ta' => 2.40, 'te' => 2.40, 'bn' => 2.40, 'pa' => 2.40,
+    'mr' => 2.40, 'hi' => 2.40,
+    'uk' => 1.64, 'ru' => 1.64,          // Cyrillic
+    'ms' => 1.12, 'nb' => 1.04,          // measured Latin
+];
+
+function i18nBudget(string $loc, int $maxBytes): int
+{
+    $x = EXPANSION[$loc] ?? LATIN_BASELINE;
+    return (int) round($maxBytes * (LATIN_BASELINE / $x));
+}
 $out = $root . '/.i18n-work';
 
 for ($i = 0; $i < count($argvRest); $i++) {
@@ -93,11 +136,17 @@ $worklist = [];
 $oversized = [];
 $totalKeys = 0;
 $blankSkipped = 0;   // blank-English keys withheld from translators; see below
+$budgets = [];       // per-locale English-byte budget, scaled by script expansion
 $chunkDir = $out . '/chunks';
 @mkdir($chunkDir, 0777, true);
 
 foreach ($locales as $loc) {
     if (!is_dir("lang/$loc")) { fwrite(STDERR, "no such locale dir: lang/$loc\n"); exit(2); }
+
+    // English bytes this locale may be given, scaled by how much its script
+    // expands on output. See EXPANSION above.
+    $budget = i18nBudget($loc, $maxBytes);
+    $budgets[$loc] = $budget;
 
     foreach ($enFiles as $enPath) {
         $ns   = basename($enPath, '.php');
@@ -151,7 +200,7 @@ foreach ($locales as $loc) {
             $n = count($rows);
             $b = i18nRowBytes($rows);
 
-            if ($n > $max || $b > $maxBytes) {
+            if ($n > $max || $b > $budget) {
                 $oversized[] = ['locale'=>$loc, 'ns'=>$ns, 'section'=>$name, 'keys'=>$n, 'bytes'=>$b];
                 if ($cur) { $batches[] = [$curNames, $cur]; $cur = []; $curN = 0; $curB = 0; $curNames = []; }
 
@@ -159,8 +208,8 @@ foreach ($locales as $loc) {
                 // with nothing written — so split it at SECOND-level key boundaries,
                 // which keeps each dialogue or panel whole. A section that is merely
                 // over the KEY limit still gets one agent, as it always did.
-                if ($b > $maxBytes) {
-                    foreach (i18nSplitSection($rows, $maxBytes) as $pi => $part) {
+                if ($b > $budget) {
+                    foreach (i18nSplitSection($rows, $budget) as $pi => $part) {
                         $batches[] = [[$name . '_p' . ($pi + 1)], $part];
                     }
                 } else {
@@ -169,7 +218,7 @@ foreach ($locales as $loc) {
                 continue;
             }
 
-            if (($curN + $n > $max || $curB + $b > $maxBytes) && $cur) {
+            if (($curN + $n > $max || $curB + $b > $budget) && $cur) {
                 $batches[] = [$curNames, $cur]; $cur = []; $curN = 0; $curB = 0; $curNames = [];
             }
             foreach ($rows as $k => $v) $cur[$k] = $v;
@@ -215,7 +264,14 @@ file_put_contents($out . '/_worklist.json', json_encode([
 printf("locales      : %s\n", implode(' ', $locales));
 printf("chunks       : %d\n", count($worklist));
 printf("keys         : %s\n", number_format($totalKeys));
-printf("max/chunk    : %d keys, %s bytes\n", $max, number_format($maxBytes));
+printf("max/chunk    : %d keys, %s bytes of English (Latin baseline)\n", $max, number_format($maxBytes));
+foreach ($budgets as $l => $b) {
+    $x = EXPANSION[$l] ?? LATIN_BASELINE;
+    if (abs($b - $maxBytes) > 1) {
+        printf("  %-6s budget %s bytes — script expands x%.2f, so ~%s bytes of output\n",
+            $l, number_format($b), $x, number_format((int) round($b * $x)));
+    }
+}
 printf("out          : %s\n", $out);
 if ($blankSkipped) {
     printf("blank-English: %d key(s) withheld from translators — i18n_merge.php fills them\n", $blankSkipped);
@@ -225,7 +281,11 @@ if ($oversized) {
     foreach (array_slice($oversized, 0, 12) as $o) {
         printf("  %-3s %-20s %-24s %5d keys %7s bytes  %s\n",
             $o['locale'], $o['ns'], $o['section'], $o['keys'], number_format($o['bytes']),
-            $o['bytes'] > $maxBytes ? 'SPLIT at second-level boundaries' : 'own agent, not split');
+            // ⚠️ Against that LOCALE's budget, not the global limit — they differ
+            // once a script expands on output, and comparing to the wrong one
+            // labels a section "not split" while the packer is splitting it.
+            $o['bytes'] > ($budgets[$o['locale']] ?? $maxBytes)
+                ? 'SPLIT at second-level boundaries' : 'own agent, not split');
     }
     if (count($oversized) > 12) printf("  ... and %d more\n", count($oversized) - 12);
 }
