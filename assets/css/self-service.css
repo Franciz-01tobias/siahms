@@ -61,7 +61,12 @@ body {
     color: var(--ss-on-accent, #fff);
 }
 /* The logo is a dark-on-transparent PNG; force it white against the accent bar. */
+/* The BUNDLED mark is a single-colour logo drawn to sit on a coloured header,
+   so it is forced to white. An UPLOADED logo is not: keeping your own colours
+   is the entire reason for uploading one, and brightness(0) invert(1) flattens
+   any artwork to a white silhouette. */
 .portal-brand img { height: 28px; filter: brightness(0) invert(1); }
+.portal-brand.has-custom-logo img { filter: none; }
 
 /* The nav uses inbox.css's shared .nav-btn (the portal already loads that
  * stylesheet), so the buttons are literally the same component the modules use —

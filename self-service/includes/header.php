@@ -192,7 +192,7 @@ try {
     <title><?php echo htmlspecialchars($pageTitle); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/self-service.css?v=16">
+    <link rel="stylesheet" href="../assets/css/self-service.css?v=17">
 <?php if ($ssAppearance['background_pattern'] !== ''): ?>
     <!-- Only fetched when a pattern is actually in use. -->
     <link rel="stylesheet" href="../assets/css/self-service-patterns.css?v=4">
@@ -221,11 +221,13 @@ $ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? '
 ?>
 <body class="<?php echo htmlspecialchars($ssBodyClass); ?>"<?php echo $ssVars !== '' ? ' style="' . htmlspecialchars($ssVars, ENT_QUOTES) . '"' : ''; ?>>
     <div class="portal-header">
-        <div class="portal-brand">
+        <?php /* Resolved BEFORE the div: the class depends on it, and the img
+                 below is inside. */ ?>
+        <?php $ssLogoUrl = selfServicePortalLogoUrl($conn ?? connectToDatabase()); ?>
+        <div class="portal-brand<?php echo $ssLogoUrl !== '' ? ' has-custom-logo' : ''; ?>">
             <?php /* A portal-specific logo if one is set, otherwise the shared
                      one from System → Branding. Empty means "use the main one",
                      so nothing changes for an install that has not set it. */ ?>
-            <?php $ssLogoUrl = selfServicePortalLogoUrl($conn ?? connectToDatabase()); ?>
             <img src="<?php echo htmlspecialchars($ssLogoUrl !== '' ? $ssLogoUrl : brandingLogoUrl()); ?>" alt="">
             <span><?php echo htmlspecialchars(t('self-service.portal')); ?></span>
         </div>
