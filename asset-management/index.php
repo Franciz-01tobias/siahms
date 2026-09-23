@@ -1902,6 +1902,13 @@ $translationNamespaces = ['common', 'asset-management'];
                 if (data.success) {
                     const asset = assets.find(a => a.id == selectedAssetId);
                     if (asset) asset[field] = value || null;
+                    // The panel is rendered from selectedAsset, not from the list,
+                    // so both copies have to move or the next re-render puts the
+                    // old value straight back.
+                    if (selectedAsset && selectedAsset.id == selectedAssetId) {
+                        selectedAsset[field] = value || null;
+                    }
+                    refreshExpiryFlag(field, value);
                 } else {
                     showToast(window.t('asset-management.toast.update_error', { error: data.error }), 'error');
                 }
@@ -2330,11 +2337,11 @@ $translationNamespaces = ['common', 'asset-management'];
                             <input type="text" class="info-value-input" value="${escapeHtml(selectedAsset.order_number || '')}" placeholder="-" onchange="updateAssetField('order_number', this.value)">
                         </div>
                         <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.warranty_expiry')}${expiryFlag(selectedAsset.warranty_expiry)}</span>
+                            <span class="info-label">${window.t('asset-management.field.warranty_expiry')}<span class="expiry-slot" data-expiry-field="warranty_expiry">${expiryFlag(selectedAsset.warranty_expiry)}</span></span>
                             <input type="date" class="info-value-input" value="${selectedAsset.warranty_expiry || ''}" onchange="updateAssetField('warranty_expiry', this.value)">
                         </div>
                         <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.lease_expiry')}${expiryFlag(selectedAsset.lease_expiry)}</span>
+                            <span class="info-label">${window.t('asset-management.field.lease_expiry')}<span class="expiry-slot" data-expiry-field="lease_expiry">${expiryFlag(selectedAsset.lease_expiry)}</span></span>
                             <input type="date" class="info-value-input" value="${selectedAsset.lease_expiry || ''}" onchange="updateAssetField('lease_expiry', this.value)">
                         </div>
                     </div>
@@ -3910,6 +3917,23 @@ $translationNamespaces = ['common', 'asset-management'];
                 return ` <span class="expiry-flag expiry-flag-soon">${window.t('asset-management.detail.expires_in_days', { days: days })}</span>`;
             }
             return '';
+        }
+
+        /**
+         * Re-draw the pill beside a date that has just been saved.
+         *
+         * Called after the save rather than on change: a pill that updates
+         * optimistically and then fails to save leaves the screen stating a
+         * date the asset does not have, which is worse than a stale pill
+         * because it looks freshly correct.
+         *
+         * Silently does nothing for any other field, so every call site can
+         * hand it whatever was edited without asking what kind of field it is.
+         */
+        function refreshExpiryFlag(field, value) {
+            if (field !== 'warranty_expiry' && field !== 'lease_expiry') { return; }
+            const slot = document.querySelector(`.expiry-slot[data-expiry-field="${field}"]`);
+            if (slot) { slot.innerHTML = expiryFlag(value); }
         }
 
         // Open assign user modal
