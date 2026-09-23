@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'অ্যাসেট স্ট্যাটাস',
         'tab_locations'        => 'অবস্থান',
         'tab_suppliers'        => 'সরবরাহকারী',
-        'tab_warranty'         => 'ওয়ারেন্টি সতর্কতা',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

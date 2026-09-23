@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Batestatusse',
         'tab_locations'        => 'Liggings',
         'tab_suppliers'        => 'Verskaffers',
-        'tab_warranty'         => 'Waarborgwaarskuwings',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

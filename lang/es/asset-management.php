@@ -707,7 +707,6 @@ Hay dos formas de evitarlo: cambie también el nombre en la hoja de cálculo, o 
         'cf_date_date' => 'Una fecha',
         'cf_date_time' => 'Una hora',
         'cf_date_datetime' => 'Una fecha y hora',
-        'tab_warranty' => 'Alertas de garantía',
         'tab_handover' => 'Documento de entrega',
         'handover_heading' => 'Documento de entrega',
         'handover_intro' => 'Diseñe el documento que genera <strong>Usuarios &rarr; Documento de entrega</strong>. Active o desactive secciones, reordénelas, cambie el texto y elija qué columnas muestra la tabla de equipos. Los códigos de combinación rellenan la persona y la fecha cuando se genera el documento.',

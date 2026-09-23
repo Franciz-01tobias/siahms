@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'ਸੰਪਤੀ ਸਥਿਤੀਆਂ',
         'tab_locations'        => 'ਟਿਕਾਣੇ',
         'tab_suppliers'        => 'ਸਪਲਾਇਰ',
-        'tab_warranty'         => 'ਵਾਰੰਟੀ ਚੇਤਾਵਨੀਆਂ',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

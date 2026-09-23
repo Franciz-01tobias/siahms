@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'ఆస్తి స్థితులు',
         'tab_locations'        => 'స్థానాలు',
         'tab_suppliers'        => 'సరఫరాదారులు',
-        'tab_warranty'         => 'వారంటీ హెచ్చరికలు',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

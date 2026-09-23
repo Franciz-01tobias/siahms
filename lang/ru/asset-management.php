@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Статусы активов',
         'tab_locations'        => 'Расположения',
         'tab_suppliers'        => 'Поставщики',
-        'tab_warranty'         => 'Оповещения о гарантии',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

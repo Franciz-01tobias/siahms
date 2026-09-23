@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Status aset',
         'tab_locations'        => 'Lokasi',
         'tab_suppliers'        => 'Pemasok',
-        'tab_warranty'         => 'Peringatan garansi',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

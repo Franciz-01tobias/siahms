@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Assetstatussen',
         'tab_locations'        => 'Locaties',
         'tab_suppliers'        => 'Leveranciers',
-        'tab_warranty'         => 'Garantiemeldingen',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

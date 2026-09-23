@@ -859,7 +859,7 @@ return [
         'cf_date_time'         => 'A time',
         'cf_date_datetime'     => 'A date and time',
 
-        'tab_warranty'         => 'Warranty alerts',
+        'tab_warranty'         => 'Expiry alerts',
         'tab_handover'         => 'Handover document',
 
         // The handover document designer (discussion #56).
@@ -973,7 +973,7 @@ return [
         'supplier_added'              => 'Supplier added',
         'add_supplier_failed'         => 'Failed to add supplier',
 
-        // Warranty alerts
+        // Expiry alerts (warranty + lease)
         'warranty_heading'        => 'Warranty expiry alerts',
         'warranty_intro'          => 'Surface assets whose warranty has expired or is about to, based on each asset\'s <strong>Warranty expiry</strong> date. Choose where they show up &mdash; a card on the Watchtower dashboard, events on the Calendar (in a "Warranty" category), or both.',
         'warranty_show_in'        => 'Show alerts in',

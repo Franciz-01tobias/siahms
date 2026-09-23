@@ -934,7 +934,7 @@ $translationNamespaces = ['common', 'asset-management'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'warranty')): ?>
-        <!-- Warranty alerts Tab -->
+        <!-- Expiry alerts tab: warranty AND lease, two blocks, one tab -->
         <div class="tab-content<?php echo $activeTabId === 'warranty' ? ' active' : ''; ?>" id="warranty-tab" data-capability="<?php echo Cap::ASSETS_WARRANTY; ?>">
             <div class="settings-section">
                 <div class="settings-section-header">

@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'சொத்து நிலைகள்',
         'tab_locations'        => 'இடங்கள்',
         'tab_suppliers'        => 'வழங்குநர்கள்',
-        'tab_warranty'         => 'உத்தரவாத எச்சரிக்கைகள்',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

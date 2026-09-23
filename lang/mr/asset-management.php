@@ -363,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'मालमत्ता स्थिती',
         'tab_locations'        => 'स्थाने',
         'tab_suppliers'        => 'पुरवठादार',
-        'tab_warranty'         => 'वॉरंटी सूचना',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 
