@@ -45,6 +45,26 @@
         return typeof cursor === 'string' ? interpolate(cursor, params) : key;
     }
 
+    /**
+     * Translate, or fall back to the English passed at the call site.
+     *
+     * The JavaScript counterpart of includes/i18n_guarded.php's tr(). Shared
+     * files like confirm.js and command-palette.js are pulled in by pages that
+     * do not all export window.translations, and a missing key currently
+     * renders as the key itself - which is right during development and wrong
+     * in front of a user. Passing the English makes the worst case "the string
+     * it always showed" rather than "common.palette.search_ph".
+     */
+    function lookupOr(key, english, params) {
+        var out = lookup(key, params);
+        // The fallback has to go through interpolate() too. Returning the
+        // raw English left "Tickets {verb} per {unit}" on screen for every
+        // key that had not been added yet - which, on an English install,
+        // is the ONLY path this function ever takes.
+        return (out === key || out === '' || out === undefined) ? interpolate(english, params) : out;
+    }
+
     // Expose globally
     window.t = lookup;
+    window.tf = lookupOr;
 })();

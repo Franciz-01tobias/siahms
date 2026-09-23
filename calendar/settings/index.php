@@ -190,7 +190,7 @@ $translationNamespaces = ['common', 'calendar'];
          .tab-content and becomes a card feed rather than a sideways scroll. -->
     <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>

@@ -158,6 +158,15 @@
         return lastError;
     }
 
+    /**
+     * i18n-exempt: these strings are defined by the SCORM 2004 run-time
+     * specification, not by FreeITSM. They are returned to the CONTENT PACKAGE
+     * through GetErrorString(), which compares them and logs them; a course
+     * built to the spec expects "Not Initialized" in English whatever language
+     * the learner reads. Translating them would break conformance, and no
+     * learner ever sees them. The header block above says the same for
+     * Content-Type, which is an HTTP header name.
+     */
     function doGetErrorString(code) {
         const errors = {
             '0': 'No Error',

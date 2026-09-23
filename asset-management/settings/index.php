@@ -55,7 +55,7 @@ $translationNamespaces = ['common', 'asset-management'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script src="../../assets/js/chart.min.js"></script>
     <style>
         /* Module accent — drives toggle, focus rings, button colours.
@@ -3599,7 +3599,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
     <?php /* Loaded last so it can wrap this page's globals; inert on desktop. */ ?>
     <script>window.assetTypeIcons = <?php echo json_encode($assetTypeIcons, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../../assets/js/network-mapper-icons.js?v=2"></script>
+    <script src="../../assets/js/network-mapper-icons.js?v=3"></script>
     <script src="../../assets/js/mobile.js?v=65"></script>
 </body>
 </html>

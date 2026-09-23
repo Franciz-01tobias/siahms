@@ -152,10 +152,10 @@ $byWorkflow = $conn->query(
 function whLatency($s) {
     if ($s === null) return '—';
     $s = (float)$s;
-    if ($s < 1)    return '<1s';
-    if ($s < 90)   return round($s) . 's';
-    if ($s < 5400) return round($s / 60) . 'm';
-    return round($s / 3600, 1) . 'h';
+    if ($s < 1)    return t('system.webhooks.lat_under_1s');
+    if ($s < 90)   return t('system.webhooks.lat_seconds', ['n' => round($s)]);
+    if ($s < 5400) return t('system.webhooks.lat_minutes', ['n' => round($s / 60)]);
+    return t('system.webhooks.lat_hours', ['n' => round($s / 3600, 1)]);
 }
 // Success-rate cell: delivered vs terminal (delivered + dead); in-flight ignored.
 function whRate($delivered, $dead) {
@@ -176,10 +176,10 @@ $cliCmd     = 'php ' . $scriptPath;
 
 function whAgo($s) {
     if ($s === null) return '';
-    if ($s < 90)    return $s . ' seconds ago';
-    if ($s < 5400)  return round($s / 60) . ' minutes ago';
-    if ($s < 129600) return round($s / 3600) . ' hours ago';
-    return round($s / 86400) . ' days ago';
+    if ($s < 90)    return t('system.webhooks.ago_seconds', ['n' => $s]);
+    if ($s < 5400)  return t('system.webhooks.ago_minutes', ['n' => round($s / 60)]);
+    if ($s < 129600) return t('system.webhooks.ago_hours', ['n' => round($s / 3600)]);
+    return t('system.webhooks.ago_days', ['n' => round($s / 86400)]);
 }
 ?>
 <!DOCTYPE html>
@@ -188,9 +188,11 @@ function whAgo($s) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Webhooks</title>
+    <title><?php echo htmlspecialchars(t('system.webhooks.browser_title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <style>
         /* Module accent: System = blue-grey. Pinned so shared components pick it up. */
         body {
@@ -353,146 +355,128 @@ function whAgo($s) {
     <?php include '../includes/header.php'; ?>
 
     <div class="wh-container">
-        <h1 class="page-title">Webhooks</h1>
+        <h1 class="page-title"><?php echo htmlspecialchars(t('system.webhooks.title')); ?></h1>
         <p class="page-subtitle">
-            Outbound webhooks — queued by the <em>Send a webhook</em> workflow action — are delivered in the
-            background with automatic retries, so a slow or dead endpoint never holds up a ticket. This page shows
-            whether delivery is set up, an overview of delivery health, and the full log where you can inspect every
-            request, its response, and replay any of them.
+            <?php echo t('system.webhooks.subtitle'); ?>
         </p>
 
         <!-- ============ SETUP / STATUS ============ -->
         <div class="card setup <?php echo $cronState; ?>">
             <div class="setup-head">
                 <?php
-                    $pillLabel = ['running' => 'Delivery worker is running',
-                                  'stale'   => 'Delivery worker is delayed',
-                                  'down'    => 'Delivery worker has stopped',
-                                  'never'   => 'Not set up yet'][$cronState];
+                    $pillLabel = ['running' => t('system.webhooks.pill_running'),
+                                  'stale'   => t('system.webhooks.pill_stale'),
+                                  'down'    => t('system.webhooks.pill_down'),
+                                  'never'   => t('system.webhooks.pill_never')][$cronState];
                 ?>
                 <span class="setup-pill <?php echo $cronState; ?>"><span class="dot"></span><?php echo $pillLabel; ?></span>
                 <?php if ($lastRun): ?>
-                    <span class="setup-when">Last ran <?php echo htmlspecialchars(whAgo($lastRunAge)); ?></span>
+                    <span class="setup-when"><?php echo htmlspecialchars(t('system.webhooks.last_ran', ['when' => whAgo($lastRunAge)])); ?></span>
                 <?php endif; ?>
             </div>
 
             <?php if ($cronState === 'running'): ?>
                 <p class="setup-explain">
-                    The background worker is running and delivering the queue.
+                    <?php echo htmlspecialchars(t('system.webhooks.running_ok')); ?>
                     <?php if ($pendingCount > 0): ?>
-                        <strong><?php echo $pendingCount; ?></strong> webhook<?php echo $pendingCount === 1 ? '' : 's'; ?>
-                        waiting — <?php echo $pendingCount === 1 ? 'it' : 'they'; ?> will go out within a minute.
+                        <?php echo $pendingCount === 1
+                            ? t('system.webhooks.waiting_one')
+                            : t('system.webhooks.waiting_many', ['n' => $pendingCount]); ?>
                     <?php else: ?>
-                        Nothing is currently waiting.
+                        <?php echo htmlspecialchars(t('system.webhooks.nothing_waiting')); ?>
                     <?php endif; ?>
                 </p>
             <?php else: ?>
                 <p class="setup-explain">
                     <?php if ($cronState === 'never'): ?>
-                        <strong>Webhooks will not be sent</strong> until the background delivery worker is scheduled to run.
+                        <?php echo t('system.webhooks.never_explain'); ?>
                     <?php elseif ($cronState === 'down'): ?>
-                        <strong>Webhooks are no longer being sent</strong> — the worker last ran
-                        <?php echo htmlspecialchars(whAgo($lastRunAge)); ?> and appears to have stopped.
+                        <?php echo t('system.webhooks.down_explain', ['when' => htmlspecialchars(whAgo($lastRunAge))]); ?>
                     <?php else: ?>
-                        The worker is running but behind schedule (last run <?php echo htmlspecialchars(whAgo($lastRunAge)); ?>).
-                        It should run every minute.
+                        <?php echo t('system.webhooks.stale_explain', ['when' => htmlspecialchars(whAgo($lastRunAge))]); ?>
                     <?php endif; ?>
                     <?php if ($pendingCount > 0): ?>
-                        <strong><?php echo $pendingCount; ?></strong> webhook<?php echo $pendingCount === 1 ? '' : 's'; ?>
-                        <?php echo $pendingCount === 1 ? 'is' : 'are'; ?> queued and waiting.
+                        <?php echo $pendingCount === 1
+                            ? t('system.webhooks.queued_one')
+                            : t('system.webhooks.queued_many', ['n' => $pendingCount]); ?>
                     <?php endif; ?>
                 </p>
 
                 <ol class="steps">
                     <li>
-                        <strong>Schedule the delivery worker to run every minute.</strong> On the server, run this command
-                        from a scheduled task (Windows Task Scheduler) or cron (Linux):
+                        <?php echo t('system.webhooks.step1'); ?>
                         <div class="cmd-row">
                             <code id="cliCmd"><?php echo htmlspecialchars($cliCmd); ?></code>
-                            <button class="copy-btn" data-copy="cliCmd" type="button">Copy</button>
+                            <button class="copy-btn" data-copy="cliCmd" type="button"><?php echo htmlspecialchars(t('common.copy')); ?></button>
                         </div>
-                        <p class="sub">Can't run PHP from the shell? Call it over HTTP instead (e.g. from a hosted cron service):</p>
+                        <p class="sub"><?php echo htmlspecialchars(t('system.webhooks.step1_http')); ?></p>
                         <div class="cmd-row">
                             <code id="httpCmd"><?php echo htmlspecialchars($httpUrl); ?></code>
-                            <button class="copy-btn" data-copy="httpCmd" type="button">Copy</button>
+                            <button class="copy-btn" data-copy="httpCmd" type="button"><?php echo htmlspecialchars(t('common.copy')); ?></button>
                         </div>
                     </li>
                     <li>
-                        <strong>Add the <em>Send a webhook</em> action to a workflow</strong> so events start filling the queue —
-                        under <a href="<?php echo BASE_URL; ?>workflow/">Workflows</a>.
+                        <?php echo t('system.webhooks.step2', ['url' => BASE_URL . 'workflow/']); ?>
                     </li>
                     <li>
-                        <strong>Watch this page.</strong> Once the worker runs, the status above turns green and deliveries appear below.
-                        Full setup notes (Windows &amp; Linux, signature verification) are in
-                        <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">the Workflows wiki</a>.
+                        <?php echo t('system.webhooks.step3'); ?>
                     </li>
                 </ol>
             <?php endif; ?>
 
             <div class="facts">
-                <div class="fact">Worker script<b>cron/webhook_deliveries.php</b></div>
-                <div class="fact">Retry schedule<b>1m · 5m · 15m · 1h · 6h, then failed</b></div>
-                <div class="fact">Log retention<b><?php echo $retentionDays; ?> days</b></div>
+                <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_worker')); ?><b>cron/webhook_deliveries.php</b></div>
+                <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_retry')); ?><b><?php echo t('system.webhooks.fact_retry_val'); ?></b></div>
+                <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_retention')); ?><b><?php echo htmlspecialchars(t('system.webhooks.days', ['n' => $retentionDays])); ?></b></div>
                 <?php if ($cronState !== 'never'): ?>
-                    <div class="fact">Queued now<b><?php echo $pendingCount; ?></b></div>
+                    <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_queued')); ?><b><?php echo $pendingCount; ?></b></div>
                 <?php endif; ?>
             </div>
         </div>
 
         <!-- ============ DATA PROTECTION ============ -->
         <div class="card">
-            <h3>Data protection</h3>
-            <p class="desc">What FreeITSM keeps on disk about your webhooks, and for how long.</p>
+            <h3><?php echo htmlspecialchars(t('system.webhooks.dp_title')); ?></h3>
+            <p class="desc"><?php echo htmlspecialchars(t('system.webhooks.dp_desc')); ?></p>
 
             <?php if ($encryptionOn): ?>
                 <div class="wf-diagnosis" style="background:var(--success-bg,#e6f4ea); color:var(--success-text,#1e7e34); border-color:var(--success-border,#b7e1c4);">
-                    <strong>Webhook URLs and signing secrets are encrypted at rest</strong>
+                    <strong><?php echo t('system.webhooks.enc_on_title'); ?></strong>
                     <div class="wf-diagnosis-body">
-                        Stored with AES-256-GCM, in the workflow and in the delivery queue. A webhook URL is a
-                        credential in its own right &mdash; anyone holding it can post to your channel &mdash; and the
-                        signing secret is what proves a message really came from you.
+                        <?php echo t('system.webhooks.enc_on_body'); ?>
                     </div>
                 </div>
             <?php else: ?>
                 <div class="wf-diagnosis">
-                    <strong>No encryption key is configured &mdash; webhook URLs and signing secrets are stored in plain text</strong>
+                    <strong><?php echo t('system.webhooks.enc_off_title'); ?></strong>
                     <div class="wf-diagnosis-body">
-                        FreeITSM encrypts these when an encryption key file is present, but this install has none, so
-                        they are being saved as-is rather than failing your webhooks outright. Anyone who can read the
-                        database or a backup of it can post to your channels and forge your signatures. Configure the
-                        encryption key (<code>ENCRYPTION_KEY_PATH</code>) and re-save each webhook workflow to encrypt
-                        the stored values.
+                        <?php echo t('system.webhooks.enc_off_body'); ?>
                     </div>
                 </div>
             <?php endif; ?>
 
             <div class="form-group" style="max-width: 520px; margin-top: 16px;">
-                <label for="payloadRetention" style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;">Keep sent payloads for</label>
+                <label for="payloadRetention" style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;"><?php echo htmlspecialchars(t('system.webhooks.ret_label')); ?></label>
                 <select id="payloadRetention" class="form-input" onchange="savePayloadRetention(this.value)">
-                    <option value="0"  <?php echo $payloadRetention === 0  ? 'selected' : ''; ?>>Don't store them at all</option>
-                    <option value="1"  <?php echo $payloadRetention === 1  ? 'selected' : ''; ?>>1 day</option>
-                    <option value="7"  <?php echo $payloadRetention === 7  ? 'selected' : ''; ?>>7 days (recommended)</option>
-                    <option value="30" <?php echo $payloadRetention === 30 ? 'selected' : ''; ?>>30 days</option>
-                    <option value="-1" <?php echo $payloadRetention === -1 ? 'selected' : ''; ?>>As long as the delivery record lasts</option>
+                    <option value="0"  <?php echo $payloadRetention === 0  ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.webhooks.ret_none')); ?></option>
+                    <option value="1"  <?php echo $payloadRetention === 1  ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.webhooks.ret_1')); ?></option>
+                    <option value="7"  <?php echo $payloadRetention === 7  ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.webhooks.ret_7')); ?></option>
+                    <option value="30" <?php echo $payloadRetention === 30 ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.webhooks.ret_30')); ?></option>
+                    <option value="-1" <?php echo $payloadRetention === -1 ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.webhooks.ret_forever')); ?></option>
                 </select>
                 <span id="payloadRetentionStatus" style="display:block; font-size:12px; margin-top:6px; min-height:16px;"></span>
                 <small style="display:block; color:var(--text-muted,#666); margin-top:6px; line-height:1.55;">
-                    The delivery log stores the exact payload that was sent. With the <strong>Full record</strong> format
-                    that is an <strong>entire ticket</strong> &mdash; subject, requester, the lot &mdash; copied here in plain
-                    text. After this many days the payload and response bodies are scrubbed, while the delivery
-                    <em>record</em> (endpoint, status, timing, errors) is kept for audit until the log retention above
-                    (<?php echo $retentionDays; ?> days) removes the row entirely.
+                    <?php echo t('system.webhooks.ret_help', ['days' => $retentionDays]); ?>
                     <br><br>
-                    <strong>Trade-off:</strong> <em>Replay</em> re-sends the stored payload, so a delivery whose payload
-                    has been scrubbed can no longer be replayed. Replay is normally used within hours of a failure, not weeks.
+                    <?php echo t('system.webhooks.ret_tradeoff'); ?>
                 </small>
             </div>
         </div>
 
         <!-- ============ OVERVIEW DASHBOARD ============ -->
         <div class="card">
-            <h3>Overview</h3>
-            <p class="desc">Delivery health at a glance — the last 7 days, plus your busiest endpoints and the workflows sending the most.</p>
+            <h3><?php echo htmlspecialchars(t('system.webhooks.ov_title')); ?></h3>
+            <p class="desc"><?php echo t('system.webhooks.ov_desc'); ?></p>
 
             <?php
                 $srClass = $success7 === null ? '' : ($success7 >= 99 ? 'good' : ($success7 >= 90 ? 'warn' : 'bad'));
@@ -500,46 +484,46 @@ function whAgo($s) {
             ?>
             <div class="kpis">
                 <div class="kpi <?php echo $srClass; ?>">
-                    <div class="k-label">Success rate · 7d</div>
+                    <div class="k-label"><?php echo t('system.webhooks.kpi_success'); ?></div>
                     <div class="k-value"><?php echo $success7 === null ? '—' : $success7 . '%'; ?></div>
-                    <div class="k-sub"><?php echo (int)($m['delivered_7d'] ?? 0); ?> of <?php echo $term7; ?> delivered</div>
+                    <div class="k-sub"><?php echo htmlspecialchars(t('system.webhooks.kpi_success_sub', ['delivered' => (int)($m['delivered_7d'] ?? 0), 'total' => $term7])); ?></div>
                 </div>
                 <div class="kpi">
-                    <div class="k-label">Sent · 7d</div>
+                    <div class="k-label"><?php echo t('system.webhooks.kpi_sent'); ?></div>
                     <div class="k-value"><?php echo (int)($m['total_7d'] ?? 0); ?></div>
-                    <div class="k-sub"><?php echo (int)($m['total_24h'] ?? 0); ?> in the last 24h</div>
+                    <div class="k-sub"><?php echo htmlspecialchars(t('system.webhooks.kpi_sent_sub', ['n' => (int)($m['total_24h'] ?? 0)])); ?></div>
                 </div>
                 <div class="kpi">
-                    <div class="k-label">Avg delivery time</div>
-                    <div class="k-value"><?php echo whLatency($m['avg_latency_7d'] ?? null); ?></div>
-                    <div class="k-sub">queue → delivered · 7d</div>
+                    <div class="k-label"><?php echo htmlspecialchars(t('system.webhooks.kpi_latency')); ?></div>
+                    <div class="k-value"><?php echo htmlspecialchars(whLatency($m['avg_latency_7d'] ?? null)); ?></div>
+                    <div class="k-sub"><?php echo t('system.webhooks.kpi_latency_sub'); ?></div>
                 </div>
                 <div class="kpi <?php echo $pendingCount > 0 ? 'warn' : ''; ?>">
-                    <div class="k-label">Queued now</div>
+                    <div class="k-label"><?php echo htmlspecialchars(t('system.webhooks.fact_queued')); ?></div>
                     <div class="k-value"><?php echo $pendingCount; ?></div>
-                    <div class="k-sub"><?php echo (int)($m['inflight_all'] ?? 0); ?> in flight · <?php echo (int)($m['retrying_all'] ?? 0); ?> retrying</div>
+                    <div class="k-sub"><?php echo t('system.webhooks.kpi_queued_sub', ['inflight' => (int)($m['inflight_all'] ?? 0), 'retrying' => (int)($m['retrying_all'] ?? 0)]); ?></div>
                 </div>
                 <div class="kpi <?php echo $deadAll > 0 ? 'bad' : ''; ?>">
-                    <div class="k-label">Dead-letter</div>
+                    <div class="k-label"><?php echo htmlspecialchars(t('system.webhooks.kpi_dead')); ?></div>
                     <div class="k-value"><?php echo $deadAll; ?></div>
-                    <div class="k-sub"><?php echo $deadAll > 0 ? 'gave up after retries' : 'none — all clear'; ?></div>
+                    <div class="k-sub"><?php echo $deadAll > 0 ? t('system.webhooks.kpi_dead_some') : t('system.webhooks.kpi_dead_none'); ?></div>
                 </div>
             </div>
 
             <?php if (!$hasData): ?>
-                <div class="ov-empty">No webhook deliveries recorded yet — once a <em>Send a webhook</em> action fires, its stats appear here.</div>
+                <div class="ov-empty"><?php echo t('system.webhooks.ov_empty'); ?></div>
             <?php else: ?>
                 <div class="ov-grid">
                     <!-- 14-day volume -->
                     <div class="ov-panel">
-                        <h4>Volume — last 14 days</h4>
+                        <h4><?php echo t('system.webhooks.vol_title'); ?></h4>
                         <div class="chart">
                             <?php foreach ($vol as $v):
                                 $okpx   = $v['delivered'] > 0 ? max(2, (int)round(110 * $v['delivered'] / $volMax)) : 0;
                                 $failpx = $v['failed']    > 0 ? max(2, (int)round(110 * $v['failed']    / $volMax)) : 0;
                                 $dd = (int)substr($v['day'], 8, 2);
                             ?>
-                                <div class="bar" title="<?php echo htmlspecialchars($v['day']); ?>: <?php echo $v['delivered']; ?> delivered, <?php echo $v['failed']; ?> failed">
+                                <div class="bar" title="<?php echo htmlspecialchars(t('system.webhooks.bar_title', ['day' => $v['day'], 'delivered' => $v['delivered'], 'failed' => $v['failed']])); ?>">
                                     <div class="col">
                                         <?php if ($v['total'] === 0): ?>
                                             <div class="seg seg-zero"></div>
@@ -553,16 +537,16 @@ function whAgo($s) {
                             <?php endforeach; ?>
                         </div>
                         <div class="chart-legend">
-                            <span><span class="sw" style="background:#66bb6a;"></span>Delivered</span>
-                            <span><span class="sw" style="background:#ef9a9a;"></span>Failed / retrying</span>
+                            <span><span class="sw" style="background:#66bb6a;"></span><?php echo htmlspecialchars(t('system.webhooks.legend_ok')); ?></span>
+                            <span><span class="sw" style="background:#ef9a9a;"></span><?php echo htmlspecialchars(t('system.webhooks.legend_fail')); ?></span>
                         </div>
                     </div>
 
                     <!-- breakdowns -->
                     <div class="ov-panel">
-                        <h4>Top endpoints</h4>
+                        <h4><?php echo htmlspecialchars(t('system.webhooks.top_endpoints')); ?></h4>
                         <table class="mini">
-                            <thead><tr><th>Endpoint</th><th class="num">Sent</th><th class="num">Success</th></tr></thead>
+                            <thead><tr><th><?php echo htmlspecialchars(t('system.webhooks.col_endpoint')); ?></th><th class="num"><?php echo htmlspecialchars(t('system.webhooks.col_sent')); ?></th><th class="num"><?php echo htmlspecialchars(t('system.webhooks.col_success')); ?></th></tr></thead>
                             <tbody>
                                 <?php foreach ($byHost as $h): ?>
                                     <tr>
@@ -574,9 +558,9 @@ function whAgo($s) {
                             </tbody>
                         </table>
 
-                        <h4 style="margin-top:18px;">Top source workflows</h4>
+                        <h4 style="margin-top:18px;"><?php echo htmlspecialchars(t('system.webhooks.top_workflows')); ?></h4>
                         <table class="mini">
-                            <thead><tr><th>Workflow</th><th class="num">Sent</th><th class="num">Success</th></tr></thead>
+                            <thead><tr><th><?php echo htmlspecialchars(t('system.webhooks.col_workflow')); ?></th><th class="num"><?php echo htmlspecialchars(t('system.webhooks.col_sent')); ?></th><th class="num"><?php echo htmlspecialchars(t('system.webhooks.col_success')); ?></th></tr></thead>
                             <tbody>
                                 <?php foreach ($byWorkflow as $w): ?>
                                     <tr>
@@ -596,19 +580,19 @@ function whAgo($s) {
         <div class="card">
             <div class="wh-head">
                 <div class="wh-filters" id="filters"></div>
-                <button class="add-btn" id="refreshBtn" type="button">Refresh</button>
+                <button class="add-btn" id="refreshBtn" type="button"><?php echo htmlspecialchars(t('system.webhooks.refresh')); ?></button>
             </div>
             <div id="tableWrap">
                 <table class="wh">
                     <thead>
                         <tr>
-                            <th>When</th><th>Workflow</th><th>Format</th><th>URL</th>
-                            <th>Status</th><th>Attempts</th><th>Last code</th><th>Next retry</th><th style="text-align:right;">Actions</th>
+                            <th><?php echo htmlspecialchars(t('system.webhooks.col_when')); ?></th><th><?php echo htmlspecialchars(t('system.webhooks.col_workflow')); ?></th><th><?php echo htmlspecialchars(t('system.webhooks.col_format')); ?></th><th><?php echo htmlspecialchars(t('system.webhooks.col_url')); ?></th>
+                            <th><?php echo htmlspecialchars(t('system.webhooks.col_status')); ?></th><th><?php echo htmlspecialchars(t('system.webhooks.col_attempts')); ?></th><th><?php echo htmlspecialchars(t('system.webhooks.col_last_code')); ?></th><th><?php echo htmlspecialchars(t('system.webhooks.col_next_retry')); ?></th><th style="text-align:right;"><?php echo htmlspecialchars(t('system.webhooks.col_actions')); ?></th>
                         </tr>
                     </thead>
                     <tbody id="rows"></tbody>
                 </table>
-                <div class="wh-empty" id="empty" style="display:none;">No webhook deliveries yet. Add a <em>Send a webhook</em> action to a workflow and trigger it.</div>
+                <div class="wh-empty" id="empty" style="display:none;"><?php echo t('system.webhooks.log_empty'); ?></div>
             </div>
         </div>
     </div>
@@ -616,13 +600,15 @@ function whAgo($s) {
     <!-- Payload modal -->
     <div class="modal" id="payloadModal" style="display:none;">
         <div class="modal-content" style="max-width: 640px;">
-            <div class="modal-header"><h3 id="pmTitle">Delivery</h3><button class="modal-close" id="pmClose" type="button">&times;</button></div>
+            <div class="modal-header"><h3 id="pmTitle"><?php echo htmlspecialchars(t('system.webhooks.modal_title')); ?></h3><button class="modal-close" id="pmClose" type="button">&times;</button></div>
             <div class="modal-body" id="pmBody"></div>
         </div>
     </div>
 
     <script>
     const API = '<?php echo htmlspecialchars(BASE_URL . 'api/workflow'); ?>';
+    /** Shorthand for this page's namespace; window.t() comes from i18n.js. */
+    const wh = (k, p) => t('system.webhooks.' + k, p);
     let filter = '';
     let cache = [];
     const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
@@ -636,7 +622,7 @@ function whAgo($s) {
     async function load() {
         const res = await fetch(API + '/deliveries.php' + (filter ? '?status=' + filter : ''), { credentials: 'same-origin' });
         const data = await res.json();
-        if (!data.success) { document.getElementById('rows').innerHTML = '<tr><td colspan="9">' + esc(data.error || 'Error') + '</td></tr>'; return; }
+        if (!data.success) { document.getElementById('rows').innerHTML = '<tr><td colspan="9">' + esc(data.error || wh('error')) + '</td></tr>'; return; }
         cache = data.deliveries;
         renderFilters(data.summary);
         renderRows(data.deliveries);
@@ -644,30 +630,33 @@ function whAgo($s) {
 
     function renderFilters(summary) {
         const total = Object.values(summary).reduce((a, b) => a + b, 0);
-        const defs = [['', 'All', total], ['pending', 'Pending', summary.pending || 0], ['delivered', 'Delivered', summary.delivered || 0],
-                      ['failed', 'Retrying', summary.failed || 0], ['dead', 'Failed', summary.dead || 0]];
+        const defs = [['', wh('f_all'), total], ['pending', wh('f_pending'), summary.pending || 0], ['delivered', wh('f_delivered'), summary.delivered || 0],
+                      ['failed', wh('f_retrying'), summary.failed || 0], ['dead', wh('f_failed'), summary.dead || 0]];
         document.getElementById('filters').innerHTML = defs.map(([v, l, n]) =>
-            `<button class="wh-chip ${filter === v ? 'active' : ''}" data-f="${v}">${l}<span class="n">${n}</span></button>`).join('');
+            `<button class="wh-chip ${filter === v ? 'active' : ''}" data-f="${v}">${esc(l)}<span class="n">${n}</span></button>`).join('');
         document.querySelectorAll('.wh-chip').forEach(c => c.onclick = () => { filter = c.dataset.f; load(); });
     }
 
     function renderRows(rows) {
         document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
         document.getElementById('rows').innerHTML = rows.map(r => {
-            const statusLabel = r.status === 'failed' ? 'retrying' : (r.status === 'dead' ? 'failed' : r.status);
+            const statusLabel = r.status === 'failed' ? wh('st_retrying')
+                : r.status === 'dead' ? wh('st_failed')
+                : r.status === 'delivered' ? wh('st_delivered')
+                : r.status === 'pending' ? wh('st_pending') : r.status;
             const replay = (r.status === 'delivered' || r.status === 'failed' || r.status === 'dead')
-                ? `<button class="table-action-btn" data-replay="${r.id}" title="Send again">Replay</button>` : '';
+                ? `<button class="table-action-btn" data-replay="${r.id}" title="${esc(wh('replay_title'))}">${esc(wh('replay'))}</button>` : '';
             return `<tr>
                 <td>${esc(fmt(r.created))}</td>
                 <td>${esc(r.workflow)}</td>
-                <td>${esc(r.preset || 'custom')}</td>
+                <td>${esc(r.preset || wh('custom'))}</td>
                 <td><span class="wh-url" title="${esc(r.url)}">${esc(host(r.url))}</span></td>
                 <td><span class="st ${r.status}">${esc(statusLabel)}</span></td>
                 <td>${r.attempts}/${r.max_attempts}</td>
                 <td>${r.last_status !== null ? r.last_status : '—'}</td>
                 <td>${r.status === 'failed' && r.next_attempt ? esc(fmt(r.next_attempt)) : '—'}</td>
                 <td style="text-align:right; white-space:nowrap;">
-                    <button class="table-action-btn" data-view="${r.id}">View</button> ${replay}
+                    <button class="table-action-btn" data-view="${r.id}">${esc(wh('view'))}</button> ${replay}
                 </td></tr>`;
         }).join('');
         document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => view(+b.dataset.view));
@@ -677,20 +666,19 @@ function whAgo($s) {
     function view(id) {
         const r = cache.find(x => x.id === id);
         if (!r) return;
-        document.getElementById('pmTitle').textContent = 'Delivery #' + r.id + ' — ' + (r.preset || 'custom');
+        document.getElementById('pmTitle').textContent = wh('modal_delivery', { id: r.id, format: r.preset || wh('custom') });
         // (diagnosisHtml is defined below — same shape the workflow editor renders.)
         document.getElementById('pmBody').innerHTML =
             '<p style="font-size:12px;color:var(--text-muted, #667);margin:0 0 8px;">' + esc(r.method) + ' ' + esc(r.url) + '</p>'
-            + '<strong style="font-size:12px;">Request headers</strong><pre>' + esc((r.headers || []).join('\n')) + '</pre>'
-            + '<strong style="font-size:12px;">Request body (sent)</strong>'
+            + '<strong style="font-size:12px;">' + esc(wh('req_headers')) + '</strong><pre>' + esc((r.headers || []).join('\n')) + '</pre>'
+            + '<strong style="font-size:12px;">' + esc(wh('req_body')) + '</strong>'
             // An empty body here would otherwise look like a bug. Say why it's gone.
             + (r.purged
-                ? '<div class="wf-diagnosis"><strong>Payload scrubbed by retention</strong>'
-                  + '<div class="wf-diagnosis-body">The exact payload that was sent is no longer stored, '
-                  + 'per the payload-retention setting on this page. This delivery can no longer be replayed.</div></div>'
+                ? '<div class="wf-diagnosis"><strong>' + esc(wh('purged_title')) + '</strong>'
+                  + '<div class="wf-diagnosis-body">' + esc(wh('purged_body')) + '</div></div>'
                 : '<pre>' + esc(r.body || '') + '</pre>')
-            + (r.response ? '<strong style="font-size:12px;">Response' + (r.last_status ? ' (HTTP ' + r.last_status + ')' : '') + '</strong><pre>' + esc(r.response) + '</pre>' : '')
-            + (r.last_error ? '<strong style="font-size:12px;color:var(--danger-text, #c0392b);">Last error</strong><pre>' + esc(r.last_error) + '</pre>' : '')
+            + (r.response ? '<strong style="font-size:12px;">' + esc(r.last_status ? wh('response_http', { code: r.last_status }) : wh('response')) + '</strong><pre>' + esc(r.response) + '</pre>' : '')
+            + (r.last_error ? '<strong style="font-size:12px;color:var(--danger-text, #c0392b);">' + esc(wh('last_error')) + '</strong><pre>' + esc(r.last_error) + '</pre>' : '')
             // The raw cURL error says what broke, not what to do about it. Where the
             // server recognised the cause, show the plain-English version + the fix.
             + (r.diagnosis ? diagnosisHtml(r.diagnosis) : '');
@@ -706,7 +694,7 @@ function whAgo($s) {
         h += '<strong>' + esc(dg.title) + '</strong>';
         h += '<div class="wf-diagnosis-body">' + esc(dg.summary) + '</div>';
         if (dg.help) {
-            h += '<a class="wf-diagnosis-link" href="' + esc(dg.help) + '" target="_blank" rel="noopener">How to fix this &rarr;</a>';
+            h += '<a class="wf-diagnosis-link" href="' + esc(dg.help) + '" target="_blank" rel="noopener">' + esc(wh('how_to_fix')) + '</a>';
         }
         return h + '</div>';
     }
@@ -715,7 +703,7 @@ function whAgo($s) {
     async function savePayloadRetention(days) {
         const el = document.getElementById('payloadRetentionStatus');
         el.style.color = 'var(--text-muted, #666)';
-        el.textContent = 'Saving…';
+        el.textContent = t('common.saving');
         try {
             const res = await fetch(API + '/save_payload_retention.php', {
                 method: 'POST', credentials: 'same-origin',
@@ -725,17 +713,17 @@ function whAgo($s) {
             const d = await res.json();
             if (!d.success) {
                 el.style.color = 'var(--danger-text, #c0392b)';
-                el.textContent = d.error || 'Could not save.';
+                el.textContent = d.error || wh('save_failed');
                 return;
             }
             el.style.color = 'var(--success-text, #1e7e34)';
             el.textContent = d.scrubbed > 0
-                ? 'Saved — ' + d.scrubbed + ' stored payload' + (d.scrubbed === 1 ? '' : 's') + ' scrubbed now.'
-                : 'Saved.';
+                ? (d.scrubbed === 1 ? wh('scrubbed_one') : wh('scrubbed_many', { n: d.scrubbed }))
+                : wh('saved');
             load();   // refresh the log: purged rows lose their payload + Replay
         } catch (e) {
             el.style.color = 'var(--danger-text, #c0392b)';
-            el.textContent = 'Could not save.';
+            el.textContent = wh('save_failed');
         }
     }
 
@@ -745,14 +733,14 @@ function whAgo($s) {
             headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id })
         });
         const data = await res.json();
-        if (!data.success) alert(data.error || 'Replay failed');
+        if (!data.success) alert(data.error || wh('replay_failed'));
         load();
     }
 
     document.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
         const t = document.getElementById(b.dataset.copy).textContent;
         // copyToClipboard(), not navigator.clipboard directly - see clipboard.js.
-        copyToClipboard(t).then(ok => { const o = b.textContent; b.textContent = ok ? 'Copied' : 'Copy failed'; setTimeout(() => b.textContent = o, 1600); });
+        copyToClipboard(t).then(ok => { const o = b.textContent; b.textContent = ok ? t('common.copied') : wh('copy_failed'); setTimeout(() => b.textContent = o, 1600); });
     });
     document.getElementById('refreshBtn').onclick = load;
     document.getElementById('pmClose').onclick = () => document.getElementById('payloadModal').style.display = 'none';

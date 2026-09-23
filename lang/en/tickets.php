@@ -2256,6 +2256,121 @@ return [
         'failed_remove'           => 'Failed to remove widget',
         'widget_removed'          => 'Widget removed',
         'widget_updated'          => 'Widget updated',
+        // ── The widget editor, shared by index.php and library.php ──────
+        // (tickets/dashboard/includes/widget_edit_form.php)
+        'form' => [
+            'title'            => 'Title',
+            'title_ph'         => 'e.g. Tickets by status',
+            'chart_type'       => 'Chart type',
+            'chart_bar'        => 'Bar',
+            'chart_doughnut'   => 'Doughnut',
+            'chart_pie'        => 'Pie',
+            'chart_line'       => 'Line',
+            'description'      => 'Description',
+            'description_ph'   => 'Brief description of what this widget shows',
+            'property'         => 'Aggregate property',
+            'group_categorical' => 'Categorical',
+            'group_timeseries' => 'Time series',
+            'group_comparison' => 'Comparison',
+            'prop_status'      => 'Status',
+            'prop_priority'    => 'Priority',
+            'prop_department'  => 'Department',
+            'prop_ticket_type' => 'Ticket type',
+            'prop_analyst'     => 'Assigned analyst',
+            'prop_owner'       => 'Owner',
+            'prop_origin'      => 'Origin',
+            'prop_ftf'         => 'First time fix',
+            'prop_training'    => 'Training provided',
+            'prop_created'     => 'Created',
+            'prop_closed'      => 'Closed',
+            'prop_created_vs_closed' => 'Created vs closed',
+            'time_grouping'    => 'Time grouping',
+            'time_day'         => 'Day',
+            'time_month'       => 'Month',
+            'time_year'        => 'Year',
+            'series'           => 'Series breakdown',
+            'series_none'      => 'None (single series)',
+            'series_status'    => 'By status',
+            'series_priority'  => 'By priority',
+            'date_range'       => 'Date range',
+            'range_all'        => 'All time',
+            'range_7d'         => 'Last 7 days',
+            'range_30d'        => 'Last 30 days',
+            'range_this_month' => 'This month',
+            'range_3m'         => 'Last 3 months',
+            'range_6m'         => 'Last 6 months',
+            'range_12m'        => 'Last 12 months',
+            'range_this_year'  => 'This year',
+            'dept_filter'      => 'Department filter',
+            'dept_hint'        => 'Leave all unchecked to include all departments',
+            'filterable'       => 'Allow status filtering',
+        ],
+        // ── The auto-written widget description (assets/js/widget-editor.js) ──
+        //
+        // This was assembled in JavaScript by concatenating English and then
+        // calling .toLowerCase() on the result. Two things are wrong with that
+        // in any other language: word order is fixed to English, and German
+        // capitalises its nouns mid-sentence. So each shape is a whole
+        // sentence, and the mid-sentence forms are their own keys rather than
+        // a lower-cased title.
+        //
+        // 🔴 It also carried a real English bug: the unit came from lower-casing
+        // "Daily"/"Monthly"/"Yearly" and stripping a trailing "ly", which gives
+        // "month" and "year" but turns "Daily" into "dai" - the description read
+        // "Tickets created per dai". The unit is now its own word.
+        'auto_desc' => [
+            'created_vs_closed'     => 'Created vs closed',
+            'created_vs_closed_per' => 'Created vs closed per {unit}',
+            'per'                   => 'Tickets {verb} per {unit}',
+            'per_by'                => 'Tickets {verb} per {unit} by {series}',
+            'by'                    => 'Tickets by {property}',
+            'by_and'                => 'Tickets by {property} and {series}',
+            'with_range'            => '{desc} ({range})',
+            'with_depts'            => '{desc} — {names}',
+            'with_dept_count'       => '{desc} — {n} departments',
+
+            'verb_created'          => 'created',
+            'verb_closed'           => 'closed',
+            'unit_day'              => 'day',
+            'unit_month'            => 'month',
+            'unit_year'             => 'year',
+
+            // Mid-sentence forms of the aggregate property and the series.
+            'of_status'             => 'status',
+            'of_priority'           => 'priority',
+            'of_department'         => 'department',
+            'of_ticket_type'        => 'ticket type',
+            'of_analyst'            => 'assigned analyst',
+            'of_owner'              => 'owner',
+            'of_origin'             => 'origin',
+            'of_first_time_fix'     => 'first time fix',
+            'of_training_provided'  => 'training provided',
+            'of_category'           => 'category',
+            'of_closure_category'   => 'category at close',
+            'of_resolution_code'    => 'resolution code',
+
+            // Mid-sentence forms of the date range, for the "( ... )" suffix.
+            'in_7d'                 => 'last 7 days',
+            'in_30d'                => 'last 30 days',
+            'in_this_month'         => 'this month',
+            'in_3m'                 => 'last 3 months',
+            'in_6m'                 => 'last 6 months',
+            'in_12m'                => 'last 12 months',
+            'in_this_year'          => 'this year',
+
+            // Three properties the shared form partial does not offer, but the
+            // editor still has to label when an existing widget uses one.
+            'prop_category'         => 'Category',
+            'prop_closure_category' => 'Category at close',
+            'prop_resolution_code'  => 'Resolution code',
+
+            'grouping_daily'        => 'Daily',
+            'grouping_monthly'      => 'Monthly',
+            'grouping_yearly'       => 'Yearly',
+
+            'err_title'             => 'Title is required',
+            'err_time_grouping'     => 'Time grouping is required for time-based aggregates',
+        ],
         'library' => [
             'page_title'          => 'Service Desk - Ticket Widget Library',
             'back_dashboard'      => 'Dashboard',

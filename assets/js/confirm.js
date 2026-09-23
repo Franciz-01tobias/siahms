@@ -222,10 +222,17 @@
         opts = opts || {};
         build();
 
-        titleEl.textContent = opts.title || 'Confirm';
+        // tf() is translate-or-this-English (i18n.js). Guarded because this
+        // file is injected by pages that do not all load i18n.js, and a dialog
+        // whose buttons read "common.ok" is worse than one reading "OK".
+        var cd = function (key, english) {
+            return window.tf ? window.tf(key, english) : english;
+        };
+
+        titleEl.textContent = opts.title || cd('common.confirm_dialog.title', 'Confirm');
         bodyEl.textContent = opts.message || '';
-        okBtn.textContent = opts.okLabel || 'OK';
-        cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+        okBtn.textContent = opts.okLabel || cd('common.ok', 'OK');
+        cancelBtn.textContent = opts.cancelLabel || cd('common.cancel', 'Cancel');
 
         var cls = (opts.okClass === 'danger') ? 'danger' : 'primary';
         okBtn.className = 'fitsm-confirm-btn fitsm-confirm-btn-' + cls;

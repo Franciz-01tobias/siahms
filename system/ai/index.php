@@ -249,7 +249,7 @@ try {
         </form>
     </div>
 
-    <script src="../../assets/js/i18n.js?v=1"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script src="../../assets/js/toast.js?v=1"></script>
     <script>
     const API_BASE = '<?php echo $path_prefix; ?>api/settings/';

@@ -51,6 +51,24 @@ const MIN_STRINGS = 5;
  */
 const SKIP = ['api/', 'includes/', 'vendor/', 'node_modules/', 'tests/', 'scripts/', 'lang/', 'cron/', 'assets/vendor/'];
 
+/**
+ * A file can declare itself out of scope with `i18n-exempt: <reason>` in a
+ * comment. There is exactly one honest reason - the strings are not the
+ * product's to translate - and the marker forces it to be WRITTEN DOWN next to
+ * the strings, where the next person to open the file will read it.
+ *
+ * ⚠️ This is a decision, not a suppression: an exempt file is still listed,
+ * with its reason, so "I marked it and forgot" is not available. It just
+ * doesn't fail the run.
+ */
+function exemptReason(string $src): ?string
+{
+    if (preg_match('/i18n-exempt:\s*(.+)/', $src, $m)) {
+        return trim(preg_replace('/\s+/', ' ', substr($m[1], 0, 120)));
+    }
+    return null;
+}
+
 function skipped(string $p): bool
 {
     foreach (SKIP as $s) if (str_starts_with($p, $s)) return true;
@@ -74,7 +92,9 @@ function skipped(string $p): bool
  */
 function tCalls(string $src): int
 {
-    $n = preg_match_all('/(?<![A-Za-z0-9_$.])(?:window\.)?t\s*\(/', $src);
+    // `tf(key, english)` is the other global i18n.js exposes - a translation
+    // with the English as its fallback - so it counts exactly like t().
+    $n = preg_match_all('/(?<![A-Za-z0-9_$.])(?:window\.)?tf?\s*\(/', $src);
 
     // function NAME(...) { ... window.t( ... }  — take the first 400 chars of
     // the body, which is plenty for a lookup wrapper and stops a huge function
@@ -82,7 +102,7 @@ function tCalls(string $src): int
     if (preg_match_all('/function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*\{(.{0,400}?)\}/s', $src, $m, PREG_SET_ORDER)) {
         foreach ($m as $fn) {
             [, $name, $body] = $fn;
-            if ($name === 't' || !str_contains($body, 'window.t(')) continue;
+            if ($name === 't' || $name === 'tf' || !preg_match('/window\.tf?\(/', $body)) continue;
             $n += preg_match_all('/(?<![A-Za-z0-9_$.])' . preg_quote($name, '/') . '\s*\(/', $src);
         }
     }
@@ -191,6 +211,7 @@ $files = array_values(array_unique(array_filter($files, fn($f) => !skipped($f)))
 
 $bad = [];
 $warn = [];
+$exempt = [];
 $rows = [];
 
 foreach ($files as $f) {
@@ -206,7 +227,9 @@ foreach ($files as $f) {
     $t = tCalls($src);
     $rows[] = [$f, $vis, $t];
 
-    if ($t === 0)                  $bad[]  = [$f, $vis, $t];
+    $why = exemptReason($src);
+    if ($why !== null)             $exempt[] = [$f, $vis, $why];
+    elseif ($t === 0)              $bad[]  = [$f, $vis, $t];
     elseif ($vis > $t * 3)         $warn[] = [$f, $vis, $t];
 }
 
@@ -225,6 +248,11 @@ if ($bad) {
     foreach ($bad as [$f, $v, $t]) printf("   %-50s %4d visible string(s), 0 t()\n", $f, $v);
     echo "\n   These are shown in English in every locale, and i18n_audit.php\n";
     echo "   cannot see it: the strings are not in lang/en either.\n";
+}
+
+if ($exempt) {
+    printf("\n✅ %d file(s) declare themselves out of scope:\n", count($exempt));
+    foreach ($exempt as [$f, $v, $why]) printf("   %-44s %4d string(s) - %s\n", $f, $v, $why);
 }
 
 if ($warn) {

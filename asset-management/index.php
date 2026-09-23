@@ -29,7 +29,7 @@ $translationNamespaces = ['common', 'asset-management'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/record-preview.css?v=1">
     <script src="../assets/js/record-preview.js?v=1"></script>
     <?php
@@ -4137,7 +4137,7 @@ $translationNamespaces = ['common', 'asset-management'];
              outside rather than editing it — the wrap-don't-edit rule. Every
              behaviour inside is gated on matchMedia(768px), so on desktop it is
              inert. (#936) */ ?>
-    <script src="../assets/js/network-mapper-icons.js?v=2"></script>
+    <script src="../assets/js/network-mapper-icons.js?v=3"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
 </body>
 </html>

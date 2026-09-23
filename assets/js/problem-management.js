@@ -78,24 +78,35 @@ async function pmLoadList() {
     try {
         const res = await fetch(PM_API + 'list.php?' + params.toString());
         const data = await res.json();
-        if (!data.success) { pmToast(data.error || 'Failed to load', 'error'); return; }
+        if (!data.success) { pmToast(data.error || pmT('list.load_failed', 'Failed to load'), 'error'); return; }
         pmRenderFilters(data.status_counts);
         pmRenderList(data.problems);
         document.getElementById('pmCount').textContent = data.total + (data.total === 1 ? ' problem' : ' problems');
-    } catch (e) { pmToast('Failed to load problems', 'error'); }
+    } catch (e) { pmToast(pmT('list.load_failed_list', 'Failed to load problems'), 'error'); }
 }
 
 function pmRenderFilters(counts) {
     const wrap = document.getElementById('pmStatusFilters');
     const total = (counts || []).reduce((n, s) => n + (s.cnt || 0), 0);
-    let html = `<div class="pm-filter ${pmFilterStatus === 'all' ? 'active' : ''}" data-status="all" onclick="pmFilter('all')"><span>All</span><span class="cnt">${total}</span></div>`;
+    let html = `<div class="pm-filter ${pmFilterStatus === 'all' ? 'active' : ''}" data-status="all" onclick="pmFilter('all')"><span>${pmEsc(pmT('list.all', 'All'))}</span><span class="cnt">${total}</span></div>`;
     html += (counts || []).map(s => `<div class="pm-filter ${String(pmFilterStatus) === String(s.id) ? 'active' : ''}" onclick="pmFilter(${s.id})"><span>${pmEsc(s.name)}</span><span class="cnt">${s.cnt || 0}</span></div>`).join('');
     wrap.innerHTML = html;
 }
 
+/**
+ * Translate, or the English written at the call site.
+ *
+ * Nearly everything this module says is drawn HERE rather than in PHP, so this
+ * one function is most of the module's i18n. window.tf comes from i18n.js,
+ * which problem-management/index.php loads with this namespace exported.
+ */
+function pmT(key, english, params) {
+    return window.tf ? window.tf('problem-management.' + key, english, params) : english;
+}
+
 function pmRenderList(problems) {
     const el = document.getElementById('pmList');
-    if (!problems.length) { el.innerHTML = '<div class="pm-empty">No problems. Click “New problem” to create one.</div>'; return; }
+    if (!problems.length) { el.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('list.empty', 'No problems. Click “New problem” to create one.')) + '</div>'; return; }
     el.innerHTML = problems.map(p => `
         <div class="pm-card" onclick="pmOpenDetail(${p.id})">
             <div class="pm-card-top">
@@ -106,8 +117,10 @@ function pmRenderList(problems) {
             <div class="pm-meta">
                 ${p.priority_name ? `<span>${pmEsc(p.priority_name)}</span>` : ''}
                 ${p.assignee_name ? `<span>👤 ${pmEsc(p.assignee_name)}</span>` : ''}
-                <span>🎫 ${p.incident_count} incident${p.incident_count == 1 ? '' : 's'}</span>
-                ${p.is_known_error == 1 ? '<span class="pm-ke">Known error</span>' : ''}
+                <span>${pmEsc(p.incident_count == 1
+                    ? pmT('list.incidents_one', '🎫 1 incident')
+                    : pmT('list.incidents_many', '🎫 {n} incidents', { n: p.incident_count }))}</span>
+                ${p.is_known_error == 1 ? '<span class="pm-ke">' + pmEsc(pmT('list.known_error', 'Known error')) + '</span>' : ''}
             </div>
         </div>`).join('');
 }
@@ -171,7 +184,7 @@ function pmInitSearchDrag() {
 async function pmPerformSearch() {
     const num = document.getElementById('pmSearchNumber').value.trim();
     const title = document.getElementById('pmSearchTitle').value.trim();
-    if (!num && !title) { pmToast('Enter a problem number or title to search', 'error'); return; }
+    if (!num && !title) { pmToast(pmT('search.need_terms', 'Enter a problem number or title to search'), 'error'); return; }
     const results = document.getElementById('pmSearchResults');
     results.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     // list.php?q= searches both title and problem_number, so a single term covers either field.
@@ -180,15 +193,17 @@ async function pmPerformSearch() {
     try {
         const res = await fetch(PM_API + 'list.php?' + params.toString());
         const data = await res.json();
-        if (!data.success) { results.innerHTML = `<div class="search-results-empty">${pmEsc(data.error || 'Search failed')}</div>`; return; }
+        if (!data.success) { results.innerHTML = `<div class="search-results-empty">${pmEsc(data.error || pmT('search.failed', 'Search failed'))}</div>`; return; }
         pmRenderSearchResults(data.problems || []);
-    } catch (e) { results.innerHTML = '<div class="search-results-empty">Search failed. Please try again.</div>'; }
+    } catch (e) { results.innerHTML = '<div class="search-results-empty">' + pmEsc(pmT('search.failed_retry', 'Search failed. Please try again.')) + '</div>'; }
 }
 
 function pmRenderSearchResults(results) {
     const c = document.getElementById('pmSearchResults');
-    if (!results.length) { c.innerHTML = '<div class="search-results-empty">No matching problems.</div>'; return; }
-    let html = '<div class="search-results-count">' + results.length + (results.length === 1 ? ' result' : ' results') + '</div>';
+    if (!results.length) { c.innerHTML = '<div class="search-results-empty">' + pmEsc(pmT('search.no_matches', 'No matching problems.')) + '</div>'; return; }
+    let html = '<div class="search-results-count">' + pmEsc(results.length === 1
+        ? pmT('search.count_one', '1 result')
+        : pmT('search.count_many', '{n} results', { n: results.length })) + '</div>';
     results.forEach(p => {
         html += `<div class="search-result-item" onclick="pmSelectSearchResult(${p.id})">
             <div class="search-result-ticket">${pmEsc(p.problem_number || '')}</div>
@@ -208,7 +223,7 @@ function pmSelectSearchResult(id) { pmCloseSearchModal(); pmOpenDetail(id); }
 function pmClearSearch() {
     document.getElementById('pmSearchNumber').value = '';
     document.getElementById('pmSearchTitle').value = '';
-    document.getElementById('pmSearchResults').innerHTML = '<div class="search-results-empty">Enter a problem number or title above and press Search.</div>';
+    document.getElementById('pmSearchResults').innerHTML = '<div class="search-results-empty">' + pmEsc(pmT('search.prompt', 'Enter a problem number or title above and press Search.')) + '</div>';
 }
 
 function pmShowListView() {
@@ -231,7 +246,7 @@ async function pmOpenDetail(id, fromHistory) {
     try {
         const res = await fetch(PM_API + 'get.php?id=' + id);
         const data = await res.json();
-        if (!data.success) { pmToast(data.error || 'Not found', 'error'); return; }
+        if (!data.success) { pmToast(data.error || pmT('detail.not_found', 'Not found'), 'error'); return; }
         pmCurrentId = id; pmDetailCache = data;
         // The recent trail (#124).
         if (window.trailVisit) window.trailVisit('problem', id);
@@ -241,7 +256,7 @@ async function pmOpenDetail(id, fromHistory) {
         // Reflect the open problem in the URL (skip when we're restoring from a
         // load/back-forward navigation, which is already at the right URL).
         if (!fromHistory) history.pushState({ pmView: 'detail', id }, '', location.pathname + '?problem_id=' + id);
-    } catch (e) { pmToast('Failed to open problem', 'error'); }
+    } catch (e) { pmToast(pmT('detail.open_failed', 'Failed to open problem'), 'error'); }
 }
 
 function pmRenderDetail(data) {
@@ -254,91 +269,98 @@ function pmRenderDetail(data) {
             <td>${pmEsc(i.status || '')}</td>
             <td class="pm-actions">
                 ${pmPreviewBadge('ticket', i.id)}
-                <a class="pm-icon-btn" href="../tickets/index.php?ticket_id=${i.id}" target="_blank" title="Open incident">${PM_OPEN_SVG}</a>
-                <button class="pm-icon-btn danger" onclick="pmUnlinkIncident(${i.id})" title="Unlink incident">${PM_UNLINK_SVG}</button>
+                <a class="pm-icon-btn" href="../tickets/index.php?ticket_id=${i.id}" target="_blank" title="${pmEsc(pmT('detail.open_incident', 'Open incident'))}">${PM_OPEN_SVG}</a>
+                <button class="pm-icon-btn danger" onclick="pmUnlinkIncident(${i.id})" title="${pmEsc(pmT('detail.unlink_incident', 'Unlink incident'))}">${PM_UNLINK_SVG}</button>
             </td>
         </tr>`).join('');
-    const incidents = `<table class="pm-table"><thead><tr><th>Reference</th><th>Subject</th><th>Status</th><th></th></tr></thead>
-        <tbody>${incidentRows || '<tr class="pm-empty-row"><td colspan="4">No incidents linked yet.</td></tr>'}</tbody></table>`;
+    const incidents = `<table class="pm-table"><thead><tr><th>${pmEsc(pmT('detail.col_reference', 'Reference'))}</th><th>${pmEsc(pmT('detail.col_subject', 'Subject'))}</th><th>${pmEsc(pmT('detail.col_status', 'Status'))}</th><th></th></tr></thead>
+        <tbody>${incidentRows || '<tr class="pm-empty-row"><td colspan="4">' + pmEsc(pmT('detail.no_incidents', 'No incidents linked yet.')) + '</td></tr>'}</tbody></table>`;
     const changeRows = (data.changes || []).map(c => `
         <tr>
-            <td><a href="../change-management/index.php?change_id=${c.id}" target="_blank">Change #${c.id}</a></td>
+            <td><a href="../change-management/index.php?change_id=${c.id}" target="_blank">${pmEsc(pmT('detail.change_ref', 'Change #{id}', { id: c.id }))}</a></td>
             <td>${pmEsc(c.title || '')}</td>
             <td>${pmEsc(c.status || '')}</td>
             <td class="pm-actions">
                 ${pmPreviewBadge('change', c.id)}
-                <a class="pm-icon-btn" href="../change-management/index.php?change_id=${c.id}" target="_blank" title="Open change">${PM_OPEN_SVG}</a>
-                <button class="pm-icon-btn danger" onclick="pmUnlinkChange(${c.id})" title="Unlink change">${PM_UNLINK_SVG}</button>
+                <a class="pm-icon-btn" href="../change-management/index.php?change_id=${c.id}" target="_blank" title="${pmEsc(pmT('detail.open_change', 'Open change'))}">${PM_OPEN_SVG}</a>
+                <button class="pm-icon-btn danger" onclick="pmUnlinkChange(${c.id})" title="${pmEsc(pmT('detail.unlink_change', 'Unlink change'))}">${PM_UNLINK_SVG}</button>
             </td>
         </tr>`).join('');
-    const changes = `<table class="pm-table"><thead><tr><th>Reference</th><th>Title</th><th>Status</th><th></th></tr></thead>
-        <tbody>${changeRows || '<tr class="pm-empty-row"><td colspan="4">No change linked yet.</td></tr>'}</tbody></table>`;
+    const changes = `<table class="pm-table"><thead><tr><th>${pmEsc(pmT('detail.col_reference', 'Reference'))}</th><th>${pmEsc(pmT('detail.col_title', 'Title'))}</th><th>${pmEsc(pmT('detail.col_status', 'Status'))}</th><th></th></tr></thead>
+        <tbody>${changeRows || '<tr class="pm-empty-row"><td colspan="4">' + pmEsc(pmT('detail.no_change', 'No change linked yet.')) + '</td></tr>'}</tbody></table>`;
     const auditRows = (data.audit || []).map(a => {
         const when = a.created_datetime ? fmtDateTime(a.created_datetime) : '';
-        const what = a.action_type === 'created' ? 'created the problem' : `changed ${pmEsc(a.field_name)}` + (a.new_value ? ` to “${pmEsc(a.new_value)}”` : '');
-        return `<tr><td class="pm-when">${when}</td><td>${pmEsc(a.analyst_name || 'Someone')}</td><td>${what}</td></tr>`;
+        // One sentence, not a verb concatenated onto a field name: "changed
+        // Priority to High" does not survive being assembled left to right in
+        // a language that puts the verb last.
+        const what = a.action_type === 'created'
+            ? pmEsc(pmT('detail.audit_created', 'created the problem'))
+            : pmEsc(a.new_value
+                ? pmT('detail.audit_changed_to', 'changed {field} to “{value}”', { field: a.field_name, value: a.new_value })
+                : pmT('detail.audit_changed', 'changed {field}', { field: a.field_name }));
+        return `<tr><td class="pm-when">${when}</td><td>${pmEsc(a.analyst_name || pmT('detail.someone', 'Someone'))}</td><td>${what}</td></tr>`;
     }).join('');
-    const audit = `<table class="pm-table"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
-        <tbody>${auditRows || '<tr class="pm-empty-row"><td colspan="3">No history.</td></tr>'}</tbody></table>`;
+    const audit = `<table class="pm-table"><thead><tr><th>${pmEsc(pmT('detail.col_when', 'When'))}</th><th>${pmEsc(pmT('detail.col_who', 'Who'))}</th><th>${pmEsc(pmT('detail.col_what', 'What'))}</th></tr></thead>
+        <tbody>${auditRows || '<tr class="pm-empty-row"><td colspan="3">' + pmEsc(pmT('detail.no_history', 'No history.')) + '</td></tr>'}</tbody></table>`;
     const notes = (data.notes || []).map(n => {
         const when = n.created_datetime ? fmtDateTime(n.created_datetime) : '';
         return `<div class="pm-note">
-            <div class="pm-note-head"><span class="pm-note-who">${pmEsc(n.analyst_name || 'Someone')}</span><span class="pm-note-when">${when}</span></div>
+            <div class="pm-note-head"><span class="pm-note-who">${pmEsc(n.analyst_name || pmT('detail.someone', 'Someone'))}</span><span class="pm-note-when">${when}</span></div>
             <div class="pm-note-body">${pmEsc(n.note)}</div>
         </div>`;
-    }).join('') || '<div style="color:#9ca3af;font-size:13px;">No notes yet.</div>';
+    }).join('') || '<div style="color:#9ca3af;font-size:13px;">' + pmEsc(pmT('detail.no_notes', 'No notes yet.')) + '</div>';
 
     document.getElementById('pmDetailView').innerHTML = `
         <div class="pm-detail">
             <div class="pm-detail-head">
-                <a href="#" onclick="pmBackToList();return false;" style="color:#6a1b9a;text-decoration:none;">← Back</a>
+                <a href="#" onclick="pmBackToList();return false;" style="color:#6a1b9a;text-decoration:none;">${pmEsc(pmT('detail.back', '← Back'))}</a>
                 <span class="pm-num">${pmEsc(p.problem_number || '')}</span>
                 <h1>${pmEsc(p.title)}</h1>
                 ${statusBadge}
-                ${p.is_known_error == 1 ? '<span class="pm-ke">Known error</span>' : ''}
+                ${p.is_known_error == 1 ? '<span class="pm-ke">' + pmEsc(pmT('list.known_error', 'Known error')) + '</span>' : ''}
             </div>
             <div style="display:flex;gap:10px;margin:6px 0 4px;flex-wrap:wrap;">
-                <button class="pm-btn" onclick="pmEditCurrent()">Edit</button>
-                <button class="pm-btn" onclick="pmLinkIncident()">Link incident</button>
-                <button class="pm-btn" onclick="pmLinkChange()">Link change</button>
-                <button class="pm-btn" onclick="pmAiRootCause()" title="Draft a root cause from the linked incidents">🤖 Draft root cause</button>
-                <button class="pm-btn pm-btn-danger" onclick="pmDelete()">Delete</button>
+                <button class="pm-btn" onclick="pmEditCurrent()">${pmEsc(pmT('detail.edit', 'Edit'))}</button>
+                <button class="pm-btn" onclick="pmLinkIncident()">${pmEsc(pmT('detail.link_incident', 'Link incident'))}</button>
+                <button class="pm-btn" onclick="pmLinkChange()">${pmEsc(pmT('detail.link_change', 'Link change'))}</button>
+                <button class="pm-btn" onclick="pmAiRootCause()" title="${pmEsc(pmT('detail.draft_title', 'Draft a root cause from the linked incidents'))}">${pmEsc(pmT('detail.draft_cause', '🤖 Draft root cause'))}</button>
+                <button class="pm-btn pm-btn-danger" onclick="pmDelete()">${pmEsc(pmT('detail.delete', 'Delete'))}</button>
             </div>
             <div class="pm-ai-out" id="pmAiOut"></div>
 
             <div class="pm-section">
-                <h3>Details</h3>
+                <h3>${pmEsc(pmT('detail.details', 'Details'))}</h3>
                 <div class="pm-grid2">
-                    <div><div class="pm-field-label">Priority</div><div class="pm-field-val">${pmEsc(p.priority_name || '—')}</div></div>
-                    <div><div class="pm-field-label">Assigned to</div><div class="pm-field-val">${pmEsc(p.assignee_name || '—')}</div></div>
+                    <div><div class="pm-field-label">${pmEsc(pmT('detail.priority', 'Priority'))}</div><div class="pm-field-val">${pmEsc(p.priority_name || '—')}</div></div>
+                    <div><div class="pm-field-label">${pmEsc(pmT('detail.assigned_to', 'Assigned to'))}</div><div class="pm-field-val">${pmEsc(p.assignee_name || '—')}</div></div>
                 </div>
-                <div class="pm-field-label">Description</div><div class="pm-field-val">${pmEsc(p.description || '—')}</div>
-                <div class="pm-field-label">Root cause</div><div class="pm-field-val">${pmEsc(p.root_cause || '—')}</div>
-                <div class="pm-field-label">Workaround</div><div class="pm-field-val">${pmEsc(p.workaround || '—')}</div>
+                <div class="pm-field-label">${pmEsc(pmT('detail.description', 'Description'))}</div><div class="pm-field-val">${pmEsc(p.description || '—')}</div>
+                <div class="pm-field-label">${pmEsc(pmT('detail.root_cause', 'Root cause'))}</div><div class="pm-field-val">${pmEsc(p.root_cause || '—')}</div>
+                <div class="pm-field-label">${pmEsc(pmT('detail.workaround', 'Workaround'))}</div><div class="pm-field-val">${pmEsc(p.workaround || '—')}</div>
             </div>
 
             <div class="pm-section">
-                <h3>Linked incidents (${(data.incidents || []).length})</h3>
+                <h3>${pmEsc(pmT('detail.incidents', 'Linked incidents ({n})', { n: (data.incidents || []).length }))}</h3>
                 ${incidents}
             </div>
             <div class="pm-section">
-                <h3>Fix (linked change)</h3>
+                <h3>${pmEsc(pmT('detail.fix', 'Fix (linked change)'))}</h3>
                 ${changes}
             </div>
             <div class="pm-section">
-                <h3>Notes</h3>
+                <h3>${pmEsc(pmT('detail.notes', 'Notes'))}</h3>
                 <div class="pm-note-add">
-                    <textarea id="pmNoteInput" rows="2" placeholder="Add a note…"></textarea>
-                    <button class="pm-btn pm-btn-primary" onclick="pmAddNote()">Add</button>
+                    <textarea id="pmNoteInput" rows="2" placeholder="${pmEsc(pmT('detail.note_ph', 'Add a note…'))}"></textarea>
+                    <button class="pm-btn pm-btn-primary" onclick="pmAddNote()">${pmEsc(pmT('detail.note_add', 'Add'))}</button>
                 </div>
                 <div class="pm-notes">${notes}</div>
             </div>
             <div class="pm-section">
-                <h3>History</h3>
+                <h3>${pmEsc(pmT('detail.history', 'History'))}</h3>
                 ${audit}
             </div>
             <div class="pm-section">
-                <h3>Documents</h3>
+                <h3>${pmEsc(pmT('detail.documents', 'Documents'))}</h3>
                 <div id="pmDocuments"></div>
             </div>
         </div>`;
@@ -363,7 +385,11 @@ function pmFillSelect(sel, items, selected, blank) {
 function pmOpenEditor(problem) {
     const p = problem || {};
     document.getElementById('pmId').value = p.id || '';
-    document.getElementById('pmModalTitle').textContent = p.id ? ('Edit ' + (p.problem_number || 'problem')) : 'New problem';
+    document.getElementById('pmModalTitle').textContent = p.id
+        ? (p.problem_number
+            ? pmT('editor.edit', 'Edit {number}', { number: p.problem_number })
+            : pmT('editor.edit_generic', 'Edit problem'))
+        : pmT('editor.new', 'New problem');
     document.getElementById('pmTitle').value = p.title || '';
     document.getElementById('pmDescription').value = p.description || '';
     document.getElementById('pmRootCause').value = p.root_cause || '';
@@ -389,32 +415,37 @@ async function pmSave() {
         workaround: document.getElementById('pmWorkaround').value,
         is_known_error: document.getElementById('pmKnownError').checked ? 1 : 0
     };
-    if (!payload.title) { pmToast('Title is required', 'error'); return; }
+    if (!payload.title) { pmToast(pmT('editor.title_required', 'Title is required'), 'error'); return; }
     try {
         const res = await fetch(PM_API + 'save.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await res.json();
-        if (!data.success) { pmToast(data.error || 'Save failed', 'error'); return; }
-        pmToast(data.message || 'Saved', 'success');
+        if (!data.success) { pmToast(data.error || pmT('editor.save_failed', 'Save failed'), 'error'); return; }
+        pmToast(data.message || pmT('editor.saved', 'Saved'), 'success');
         pmCloseEditor();
         // Open the problem we just saved — the edited one (payload.id) or, for a
         // new problem, the id the server returns. Keying off pmCurrentId was wrong:
         // creating a problem while another was open reopened the old one.
         pmOpenDetail((payload.id && payload.id != 0) ? payload.id : data.id);
-    } catch (e) { pmToast('Save failed', 'error'); }
+    } catch (e) { pmToast(pmT('editor.save_failed', 'Save failed'), 'error'); }
 }
 
 async function pmDelete() {
     if (!pmCurrentId) return;
     const ok = window.showConfirm
-        ? await showConfirm({ title: 'Delete problem?', message: 'Linked incidents are not deleted; they just lose the link. This cannot be undone.', okLabel: 'Delete', okClass: 'danger' })
-        : confirm('Delete this problem? Linked incidents are not deleted; they just lose the link.');
+        ? await showConfirm({
+            title: pmT('editor.delete_title', 'Delete problem?'),
+            message: pmT('editor.delete_message', 'Linked incidents are not deleted; they just lose the link. This cannot be undone.'),
+            okLabel: pmT('detail.delete', 'Delete'),
+            okClass: 'danger'
+          })
+        : confirm(pmT('editor.delete_fallback', 'Delete this problem? Linked incidents are not deleted; they just lose the link.'));
     if (!ok) return;
     try {
         const res = await fetch(PM_API + 'delete.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pmCurrentId }) });
         const data = await res.json();
-        if (!data.success) { pmToast(data.error || 'Delete failed', 'error'); return; }
-        pmToast('Problem deleted', 'success'); pmBackToList();
-    } catch (e) { pmToast('Delete failed', 'error'); }
+        if (!data.success) { pmToast(data.error || pmT('editor.delete_failed', 'Delete failed'), 'error'); return; }
+        pmToast(pmT('editor.deleted', 'Problem deleted'), 'success'); pmBackToList();
+    } catch (e) { pmToast(pmT('editor.delete_failed', 'Delete failed'), 'error'); }
 }
 
 // ----- Linking (endpoints added in phases B/C) -----
@@ -433,30 +464,30 @@ function pmLinkSearchDebounced() {
 async function pmLoadLinkable() {
     const list = document.getElementById('pmLinkList');
     const q = (document.getElementById('pmLinkSearch') || {}).value || '';
-    list.innerHTML = '<div class="pm-empty">Loading…</div>';
+    list.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('list.loading', 'Loading…')) + '</div>';
     try {
         const res = await fetch(PM_API + 'list_linkable_tickets.php?problem_id=' + pmCurrentId + '&q=' + encodeURIComponent(q.trim()));
         const data = await res.json();
-        if (!data.success) { list.innerHTML = '<div class="pm-empty">' + pmEsc(data.error || 'Failed to load') + '</div>'; return; }
-        if (!data.tickets.length) { list.innerHTML = '<div class="pm-empty">' + (q.trim() ? 'No matching open incidents.' : 'No open incidents available to link.') + '</div>'; return; }
+        if (!data.success) { list.innerHTML = '<div class="pm-empty">' + pmEsc(data.error || pmT('list.load_failed', 'Failed to load')) + '</div>'; return; }
+        if (!data.tickets.length) { list.innerHTML = '<div class="pm-empty">' + pmEsc(q.trim() ? pmT('link.no_matching_incidents', 'No matching open incidents.') : pmT('link.none_linkable', 'No open incidents available to link.')) + '</div>'; return; }
         list.innerHTML = data.tickets.map(t => `
             <label class="pm-pick-row">
                 <input type="checkbox" class="pm-pick-cb" value="${t.id}">
                 <span class="pm-pick-main">
-                    <span class="pm-pick-title">${pmEsc(t.subject || '(no subject)')}</span>
+                    <span class="pm-pick-title">${pmEsc(t.subject || pmT('link.no_subject', '(no subject)'))}</span>
                     <span class="pm-pick-meta"><span class="pm-pick-num">${pmEsc(t.ticket_number)}</span>${t.status ? ' · ' + pmEsc(t.status) : ''}${t.requester ? ' · ' + pmEsc(t.requester) : ''}</span>
                 </span>
             </label>`).join('');
-    } catch (e) { list.innerHTML = '<div class="pm-empty">Failed to load incidents</div>'; }
+    } catch (e) { list.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('link.incidents_failed', 'Failed to load incidents')) + '</div>'; }
 }
 function pmToggleAllLinkable(checked) {
     document.querySelectorAll('#pmLinkList .pm-pick-cb').forEach(cb => cb.checked = checked);
 }
 async function pmLinkSelected() {
     const ids = Array.from(document.querySelectorAll('#pmLinkList .pm-pick-cb:checked')).map(cb => cb.value);
-    if (!ids.length) { pmToast('Select at least one incident', 'warning'); return; }
+    if (!ids.length) { pmToast(pmT('link.need_incident', 'Select at least one incident'), 'warning'); return; }
     const btn = document.getElementById('pmLinkSelBtn');
-    btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Linking…';
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = pmT('link.linking', 'Linking…');
     let ok = 0, fail = 0;
     for (const id of ids) {
         try {
@@ -467,18 +498,27 @@ async function pmLinkSelected() {
     }
     btn.disabled = false; btn.textContent = orig;
     document.getElementById('pmLinkModal').classList.remove('active');
-    if (ok) pmToast(ok + (ok === 1 ? ' incident linked' : ' incidents linked') + (fail ? ', ' + fail + ' failed' : ''), fail ? 'warning' : 'success');
-    else pmToast('Link failed', 'error');
+    if (ok) {
+        const done = ok === 1 ? pmT('link.linked_incident_one', '1 incident linked')
+                             : pmT('link.linked_incident_many', '{n} incidents linked', { n: ok });
+        pmToast(fail ? pmT('link.and_failed', '{done}, {n} failed', { done: done, n: fail }) : done,
+                fail ? 'warning' : 'success');
+    }
+    else pmToast(pmT('link.failed', 'Link failed'), 'error');
     pmOpenDetail(pmCurrentId);
 }
 async function pmUnlinkIncident(ticketId) {
-    const ok = await showConfirm({ title: 'Unlink incident?', message: 'This removes the link to this problem. The incident itself is not deleted.', okLabel: 'Unlink', okClass: 'danger' });
+    const ok = await showConfirm({
+        title: pmT('link.unlink_incident_title', 'Unlink incident?'),
+        message: pmT('link.unlink_incident_message', 'This removes the link to this problem. The incident itself is not deleted.'),
+        okLabel: pmT('link.unlink', 'Unlink'), okClass: 'danger'
+    });
     if (!ok) return;
     try {
         const res = await fetch(PM_API + 'unlink_ticket.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ problem_id: pmCurrentId, ticket_id: ticketId }) });
         const data = await res.json();
-        if (data.success) { pmToast('Unlinked', 'success'); pmOpenDetail(pmCurrentId); } else pmToast(data.error || 'Failed', 'error');
-    } catch (e) { pmToast('Failed', 'error'); }
+        if (data.success) { pmToast(pmT('link.unlinked', 'Unlinked'), 'success'); pmOpenDetail(pmCurrentId); } else pmToast(data.error || pmT('link.unlink_failed', 'Failed'), 'error');
+    } catch (e) { pmToast(pmT('link.unlink_failed', 'Failed'), 'error'); }
 }
 let pmLinkChangeSearchTimer = null;
 function pmLinkChange() {
@@ -495,12 +535,12 @@ function pmLinkChangeSearchDebounced() {
 async function pmLoadLinkableChanges() {
     const list = document.getElementById('pmLinkChangeList');
     const q = (document.getElementById('pmLinkChangeSearch') || {}).value || '';
-    list.innerHTML = '<div class="pm-empty">Loading…</div>';
+    list.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('list.loading', 'Loading…')) + '</div>';
     try {
         const res = await fetch(PM_API + 'list_linkable_changes.php?problem_id=' + pmCurrentId + '&q=' + encodeURIComponent(q.trim()));
         const data = await res.json();
-        if (!data.success) { list.innerHTML = '<div class="pm-empty">' + pmEsc(data.error || 'Failed to load') + '</div>'; return; }
-        if (!data.changes.length) { list.innerHTML = '<div class="pm-empty">' + (q.trim() ? 'No matching changes.' : 'No changes available to link.') + '</div>'; return; }
+        if (!data.success) { list.innerHTML = '<div class="pm-empty">' + pmEsc(data.error || pmT('list.load_failed', 'Failed to load')) + '</div>'; return; }
+        if (!data.changes.length) { list.innerHTML = '<div class="pm-empty">' + pmEsc(q.trim() ? pmT('link.no_matching_changes', 'No matching changes.') : pmT('link.no_changes', 'No changes available to link.')) + '</div>'; return; }
         list.innerHTML = data.changes.map(c => `
             <label class="pm-pick-row">
                 <input type="checkbox" class="pm-pick-cb" value="${c.id}">
@@ -509,16 +549,16 @@ async function pmLoadLinkableChanges() {
                     <span class="pm-pick-meta"><span class="pm-pick-num">#${c.id}</span>${c.status ? ' · ' + pmEsc(c.status) : ''}${c.priority ? ' · ' + pmEsc(c.priority) : ''}</span>
                 </span>
             </label>`).join('');
-    } catch (e) { list.innerHTML = '<div class="pm-empty">Failed to load changes</div>'; }
+    } catch (e) { list.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('link.changes_failed', 'Failed to load changes')) + '</div>'; }
 }
 function pmToggleAllLinkableChanges(checked) {
     document.querySelectorAll('#pmLinkChangeList .pm-pick-cb').forEach(cb => cb.checked = checked);
 }
 async function pmLinkChangeSelected() {
     const ids = Array.from(document.querySelectorAll('#pmLinkChangeList .pm-pick-cb:checked')).map(cb => cb.value);
-    if (!ids.length) { pmToast('Select at least one change', 'warning'); return; }
+    if (!ids.length) { pmToast(pmT('link.need_change', 'Select at least one change'), 'warning'); return; }
     const btn = document.getElementById('pmLinkChangeSelBtn');
-    btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Linking…';
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = pmT('link.linking', 'Linking…');
     let ok = 0, fail = 0;
     for (const id of ids) {
         try {
@@ -529,43 +569,52 @@ async function pmLinkChangeSelected() {
     }
     btn.disabled = false; btn.textContent = orig;
     document.getElementById('pmLinkChangeModal').classList.remove('active');
-    if (ok) pmToast(ok + (ok === 1 ? ' change linked' : ' changes linked') + (fail ? ', ' + fail + ' failed' : ''), fail ? 'warning' : 'success');
-    else pmToast('Link failed', 'error');
+    if (ok) {
+        const done = ok === 1 ? pmT('link.linked_change_one', '1 change linked')
+                             : pmT('link.linked_change_many', '{n} changes linked', { n: ok });
+        pmToast(fail ? pmT('link.and_failed', '{done}, {n} failed', { done: done, n: fail }) : done,
+                fail ? 'warning' : 'success');
+    }
+    else pmToast(pmT('link.failed', 'Link failed'), 'error');
     pmOpenDetail(pmCurrentId);
 }
 async function pmUnlinkChange(changeId) {
-    const ok = await showConfirm({ title: 'Unlink change?', message: 'This removes the link to this problem. The change itself is not deleted.', okLabel: 'Unlink', okClass: 'danger' });
+    const ok = await showConfirm({
+        title: pmT('link.unlink_change_title', 'Unlink change?'),
+        message: pmT('link.unlink_change_message', 'This removes the link to this problem. The change itself is not deleted.'),
+        okLabel: pmT('link.unlink', 'Unlink'), okClass: 'danger'
+    });
     if (!ok) return;
     try {
         const res = await fetch(PM_API + 'unlink_change.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ problem_id: pmCurrentId, change_id: changeId }) });
         const data = await res.json();
-        if (data.success) { pmToast('Unlinked', 'success'); pmOpenDetail(pmCurrentId); } else pmToast(data.error || 'Failed', 'error');
-    } catch (e) { pmToast('Failed', 'error'); }
+        if (data.success) { pmToast(pmT('link.unlinked', 'Unlinked'), 'success'); pmOpenDetail(pmCurrentId); } else pmToast(data.error || pmT('link.unlink_failed', 'Failed'), 'error');
+    } catch (e) { pmToast(pmT('link.unlink_failed', 'Failed'), 'error'); }
 }
 
 async function pmAddNote() {
     const ta = document.getElementById('pmNoteInput');
     const note = ((ta && ta.value) || '').trim();
-    if (!note) { pmToast('Enter a note first', 'warning'); return; }
+    if (!note) { pmToast(pmT('detail.note_empty', 'Enter a note first'), 'warning'); return; }
     try {
         const res = await fetch(PM_API + 'add_note.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ problem_id: pmCurrentId, note }) });
         const data = await res.json();
-        if (!data.success) { pmToast(data.error || 'Failed to add note', 'error'); return; }
-        pmToast('Note added', 'success'); pmOpenDetail(pmCurrentId);
+        if (!data.success) { pmToast(data.error || pmT('detail.note_failed', 'Failed to add note'), 'error'); return; }
+        pmToast(pmT('detail.note_added', 'Note added'), 'success'); pmOpenDetail(pmCurrentId);
     } catch (e) { pmToast('Failed to add note', 'error'); }
 }
 
 // ----- AI (endpoint added in phase D) -----
 async function pmAiRootCause() {
     const out = document.getElementById('pmAiOut');
-    out.style.display = 'block'; out.textContent = 'Analysing the linked incidents…';
+    out.style.display = 'block'; out.textContent = pmT('ai.analysing', 'Analysing the linked incidents…');
     try {
         const res = await fetch(PM_API + 'ai_root_cause.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ problem_id: pmCurrentId }) });
         const data = await res.json();
-        if (!data.success) { out.textContent = 'AI: ' + (data.error || 'failed'); return; }
-        out.innerHTML = `<strong>Suggested root cause &amp; workaround (review before saving):</strong>\n\n${pmEsc(data.draft || '')}\n\n<button class="pm-btn" onclick="pmApplyAiDraft()">Open in editor</button>`;
+        if (!data.success) { out.textContent = pmT('ai.prefix', 'AI: {message}', { message: data.error || pmT('ai.failed_word', 'failed') }); return; }
+        out.innerHTML = `<strong>${pmT('ai.draft_heading', 'Suggested root cause &amp; workaround (review before saving):')}</strong>\n\n${pmEsc(data.draft || '')}\n\n<button class="pm-btn" onclick="pmApplyAiDraft()">${pmEsc(pmT('ai.open_in_editor', 'Open in editor'))}</button>`;
         out._draft = data;
-    } catch (e) { out.textContent = 'AI request failed'; }
+    } catch (e) { out.textContent = pmT('ai.request_failed', 'AI request failed'); }
 }
 // ----- AI: detect recurring-incident problems -----
 let pmSuggestions = [];
@@ -573,35 +622,35 @@ async function pmSuggest() {
     const modal = document.getElementById('pmSuggestModal');
     const body = document.getElementById('pmSuggestBody');
     modal.classList.add('active');
-    body.innerHTML = 'Scanning recent open incidents…';
+    body.innerHTML = pmEsc(pmT('ai.scanning', 'Scanning recent open incidents…'));
     try {
         const res = await fetch(PM_API + 'ai_suggest_problem.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
         const data = await res.json();
-        if (!data.success) { body.innerHTML = '<div style="color:#c62828;">' + pmEsc(data.error || 'Failed') + '</div>'; return; }
+        if (!data.success) { body.innerHTML = '<div style="color:#c62828;">' + pmEsc(data.error || pmT('ai.failed', 'Failed')) + '</div>'; return; }
         pmSuggestions = data.suggestions || [];
-        if (!pmSuggestions.length) { body.innerHTML = `<div style="color:#6b7280;">No recurring patterns found across ${data.scanned} open incidents.</div>`; return; }
+        if (!pmSuggestions.length) { body.innerHTML = `<div style="color:#6b7280;">${pmEsc(pmT('ai.none_found', 'No recurring patterns found across {n} open incidents.', { n: data.scanned }))}</div>`; return; }
         body.innerHTML = pmSuggestions.map((s, i) => `
             <div class="pm-section" style="margin:0 0 12px;">
-                <div style="font-weight:600;">${pmEsc(s.title || 'Untitled')}</div>
+                <div style="font-weight:600;">${pmEsc(s.title || pmT('ai.untitled', 'Untitled'))}</div>
                 <div style="color:#6b7280;font-size:13px;margin:4px 0;">${pmEsc(s.rationale || '')}</div>
                 <div style="font-size:12px;margin-bottom:8px;">${(s.ticket_numbers || []).map(t => `<span class="pm-num">${pmEsc(t)}</span>`).join(', ')}</div>
-                <button class="pm-btn pm-btn-primary" onclick="pmCreateFromSuggestion(${i})">Create problem &amp; link these</button>
+                <button class="pm-btn pm-btn-primary" onclick="pmCreateFromSuggestion(${i})">${pmT('ai.create_and_link', 'Create problem &amp; link these')}</button>
             </div>`).join('');
-    } catch (e) { body.innerHTML = '<div style="color:#c62828;">Request failed</div>'; }
+    } catch (e) { body.innerHTML = '<div style="color:#c62828;">' + pmEsc(pmT('ai.request_error', 'Request failed')) + '</div>'; }
 }
 async function pmCreateFromSuggestion(i) {
     const s = pmSuggestions[i];
     if (!s) return;
     try {
-        const cr = await fetch(PM_API + 'save.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: s.title || 'Recurring problem', description: s.rationale || '' }) }).then(r => r.json());
-        if (!cr.success) { pmToast(cr.error || 'Create failed', 'error'); return; }
+        const cr = await fetch(PM_API + 'save.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: s.title || pmT('ai.default_title', 'Recurring problem'), description: s.rationale || '' }) }).then(r => r.json());
+        if (!cr.success) { pmToast(cr.error || pmT('ai.create_failed', 'Create failed'), 'error'); return; }
         for (const num of (s.ticket_numbers || [])) {
             await fetch(PM_API + 'link_ticket.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ problem_id: cr.id, ticket_number: num }) });
         }
         document.getElementById('pmSuggestModal').classList.remove('active');
-        pmToast('Problem created from suggestion', 'success');
+        pmToast(pmT('ai.created', 'Problem created from suggestion'), 'success');
         pmOpenDetail(cr.id);
-    } catch (e) { pmToast('Failed', 'error'); }
+    } catch (e) { pmToast(pmT('ai.failed', 'Failed'), 'error'); }
 }
 
 function pmApplyAiDraft() {

@@ -770,7 +770,7 @@ function renderWaffleMenuJS() {
          analyst-facing module page). Individual pages no longer need their
          own <script src="toast.js"> tag. -->
     <script src="<?php echo BASE_URL; ?>assets/js/toast.js"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/confirm.js?v=4"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/confirm.js?v=5"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/clipboard.js?v=1"></script>
     <!-- Escape (always) and click-away (opt-in) for the draggable search panel,
          shared by the four modules that have one — see #144. -->
@@ -807,7 +807,7 @@ function renderWaffleMenuJS() {
         window.CP_BASE = <?php echo json_encode(BASE_URL); ?>;
         window.CP_MODULES = <?php echo json_encode($cpModules, JSON_UNESCAPED_SLASHES); ?>;
     </script>
-    <script src="<?php echo BASE_URL; ?>assets/js/command-palette.js?v=7"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/command-palette.js?v=8"></script>
     <?php
     // The palette can return documents, and a document row offers an ⓘ that opens
     // the "attached to" dialogue — which lives in the documents component. The

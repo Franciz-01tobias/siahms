@@ -34,7 +34,7 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <style>
         /* System module accent (blue-grey) — pin the generic --accent to it. */
         body {

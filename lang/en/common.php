@@ -136,6 +136,55 @@ return [
     'error_not_logged_in'  => 'You need to be logged in.',
 
     // Home / landing page (index.php)
+    // ── The shared OK/Cancel dialog (assets/js/confirm.js) ──────────────
+    // Only the DEFAULTS live here. Every caller passes its own title and
+    // message, and those are translated where they are written.
+    'confirm_dialog' => [
+        'title' => 'Confirm',
+    ],
+
+    // ── Command palette (assets/js/command-palette.js) ──────────────────
+    // Loaded from the waffle menu on every in-app page, so it uses tf() and
+    // carries its own English: not every one of those pages exports
+    // window.translations, and a palette showing "common.palette.search_ph"
+    // would be worse than one showing English.
+    'palette' => [
+        'aria_dialog'   => 'Command palette',
+        'search_ph'     => 'Search tickets, assets, items — or jump to a module…',
+        'hint_navigate' => 'navigate',
+        'hint_open'     => 'open',
+        'hint_close'    => 'close',
+        'cmd_theme'     => 'Toggle dark mode',
+        'cmd_signout'   => 'Sign out',
+        'doc_details'   => 'Document details',
+        'no_matches'    => 'No matches for “{q}”',
+        'type_to_search' => 'Type to search',
+
+        // The tag on a single result row.
+        'type_ticket'    => 'Ticket',
+        'type_change'    => 'Change',
+        'type_problem'   => 'Problem',
+        'type_article'   => 'Article',
+        'type_contract'  => 'Contract',
+        'type_ci'        => 'Config item',
+        'type_asset'     => 'Asset',
+        'type_document'  => 'Document',
+
+        // The heading above a group of results.
+        'group_ticket'    => 'Tickets',
+        'group_change'    => 'Changes',
+        'group_problem'   => 'Problems',
+        'group_knowledge' => 'Knowledge',
+        'group_contract'  => 'Contracts',
+        'group_asset'     => 'Assets',
+        'group_ci'        => 'Configuration items',
+        'group_document'  => 'Documents',
+        // These three say WHERE the match was, not what the thing is.
+        'group_in_tickets'   => 'Found inside tickets',
+        'group_in_articles'  => 'Found inside articles',
+        'group_in_documents' => 'Found inside documents',
+    ],
+
     'home' => [
         'header_title'     => 'Service Desk',
         'browser_title'    => 'Service Desk - ITSM',

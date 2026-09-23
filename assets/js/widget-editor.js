@@ -5,24 +5,100 @@
 (function() {
     'use strict';
 
-    const PROPERTY_LABELS = {
-        status: 'Status', priority: 'Priority', department: 'Department',
-        ticket_type: 'Ticket type', analyst: 'Assigned analyst', owner: 'Owner',
-        origin: 'Origin', first_time_fix: 'First time fix', training_provided: 'Training provided',
-        // Classification (#1540). The two category dimensions roll up to the TOP
-        // level - a leaf-level chart of a three-deep tree is slices nobody can read.
-        category: 'Category', closure_category: 'Category at close', resolution_code: 'Resolution code',
-        created: 'Created', closed: 'Closed', created_vs_closed: 'Created vs closed'
-    };
+    /** Translate, or the English written at the call site (i18n.js). */
+    function we(key, english, params) {
+        return window.tf ? window.tf('tickets.dashboard.' + key, english, params) : english;
+    }
 
-    const SERIES_LABELS = { status: 'Status', priority: 'Priority' };
+    // Read through functions, not constants: this file is evaluated at load
+    // time, and a constant would freeze whatever window.translations held then.
+    function propertyLabel(p) {
+        return {
+            status:            we('form.prop_status', 'Status'),
+            priority:          we('form.prop_priority', 'Priority'),
+            department:        we('form.prop_department', 'Department'),
+            ticket_type:       we('form.prop_ticket_type', 'Ticket type'),
+            analyst:           we('form.prop_analyst', 'Assigned analyst'),
+            owner:             we('form.prop_owner', 'Owner'),
+            origin:            we('form.prop_origin', 'Origin'),
+            first_time_fix:    we('form.prop_ftf', 'First time fix'),
+            training_provided: we('form.prop_training', 'Training provided'),
+            // Classification (#1540). The two category dimensions roll up to the TOP
+            // level - a leaf-level chart of a three-deep tree is slices nobody can read.
+            category:          we('auto_desc.prop_category', 'Category'),
+            closure_category:  we('auto_desc.prop_closure_category', 'Category at close'),
+            resolution_code:   we('auto_desc.prop_resolution_code', 'Resolution code'),
+            created:           we('form.prop_created', 'Created'),
+            closed:            we('form.prop_closed', 'Closed'),
+            created_vs_closed: we('form.prop_created_vs_closed', 'Created vs closed')
+        }[p] || p;
+    }
 
-    const TIME_GROUPING_LABELS = { day: 'Daily', month: 'Monthly', year: 'Yearly' };
-    const DATE_RANGE_LABELS = {
-        '': 'All time', '7d': 'Last 7 days', '30d': 'Last 30 days',
-        'this_month': 'This month', '3m': 'Last 3 months',
-        '6m': 'Last 6 months', '12m': 'Last 12 months', 'this_year': 'This year'
-    };
+    /** The same property as it reads INSIDE a sentence - not a lower-cased title. */
+    function propertyInSentence(p) {
+        return {
+            status:            we('auto_desc.of_status', 'status'),
+            priority:          we('auto_desc.of_priority', 'priority'),
+            department:        we('auto_desc.of_department', 'department'),
+            ticket_type:       we('auto_desc.of_ticket_type', 'ticket type'),
+            analyst:           we('auto_desc.of_analyst', 'assigned analyst'),
+            owner:             we('auto_desc.of_owner', 'owner'),
+            origin:            we('auto_desc.of_origin', 'origin'),
+            first_time_fix:    we('auto_desc.of_first_time_fix', 'first time fix'),
+            training_provided: we('auto_desc.of_training_provided', 'training provided'),
+            category:          we('auto_desc.of_category', 'category'),
+            closure_category:  we('auto_desc.of_closure_category', 'category at close'),
+            resolution_code:   we('auto_desc.of_resolution_code', 'resolution code')
+        }[p] || propertyLabel(p);
+    }
+
+    function seriesLabel(s) {
+        return { status: we('form.prop_status', 'Status'), priority: we('form.prop_priority', 'Priority') }[s] || s;
+    }
+    function seriesInSentence(s) {
+        return { status: we('auto_desc.of_status', 'status'), priority: we('auto_desc.of_priority', 'priority') }[s] || s;
+    }
+
+    function timeGroupingLabel(g) {
+        return {
+            day:   we('auto_desc.grouping_daily', 'Daily'),
+            month: we('auto_desc.grouping_monthly', 'Monthly'),
+            year:  we('auto_desc.grouping_yearly', 'Yearly')
+        }[g] || g;
+    }
+    /** The unit as a noun: "per day". Was derived by stripping "ly" off
+     *  "Daily", which gave "dai". */
+    function timeUnit(g) {
+        return {
+            day:   we('auto_desc.unit_day', 'day'),
+            month: we('auto_desc.unit_month', 'month'),
+            year:  we('auto_desc.unit_year', 'year')
+        }[g] || g;
+    }
+
+    function dateRangeLabel(r) {
+        return {
+            '':           we('form.range_all', 'All time'),
+            '7d':         we('form.range_7d', 'Last 7 days'),
+            '30d':        we('form.range_30d', 'Last 30 days'),
+            'this_month': we('form.range_this_month', 'This month'),
+            '3m':         we('form.range_3m', 'Last 3 months'),
+            '6m':         we('form.range_6m', 'Last 6 months'),
+            '12m':        we('form.range_12m', 'Last 12 months'),
+            'this_year':  we('form.range_this_year', 'This year')
+        }[r] || r;
+    }
+    function dateRangeInSentence(r) {
+        return {
+            '7d':         we('auto_desc.in_7d', 'last 7 days'),
+            '30d':        we('auto_desc.in_30d', 'last 30 days'),
+            'this_month': we('auto_desc.in_this_month', 'this month'),
+            '3m':         we('auto_desc.in_3m', 'last 3 months'),
+            '6m':         we('auto_desc.in_6m', 'last 6 months'),
+            '12m':        we('auto_desc.in_12m', 'last 12 months'),
+            'this_year':  we('auto_desc.in_this_year', 'this year')
+        }[r] || dateRangeLabel(r);
+    }
 
     const TIME_AGGREGATES = ['created', 'closed', 'created_vs_closed'];
 
@@ -70,22 +146,30 @@
         const checkedDepts = [...document.querySelectorAll('.dept-checkbox:checked')];
 
         let desc = '';
+        const unit = timeUnit(timeGrouping);
 
         if (prop === 'created_vs_closed') {
-            desc = 'Created vs closed';
-            if (isTime) desc += ' per ' + (TIME_GROUPING_LABELS[timeGrouping] || timeGrouping).toLowerCase().replace(/ly$/, '');
+            desc = isTime
+                ? we('auto_desc.created_vs_closed_per', 'Created vs closed per {unit}', { unit: unit })
+                : we('auto_desc.created_vs_closed', 'Created vs closed');
         } else if (isTime) {
-            const verb = prop === 'created' ? 'created' : 'closed';
-            const groupLabel = (TIME_GROUPING_LABELS[timeGrouping] || timeGrouping).toLowerCase().replace(/ly$/, '');
-            desc = 'Tickets ' + verb + ' per ' + groupLabel;
-            if (series) desc += ' by ' + (SERIES_LABELS[series] || series).toLowerCase();
+            const verb = prop === 'created'
+                ? we('auto_desc.verb_created', 'created')
+                : we('auto_desc.verb_closed', 'closed');
+            desc = series
+                ? we('auto_desc.per_by', 'Tickets {verb} per {unit} by {series}',
+                     { verb: verb, unit: unit, series: seriesInSentence(series) })
+                : we('auto_desc.per', 'Tickets {verb} per {unit}', { verb: verb, unit: unit });
         } else {
-            desc = 'Tickets by ' + (PROPERTY_LABELS[prop] || prop).toLowerCase();
-            if (series) desc += ' and ' + (SERIES_LABELS[series] || series).toLowerCase();
+            desc = series
+                ? we('auto_desc.by_and', 'Tickets by {property} and {series}',
+                     { property: propertyInSentence(prop), series: seriesInSentence(series) })
+                : we('auto_desc.by', 'Tickets by {property}', { property: propertyInSentence(prop) });
         }
 
         if (dateRange) {
-            desc += ' (' + (DATE_RANGE_LABELS[dateRange] || dateRange).toLowerCase() + ')';
+            desc = we('auto_desc.with_range', '{desc} ({range})',
+                      { desc: desc, range: dateRangeInSentence(dateRange) });
         }
 
         if (checkedDepts.length > 0 && checkedDepts.length < allDepartments.length) {
@@ -93,11 +177,9 @@
                 const label = cb.closest('label');
                 return label ? label.textContent.trim() : '';
             }).filter(Boolean);
-            if (names.length <= 2) {
-                desc += ' \u2014 ' + names.join(', ');
-            } else {
-                desc += ' \u2014 ' + names.length + ' departments';
-            }
+            desc = names.length <= 2
+                ? we('auto_desc.with_depts', '{desc} \u2014 {names}', { desc: desc, names: names.join(', ') })
+                : we('auto_desc.with_dept_count', '{desc} \u2014 {n} departments', { desc: desc, n: names.length });
         }
 
         return desc;
@@ -127,9 +209,15 @@
         const isTime = TIME_AGGREGATES.includes(prop);
 
         const allowedSeries = SERIES_RULES[prop] || [];
-        seriesSelect.innerHTML = '<option value="">None (single series)</option>';
+        seriesSelect.innerHTML = '<option value="">' +
+            esc(we('form.series_none', 'None (single series)')) + '</option>';
         allowedSeries.forEach(function(s) {
-            seriesSelect.innerHTML += '<option value="' + s + '">By ' + (SERIES_LABELS[s] || s) + '</option>';
+            // "By status" is one string, not "By " + a word: the preposition
+            // does not sit in front of the noun in every language.
+            var label = s === 'priority'
+                ? we('form.series_priority', 'By priority')
+                : we('form.series_status', 'By status');
+            seriesSelect.innerHTML += '<option value="' + s + '">' + esc(label) + '</option>';
         });
 
         if (allowedSeries.length === 0) {
@@ -286,11 +374,11 @@
     function validateForm() {
         var data = collectFormData();
         if (!data.title) {
-            showToast('Title is required', 'error');
+            showToast(we('auto_desc.err_title', 'Title is required'), 'error');
             return false;
         }
         if (TIME_AGGREGATES.includes(data.aggregate_property) && !data.time_grouping) {
-            showToast('Time grouping is required for time-based aggregates', 'error');
+            showToast(we('auto_desc.err_time_grouping', 'Time grouping is required for time-based aggregates'), 'error');
             return false;
         }
         return true;
@@ -307,7 +395,7 @@
             });
             return await res.json();
         } catch (err) {
-            return { success: false, error: 'Network error' };
+            return { success: false, error: window.tf ? window.tf('common.error_network', 'Network error') : 'Network error' };
         }
     }
 
@@ -319,10 +407,14 @@
         validateForm: validateForm,
         saveWidget: saveWidget,
         onPropertyChange: onPropertyChange,
-        PROPERTY_LABELS: PROPERTY_LABELS,
-        SERIES_LABELS: SERIES_LABELS,
-        TIME_GROUPING_LABELS: TIME_GROUPING_LABELS,
-        DATE_RANGE_LABELS: DATE_RANGE_LABELS,
+        // Exported so the auto-description can be exercised directly. It is the
+        // one function here that writes a whole SENTENCE, which is where an
+        // i18n mistake hides best.
+        generateDescription: generateDescription,
+        propertyLabel: propertyLabel,
+        seriesLabel: seriesLabel,
+        timeGroupingLabel: timeGroupingLabel,
+        dateRangeLabel: dateRangeLabel,
         TIME_AGGREGATES: TIME_AGGREGATES,
         SERIES_RULES: SERIES_RULES,
         getValidChartTypes: getValidChartTypes

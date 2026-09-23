@@ -75,7 +75,7 @@ $translationNamespaces = ['common', 'cmdb'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <style>
         /* ------------------------------------------------------------------
            Motion tokens. The built-in CSS easings are too soft to read as
@@ -917,7 +917,7 @@ $translationNamespaces = ['common', 'cmdb'];
     </script>
     <!-- The class-icon library. Its own docblock names CMDB as consumer #1;
          object.php simply never loaded it. -->
-    <script src="../assets/js/network-mapper-icons.js?v=1"></script>
+    <script src="../assets/js/network-mapper-icons.js?v=3"></script>
     <!-- The shared dropdown-options editor, same one the settings page uses. -->
     <script src="options-editor.js?v=3"></script>
     <script src="object.js?v=9"></script>

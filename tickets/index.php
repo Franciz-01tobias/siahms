@@ -47,7 +47,7 @@ $translationNamespaces = ['common', 'tickets'];
     try { $snoozeWakeHour = snoozeWakeHour(connectToDatabase()); } catch (Exception $e) {}
     ?>
     <script>window.SNOOZE_WAKE_HOUR = <?php echo (int)$snoozeWakeHour; ?>;</script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/record-preview.css?v=1">
     <script src="../assets/js/record-preview.js?v=1"></script>
     <script src="../assets/js/tinymce/tinymce.min.js"></script>
