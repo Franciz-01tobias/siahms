@@ -51,10 +51,37 @@ function skipped(string $p): bool
     return str_contains($p, '/vendor/') || str_contains($p, '.min.js');
 }
 
-/** Count t(...) and window.t(...) calls. */
+/**
+ * Count t(...) and window.t(...) calls — plus calls to any LOCAL WRAPPER
+ * around window.t that the file defines for itself.
+ *
+ * ⚠️ Counting only the literal `t(` reported a fully wired file as unwired.
+ * Two files here deliberately wrap the lookup rather than call it directly:
+ * `checklists/ticket_view.js` has `chkT()` because its own `forEach(t => ...)`
+ * loops SHADOW the global `t`, and `assets/js/calendar.js` has `tr()`. Both are
+ * the right thing to do, and to the old regex both looked like zero t() calls.
+ *
+ * 🔑 A wrapper is recognised by what it DOES, not by its name: a function whose
+ * body calls `window.t(`. Matching on a list of known names would have to be
+ * kept in step with the code, and the whole point of this script is to find the
+ * places nobody remembered to keep in step.
+ */
 function tCalls(string $src): int
 {
-    return preg_match_all('/(?<![A-Za-z0-9_$.])(?:window\.)?t\s*\(/', $src);
+    $n = preg_match_all('/(?<![A-Za-z0-9_$.])(?:window\.)?t\s*\(/', $src);
+
+    // function NAME(...) { ... window.t( ... }  — take the first 400 chars of
+    // the body, which is plenty for a lookup wrapper and stops a huge function
+    // that happens to mention window.t from being counted as one.
+    if (preg_match_all('/function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*\{(.{0,400}?)\}/s', $src, $m, PREG_SET_ORDER)) {
+        foreach ($m as $fn) {
+            [, $name, $body] = $fn;
+            if ($name === 't' || !str_contains($body, 'window.t(')) continue;
+            $n += preg_match_all('/(?<![A-Za-z0-9_$.])' . preg_quote($name, '/') . '\s*\(/', $src);
+        }
+    }
+
+    return $n;
 }
 
 /**

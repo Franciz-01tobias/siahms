@@ -155,7 +155,7 @@ function renderChecklistToolbarButton(ticketId) {
 
     btn.innerHTML = `
         <span class="action-btn-icon">✅</span>
-        <span>Checklist${badgeText}</span>
+        <span>${chkT('checklists.panel.title', 'Checklist')}${badgeText}</span>
     `;
 }
 
@@ -175,10 +175,10 @@ function renderTicketChecklistsInline(ticketId) {
         host.innerHTML = `
             <div id="sopEmptyStateHost_${ticketId}" style="background: var(--surface, #ffffff); border: 1px dashed var(--border, #cbd5e1); border-radius: 6px; padding: 8px 14px; margin: -15px 0 12px 0; display: flex; justify-content: space-between; align-items: center;">
                 <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                    <strong>Checklist:</strong> None attached to this ticket.
+                    <strong>${chkT('checklists.panel.title', 'Checklist')}:</strong> ${chkT('checklists.panel.none_attached', 'None attached to this ticket.')}
                 </div>
                 <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
-                    Attach
+                    ${chkT('checklists.panel.attach', 'Attach')}
                 </button>
             </div>
         `;
@@ -191,14 +191,14 @@ function renderTicketChecklistsInline(ticketId) {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">✅</span>
-                    <strong style="font-size: 13px; color: var(--text, #1e293b);">Checklist next steps</strong>
+                    <strong style="font-size: 13px; color: var(--text, #1e293b);">${chkT('checklists.panel.next_steps', 'Checklist next steps')}</strong>
                 </div>
                 <div style="display: flex; gap: 6px;">
-                    <button type="button" class="chk-chip" onclick="openChecklistModal(${ticketId})" title="Pop out full checklist">
+                    <button type="button" class="chk-chip" onclick="openChecklistModal(${ticketId})" title="${chkT('checklists.panel.pop_out', 'Pop out full checklist')}">
                         <span>⤢</span> Pop out
                     </button>
                     <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
-                        Attach
+                        ${chkT('checklists.panel.attach', 'Attach')}
                     </button>
                 </div>
             </div>
@@ -276,7 +276,7 @@ function openChecklistModal(ticketId) {
             <div style="text-align: center; padding: 30px; color: var(--text-muted, #64748b);">
                 <p style="margin-bottom: 12px;">No checklists are attached to this ticket.</p>
                 <button class="btn btn-primary" type="button" onclick="closeChecklistModal(); openAttachChecklistModal(${ticketId});">
-                    Attach
+                    ${chkT('checklists.panel.attach', 'Attach')}
                 </button>
             </div>
         `;
@@ -341,11 +341,11 @@ function openChecklistModal(ticketId) {
             <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 18px;">✅</span>
-                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text, #1e293b);">Checklists for ticket #${ticketId}</h3>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text, #1e293b);">${chkT('checklists.panel.modal_title', 'Checklists for ticket #{id}').replace('{id}', ticketId)}</h3>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
-                        Attach
+                        ${chkT('checklists.panel.attach', 'Attach')}
                     </button>
                     
                 </div>
@@ -518,14 +518,24 @@ async function logStepNote(ticketId, checklistTitle, stepTitle, completed, respo
 async function removeTicketChecklist(ticketId, checklistId) {
     const chk = (ticketChecklistsData || []).find(c => parseInt(c.id, 10) === parseInt(checklistId, 10));
     const done = chk ? (chk.completed_items || 0) : 0;
+    const chkName = chk ? chk.title : chkT('checklists.panel.title', 'Checklist');
     const ok = await showConfirm({
-        title: 'Remove checklist',
+        title: chkT('checklists.panel.remove_title', 'Remove checklist'),
         // Say what is actually lost. Removing a part-completed checklist throws
         // away who ticked what and when, which is the point of the feature.
+        //
+        // ⚠️ Two messages, not one with a plural suffix bolted on. "step" +
+        // "s" is an English-only rule; a language with three plural forms, or
+        // one that inflects the noun after a number, cannot be served by
+        // appending a letter. The count goes in as a placeholder and each
+        // locale words the whole sentence.
         message: done > 0
-            ? `Remove "${chk.title}" from this ticket? ${done} completed step${done === 1 ? '' : 's'} and their attribution go with it.`
-            : `Remove "${chk ? chk.title : 'this checklist'}" from this ticket?`,
-        okLabel: 'Remove', okClass: 'danger'
+            ? chkT('checklists.panel.remove_confirm_done',
+                   'Remove "{name}" from this ticket? {count} completed step(s) and their attribution go with it.')
+                .replace('{name}', chkName).replace('{count}', done)
+            : chkT('checklists.panel.remove_confirm', 'Remove "{name}" from this ticket?')
+                .replace('{name}', chkName),
+        okLabel: chkT('checklists.editor.remove', 'Remove'), okClass: 'danger'
     });
     if (!ok) return;
     try {
@@ -623,7 +633,7 @@ function filterTemplatesList(ticketId) {
     });
 
     if (scored.length === 0) {
-        list.innerHTML = `<div style="text-align: center; color: var(--text-muted, #64748b); padding: 20px; font-size: 13px;">No matching checklists found.</div>`;
+        list.innerHTML = `<div style="text-align: center; color: var(--text-muted, #64748b); padding: 20px; font-size: 13px;">${chkT('checklists.panel.no_match', 'No matching checklists found.')}</div>`;
         return;
     }
 
@@ -771,8 +781,8 @@ async function checkAndShowSopSuggestion(ticketId) {
             hostDiv.style.padding = '10px 14px';
 
             const matchLabel = list.length === 1 
-                ? '💡 Suggested checklist for this ticket (Best match):'
-                : `💡 Suggested checklists for this ticket (Top ${list.length} matches):`;
+                ? '💡 ' + chkT('checklists.panel.suggested_one', 'Suggested checklist for this ticket (Best match):')
+                : '💡 ' + chkT('checklists.panel.suggested_many', 'Suggested checklists for this ticket (Top {count} matches):').replace('{count}', list.length);
 
             let itemsHtml = '';
             list.forEach((s, idx) => {
@@ -801,7 +811,7 @@ async function checkAndShowSopSuggestion(ticketId) {
                                 ${targetIcon}${conf}%
                             </span>
                             <button type="button" onclick="attachSopToTicket(${ticketId}, ${s.id})" style="background: #0d9488; color: #fff; border: none; padding: 4px 10px; font-size: 11px; border-radius: 4px; font-weight: 600; cursor: pointer; white-space: nowrap;">
-                                Attach
+                                ${chkT('checklists.panel.attach', 'Attach')}
                             </button>
                         </div>
                     </div>
@@ -833,10 +843,10 @@ async function checkAndShowSopSuggestion(ticketId) {
         } else {
             hostDiv.innerHTML = `
                 <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                    <strong>Checklist:</strong> None attached to this ticket. <span style="font-style: italic; opacity: 0.85;">(No suggestions found)</span>
+                    <strong>${chkT('checklists.panel.title', 'Checklist')}:</strong> ${chkT('checklists.panel.none_attached', 'None attached to this ticket.')} <span style="font-style: italic; opacity: 0.85;">(No suggestions found)</span>
                 </div>
                 <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
-                    Attach
+                    ${chkT('checklists.panel.attach', 'Attach')}
                 </button>
             `;
         }
@@ -854,10 +864,10 @@ function dismissSopSuggestion(ticketId) {
         hostDiv.style.padding = '8px 14px';
         hostDiv.innerHTML = `
             <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                <strong>Checklist:</strong> None attached to this ticket.
+                <strong>${chkT('checklists.panel.title', 'Checklist')}:</strong> ${chkT('checklists.panel.none_attached', 'None attached to this ticket.')}
             </div>
             <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
-                Attach
+                ${chkT('checklists.panel.attach', 'Attach')}
             </button>
         `;
     }

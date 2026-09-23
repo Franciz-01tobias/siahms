@@ -28,6 +28,11 @@ require_once '../../includes/i18n.php';
 require_once '../../includes/theme.php';
 require_once '../../includes/timezone.php';
 
+// ⚠️ The client needs these too. This editor builds its step rows in
+// JavaScript, so the labels inside them never pass through PHP's t() - they
+// are looked up by window.t() against window.translations, published below.
+$translationNamespaces = ['common', 'checklists'];
+
 I18n::initFromSession();
 Tz::init();
 requireModuleAccess('checklists');
@@ -48,9 +53,11 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Checklist template</title>
+    <title><?php echo htmlspecialchars(t('checklists.editor.page_title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+    <script src="../../assets/js/i18n.js?v=2"></script>
     <style>
         html, body { height: auto !important; min-height: 100vh; overflow-y: auto !important; overflow-x: hidden; margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }
         .ed-shell { display: flex; flex-direction: column; min-height: 100vh; }
@@ -135,36 +142,36 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
     <?php include __DIR__ . '/../includes/header.php'; ?>
 
     <div class="ed-bar">
-        <a href="<?php echo BASE_URL; ?>checklists/" class="btn-plain" id="edBack">Back</a>
-        <h1 id="edTitle">New template</h1>
-        <span class="ed-unsaved" id="edUnsaved">Unsaved changes</span>
+        <a href="<?php echo BASE_URL; ?>checklists/" class="btn-plain" id="edBack"><?php echo htmlspecialchars(t('checklists.editor.back')); ?></a>
+        <h1 id="edTitle"><?php echo htmlspecialchars(t('checklists.editor.new_template')); ?></h1>
+        <span class="ed-unsaved" id="edUnsaved"><?php echo htmlspecialchars(t('checklists.editor.unsaved')); ?></span>
         <div class="spacer"></div>
-        <button class="btn-teal" id="edSave">Save</button>
+        <button class="btn-teal" id="edSave"><?php echo htmlspecialchars(t('checklists.editor.save')); ?></button>
     </div>
 
     <div class="ed-body">
         <div class="ed-grid">
             <div class="ed-card">
-                <h2>Template</h2>
-                <p class="ed-sub">What this checklist is, and how analysts will find it.</p>
+                <h2><?php echo htmlspecialchars(t('checklists.editor.heading_template')); ?></h2>
+                <p class="ed-sub"><?php echo htmlspecialchars(t('checklists.editor.heading_template_sub')); ?></p>
 
                 <div class="ed-field">
-                    <label for="edName">Title</label>
-                    <input type="text" id="edName" class="ed-input" maxlength="255" placeholder="For example, New employee workstation setup">
+                    <label for="edName"><?php echo htmlspecialchars(t('checklists.editor.title')); ?></label>
+                    <input type="text" id="edName" class="ed-input" maxlength="255" placeholder="<?php echo htmlspecialchars(t('checklists.editor.title_ph')); ?>">
                 </div>
                 <div class="ed-field">
-                    <label for="edCategory">Category</label>
-                    <input type="text" id="edCategory" class="ed-input" maxlength="100" list="edCategoryList" placeholder="For example, HR &amp; IT">
+                    <label for="edCategory"><?php echo htmlspecialchars(t('checklists.editor.category')); ?></label>
+                    <input type="text" id="edCategory" class="ed-input" maxlength="100" list="edCategoryList" placeholder="<?php echo htmlspecialchars(t('checklists.editor.category_ph')); ?>">
                     <datalist id="edCategoryList">
                         <?php foreach ($categories as $c): ?><option value="<?php echo htmlspecialchars($c, ENT_QUOTES); ?>"><?php endforeach; ?>
                     </datalist>
                 </div>
                 <div class="ed-field">
-                    <label for="edScope">Applies to</label>
+                    <label for="edScope"><?php echo htmlspecialchars(t('checklists.editor.applies_to')); ?></label>
                     <select id="edScope" class="ed-select">
-                        <option value="both">Tickets and tasks</option>
-                        <option value="ticket">Tickets only</option>
-                        <option value="task">Tasks only</option>
+                        <option value="both"><?php echo htmlspecialchars(t('checklists.editor.applies_both')); ?></option>
+                        <option value="ticket"><?php echo htmlspecialchars(t('checklists.editor.applies_ticket')); ?></option>
+                        <option value="task"><?php echo htmlspecialchars(t('checklists.editor.applies_task')); ?></option>
                     </select>
                 </div>
                 <div class="ed-field">
@@ -176,26 +183,26 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
                     <span style="font-size: 11px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.editor.closure_mode_desc')); ?></span>
                 </div>
                 <div class="ed-field">
-                    <label for="edDesc">Description</label>
-                    <textarea id="edDesc" class="ed-textarea" placeholder="When and why to use this checklist."></textarea>
+                    <label for="edDesc"><?php echo htmlspecialchars(t('checklists.editor.description')); ?></label>
+                    <textarea id="edDesc" class="ed-textarea" placeholder="<?php echo htmlspecialchars(t('checklists.editor.description_ph')); ?>"></textarea>
                 </div>
                 <div class="ed-field" style="margin-bottom: 0;">
-                    <label for="edKeywords">Keywords</label>
-                    <input type="text" id="edKeywords" class="ed-input" placeholder="vpn, remote access, token">
-                    <span style="font-size: 11px; color: var(--text-muted, #64748b);">Comma separated. Used to suggest this checklist against a ticket's subject.</span>
+                    <label for="edKeywords"><?php echo htmlspecialchars(t('checklists.editor.keywords')); ?></label>
+                    <input type="text" id="edKeywords" class="ed-input" placeholder="<?php echo htmlspecialchars(t('checklists.editor.keywords_ph')); ?>">
+                    <span style="font-size: 11px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.editor.keywords_help')); ?></span>
                 </div>
             </div>
 
             <div class="ed-card">
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
                     <div style="flex: 1;">
-                        <h2>Steps</h2>
-                        <p class="ed-sub">Drag a step by its handle to reorder. The order here is the order an analyst works through.</p>
+                        <h2><?php echo htmlspecialchars(t('checklists.editor.heading_steps')); ?></h2>
+                        <p class="ed-sub"><?php echo htmlspecialchars(t('checklists.editor.heading_steps_sub')); ?></p>
                     </div>
-                    <button class="btn-teal" id="edAddStep">Add step</button>
+                    <button class="btn-teal" id="edAddStep"><?php echo htmlspecialchars(t('checklists.editor.add_step')); ?></button>
                 </div>
                 <ul class="step-list" id="edSteps"></ul>
-                <div class="ed-empty" id="edStepsEmpty">No steps yet — add the first one.</div>
+                <div class="ed-empty" id="edStepsEmpty"><?php echo htmlspecialchars(t('checklists.editor.steps_empty')); ?></div>
             </div>
         </div>
     </div>
@@ -240,7 +247,7 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
             empty.hidden = steps.length > 0;
 
             list.innerHTML = steps.map(function (s, i) {
-                let roleOpts = '<option value="">Role (optional)</option>';
+                let roleOpts = '<option value="">' + esc(t('checklists.editor.role_optional')) + '</option>';
                 let matched = false;
                 CHK_ROLES.forEach(function (r) {
                     const sel = r.toLowerCase() === String(s.suggested_role || '').trim().toLowerCase();
@@ -264,17 +271,17 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
                       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>' +
                     '</span>' +
                     '<span class="step-num">' + (i + 1) + '</span>' +
-                    '<input type="text" class="ed-input step-title" data-f="title" value="' + esc(s.title) + '" placeholder="What the analyst does">' +
+                    '<input type="text" class="ed-input step-title" data-f="title" value="' + esc(s.title) + '" placeholder="' + esc(t('checklists.editor.step_title_ph')) + '">' +
                     '<select class="ed-select step-role" data-f="suggested_role">' + roleOpts + '</select>' +
                     '<button type="button" class="step-del" title="Remove step" aria-label="Remove step">' +
                       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>' +
                     '</button>' +
                   '</div>' +
                   '<div class="step-opts">' +
-                    '<span class="step-opt"><label class="toggle-switch"><input type="checkbox" data-f="is_mandatory"' + (s.is_mandatory ? ' checked' : '') + '><span class="toggle-slider"></span></label> Mandatory</span>' +
-                    '<span class="step-opt"><label class="toggle-switch"><input type="checkbox" data-f="requires_input"' + (s.requires_input ? ' checked' : '') + '><span class="toggle-slider"></span></label> Ask for a value</span>' +
+                    '<span class="step-opt"><label class="toggle-switch"><input type="checkbox" data-f="is_mandatory"' + (s.is_mandatory ? ' checked' : '') + '><span class="toggle-slider"></span></label> ' + esc(t('checklists.editor.mandatory')) + '</span>' +
+                    '<span class="step-opt"><label class="toggle-switch"><input type="checkbox" data-f="requires_input"' + (s.requires_input ? ' checked' : '') + '><span class="toggle-slider"></span></label> ' + esc(t('checklists.editor.ask_for_value')) + '</span>' +
                     '<span class="step-ph-wrap"' + (s.requires_input ? '' : ' hidden') + '>' +
-                      '<input type="text" class="ed-input step-ph" data-f="input_placeholder" value="' + esc(s.input_placeholder) + '" placeholder="What to ask for, e.g. Asset tag">' +
+                      '<input type="text" class="ed-input step-ph" data-f="input_placeholder" value="' + esc(s.input_placeholder) + '" placeholder="' + esc(t('checklists.editor.value_prompt_ph')) + '">' +
                     '</span>' +
                   '</div>' +
                 '</li>';
@@ -312,9 +319,10 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
             const i = +li.dataset.index;
             const name = (steps[i].title || '').trim();
             const ok = await showConfirm({
-                title: 'Remove step',
-                message: name ? 'Remove "' + name + '" from this checklist?' : 'Remove this empty step?',
-                okLabel: 'Remove', okClass: 'danger'
+                title: t('checklists.editor.remove_step'),
+                message: name ? t('checklists.editor.remove_step_named', { name: name })
+                              : t('checklists.editor.remove_step_empty'),
+                okLabel: t('checklists.editor.remove'), okClass: 'danger'
             });
             if (!ok) return;
             steps.splice(i, 1);

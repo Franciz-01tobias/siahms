@@ -2,19 +2,144 @@
 /**
  * Checklists & SOPs — English strings.
  *
- * ⚠️ FIRST t() USAGE IN THE MODULE. The module was contributed with its screens
- * hardcoded in English (2.0.0, Santhosh Srinivasan). This namespace starts with
- * the help page because that is the page a translator gains most from, and the
- * rest of the module follows. Do not assume `checklists.*` covers the screens —
- * grep before relying on a key existing.
+ * The module was contributed with its screens hardcoded in English (2.0.0,
+ * Santhosh Srinivasan) and this namespace originally covered the help page
+ * only. The four screens — the template list, the settings tabs, the template
+ * editor and the panel on a ticket — were wired to t() afterwards.
+ *
+ * 🔴 HOW THE GAP WAS FOUND, because no tool here could find it. Ed opened the
+ * Checklists page with Spanish set and saw "Ayuda" in the nav and every other
+ * word in English. `i18n_audit.php` reported Spanish at 100% and was right:
+ * the strings were not missing from lang/es, they were missing from lang/en
+ * as well, because they had never left the PHP. A locale comparison can only
+ * see keys that exist.
+ *
+ * `scripts/i18n_unwired.php` is the check that CAN see it — it counts strings
+ * a file renders against the number of t() calls it makes. Run it after adding
+ * a screen.
  */
 
 return [
+    // The template editor (checklists/edit/).
     'editor' => [
+        'page_title'        => 'Edit checklist',
+        'back'              => 'Back',
+        'save'              => 'Save',
+        'heading_template'  => 'Template',
+        'heading_template_sub' => 'What this checklist is, and how analysts will find it.',
+        'title'             => 'Title',
+        'category'          => 'Category',
+        'applies_to'        => 'Applies to',
+        'applies_both'      => 'Tickets and tasks',
+        'applies_ticket'    => 'Tickets only',
+        'applies_task'      => 'Tasks only',
         'closure_mode'      => 'Closure gate',
         'closure_mode_desc' => 'How outstanding mandatory steps behave when a ticket moves to a closed status.',
         'closure_warn'      => 'Standard (Warn & record override)',
         'closure_block'     => 'Critical (Block closure until complete)',
+        'description'       => 'Description',
+        'description_ph'    => 'When and why to use this checklist.',
+        'keywords'          => 'Keywords',
+        'keywords_ph'       => 'vpn, remote access, token',
+        'keywords_help'     => 'Comma separated. Used to suggest this checklist against a ticket\'s subject.',
+        'heading_steps'     => 'Steps',
+        'heading_steps_sub' => 'Drag a step by its handle to reorder. The order here is the order an analyst works through.',
+        'add_step'          => 'Add step',
+        'steps_empty'       => 'No steps yet - add the first one.',
+        'step_title_ph'     => 'What the analyst does',
+        'mandatory'         => 'Mandatory',
+        'ask_for_value'     => 'Ask for a value',
+        'value_prompt_ph'   => 'What to ask for, e.g. Asset tag',
+        'remove_step'       => 'Remove step',
+        'remove_step_named' => 'Remove "{name}" from this checklist?',
+        'remove_step_empty' => 'Remove this empty step?',
+        'remove'            => 'Remove',
+        'role_optional'     => 'Role (optional)',
+        'new_template'      => 'New template',
+        'unsaved'           => 'Unsaved changes',
+        'title_ph'          => 'For example, New employee workstation setup',
+        'category_ph'       => 'For example, HR & IT',
+    ],
+
+    // The templates list (checklists/).
+    'list' => [
+        'page_title'      => 'Checklists',
+        'heading'         => 'Checklist templates',
+        'heading_sub'     => 'Standard checklist templates with task-level role assignments',
+        'new_template'    => 'New template',
+        'search_ph'       => 'Search templates...',
+        'scope'           => 'Scope',
+        'scope_all'       => 'All scopes',
+        'scope_ticket'    => 'Ticket',
+        'scope_task'      => 'Task',
+        'categories'      => 'Categories',
+        'categories_all'  => 'All categories',
+        'roles'           => 'Suggested roles',
+        'roles_all'       => 'All roles',
+        'manage'          => 'Manage',
+        'edit'            => 'Edit',
+        'delete'          => 'Delete',
+        'more_steps'      => '+ {count} more steps...',
+        'no_steps'        => 'No checklist steps defined',
+        'delete_title'    => 'Delete template',
+        'delete_confirm'  => 'Delete "{name}"? Checklists already attached to a ticket keep their steps — only the template goes.',
+        'badge_both'      => 'BOTH',
+        'badge_ticket'    => 'TICKET',
+        'badge_task'      => 'TASK',
+    ],
+
+    // Checklists -> Settings (checklists/settings/).
+    'settings' => [
+        'page_title'        => 'Checklist settings',
+        'heading'           => 'Checklist settings',
+        'heading_sub'       => 'Manage the categories and suggested roles your checklist templates can use.',
+        'tab_categories'    => 'Categories',
+        'tab_roles'         => 'Suggested roles',
+        'tab_layout'        => 'Left panel',
+
+        'categories'        => 'Categories',
+        'categories_sub'    => 'How checklist templates are grouped. A category is created automatically the first time a template uses it.',
+        'col_category'      => 'Category',
+        'col_templates'     => 'Templates',
+        'categories_empty'  => 'No categories yet - one appears here as soon as a template uses it.',
+
+        'roles'             => 'Suggested roles',
+        'roles_sub'         => 'Who normally carries out a step. Offered when building a template; it suggests, it does not assign.',
+        'col_role'          => 'Role',
+        'col_steps_using'   => 'Steps using it',
+        'roles_empty'       => 'No roles yet.',
+
+        'col_actions'       => 'Actions',
+        'add'               => 'Add',
+        'edit'              => 'Edit',
+        'delete'            => 'Delete',
+        'rename'            => 'Rename',
+        'name'              => 'Name',
+        'cancel'            => 'Cancel',
+        'save'              => 'Save',
+
+        'layout_heading'    => 'Left panel visibility',
+        'layout_sub'        => 'Choose how the checklist templates sidebar behaves on your account.',
+        'layout_pinned'     => 'Always visible',
+        'layout_pinned_desc' => 'Keep the 260px filter panel permanently pinned to the left of the page.',
+        'layout_hover'      => 'Show on hover',
+        'layout_hover_desc' => 'Collapse the sidebar into a thin 16px strip that slides open when your cursor approaches it.',
+    ],
+
+    // The checklist panel on a ticket (checklists/ticket_view.js).
+    'panel' => [
+        'title'            => 'Checklist',
+        'none_attached'    => 'None attached to this ticket.',
+        'attach'           => 'Attach',
+        'modal_title'      => 'Checklists for ticket #{id}',
+        'next_steps'       => 'Checklist next steps',
+        'pop_out'          => 'Pop out full checklist',
+        'no_match'         => 'No matching checklists found.',
+        'suggested_one'    => 'Suggested checklist for this ticket (Best match):',
+        'suggested_many'   => 'Suggested checklists for this ticket (Top {count} matches):',
+        'remove_title'     => 'Remove checklist',
+        'remove_confirm'   => 'Remove "{name}" from this ticket?',
+        'remove_confirm_done' => 'Remove "{name}" from this ticket? {count} completed step(s) and their attribution go with it.',
     ],
     'nav' => [
         'templates' => 'Templates',
