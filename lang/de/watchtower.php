@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Wissen',
         'card_knowledge_desc' => 'Neue Artikel und nun überfällige Überprüfungen.',
         'card_assets' => 'Assets',
-        'card_assets_desc' => 'Ablaufende Garantien und länger nicht gesehene Assets.',
         'card_tasks' => 'Aufgaben',
         'card_tasks_desc' => 'Offene Aufgaben nach Status, überfällig und heute fällig.',
         'card_workflows' => 'Workflows',

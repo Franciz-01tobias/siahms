@@ -70,6 +70,7 @@ class AssetsService
             'purchase_cost'    => ['audit' => 'purchase_cost',   'kind' => 'decimal'],
             'order_number'     => ['audit' => 'order_number',    'kind' => 'string', 'max' => 100],
             'warranty_expiry'  => ['audit' => 'warranty_expiry', 'kind' => 'date'],
+            'lease_expiry'     => ['audit' => 'lease_expiry',    'kind' => 'date'],
             'hostname'         => ['audit' => 'hostname',         'kind' => 'string', 'max' => 50],
             'manufacturer'     => ['audit' => 'manufacturer',     'kind' => 'string', 'max' => 50],
             'model'            => ['audit' => 'model',            'kind' => 'string', 'max' => 50],
@@ -161,7 +162,8 @@ class AssetsService
 
         self::auditWrite($conn, $assetId, $ctx->actorId, 'asset_created', null, $creationNote);
 
-        if (array_key_exists('warranty_expiry', $in) && $in['warranty_expiry']) {
+        if ((array_key_exists('warranty_expiry', $in) && $in['warranty_expiry'])
+            || (array_key_exists('lease_expiry', $in) && $in['lease_expiry'])) {
             self::syncWarranty($conn);
         }
         return $assetId;
@@ -224,7 +226,9 @@ class AssetsService
                 self::auditDisplay($conn, $field, $oldValue, $def),
                 self::auditDisplay($conn, $field, $newValue, $def),
             ];
-            if ($field === 'warranty_expiry') {
+            // Either date drives the same calendar pass, so either one changing
+            // is a reason to run it.
+            if ($field === 'warranty_expiry' || $field === 'lease_expiry') {
                 $warrantyChanged = true;
             }
         }
@@ -601,7 +605,11 @@ class AssetsService
         return (string)$value;
     }
 
-    /** Re-sync the warranty calendar (best-effort; same hook the UI + API used). */
+    /**
+     * Re-sync the asset expiry calendar (best-effort; same hook the UI + API
+     * used). One pass writes BOTH warranty and lease entries, which is why
+     * there is no lease equivalent of this method.
+     */
     private static function syncWarranty(PDO $conn): void
     {
         require_once __DIR__ . '/../asset_warranty_calendar.php';

@@ -176,6 +176,7 @@ return [
         'purchase_cost'    => 'Purchase cost',
         'supplier'         => 'Supplier',
         'order_number'     => 'Order number',
+        'lease_expiry'                => 'Lease ends',
         'warranty_expiry'  => 'Warranty expiry',
         'assigned_user'    => 'Assigned User',
 
@@ -239,6 +240,11 @@ return [
     ],
 
     'detail' => [
+        // The flags beside a warranty or lease date. {days} is always 0-30
+        // here, but the number is passed rather than baked into the string,
+        // because several locales inflect the noun on it.
+        'expired'                 => 'Expired',
+        'expires_in_days'         => 'in {days} days',
         'select_prompt'     => 'Select an asset to view details and assigned users',
         // ⚠️ The KEY is the database column (`assets.service_tag`); the LABEL is
         // what people call it. Those parted company when this was renamed to
@@ -978,6 +984,12 @@ return [
         'warranty_days_label'     => 'Warn this many days before expiry',
         'warranty_days_hint'      => 'Assets already past their warranty date are always included.',
         'warranty_saved'          => 'Warranty alert settings saved',
+        'lease_heading'           => 'Lease expiry alerts',
+        'lease_intro'             => 'Surface assets whose lease has ended or is about to, based on each asset\'s <strong>Lease ends</strong> date. Choose where they show up &mdash; a card on the Watchtower dashboard, events on the Calendar (in a "Lease" category), or both.',
+        'lease_show_in'           => 'Show lease expiries in',
+        'lease_days_label'        => 'Warn this many days ahead',
+        'lease_days_hint'         => 'Assets already past their lease end date are always included. A longer window than the warranty one is usual: returning or renewing leased kit takes arranging.',
+        'lease_saved'             => 'Lease alert settings saved',
         'save_settings_failed'    => 'Failed to save settings',
 
         // vCenter

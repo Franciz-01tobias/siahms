@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Connaissances',
         'card_knowledge_desc' => 'Articles récents et révisions désormais en retard.',
         'card_assets' => 'Actifs',
-        'card_assets_desc' => 'Garanties expirant et actifs non vus récemment.',
         'card_tasks' => 'Tâches',
         'card_tasks_desc' => 'Tâches ouvertes par statut, en retard et dues aujourd\'hui.',
         'card_workflows' => 'Workflows',

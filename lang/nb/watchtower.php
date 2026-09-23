@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Kunnskap',
         'card_knowledge_desc' => 'Nylige artikler og gjennomganger som nå er forfalt.',
         'card_assets' => 'Ressurser',
-        'card_assets_desc' => 'Garantier som utløper og ressurser som ikke er sett nylig.',
         'card_tasks' => 'Oppgaver',
         'card_tasks_desc' => 'Åpne oppgaver etter status, forfalt og med frist i dag.',
         'card_workflows' => 'Arbeidsflyter',

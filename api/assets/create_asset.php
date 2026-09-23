@@ -49,7 +49,8 @@ try {
     // on anything that does report for itself.
     $allowed = ['hostname', 'asset_type_id', 'asset_status_id', 'location_id',
                 'manufacturer', 'model', 'service_tag',
-                'supplier_id', 'purchase_date', 'purchase_cost', 'order_number', 'warranty_expiry'];
+                'supplier_id', 'purchase_date', 'purchase_cost', 'order_number', 'warranty_expiry',
+                'lease_expiry'];
 
     $in = [];
     foreach ($allowed as $f) {

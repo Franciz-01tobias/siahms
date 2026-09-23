@@ -649,12 +649,41 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
         } catch (Exception $e) { $wtShowWarranty = false; }
     }
 
+    // Lease expiries — the same shape as warranty above, with its own setting
+    // pair and its own window (60 days by default rather than 30: a warranty
+    // running out is worth noting, a lease ending is a date you have to have
+    // done something about beforehand).
+    //
+    // 🔴 The column is newer than the rest of the procurement block and does
+    // NOT exist until Database Verification has run. The try/catch is what
+    // keeps the whole dashboard — every other card on it — from going blank on
+    // an install that has pulled the update and not yet run it.
+    $ltSurface = 'dashboard';
+    $ltDays = 60;
+    try {
+        $lset = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('asset_lease_surface','asset_lease_days')")->fetchAll(PDO::FETCH_KEY_PAIR);
+        if (!empty($lset['asset_lease_surface'])) $ltSurface = $lset['asset_lease_surface'];
+        if (!empty($lset['asset_lease_days']) && (int)$lset['asset_lease_days'] > 0) $ltDays = (int)$lset['asset_lease_days'];
+    } catch (Exception $e) { /* defaults */ }
+    $wtShowLease = in_array($ltSurface, ['dashboard', 'both'], true);
+    $asLease = 0;
+    if ($wtShowLease) {
+        try {
+            $l = $conn->prepare("SELECT COUNT(*) FROM assets WHERE lease_expiry IS NOT NULL AND lease_expiry <= DATE_ADD({$todaySql}, INTERVAL ? DAY)");
+            $l->execute([$ltDays]);
+            $asLease = (int)$l->fetchColumn();
+        } catch (Exception $e) { $wtShowLease = false; }
+    }
+
     $assets = [
         'total'         => $asTotal,
         'not_seen_7d'   => $asNotSeen,
         'warranty_soon' => $asWarranty,
         'warranty_days' => $wtDays,
-        'warranty_show' => $wtShowWarranty
+        'warranty_show' => $wtShowWarranty,
+        'lease_soon'    => $asLease,
+        'lease_days'    => $ltDays,
+        'lease_show'    => $wtShowLease
     ];
 
     // -- Tasks --

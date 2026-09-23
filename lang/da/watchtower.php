@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Viden',
         'card_knowledge_desc' => 'Nye artikler og gennemgange, der nu er forfaldne.',
         'card_assets' => 'Aktiver',
-        'card_assets_desc' => 'Udløbende garantier og aktiver, der ikke er set for nylig.',
         'card_tasks' => 'Opgaver',
         'card_tasks_desc' => 'Åbne opgaver efter status, forsinkede og med frist i dag.',
         'card_workflows' => 'Arbejdsgange',

@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Conocimiento',
         'card_knowledge_desc' => 'Artículos recientes y revisiones ya vencidas.',
         'card_assets' => 'Activos',
-        'card_assets_desc' => 'Garantías por vencer y activos no vistos recientemente.',
         'card_tasks' => 'Tareas',
         'card_tasks_desc' => 'Tareas abiertas por estado, vencidas y con vencimiento hoy.',
         'card_workflows' => 'Flujos de trabajo',

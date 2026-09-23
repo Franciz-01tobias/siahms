@@ -2434,6 +2434,13 @@ CREATE TABLE IF NOT EXISTS `assets` (
     `supplier_id`       INT NULL,
     `order_number`      VARCHAR(100) NULL,
     `warranty_expiry`   DATE NULL,
+    -- Leased kit. Ed's original lifecycle brief said "warranty/lease expiries"
+    -- and only warranty was built; this is the other half. Kept as a plain
+    -- date beside the warranty one rather than a lease RECORD (lessor, cost,
+    -- schedule) because the question actually being asked is "what do I have
+    -- to give back, and when" - and the warranty machinery already answers
+    -- that shape of question on the dashboard and in the calendar.
+    `lease_expiry`      DATE NULL,
     -- Multi-tenancy (SCOPED DATA, not config): the company this asset belongs to.
     -- NULL = the Default company (existing installs stay NULL, so a single-company
     -- install is unaffected). Agent ingest derives it from the API key's tenant_id;

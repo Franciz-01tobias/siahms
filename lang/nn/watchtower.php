@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Kunnskap',
         'card_knowledge_desc' => 'Nylege artiklar og gjennomgangar som no er over fristen.',
         'card_assets' => 'Ressursar',
-        'card_assets_desc' => 'Garantiar som går ut, og ressursar som ikkje er sette nyleg.',
         'card_tasks' => 'Oppgåver',
         'card_tasks_desc' => 'Opne oppgåver etter status, over fristen og med frist i dag.',
         'card_workflows' => 'Arbeidsflytar',

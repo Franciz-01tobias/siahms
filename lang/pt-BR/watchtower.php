@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Conhecimento',
         'card_knowledge_desc' => 'Artigos recentes e revisões agora atrasadas.',
         'card_assets' => 'Ativos',
-        'card_assets_desc' => 'Garantias vencendo e ativos não vistos recentemente.',
         'card_tasks' => 'Tarefas',
         'card_tasks_desc' => 'Tarefas abertas por status, atrasadas e com vencimento hoje.',
         'card_workflows' => 'Workflows',

@@ -966,6 +966,35 @@ $translationNamespaces = ['common', 'asset-management'];
                             <button type="submit" class="btn btn-primary" id="warrantySaveBtn"><?php echo htmlspecialchars(t('asset-management.common.save')); ?></button>
                         </div>
                     </form>
+
+                    <?php /* Leased kit. The original lifecycle brief said
+                             "warranty/lease expiries" and only warranty was
+                             built; this is the other half, configured the same
+                             way because it is the same question. */ ?>
+                    <hr class="settings-divider" style="margin: 28px 0 22px; border: none; border-top: 1px solid var(--border-color, #e5e7eb);">
+                    <h3 style="margin: 0 0 6px; font-size: 15px;"><?php echo htmlspecialchars(t('asset-management.settings.lease_heading')); ?></h3>
+                    <p class="settings-description">
+                        <?php echo t('asset-management.settings.lease_intro'); ?>
+                    </p>
+                    <form id="leaseForm" onsubmit="saveLeaseSettings(event)">
+                        <div class="form-group">
+                            <label class="form-label" for="leaseSurface"><?php echo htmlspecialchars(t('asset-management.settings.lease_show_in')); ?></label>
+                            <select class="form-input" id="leaseSurface" style="max-width: 340px;">
+                                <option value="off"><?php echo htmlspecialchars(t('asset-management.settings.warranty_off')); ?></option>
+                                <option value="dashboard"><?php echo htmlspecialchars(t('asset-management.settings.warranty_dashboard_only')); ?></option>
+                                <option value="calendar"><?php echo htmlspecialchars(t('asset-management.settings.warranty_calendar_only')); ?></option>
+                                <option value="both"><?php echo htmlspecialchars(t('asset-management.settings.warranty_both')); ?></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leaseDays"><?php echo htmlspecialchars(t('asset-management.settings.lease_days_label')); ?></label>
+                            <input type="number" class="form-input" id="leaseDays" min="1" max="3650" value="60" style="max-width: 140px;">
+                            <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.lease_days_hint')); ?></div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary" id="leaseSaveBtn"><?php echo htmlspecialchars(t('asset-management.common.save')); ?></button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -1680,12 +1709,52 @@ $translationNamespaces = ['common', 'asset-management'];
                     document.getElementById('warrantySurface').value = data.settings.asset_warranty_surface || 'dashboard';
                     const wDays = parseInt(data.settings.asset_warranty_days, 10);
                     document.getElementById('warrantyDays').value = (wDays > 0 ? wDays : 30);
+
+                    // Lease alert settings. The default window is 60 days
+                    // rather than warranty's 30: a warranty running out is
+                    // something to note, whereas a lease ending is a date you
+                    // have to have done something about beforehand.
+                    document.getElementById('leaseSurface').value = data.settings.asset_lease_surface || 'dashboard';
+                    const lDays = parseInt(data.settings.asset_lease_days, 10);
+                    document.getElementById('leaseDays').value = (lDays > 0 ? lDays : 60);
                 }
             } catch (error) {
                 console.error('Error loading settings:', error);
             }
         }
 
+        // Save the lease alert settings. A sibling of saveWarrantySettings
+        // rather than a shared function taking a prefix: two near-identical
+        // twenty-line handlers read better than one handler with a parameter
+        // deciding which of six element ids it is talking to.
+        async function saveLeaseSettings(e) {
+            e.preventDefault();
+            const btn = document.getElementById('leaseSaveBtn');
+            btn.disabled = true; btn.textContent = window.t('asset-management.settings.saving');
+            try {
+                const res = await fetch(API_SETTINGS + 'save_system_settings.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings: {
+                        asset_lease_surface: document.getElementById('leaseSurface').value,
+                        asset_lease_days: String(Math.max(1, Math.min(3650, parseInt(document.getElementById('leaseDays').value, 10) || 60)))
+                    }})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    // Resync the calendar so it immediately matches the new
+                    // choice - the same endpoint the warranty block calls,
+                    // because one pass writes both kinds of entry.
+                    try { await fetch(API_BASE + 'sync_warranty_calendar.php', { method: 'POST' }); } catch (e) {}
+                    showToast(window.t('asset-management.settings.lease_saved'), 'success');
+                } else {
+                    showToast(window.t('asset-management.toast.error', { error: data.error }), 'error');
+                }
+            } catch (e) {
+                showToast(window.t('asset-management.settings.save_settings_failed'), 'error');
+            }
+            btn.disabled = false; btn.textContent = window.t('asset-management.common.save');
+        }
         async function saveWarrantySettings(e) {
             e.preventDefault();
             const btn = document.getElementById('warrantySaveBtn');

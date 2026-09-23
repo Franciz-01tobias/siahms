@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Pengetahuan',
         'card_knowledge_desc' => 'Artikel terkini dan semakan yang kini tertunggak.',
         'card_assets' => 'Aset',
-        'card_assets_desc' => 'Waranti yang tamat tempoh dan aset yang tidak dilihat baru-baru ini.',
         'card_tasks' => 'Tugasan',
         'card_tasks_desc' => 'Tugasan terbuka mengikut status, tertunggak dan tarikh akhir hari ini.',
         'card_workflows' => 'Aliran Kerja',

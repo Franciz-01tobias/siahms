@@ -60,7 +60,6 @@ return [
         'card_knowledge' => 'Baza wiedzy',
         'card_knowledge_desc' => 'Ostatnie artykuły i zaległe przeglądy.',
         'card_assets' => 'Zasoby',
-        'card_assets_desc' => 'Wygasające gwarancje i zasoby niewidziane od dawna.',
         'card_tasks' => 'Zadania',
         'card_tasks_desc' => 'Otwarte zadania według statusu, zaległe i z terminem na dzisiaj.',
         'card_workflows' => 'Przepływy pracy',

@@ -1645,6 +1645,7 @@ return [
         'supplier_id'       => 'INT NULL',
         'order_number'      => 'VARCHAR(100) NULL',
         'warranty_expiry'   => 'DATE NULL',
+        'lease_expiry'      => 'DATE NULL',
         // Multi-tenancy: the company this asset belongs to (NULL = Default).
         'tenant_id'         => 'INT NULL',
         // QR labels (#935). asset_tag is the printed human number, unique per

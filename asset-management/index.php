@@ -1429,6 +1429,32 @@ $translationNamespaces = ['common', 'asset-management'];
             background: var(--bg-secondary, #eee);
             color: var(--text-muted, #666);
         }
+        /* Expiry flags beside a warranty or lease date. Colour is never the only
+           signal - each carries its own words - so it still reads correctly to
+           somebody who cannot tell the two apart. */
+        .expiry-flag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+        .expiry-flag-past {
+            background: #fdeaea;
+            color: #b3261e;
+        }
+        .expiry-flag-soon {
+            background: #fef3e2;
+            color: #a15c07;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) .expiry-flag-past { background: #4a1c1a; color: #ffb4ab; }
+            :root:not([data-theme="light"]) .expiry-flag-soon { background: #4a3410; color: #ffd18c; }
+        }
+        :root[data-theme="dark"] .expiry-flag-past { background: #4a1c1a; color: #ffb4ab; }
+        :root[data-theme="dark"] .expiry-flag-soon { background: #4a3410; color: #ffd18c; }
     </style>
     <?php /* Mobile-friendly opt-in (#936). Deliberately AFTER this page's own
              <style> block so its @media rules win on ties — the ordering rule
@@ -2304,8 +2330,12 @@ $translationNamespaces = ['common', 'asset-management'];
                             <input type="text" class="info-value-input" value="${escapeHtml(selectedAsset.order_number || '')}" placeholder="-" onchange="updateAssetField('order_number', this.value)">
                         </div>
                         <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.warranty_expiry')}</span>
+                            <span class="info-label">${window.t('asset-management.field.warranty_expiry')}${expiryFlag(selectedAsset.warranty_expiry)}</span>
                             <input type="date" class="info-value-input" value="${selectedAsset.warranty_expiry || ''}" onchange="updateAssetField('warranty_expiry', this.value)">
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.lease_expiry')}${expiryFlag(selectedAsset.lease_expiry)}</span>
+                            <input type="date" class="info-value-input" value="${selectedAsset.lease_expiry || ''}" onchange="updateAssetField('lease_expiry', this.value)">
                         </div>
                     </div>
                     <?php /* Custom fields (docs/design/flexible-asset-fields.md).
@@ -3843,6 +3873,45 @@ $translationNamespaces = ['common', 'asset-management'];
             `;
         }
 
+        /**
+         * A small red or amber flag beside a date that has passed or is about
+         * to. Returns an empty string for everything else, so a date with
+         * years left on it - and a field left blank, which is most of them -
+         * adds nothing to the screen at all.
+         *
+         * The 30-day window is fixed here on purpose. The configurable windows
+         * under Assets -> Settings decide what reaches the DASHBOARD and the
+         * CALENDAR, where a number too large would bury everything else. This
+         * is a mark on a record somebody has already chosen to look at, so
+         * there is nothing for it to crowd out.
+         *
+         * Dates are compared as plain calendar days. A lease ends on a date,
+         * not at an instant, and turning it into a timestamp would make the
+         * answer depend on the reader's timezone - so a lease would read as
+         * expired in Auckland and current in London on the same day.
+         */
+        function expiryFlag(dateStr) {
+            if (!dateStr) { return ''; }
+            const d = String(dateStr).slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { return ''; }
+
+            const today = new Date();
+            const todayStr = today.getFullYear() + '-'
+                + String(today.getMonth() + 1).padStart(2, '0') + '-'
+                + String(today.getDate()).padStart(2, '0');
+
+            // Both are YYYY-MM-DD, so a string comparison IS a date comparison
+            // and needs no parsing to get right.
+            if (d < todayStr) {
+                return ` <span class="expiry-flag expiry-flag-past">${window.t('asset-management.detail.expired')}</span>`;
+            }
+            const days = Math.round((Date.parse(d + 'T00:00:00') - Date.parse(todayStr + 'T00:00:00')) / 86400000);
+            if (days <= 30) {
+                return ` <span class="expiry-flag expiry-flag-soon">${window.t('asset-management.detail.expires_in_days', { days: days })}</span>`;
+            }
+            return '';
+        }
+
         // Open assign user modal
         function openAssignModal() {
             selectedUserForAssign = null;
@@ -4113,7 +4182,7 @@ $translationNamespaces = ['common', 'asset-management'];
             // localise here. Legacy rows hold an English label (with spaces/capitals)
             // — those don't match a key, so we show them as-is.
             const FIELD_KEYS = ['type','status','location','supplier','purchase_date',
-                'purchase_cost','order_number','warranty_expiry','assigned_user'];
+                'purchase_cost','order_number','warranty_expiry','lease_expiry','assigned_user'];
 
             history.forEach(entry => {
                 const noneEm = `<em style="color:#999;">${window.t('asset-management.common.none')}</em>`;
