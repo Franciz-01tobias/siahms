@@ -225,7 +225,8 @@ $ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? '
             <?php /* A portal-specific logo if one is set, otherwise the shared
                      one from System → Branding. Empty means "use the main one",
                      so nothing changes for an install that has not set it. */ ?>
-            <img src="<?php echo htmlspecialchars($ssAppearance['logo_path'] !== '' ? $ssAppearance['logo_path'] : brandingLogoUrl()); ?>" alt="">
+            <?php $ssLogoUrl = selfServicePortalLogoUrl($conn ?? connectToDatabase()); ?>
+            <img src="<?php echo htmlspecialchars($ssLogoUrl !== '' ? $ssLogoUrl : brandingLogoUrl()); ?>" alt="">
             <span><?php echo htmlspecialchars(t('self-service.portal')); ?></span>
         </div>
         <nav class="portal-nav" id="portalNav">

@@ -84,3 +84,38 @@ function selfServicePortalSettings(PDO $conn): array
         'show_my_assets'      => $get('self_service_show_my_assets') === '1',
     ];
 }
+
+/**
+ * The portal logo as a URL the browser can actually fetch, or '' when there is
+ * none (the caller then falls back to the main branding logo).
+ *
+ * 🔴 The setting stores a path relative to the APP ROOT. Writing it straight
+ * into src="" works only from a page at the root; from /self-service/ it
+ * resolves one directory too deep and 404s. Everything that renders this logo
+ * must come through here.
+ *
+ * Mirrors brandingLogoUrl(), including the existence check: a pointer left
+ * behind by a deleted file would render a broken image in the portal header.
+ */
+function selfServicePortalLogoUrl(PDO $conn): string
+{
+    $s = selfServicePortalSettings($conn);
+    $rel = $s['logo_path'] ?? '';
+    if ($rel === '') {
+        return '';
+    }
+
+    // Only ever a file we put in the portal's own upload directory.
+    if (strpos($rel, 'system/uploads/branding/portal/') !== 0
+        || strpos($rel, '..') !== false
+        || strpos($rel, "\0") !== false
+        || !preg_match('#^[A-Za-z0-9._/-]+$#', $rel)) {
+        return '';
+    }
+
+    if (!file_exists(dirname(__DIR__) . '/' . $rel)) {
+        return '';
+    }
+
+    return (defined('BASE_URL') ? BASE_URL : '/') . $rel;
+}
