@@ -101,6 +101,18 @@ $translationNamespaces = ['common', 'watchtower'];
         .toast.toast-error { background: var(--danger-accent, #c62828); }
 
         [data-theme-mode="dark"] .wt-opt:hover { background: #14312e; }
+        /* The "configured in another module" pointer under a card. Quieter than
+           the description above it, because it is a signpost and not a setting. */
+        .wt-opt-elsewhere {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+        }
+        .wt-opt-elsewhere a {
+            color: var(--primary-color, #4a90d9);
+            text-decoration: none;
+        }
+        .wt-opt-elsewhere a:hover { text-decoration: underline; }
     </style>
     <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
 </head>
@@ -238,8 +250,34 @@ function renderCards() {
             <span>
                 <span class="wt-opt-name" style="color:${moduleColour(key)};">${escapeHtml(window.t('watchtower.settings.card_' + key))}</span>
                 <span class="wt-opt-desc">${escapeHtml(window.t('watchtower.settings.card_' + key + '_desc'))}</span>
+                ${cardSignpost(key)}
             </span>
         </label>`).join('');
+}
+
+/**
+ * Some figures on a card are switched on in the module that owns them, not here.
+ *
+ * Those settings decide the CALENDAR as well as this dashboard, so they cannot
+ * move here without splitting one decision across two screens - and somebody
+ * switching it on in one place would fairly assume the other followed. This is
+ * the compromise: one place to LOOK, still one place to SET.
+ *
+ * Returns an empty string for every card that has nothing extra, so a card only
+ * grows a line when there is genuinely somewhere else to go.
+ */
+function cardSignpost(key) {
+    const targets = {
+        assets:   '../../asset-management/settings/index.php?tab=warranty',
+        software: '../../software/settings/index.php?tab=renewals',
+    };
+    const href = targets[key];
+    if (!href) { return ''; }
+    // The link text is translated; the anchor is built here rather than put in
+    // the string, so no locale can ship a broken or redirected URL.
+    return `<span class="wt-opt-elsewhere">`
+         + `<a href="${href}">${escapeHtml(window.t('watchtower.settings.configured_elsewhere_' + key))}</a>`
+         + `</span>`;
 }
 
 function renderCounts() {

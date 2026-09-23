@@ -18,6 +18,16 @@ requireModuleAccess('software');
 $settingsManifest = settingsManifestFor('software');
 $visibleTabs      = settingsVisibleTabs(connectToDatabase(), (int) $_SESSION['analyst_id'], $settingsManifest);
 $activeTabId      = settingsFirstTabId($visibleTabs);
+/* Honour ?tab=, so a link from elsewhere (the Watchtower settings signpost,
+   say) lands on the tab it names rather than on whichever is first.
+   Validated against the VISIBLE tabs, not just the manifest - a tab this
+   analyst has no capability for is never rendered, and asking for it must
+   not select nothing, nor slip past the check. Same three lines as
+   forms/settings/index.php. */
+if (!empty($_GET['tab']) && settingsTabVisible($visibleTabs, (string) $_GET['tab'])) {
+    $activeTabId = (string) $_GET['tab'];
+}
+
 
 $current_page = 'settings';
 $path_prefix = '../../';
