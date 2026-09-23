@@ -19,6 +19,42 @@ let ticketChecklistsData = [];
 let availableTemplatesCache = [];
 let currentViewingTicketId = null;
 
+/**
+ * Translate, the way assets/js/calendar.js does it.
+ *
+ * 🔴 `window.t`, never a bare `t`. Two of the loops in this file are written
+ * `forEach(t => ...)` and `forEach(({ template: t }) => ...)`, where `t` is the
+ * template row — which SHADOWS the global translation function. An inline
+ * `typeof t === 'function'` test inside those loops is always false, so the
+ * string silently falls back to English and no locale can ever reach it. Going
+ * through window makes the lookup immune to whatever `t` means locally.
+ */
+function chkT(key, fallback) {
+    const v = (typeof window.t === 'function') ? window.t(key) : '';
+    return (v && v !== key) ? v : fallback;
+}
+
+/**
+ * The padlock marking a checklist that blocks closure until it is complete.
+ *
+ * One definition rather than the same 400-character expression pasted into the
+ * inline panel, the popup modal and the attach dialogue — the three places it
+ * appears, two of which are inside the shadowed loops described above.
+ */
+function closureLockIcon(effectiveMode, px) {
+    if (effectiveMode !== 'block') return '';
+    const label = escapeHtml(chkT('tickets.checklists.mandatory_for_closure', 'Mandatory for closure'));
+    const size  = px || 12;
+    return '<span class="chk-lock" title="' + label + '" aria-label="' + label + '"'
+         + ' style="display: inline-flex; color: #dc2626;">'
+         + '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none"'
+         + ' stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"'
+         + ' aria-hidden="true">'
+         + '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>'
+         + '<path d="M7 11V7a5 5 0 0 1 10 0v4"></path>'
+         + '</svg></span>';
+}
+
 // Format exact server datetime as dd-mmm-yy HH:MM
 function formatStepDatetime(dtStr) {
     if (!dtStr) return '';
@@ -55,6 +91,7 @@ async function loadTicketChecklists(ticketId) {
         }
 
         ticketChecklistsData = data.checklists || [];
+        window.ticketChecklistEmptyClosureMode = data.empty_closure_mode || 'off';
         renderChecklistToolbarButton(ticketId);
         renderTicketChecklistsInline(ticketId);
     } catch (e) {
@@ -80,7 +117,11 @@ function getIncompleteMandatorySteps() {
             const isMand = (it.is_mandatory == 1 || it.is_mandatory === true || it.is_mandatory === '1');
             const isComp = (it.is_completed == 1 || it.is_completed === true || it.is_completed === '1');
             if (isMand && !isComp) {
-                list.push({ checklist: chk.title, step: it.title });
+                list.push({
+                    checklist: chk.title,
+                    step: it.title,
+                    closure_mode: chk.effective_closure_mode || chk.closure_mode || 'warn'
+                });
             }
         });
     });
@@ -114,7 +155,7 @@ function renderChecklistToolbarButton(ticketId) {
 
     btn.innerHTML = `
         <span class="action-btn-icon">✅</span>
-        <span>SOP checklist${badgeText}</span>
+        <span>Checklist${badgeText}</span>
     `;
 }
 
@@ -134,7 +175,7 @@ function renderTicketChecklistsInline(ticketId) {
         host.innerHTML = `
             <div id="sopEmptyStateHost_${ticketId}" style="background: var(--surface, #ffffff); border: 1px dashed var(--border, #cbd5e1); border-radius: 6px; padding: 8px 14px; margin: -15px 0 12px 0; display: flex; justify-content: space-between; align-items: center;">
                 <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                    <strong>SOP checklist:</strong> None attached to this ticket.
+                    <strong>Checklist:</strong> None attached to this ticket.
                 </div>
                 <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
                     Attach
@@ -150,7 +191,7 @@ function renderTicketChecklistsInline(ticketId) {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">✅</span>
-                    <strong style="font-size: 13px; color: var(--text, #1e293b);">SOP next steps</strong>
+                    <strong style="font-size: 13px; color: var(--text, #1e293b);">Checklist next steps</strong>
                 </div>
                 <div style="display: flex; gap: 6px;">
                     <button type="button" class="chk-chip" onclick="openChecklistModal(${ticketId})" title="Pop out full checklist">
@@ -173,7 +214,7 @@ function renderTicketChecklistsInline(ticketId) {
         html += `
             <div style="border: 1px solid var(--border, #f1f5f9); border-radius: 6px; padding: 8px 10px; background: var(--surface-hover, #f8fafc);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-size: 12px; font-weight: 600; color: var(--text, #334155);">${escapeHtml(chk.title)}</span>
+                    <span style="font-size: 12px; font-weight: 600; color: var(--text, #334155); display: inline-flex; align-items: center; gap: 4px;">${escapeHtml(chk.title)}${closureLockIcon(chk.effective_closure_mode, 12)}</span>
                     <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted, #64748b);">
                         <span style="font-weight: 600; color: ${allDone ? '#16a34a' : 'inherit'};">${percent}%</span>
                         <div style="width: 50px; height: 5px; background: var(--border, #e2e8f0); border-radius: 3px; overflow: hidden;">
@@ -233,7 +274,7 @@ function openChecklistModal(ticketId) {
     if (!ticketChecklistsData || ticketChecklistsData.length === 0) {
         checklistsHtml = `
             <div style="text-align: center; padding: 30px; color: var(--text-muted, #64748b);">
-                <p style="margin-bottom: 12px;">No SOP checklists are attached to this ticket.</p>
+                <p style="margin-bottom: 12px;">No checklists are attached to this ticket.</p>
                 <button class="btn btn-primary" type="button" onclick="closeChecklistModal(); openAttachChecklistModal(${ticketId});">
                     Attach
                 </button>
@@ -246,7 +287,7 @@ function openChecklistModal(ticketId) {
                 <div style="border: 1px solid var(--border, #e2e8f0); border-radius: 8px; margin-bottom: 16px; overflow: hidden; background: var(--surface, #ffffff);">
                     <div style="padding: 10px 14px; background: var(--surface-hover, #f8fafc); border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <strong style="font-size: 14px; color: var(--text, #1e293b);">${escapeHtml(chk.title)}</strong>
+                            <strong style="font-size: 14px; color: var(--text, #1e293b); display: inline-flex; align-items: center; gap: 6px;">${escapeHtml(chk.title)}${closureLockIcon(chk.effective_closure_mode, 13)}</strong>
                             <div style="font-size: 11px; color: var(--text-muted, #64748b); margin-top: 2px;">
                                 ${chk.completed_items || 0} of ${chk.total_items || 0} steps completed (${percent}%)
                             </div>
@@ -300,7 +341,7 @@ function openChecklistModal(ticketId) {
             <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 18px;">✅</span>
-                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text, #1e293b);">SOP checklists for ticket #${ticketId}</h3>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text, #1e293b);">Checklists for ticket #${ticketId}</h3>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
@@ -447,12 +488,12 @@ async function executeToggleItem(ticketId, itemId, completed, responseValue, che
 async function logStepNote(ticketId, checklistTitle, stepTitle, completed, responseValue) {
     let noteText = "";
     if (completed) {
-        noteText = `✅ SOP Step Completed: [${checklistTitle}] "${stepTitle}"`;
+        noteText = `✅ Checklist step completed: [${checklistTitle}] "${stepTitle}"`;
         if (responseValue) {
             noteText += ` — Response: ${responseValue}`;
         }
     } else {
-        noteText = `↩️ SOP Step Reopened: [${checklistTitle}] "${stepTitle}" was marked incomplete`;
+        noteText = `↩️ Checklist step reopened: [${checklistTitle}] "${stepTitle}" was marked incomplete`;
     }
 
     try {
@@ -508,7 +549,7 @@ async function removeTicketChecklist(ticketId, checklistId) {
     }
 }
 
-// 8. Attach SOP Modal
+// 8. Attach checklist Modal
 async function openAttachChecklistModal(ticketId) {
     if (!ticketId) ticketId = currentViewingTicketId;
     let modal = document.getElementById('ticketAttachChecklistModal');
@@ -520,7 +561,7 @@ async function openAttachChecklistModal(ticketId) {
     }
 
     try {
-        const res = await fetch(CHK_API + '?action=list_templates_for_ticket');
+        const res = await fetch(CHK_API + '?action=list_templates_for_ticket&ticket_id=' + encodeURIComponent(ticketId || ''));
         const data = await res.json();
         if (!data.success) {
             showToast(data.error || 'Could not load the templates', 'error');
@@ -535,10 +576,10 @@ async function openAttachChecklistModal(ticketId) {
     modal.innerHTML = `
         <div class="chk-attach-dialog" style="background: var(--surface, #ffffff); border-radius: 8px; width: 90%; max-width: 560px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.25); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b);">
             <div style="padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0); display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="margin: 0; font-size: 15px; font-weight: 600;">Attach a procedure</h4>
+                <h4 style="margin: 0; font-size: 15px; font-weight: 600;">Attach checklist</h4>
             </div>
             <div style="padding: 12px 18px 6px 18px;">
-                <input type="text" id="chkSearchInput" onkeyup="filterTemplatesList(${ticketId})" placeholder="Search procedures..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333);">
+                <input type="text" id="chkSearchInput" onkeyup="filterTemplatesList(${ticketId})" placeholder="Search checklists..." style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333);">
             </div>
             <div id="chkTemplatesList" class="chk-attach-list" style="padding: 10px 18px; display: flex; flex-direction: column; gap: 8px;">
             </div>
@@ -582,7 +623,7 @@ function filterTemplatesList(ticketId) {
     });
 
     if (scored.length === 0) {
-        list.innerHTML = `<div style="text-align: center; color: var(--text-muted, #64748b); padding: 20px; font-size: 13px;">No matching SOP checklists found.</div>`;
+        list.innerHTML = `<div style="text-align: center; color: var(--text-muted, #64748b); padding: 20px; font-size: 13px;">No matching checklists found.</div>`;
         return;
     }
 
@@ -600,7 +641,10 @@ function filterTemplatesList(ticketId) {
         html += `
             <div class="chk-tpl-row">
                 <div class="chk-tpl-top">
-                    <span class="chk-tpl-title">${escapeHtml(t.title)}</span>
+                    <span class="chk-tpl-title" style="display: inline-flex; align-items: center; gap: 5px;">
+                        ${escapeHtml(t.title)}
+                        ${closureLockIcon(t.effective_closure_mode, 12)}
+                    </span>
                     <span class="chk-tpl-pill ${categoryPillClass(t.category)}">${escapeHtml(t.category || 'General')}</span>
                 </div>
                 ${t.description ? `<p class="chk-tpl-desc">${escapeHtml(t.description)}</p>` : ''}
@@ -651,6 +695,17 @@ function escapeHtml(str) {
 window.loadTicketChecklists = loadTicketChecklists;
 window.openChecklistModal = openChecklistModal;
 window.openAttachChecklistModal = openAttachChecklistModal;
+function getAttachedChecklistsCount() {
+    if (!Array.isArray(ticketChecklistsData)) return 0;
+    return ticketChecklistsData.length;
+}
+
+function getTicketChecklistEmptyClosureMode() {
+    return window.ticketChecklistEmptyClosureMode || 'off';
+}
+
+window.getAttachedChecklistsCount = getAttachedChecklistsCount;
+window.getTicketChecklistEmptyClosureMode = getTicketChecklistEmptyClosureMode;
 window.getIncompleteMandatorySteps = getIncompleteMandatorySteps;
 
 
@@ -716,8 +771,8 @@ async function checkAndShowSopSuggestion(ticketId) {
             hostDiv.style.padding = '10px 14px';
 
             const matchLabel = list.length === 1 
-                ? '💡 Suggested SOP for this Ticket (Best match):' 
-                : `💡 Suggested SOPs for this Ticket (Top ${list.length} matches):`;
+                ? '💡 Suggested checklist for this ticket (Best match):'
+                : `💡 Suggested checklists for this ticket (Top ${list.length} matches):`;
 
             let itemsHtml = '';
             list.forEach((s, idx) => {
@@ -762,7 +817,7 @@ async function checkAndShowSopSuggestion(ticketId) {
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})" style="padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; border: 1px solid #99f6e4; background: #ffffff; color: #0f766e; font-weight: 500;">
-                                Browse All SOPs
+                                Browse all checklists
                             </button>
                             <button type="button" onclick="dismissSopSuggestion(${ticketId})" style="background: none; border: none; color: #0f766e; font-size: 12px; cursor: pointer; padding: 2px 4px; opacity: 0.8;" title="Dismiss suggestions">
                                 ✕ Dismiss
@@ -778,7 +833,7 @@ async function checkAndShowSopSuggestion(ticketId) {
         } else {
             hostDiv.innerHTML = `
                 <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                    <strong>SOP checklist:</strong> None attached to this ticket. <span style="font-style: italic; opacity: 0.85;">(No suggestions found)</span>
+                    <strong>Checklist:</strong> None attached to this ticket. <span style="font-style: italic; opacity: 0.85;">(No suggestions found)</span>
                 </div>
                 <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
                     Attach
@@ -799,7 +854,7 @@ function dismissSopSuggestion(ticketId) {
         hostDiv.style.padding = '8px 14px';
         hostDiv.innerHTML = `
             <div style="color: var(--text-muted, #64748b); font-size: 13px;">
-                <strong>SOP checklist:</strong> None attached to this ticket.
+                <strong>Checklist:</strong> None attached to this ticket.
             </div>
             <button type="button" class="chk-chip" onclick="openAttachChecklistModal(${ticketId})">
                 Attach

@@ -1935,14 +1935,15 @@ class WorkflowEngine
             }
 
             // Fetch template
-            $tplStmt = $conn->prepare("SELECT title FROM checklist_templates WHERE id = ?");
+            $tplStmt = $conn->prepare("SELECT title, closure_mode FROM checklist_templates WHERE id = ?");
             $tplStmt->execute([$tplId]);
             $tpl = $tplStmt->fetch(PDO::FETCH_ASSOC);
             if (!$tpl) continue;
 
             // Insert ticket_checklists
-            $ins = $conn->prepare("INSERT INTO ticket_checklists (ticket_id, template_id, title, created_by_id, created_datetime) VALUES (?, ?, ?, 1, UTC_TIMESTAMP())");
-            $ins->execute([$ticketId, $tplId, $tpl['title']]);
+            $closureMode = (($tpl['closure_mode'] ?? '') === 'block') ? 'block' : 'warn';
+            $ins = $conn->prepare("INSERT INTO ticket_checklists (ticket_id, template_id, title, closure_mode, created_by_id, created_datetime) VALUES (?, ?, ?, ?, 1, UTC_TIMESTAMP())");
+            $ins->execute([$ticketId, $tplId, $tpl['title'], $closureMode]);
             $chkId = (int)$conn->lastInsertId();
 
             // Fetch & insert template items
@@ -2035,7 +2036,7 @@ class WorkflowEngine
             // No analyst is acting: actor 0, which the two services record as a
             // 'Workflow Note' audit entry rather than an analyst's internal note.
             $wfCtx = new ActorContext(0, null, 'workflow');
-            ChecklistsService::recordClosureOverride($conn, $wfCtx, $ticketId);
+            ChecklistsService::recordClosureOverride($conn, $wfCtx, $ticketId, $closeTenant);
             MandatoryFieldsService::afterClosure($conn, $wfCtx, $ticketId, $closeTenant, $emptyOnClose);
         }
         return ['ticket_id' => $ticketId, 'status_id' => $statusId, 'status_name' => $sRow['name']];

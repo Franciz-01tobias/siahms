@@ -5881,6 +5881,10 @@ CREATE TABLE IF NOT EXISTS `system_settings` (
 INSERT IGNORE INTO `system_settings` (`setting_key`, `setting_value`) VALUES
     ('tasks_calendar_span_mode', 'deadline');
 
+INSERT IGNORE INTO `system_settings` (`setting_key`, `setting_value`) VALUES
+    ('ticket_checklist_closure_mode', 'per_template'),
+    ('ticket_checklist_empty_closure_mode', 'off');
+
 -- SSO global switches: master kill switch (off until a provider is configured)
 -- and the local-login break-glass toggle (on by default).
 INSERT IGNORE INTO `system_settings` (`setting_key`, `setting_value`) VALUES
@@ -6810,6 +6814,7 @@ CREATE TABLE IF NOT EXISTS `checklist_templates` (
     `category` VARCHAR(100) NULL DEFAULT 'General',
     `suggested_role` VARCHAR(100) NULL,
     `scope` ENUM('ticket','task','both') NOT NULL DEFAULT 'both',
+    `closure_mode` ENUM('warn','block') NOT NULL DEFAULT 'warn',
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `created_by_id` INT NULL,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -6843,6 +6848,7 @@ CREATE TABLE IF NOT EXISTS `ticket_checklists` (
     `ticket_id` INT NOT NULL,
     `template_id` INT NULL,
     `title` VARCHAR(255) NOT NULL,
+    `closure_mode` ENUM('warn','block') NOT NULL DEFAULT 'warn',
     `created_by_id` INT NULL,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `is_demo` tinyint(1) NOT NULL DEFAULT 0,

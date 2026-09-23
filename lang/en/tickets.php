@@ -303,15 +303,38 @@ return [
         'ok'          => 'Close',
     ],
 
-    // SOP checklists on a ticket (PR #141, Santhosh Srinivasan).
+    // Checklists on a ticket (PR #141, Santhosh Srinivasan; per-template gating
+    // contributed later by the same author).
+    //
+    // 🔴 TRANSLATORS: THIS GROUP CONTAINS BOTH WARNINGS AND REFUSALS, and they
+    // must not be worded alike. A checklist is Standard (the ticket closes, the
+    // skipped steps are recorded) or Critical (the ticket does not close at
+    // all). Rendering a warning as "you cannot close this" is the opposite of
+    // what happens, and rendering a refusal as a warning promises something the
+    // server will not do. Each block below says which it is.
     'checklists' => [
-        'default_name'                 => 'SOP checklist',
-        // 🔴 TRANSLATORS: this is a WARNING, not a refusal. The ticket does
-        // close; the outstanding steps are recorded against it. Do not render
-        // it as "you cannot close this" — that is the opposite of what happens.
+        'default_name'                 => 'Checklist',
+
+        // ── WARNING. The ticket DOES close. ──────────────────────────────
         'close_with_mandatory_title'   => 'Close with steps outstanding?',
-        'close_with_mandatory'         => 'This ticket has {count} mandatory SOP step(s) still outstanding. Closing it now records which steps were skipped, and who skipped them, in the ticket notes.',
+        'close_with_mandatory'         => 'This ticket has {count} mandatory checklist step(s) still outstanding. Closing it now records which steps were skipped, and who skipped them, in the ticket notes.',
         'close_anyway'                 => 'Close anyway',
+
+        // ── WARNING. The ticket DOES close, with no checklist on it. ─────
+        'no_checklist_warn_title'      => 'No checklist attached',
+        'no_checklist_warn_msg'        => 'This ticket has no checklist attached. Close it anyway?',
+        'close_without_checklist'      => 'Close without a checklist',
+
+        // ── REFUSAL. The ticket does NOT close. ──────────────────────────
+        'blocked_title'                => 'Mandatory steps required',
+        'blocked_message'              => 'This ticket cannot be closed until its mandatory checklist steps are complete:',
+        'view_checklist'               => 'View checklist',
+        'no_checklist_blocked_title'   => 'Checklist required',
+        'no_checklist_blocked_msg'     => 'This ticket cannot be closed until a checklist is attached to it.',
+        'attach_checklist'             => 'Attach a checklist',
+
+        // Tooltip on the padlock marking a checklist that blocks closure.
+        'mandatory_for_closure'        => 'Mandatory for closure',
     ],
 
     // Closing a ticket with mandatory fields empty (Tickets → Settings →
@@ -775,7 +798,7 @@ return [
         // some are more descriptive — kept separate so translators can pick
         // different phrasings where natural.
         'headings' => [
-            'checklists'       => 'Closing with steps outstanding',
+            'checklists'       => 'Closing a ticket with steps outstanding',
             'mandatory_fields' => 'Closing with fields empty',
             'departments'      => 'Departments',
             'teams'            => 'Teams',
@@ -1435,16 +1458,26 @@ return [
         // Instructional paragraphs / notes / info boxes shown at the top of (or
         // within) the various tabs. Values that contain intended HTML are echoed
         // raw (no htmlspecialchars) so the markup renders.
-        // The closure-mode choice itself. 🔴 TRANSLATORS: "warn" is not a
-        // refusal — the ticket closes either way under that option, and the
-        // skipped steps are written to the ticket notes in BOTH cases. Only the
-        // second option actually prevents the close.
+        // The two closure-gate choices. 🔴 TRANSLATORS: these are the names of
+        // SETTINGS, not messages shown to an analyst - the dialogues live in
+        // `checklists` near the top of this file. Only "block" options prevent a
+        // close; every option here still writes the audit note.
         'checklists' => [
-            'warn_title'       => 'Warn, and record it',
-            'warn_desc'        => 'The analyst is told which mandatory steps are outstanding and can close anyway. Recommended: a step that has become impossible never traps the ticket.',
-            'block_title'      => 'Refuse the close',
-            'block_desc'       => 'The ticket cannot reach a closed status until every mandatory step is ticked. Choose this where an external standard requires it.',
-            'always_recorded'  => 'Either way, closing with steps outstanding writes an internal note naming the skipped steps, who closed it and through which interface. The setting decides whether it is allowed, never whether it is logged.',
+            'per_template_title'  => 'Follow the setting on each checklist (Recommended)',
+            'per_template_desc'   => 'Each checklist carries its own gate, chosen by whoever wrote it: Standard warns the analyst and records the override, Critical refuses the close until every mandatory step is ticked.',
+            'block_all_title'     => 'Block every ticket with outstanding steps',
+            'block_all_desc'      => 'Overrides the checklists themselves: no ticket reaches a closed status until every mandatory step is ticked, whatever the checklist says. There is deliberately no setting in the other direction — to relax a Critical checklist, edit the checklist, where the people following it can see the change.',
+
+            'empty_section_title' => 'Closing a ticket with no checklist attached',
+            'empty_section_desc'  => 'Some teams want every ticket to have followed a procedure. Most do not — a password reset needs no checklist, and insisting on one adds friction to the tickets that least deserve it.',
+            'empty_off_title'     => 'Allow it (Default)',
+            'empty_off_desc'      => 'A ticket with no checklist closes like any other.',
+            'empty_warn_title'    => 'Warn, and record it',
+            'empty_warn_desc'     => 'The analyst is asked to confirm and offered the attach dialogue. Closing anyway writes an internal note saying the ticket closed with no checklist and who closed it.',
+            'empty_block_title'   => 'Refuse the close',
+            'empty_block_desc'    => 'The ticket cannot reach a closed status until at least one checklist is attached to it.',
+
+            'always_recorded'     => 'Either way, closing with steps outstanding writes an internal note naming the skipped steps, who closed it and through which interface. These settings decide whether it is allowed, never whether it is logged.',
         ],
 
         // Mandatory fields at closure. 🔴 TRANSLATORS: the first two options are
@@ -1487,7 +1520,7 @@ return [
         ],
 
         'intros' => [
-            'checklists'      => 'An SOP checklist can mark steps as mandatory. This decides what happens if somebody closes a ticket before those steps are ticked.',
+            'checklists'      => 'A checklist can mark steps as mandatory. This decides what happens if somebody closes a ticket before those steps are ticked.',
             'mandatory_fields' => 'Choose which ticket fields must be filled in before a ticket is closed, and what happens when somebody closes one with any of them empty. The rule applies everywhere a ticket can be closed: the ticket screen, bulk actions, the REST API and workflows.',
             'departments'     => 'Departments group and route tickets to the right area of your organisation — create the ones your service desk uses to categorise and assign work.',
             'teams'           => 'Teams determine which departments analysts can access. Assign departments to teams, then assign analysts to teams to control their access.',
@@ -2511,7 +2544,7 @@ return [
             // than in its own settings, because it is a rule about closing
             // tickets and that is where somebody looks for it.
             'card_checklists_title' => 'Checklists',
-            'card_checklists_body'  => 'Decide what happens when somebody closes a ticket that still has mandatory SOP steps outstanding: <strong>warn</strong> and record an internal note naming the steps and who closed it, or <strong>block</strong> the close until they are done. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
+            'card_checklists_body'  => 'Decide what happens when somebody closes a ticket that still has mandatory checklist steps outstanding: <strong>warn</strong> and record an internal note naming the steps and who closed it, or <strong>block</strong> the close until they are done. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
             'card_mandatory_title' => 'Mandatory fields',
             'card_mandatory_body'  => 'Tick the fields that must be filled in before a ticket can close - category, resolution code, owner and so on. Then choose what happens when somebody closes one with a field empty: <strong>warn</strong>, <strong>warn and email</strong> someone such as a service delivery manager, or <strong>refuse</strong> the close. A separate switch records it on the ticket as an internal note. A field switched off for a company is never required, and merging tickets never triggers it. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
             'card_cleanup_title'   => 'Reply Cleanup AI',

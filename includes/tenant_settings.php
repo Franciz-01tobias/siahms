@@ -174,12 +174,29 @@ const SETTING_TICKET_RESOLUTION_CODE  = 'ticket_resolution_code_enabled';
 // cleared." Either way the skipped steps are recorded on the ticket - the
 // setting decides whether the analyst may proceed, never whether it is logged.
 const SETTING_TICKET_CHECKLIST_CLOSURE = 'ticket_checklist_closure_mode';
+const SETTING_TICKET_CHECKLIST_EMPTY_CLOSURE = 'ticket_checklist_empty_closure_mode';
 
 /** 'warn' (default) or 'block' — how closure with outstanding mandatory steps behaves. */
 function ticketChecklistClosureMode(PDO $conn, ?int $tenantId): string
 {
-    $v = tenantSetting($conn, $tenantId, SETTING_TICKET_CHECKLIST_CLOSURE, 'warn');
-    return $v === 'block' ? 'block' : 'warn';
+    $v = tenantSetting($conn, $tenantId, SETTING_TICKET_CHECKLIST_CLOSURE, 'per_template');
+    if ($v === 'block' || $v === 'block_all') {
+        return 'block_all';
+    }
+    return 'per_template';
+}
+
+/** 'off' (default), 'warn', or 'block' — when closing a ticket with no SOP attached. */
+function ticketChecklistEmptyClosureMode(PDO $conn, ?int $tenantId): string
+{
+    $v = tenantSetting($conn, $tenantId, SETTING_TICKET_CHECKLIST_EMPTY_CLOSURE, 'off');
+    if ($v === 'block') {
+        return 'block';
+    }
+    if ($v === 'warn') {
+        return 'warn';
+    }
+    return 'off';
 }
 
 // ---------------------------------------------------------------------------

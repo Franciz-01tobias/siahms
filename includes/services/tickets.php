@@ -654,7 +654,7 @@ class TicketsService
         // through updateTicket(). The rule itself lives in ChecklistsService;
         // this is only the hook, so tickets does not learn the checklist rules.
         if ($newStatusId !== null && $newIsClosed && !$oldIsClosed) {
-            ChecklistsService::recordClosureOverride($conn, $ctx, $ticketId);
+            ChecklistsService::recordClosureOverride($conn, $ctx, $ticketId, $closeTenant);
             // Same hook, same reasoning: the note and the email for a close that
             // went ahead with mandatory fields empty.
             MandatoryFieldsService::afterClosure($conn, $ctx, $ticketId, $closeTenant, $emptyOnClose);

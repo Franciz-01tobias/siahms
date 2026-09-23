@@ -4460,24 +4460,98 @@ async function assignStatus() {
         return;
     }
 
-    // SOP checklists (PR #141): outstanding mandatory steps WARN and are
-    // recorded, they do not block — the same line the tasks check above draws,
-    // and for the same reason. As contributed this was a hard block with an
-    // alert(), which trapped any ticket whose remaining step had become
-    // impossible, and which the API ignored entirely. The server now writes an
-    // override note naming the skipped steps (ChecklistsService), so the
-    // exception is attributable instead of merely forbidden.
+    // Checklists, part one: closing a ticket with NO checklist attached at all.
+    // Off by default — an install that has not asked for this never sees it.
+    //
+    // ⚠️ This is the browser being helpful, not the rule. The rule is in
+    // ChecklistsService::assertClosureAllowed(), which the save goes through
+    // whatever happens here; skipping this dialogue cannot get a close past it.
+    if (closing && typeof getTicketChecklistEmptyClosureMode === "function") {
+        const emptyMode = getTicketChecklistEmptyClosureMode();
+        const attached  = (typeof getAttachedChecklistsCount === "function")
+            ? getAttachedChecklistsCount() : 0;
+
+        if (attached === 0 && emptyMode !== 'off') {
+            const ticketId = currentEmail ? (currentEmail.ticket_id || currentEmail.id) : null;
+            const openAttach = () => {
+                if (typeof openAttachChecklistModal === "function" && ticketId) {
+                    openAttachChecklistModal(ticketId);
+                }
+            };
+
+            if (emptyMode === 'block') {
+                // Both buttons mean something: the close is refused either way,
+                // and OK is a shortcut to the thing that would unblock it.
+                const attachNow = await showConfirm({
+                    title: t('tickets.checklists.no_checklist_blocked_title'),
+                    message: t('tickets.checklists.no_checklist_blocked_msg'),
+                    okLabel: t('tickets.checklists.attach_checklist'), okClass: 'primary'
+                });
+                select.value = oldValue;   // or the dropdown shows a status never applied
+                if (attachNow) openAttach();
+                return;
+            }
+
+            const closeAnyway = await showConfirm({
+                title: t('tickets.checklists.no_checklist_warn_title'),
+                message: t('tickets.checklists.no_checklist_warn_msg'),
+                okLabel: t('tickets.checklists.close_without_checklist'), okClass: 'danger'
+            });
+            if (!closeAnyway) {
+                select.value = oldValue;   // or the dropdown shows a status never applied
+                openAttach();
+                return;
+            }
+        }
+    }
+
+    // Checklists, part two: outstanding mandatory steps.
+    //
+    // A Standard checklist WARNS and is recorded — the same line the tasks check
+    // above draws, and for the same reason. As originally contributed this was a
+    // hard block with an alert(), which trapped any ticket whose remaining step
+    // had become impossible, and which the API ignored entirely.
+    //
+    // A Critical checklist does block, because some procedures really are the
+    // sort where skipping a step is a compliance breach rather than a nuisance.
+    // Which one applies is decided per template by whoever wrote the procedure,
+    // and resolved server-side into effective_closure_mode — the browser is told
+    // the answer, it does not work it out, or it would be a second copy of the
+    // rule free to disagree with the one that counts.
     if (closing && typeof getIncompleteMandatorySteps === "function") {
         const pendingMandatory = getIncompleteMandatorySteps();
         if (pendingMandatory.length > 0) {
-            const grouped = {};
-            pendingMandatory.forEach(m => {
-                const cName = m.checklist || t('tickets.checklists.default_name');
-                (grouped[cName] = grouped[cName] || []).push(m.step);
-            });
-            const stepList = Object.entries(grouped)
-                .map(([cName, steps]) => cName + "\n" + steps.map(s => "    • " + s).join("\n"))
-                .join("\n\n");
+            const openChecklist = () => {
+                if (typeof openChecklistModal === "function") {
+                    openChecklistModal(currentEmail ? currentEmail.ticket_id : null);
+                }
+            };
+            const listOf = (steps) => {
+                const grouped = {};
+                steps.forEach(m => {
+                    const cName = m.checklist || t('tickets.checklists.default_name');
+                    (grouped[cName] = grouped[cName] || []).push(m.step);
+                });
+                return Object.entries(grouped)
+                    .map(([cName, s]) => cName + "\n" + s.map(x => "    • " + x).join("\n"))
+                    .join("\n\n");
+            };
+
+            const blocking = pendingMandatory.filter(m => m.closure_mode === 'block');
+            if (blocking.length > 0) {
+                // Refused either way; OK is a shortcut to the steps that would
+                // clear it, so both buttons do something distinct.
+                const viewNow = await showConfirm({
+                    title: t('tickets.checklists.blocked_title'),
+                    message: t('tickets.checklists.blocked_message') + "\n\n" + listOf(blocking),
+                    okLabel: t('tickets.checklists.view_checklist'), okClass: 'primary'
+                });
+                select.value = oldValue;   // or the dropdown shows a status never applied
+                if (viewNow) openChecklist();
+                return;
+            }
+
+            const stepList = listOf(pendingMandatory);
 
             const ok = await showConfirm({
                 title: t('tickets.checklists.close_with_mandatory_title'),
@@ -4487,13 +4561,12 @@ async function assignStatus() {
             });
             if (!ok) {
                 select.value = oldValue;   // or the dropdown shows a status never applied
-                if (typeof openChecklistModal === "function") {
-                    openChecklistModal(currentEmail ? currentEmail.ticket_id : null);
-                }
+                openChecklist();
                 return;
             }
         }
     }
+
     const openTasks = (tasksForTicket || []).filter(tk => !tk.status_is_closed).length;
     if (closing && openTasks > 0) {
         const ok = await showConfirm({
