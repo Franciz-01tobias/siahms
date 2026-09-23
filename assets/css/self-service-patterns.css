@@ -78,6 +78,24 @@
     background-image: url('../img/portal-flow-dark.svg');
 }
 
+/* Mesh — three rotated ribbons. Same machinery as Flow, more of it: this one
+   is the showpiece and Flow is the one that sits behind a page of text all
+   day. Both are files rather than gradients, so neither takes `color`. */
+.ssp-pat-mesh,
+.ss-pat-mesh {
+    background-image: url('../img/portal-mesh-light.svg');
+    background-position: center bottom;
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-attachment: fixed;
+    background-color: var(--surface, #fff);
+}
+
+[data-theme-mode="dark"] .ssp-pat-mesh,
+[data-theme-mode="dark"] .ss-pat-mesh {
+    background-image: url('../img/portal-mesh-dark.svg');
+}
+
 /* The colour every pattern is drawn in.
  *
  * 🔴 ~2%, not the 5.5% this started at. Set on the elements themselves rather
@@ -130,4 +148,14 @@
 }
 [data-theme-mode="dark"] .ssp-pattern.ssp-pat-flow {
     background-image: url('../img/portal-flow-dark.svg');
+}
+
+.ssp-pattern.ssp-pat-mesh {
+    background-image: url('../img/portal-mesh-light.svg');
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+[data-theme-mode="dark"] .ssp-pattern.ssp-pat-mesh {
+    background-image: url('../img/portal-mesh-dark.svg');
 }

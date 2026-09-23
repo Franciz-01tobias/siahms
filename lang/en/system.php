@@ -1811,6 +1811,7 @@ return [
         'pattern_grid'       => 'Grid',
         'pattern_diagonal'   => 'Diagonal',
         'pattern_flow'       => 'Flow',
+        'pattern_mesh'       => 'Mesh',
 
         'preview_heading'     => 'Preview',
         'preview_desc'        => 'What a customer sees. Updates as you change the settings above; nothing is saved until you press Save.',
