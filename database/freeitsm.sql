@@ -255,6 +255,29 @@ CREATE TABLE IF NOT EXISTS `user_preferences` (
     CONSTRAINT `fk_user_pref_analyst` FOREIGN KEY (`analyst_id`) REFERENCES `analysts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- The same idea for SELF-SERVICE PORTAL users.
+--
+-- They have no analyst row, so `user_preferences` above cannot hold anything for
+-- them. That gap was first patched by giving the portal's colour palette its own
+-- column on `users`; this is the generic twin, so the next portal preference does
+-- not become a third one-off column.
+--
+-- ⚠️ A fresh install gets the unique key and the foreign key below. An EXISTING
+-- install gains this table from Database Verification, which creates columns but
+-- not indexes - so includes/portal_preferences.php deliberately does a
+-- SELECT-then-UPDATE rather than ON DUPLICATE KEY, which would silently insert a
+-- second row where no unique key exists.
+CREATE TABLE IF NOT EXISTS `portal_user_preferences` (
+    `id`                INT NOT NULL AUTO_INCREMENT,
+    `user_id`           INT NOT NULL,
+    `preference_key`    VARCHAR(100) NOT NULL,
+    `preference_value`  TEXT NULL,
+    `updated_datetime`  DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_portal_user_pref` (`user_id`, `preference_key`),
+    CONSTRAINT `fk_portal_user_pref_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Handover document templates (discussion #56).
 --
 -- `blocks` is a JSON array describing which sections appear, in what order, and

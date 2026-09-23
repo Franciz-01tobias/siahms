@@ -350,6 +350,18 @@ return [
     ],
 
     'help_centre' => [
+        // ── How the list is drawn. The names match the analyst side's
+        //    (Cards / List / Tree) so a customer and an analyst are
+        //    describing the same thing to each other.
+        'layout_label'  => 'How to show the articles',
+        'layout_cards'  => 'Cards',
+        'layout_list'   => 'List',
+        'layout_tree'   => 'Tree',
+        'layout_table'  => 'Table',
+        'unfiled'       => 'Everything else',
+        'col_title'     => 'Article',
+        'col_folder'    => 'Section',
+
         'title'              => 'Self-Service Portal — Help Centre',
         'heading'            => 'Help Centre',
         'lede'               => 'Guides and answers from the IT team. Search before raising a ticket — the answer may already be here.',

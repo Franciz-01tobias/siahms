@@ -321,6 +321,22 @@ return [
         'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
+    // The same idea for SELF-SERVICE PORTAL users, who have no analyst row and
+    // so cannot use the table above. The portal's colour palette was given its
+    // own column on `users` when this gap first appeared; this is the generic
+    // twin, so the next portal preference does not become a third column.
+    //
+    // 🔴 Everything that reads it degrades when it is absent (see
+    // includes/portal_preferences.php): the code ships before an operator runs
+    // Database Verification, so on that install this table does not exist yet.
+    'portal_user_preferences' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'user_id'           => 'INT NOT NULL',
+        'preference_key'    => 'VARCHAR(100) NOT NULL',
+        'preference_value'  => 'TEXT NULL',
+        'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
     'ticket_types' => [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
         'name'              => 'VARCHAR(100) NOT NULL',
