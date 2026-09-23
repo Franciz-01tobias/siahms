@@ -116,9 +116,13 @@
    Month view (month grid is module-specific; only the week/day inner
    body is shared via calendar-grid.css)
    ============================================================ */
+/* minmax(0, 1fr), never plain 1fr: `1fr` means `minmax(auto, 1fr)`, so a column
+   cannot shrink below its own content and one long event title widens its day
+   while the empty ones collapse. The pills already carry text-overflow:
+   ellipsis; it never fired, because the column grew instead. */
 .month-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     height: 100%;
 }
 
@@ -134,6 +138,9 @@
     flex-direction: column;
     background: var(--surface, #fff);
     overflow: hidden;
+    /* The other half of the fix above: a grid ITEM defaults to min-width auto,
+       so allowing the track to shrink is not enough on its own. */
+    min-width: 0;
 }
 
 .month-day:nth-child(7n) { border-right: none; }
