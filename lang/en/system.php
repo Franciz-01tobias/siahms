@@ -1810,7 +1810,7 @@ return [
         'pattern_dots'       => 'Dots',
         'pattern_grid'       => 'Grid',
         'pattern_diagonal'   => 'Diagonal',
-        'pattern_topography' => 'Contours',
+        'pattern_flow'       => 'Flow',
 
         'preview_heading'     => 'Preview',
         'preview_desc'        => 'What a customer sees. Updates as you change the settings above; nothing is saved until you press Save.',

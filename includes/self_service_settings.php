@@ -21,7 +21,7 @@
 // rather than texture, and no amount of lightening made it calm. An install
 // that had already chosen it degrades to no pattern, because the getter below
 // blanks any value not on this list.
-const SELF_SERVICE_PATTERNS = ['dots', 'grid', 'diagonal', 'topography'];
+const SELF_SERVICE_PATTERNS = ['dots', 'grid', 'diagonal', 'flow'];
 
 /**
  * Every self-service portal setting, with its default.

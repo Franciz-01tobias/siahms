@@ -52,12 +52,30 @@
     background-color: var(--surface, #fff);
 }
 
-.ssp-pat-topography,
-.ss-pat-topography {
-    background-image:
-        repeating-radial-gradient(circle at 20% 30%, transparent 0 26px, currentColor 26px 27px, transparent 27px 54px),
-        repeating-radial-gradient(circle at 75% 70%, transparent 0 32px, currentColor 32px 33px, transparent 33px 66px);
+/* Flow — a family of phase-shifted sine curves, generated rather than drawn.
+ *
+ * ⚠️ THE ONLY PATTERN THAT IS NOT `currentColor`. The others are CSS gradients
+ * and inherit the page's colour; this one is an SVG file, which is a separate
+ * document and cannot. So there are two files and the theme picks one, and
+ * their strength is baked into the file rather than set here.
+ *
+ * Anchored to the BOTTOM. The band is densest through its middle, and headings
+ * and the first cards live at the top - pinning it low keeps the busiest part
+ * of the drawing away from the part of the page people actually read.
+ */
+.ssp-pat-flow,
+.ss-pat-flow {
+    background-image: url('../img/portal-flow-light.svg');
+    background-position: center bottom;
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-attachment: fixed;
     background-color: var(--surface, #fff);
+}
+
+[data-theme-mode="dark"] .ssp-pat-flow,
+[data-theme-mode="dark"] .ss-pat-flow {
+    background-image: url('../img/portal-flow-dark.svg');
 }
 
 /* The colour every pattern is drawn in.
@@ -66,8 +84,8 @@
  * than inherited, because `currentColor` would otherwise pick up whatever text
  * colour the surrounding component happened to have - which is how a "subtle"
  * pattern turns solid inside a dark header. */
-.ssp-pat-dots, .ssp-pat-grid, .ssp-pat-diagonal, .ssp-pat-topography,
-.ss-pat-dots,  .ss-pat-grid,  .ss-pat-diagonal,  .ss-pat-topography {
+.ssp-pat-dots, .ssp-pat-grid, .ssp-pat-diagonal,
+.ss-pat-dots,  .ss-pat-grid,  .ss-pat-diagonal {
     color: rgba(0, 0, 0, 0.022);
 }
 
@@ -76,11 +94,10 @@
 [data-theme-mode="dark"] .ssp-pat-dots,
 [data-theme-mode="dark"] .ssp-pat-grid,
 [data-theme-mode="dark"] .ssp-pat-diagonal,
-[data-theme-mode="dark"] .ssp-pat-topography,
 [data-theme-mode="dark"] .ss-pat-dots,
 [data-theme-mode="dark"] .ss-pat-grid,
 [data-theme-mode="dark"] .ss-pat-diagonal,
-[data-theme-mode="dark"] .ss-pat-topography {
+[data-theme-mode="dark"] .ss-pat-diagonal {
     color: rgba(255, 255, 255, 0.032);
 }
 
@@ -91,15 +108,26 @@
 .ssp-pattern.ssp-pat-dots      { background-size: 12px 12px; }
 .ssp-pattern.ssp-pat-grid      { background-size: 16px 16px; }
 .ssp-pattern.ssp-pat-diagonal  { background-image: repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 10px); }
-.ssp-pattern.ssp-pat-topography{ background-image:
-        repeating-radial-gradient(circle at 30% 40%, transparent 0 10px, currentColor 10px 11px, transparent 11px 22px); }
 .ssp-pattern.ssp-pat-dots, .ssp-pattern.ssp-pat-grid,
-.ssp-pattern.ssp-pat-diagonal, .ssp-pattern.ssp-pat-topography {
+.ssp-pattern.ssp-pat-diagonal {
     color: rgba(0, 0, 0, 0.16);
 }
 [data-theme-mode="dark"] .ssp-pattern.ssp-pat-dots,
 [data-theme-mode="dark"] .ssp-pattern.ssp-pat-grid,
-[data-theme-mode="dark"] .ssp-pattern.ssp-pat-diagonal,
-[data-theme-mode="dark"] .ssp-pattern.ssp-pat-topography {
+[data-theme-mode="dark"] .ssp-pattern.ssp-pat-diagonal {
     color: rgba(255, 255, 255, 0.22);
+}
+
+/* Flow's swatch shows the WHOLE drawing rather than a crop of it: `cover` on a
+   92x62px tile lands in the middle of the band and shows four parallel lines,
+   which says nothing about what you are picking. It also takes no `color` - it
+   is a file, not a gradient. */
+.ssp-pattern.ssp-pat-flow {
+    background-image: url('../img/portal-flow-light.svg');
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+[data-theme-mode="dark"] .ssp-pattern.ssp-pat-flow {
+    background-image: url('../img/portal-flow-dark.svg');
 }
