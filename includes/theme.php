@@ -64,7 +64,20 @@ class Theme
         // portal would be tokenised but the tokens unreachable. Their choice
         // lives on the user row (users.theme_preference); the session copy is
         // just a cache so a signed-in page doesn't hit the DB every request.
-        if (empty($_SESSION['analyst_id']) && !empty($_SESSION['ss_user_id'])) {
+        // 🔴 THIS USED TO REQUIRE analyst_id TO BE EMPTY, AND THAT WAS THE BUG.
+        //
+        // The portal and the app are one host and one PHPSESSID. An analyst who
+        // also has a portal account - every developer, and most admins testing
+        // their own portal - carries both ids at once, so the condition was
+        // false and the portal rendered the ANALYST's palette. The portal choice
+        // was saved correctly and then ignored on every render, which from the
+        // outside is indistinguishable from "it did not save".
+        //
+        // What decides it is WHICH PRODUCT the page belongs to, not who happens
+        // to be signed in elsewhere. self-service/includes/header.php defines
+        // the constant before anything asks.
+        $onPortal = defined('FREEITSM_SELF_SERVICE') && FREEITSM_SELF_SERVICE;
+        if (!empty($_SESSION['ss_user_id']) && ($onPortal || empty($_SESSION['analyst_id']))) {
             if (isset($_SESSION['ss_theme']) && self::isValid($_SESSION['ss_theme'])) {
                 return self::$cache[$ckey] = $_SESSION['ss_theme'];
             }

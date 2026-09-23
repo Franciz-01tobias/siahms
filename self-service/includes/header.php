@@ -35,6 +35,17 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../includes/i18n.php';
 I18n::initFromSession();
+/**
+ * 🔑 Mark this request as a PORTAL render, before theme.php is asked anything.
+ *
+ * The portal and the app share a PHPSESSID, so "is there an analyst_id in the
+ * session?" cannot answer "whose palette is this page for?". This can, and it
+ * is set in the one file every signed-in portal page goes through.
+ */
+if (!defined('FREEITSM_SELF_SERVICE')) {
+    define('FREEITSM_SELF_SERVICE', true);
+}
+
 require_once __DIR__ . '/../../includes/theme.php';
 // The logo the header draws (GH #87). login.php and register.php require this
 // themselves; the six signed-in pages come through here, so it belongs here.
