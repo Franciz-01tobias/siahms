@@ -145,6 +145,12 @@ return [
     ['assets', 'idx_assets_tag', 'key', '(`tenant_id`,`asset_tag`)'],
     ['assets', 'uq_assets_qr_token', 'unique', '(`qr_token`)'],
     ['users_assets', 'uq_user_asset', 'unique', '(`user_id`,`asset_id`)'],
+    // A holder is a requester OR an analyst, and MySQL treats repeated NULLs
+    // in a unique key as distinct - so uq_user_asset above does not constrain
+    // an analyst row at all (its user_id is NULL). This is the one that stops
+    // the same analyst being given the same asset twice.
+    ['users_assets', 'uq_analyst_asset', 'unique', '(`analyst_id`,`asset_id`)'],
+    ['portal_user_preferences', 'uq_portal_user_pref', 'unique', '(`user_id`,`preference_key`)'],
     ['asset_checkout_log', 'idx_acl_asset', 'key', '(`asset_id`)'],
     ['asset_physical_disks', 'idx_asset_physical_disks_asset', 'key', '(`asset_id`)'],
     ['asset_physical_disks', 'idx_asset_physical_disks_model', 'key', '(`model`(100))'],
