@@ -1068,7 +1068,13 @@ class TicketsService
         $conn->prepare(
             "INSERT INTO ticket_audit (ticket_id, analyst_id, field_name, old_value, new_value, created_datetime)
              VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
-        )->execute([$ticketId, $analystId, $field, $old, $new]);
+        // 🔴 NULL, not 0, when there is no analyst. A portal user closing their
+        // own ticket acts through ActorContext::fromPortalUser(), whose actorId
+        // is 0 because a requester is not a member of staff. Storing 0 would
+        // point the trail at an analyst row that does not exist; storing NULL
+        // says plainly that nobody on the desk did this, and the field name
+        // beside it says who did.
+        )->execute([$ticketId, $analystId > 0 ? $analystId : null, $field, $old, $new]);
     }
 
     // generateTicketNumber() moved to includes/ticket_numbering.php (GH #71).

@@ -110,7 +110,28 @@ $pageStyles = <<<'CSS'
     background: var(--surface, #fff);
     border-bottom: 1px solid var(--border, #e5e7eb);
     flex-shrink: 0;
+    /* The subject and meta stack; the close button sits to the right of
+       both, away from Reply. Deliberately NOT beside the reply button:
+       'send' and 'this is over' next to each other is a misclick waiting
+       to happen, and they are opposite intentions. */
+    display: flex; align-items: flex-start; gap: 16px;
 }
+.tk-read-head > div:first-child, .tk-read-head > h1 { min-width: 0; }
+.tk-read-head .tk-read-subject, .tk-read-head .tk-read-meta { flex: 1 1 auto; }
+/* Quiet by default. Closing your own ticket is a useful escape hatch, not
+   something the page should be encouraging on every visit. */
+.tk-close-btn {
+    margin-left: auto; flex-shrink: 0; align-self: center;
+    background: transparent; color: var(--text-muted, #666);
+    border: 1px solid var(--border, #e5e7eb);
+    padding: 6px 12px; border-radius: 6px; font-size: 12.5px; cursor: pointer;
+}
+.tk-close-btn:hover:not(:disabled) {
+    border-color: var(--danger-border, #f5c6c2);
+    color: var(--danger-text, #b3261e);
+    background: var(--danger-bg, #fdecea);
+}
+.tk-close-btn:disabled { opacity: .55; cursor: progress; }
 .tk-read-subject { font-size: 17px; font-weight: 600; color: var(--text, #333); margin: 0 0 8px 0; }
 .tk-read-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--text-muted, #666); }
 .tk-num {
@@ -523,11 +544,15 @@ let ssTickets = [];
               +     (t.department_name ? '<span>' + esc(t.department_name) + '</span>' : '')
               +     '<span>' + esc(window.t('self-service.ticket.created', { date: fullDate(t.created_datetime) })) + '</span>'
               +   '</div>'
+              +   closeButtonHtml(t)
               + '</div>'
               + '<div class="tk-thread" id="tkThread">' + (msgs || '<div class="loading-state">' + esc(window.t('self-service.ticket.no_conversation')) + '</div>') + '</div>'
               + composerHtml();
 
+            ssCurrentTicketId = Number(t.id) || 0;
             wireComposer();
+            const closeBtn = document.getElementById('ssSelfClose');
+            if (closeBtn) closeBtn.addEventListener('click', selfCloseTicket);
             const thread = document.getElementById('tkThread');
             if (thread) thread.scrollTop = thread.scrollHeight;   // newest first to the eye
         }
@@ -588,6 +613,68 @@ let ssTickets = [];
                  +     '<div class="tk-msg-card">' + o.html + atts + docs + recs + '</div>'
                  +   '</div>'
                  + '</div>';
+        }
+
+        // Which ticket the read pane is showing. renderTicket() sets it; the
+        // close handler is the only thing that needs it, and passing it through
+        // three layers of markup-building string concatenation to get there
+        // would be worse than one variable beside them.
+        let ssCurrentTicketId = 0;
+
+        /**
+         * "No longer needed", offered only when the administrator has switched
+         * it on AND the ticket is still open.
+         *
+         * 🔑 This decides what is DRAWN. api/self-service/close_ticket.php
+         * re-checks the switch and re-checks that the ticket belongs to the
+         * person asking — a button that is not on the page is not a rule.
+         */
+        function closeButtonHtml(t) {
+            if (!(window.SS_PORTAL && window.SS_PORTAL.allow_self_close)) return '';
+            if (Number(t.is_closed) === 1) return '';
+            return '<button type="button" class="btn tk-close-btn" id="ssSelfClose" title="'
+                 + esc(window.t('self-service.ticket.self_close_hint')) + '">'
+                 + esc(window.t('self-service.ticket.self_close')) + '</button>';
+        }
+
+        async function selfCloseTicket() {
+            // The shared OK/Cancel dialog rather than the browser's confirm():
+            // closing cannot be undone from the portal, so it is worth one
+            // deliberate tap — and the textarea is how the requester says WHY,
+            // which is the part an analyst actually wants.
+            const ok = await showConfirm({
+                title:    window.t('self-service.ticket.self_close_title'),
+                message:  window.t('self-service.ticket.self_close_confirm'),
+                okLabel:  window.t('self-service.ticket.self_close'),
+                okClass:  'danger',
+                textarea: { placeholder: window.t('self-service.ticket.self_close_reason'),
+                            label:       window.t('self-service.ticket.self_close_reason_label') }
+            });
+            if (!ok) return;
+
+            const btn = document.getElementById('ssSelfClose');
+            if (btn) btn.disabled = true;
+            try {
+                const r = await fetch(API_BASE + 'close_ticket.php', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket_id: ssCurrentTicketId, reason: (ok && ok.text) || '' })
+                });
+                const d = await r.json();
+                if (!d.success) {
+                    showToast(d.error || window.t('self-service.ticket.self_close_failed'), 'error');
+                    if (btn) btn.disabled = false;
+                    return;
+                }
+                showToast(window.t('self-service.ticket.self_close_done'), 'success');
+                // Reloaded rather than patched by hand: closing changes the
+                // status badge, the counts in the list beside it and whether a
+                // reply box belongs there at all, and the server knows all three.
+                window.location.reload();
+            } catch (e) {
+                showToast(window.t('self-service.ticket.self_close_failed'), 'error');
+                if (btn) btn.disabled = false;
+            }
         }
 
         function composerHtml() {

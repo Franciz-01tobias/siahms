@@ -1810,7 +1810,6 @@ return [
         'pattern_dots'       => 'Dots',
         'pattern_grid'       => 'Grid',
         'pattern_diagonal'   => 'Diagonal',
-        'pattern_waves'      => 'Waves',
         'pattern_topography' => 'Contours',
 
         'preview_heading'     => 'Preview',

@@ -195,7 +195,7 @@ try {
     <link rel="stylesheet" href="../assets/css/self-service.css?v=16">
 <?php if ($ssAppearance['background_pattern'] !== ''): ?>
     <!-- Only fetched when a pattern is actually in use. -->
-    <link rel="stylesheet" href="../assets/css/self-service-patterns.css?v=1">
+    <link rel="stylesheet" href="../assets/css/self-service-patterns.css?v=2">
 <?php endif; ?>
 <?php if (!empty($needsFormLogic)): ?>
     <!-- Form blocks (notes). In the HEAD rather than beside form-logic.js in the

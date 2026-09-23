@@ -30,6 +30,11 @@ try {
     $ticketStmt = $conn->prepare(
         "SELECT t.id, t.ticket_number, t.subject,
                 ts.name AS status, ts.colour AS status_colour,
+                -- Whether the ticket is already finished. The portal needs this
+                -- to decide whether to offer the self-close button; the status
+                -- NAME cannot answer it, because installs rename statuses and
+                -- add their own, and more than one can be a closed one.
+                ts.is_closed,
                 tp.name AS priority,
                 t.created_datetime, t.updated_datetime,
                 d.name as department_name

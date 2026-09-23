@@ -5,19 +5,31 @@
  * serve, scales to any screen without a second asset, and cannot 404 on an
  * install that copied the app folder without the images.
  *
- * ⚠️ Every one is drawn in `currentColor`-neutral greys at low opacity and sits
- * BEHIND the page's own surface colour, so it works in light and dark without a
- * second set of rules. A pattern that looked good on white and turned the dark
- * theme into mud would be worse than no pattern.
+ * 🔴 THESE MUST BE ALMOST INVISIBLE. The first version used 5.5% opacity with
+ * tight spacing, and on a real portal it was overwhelming - the diagonal read as
+ * bold hatching across the whole page and competed with the text. Ed sent
+ * screenshots. The rule that came out of it: a background pattern is texture you
+ * notice only if you look for it, not decoration. If you can read the pattern
+ * before you read the page, it is too strong.
+ *
+ * Two levers, and both matter: OPACITY (now ~2%) and SPACING (now roughly double
+ * the original). Lightening alone still gives a busy page, because the density
+ * is what the eye picks up.
+ *
+ * ⚠️ Every one is drawn in `currentColor` at very low opacity and sits BEHIND
+ * the page's own surface colour, so it works in light and dark without a second
+ * set of rules.
  *
  * The class is chosen from a fixed list in includes/self_service_settings.php -
- * these names and that list must agree.
+ * these names and that list must agree. "waves" was removed after the same
+ * review: it read as a chain of overlapping ovals rather than texture, and no
+ * amount of lightening made it calm.
  */
 
 .ssp-pat-dots,
 .ss-pat-dots {
     background-image: radial-gradient(currentColor 1px, transparent 1px);
-    background-size: 18px 18px;
+    background-size: 26px 26px;
     background-color: var(--surface, #fff);
 }
 
@@ -26,55 +38,68 @@
     background-image:
         linear-gradient(to right, currentColor 1px, transparent 1px),
         linear-gradient(to bottom, currentColor 1px, transparent 1px);
-    background-size: 24px 24px;
+    background-size: 38px 38px;
     background-color: var(--surface, #fff);
 }
 
+/* Was a 1px line every 12px, which is dense enough to read as hatching. One
+   line every 26px, and the line itself is hairline. */
 .ssp-pat-diagonal,
 .ss-pat-diagonal {
     background-image: repeating-linear-gradient(
-        45deg, currentColor 0 1px, transparent 1px 12px
+        45deg, currentColor 0 1px, transparent 1px 26px
     );
-    background-color: var(--surface, #fff);
-}
-
-.ssp-pat-waves,
-.ss-pat-waves {
-    background-image:
-        radial-gradient(circle at 50% 100%, transparent 9px, currentColor 9px, currentColor 10px, transparent 10px),
-        radial-gradient(circle at 50% 0,   transparent 9px, currentColor 9px, currentColor 10px, transparent 10px);
-    background-size: 28px 14px;
     background-color: var(--surface, #fff);
 }
 
 .ssp-pat-topography,
 .ss-pat-topography {
     background-image:
-        repeating-radial-gradient(circle at 20% 30%, transparent 0 14px, currentColor 14px 15px, transparent 15px 30px),
-        repeating-radial-gradient(circle at 75% 70%, transparent 0 18px, currentColor 18px 19px, transparent 19px 38px);
+        repeating-radial-gradient(circle at 20% 30%, transparent 0 26px, currentColor 26px 27px, transparent 27px 54px),
+        repeating-radial-gradient(circle at 75% 70%, transparent 0 32px, currentColor 32px 33px, transparent 33px 66px);
     background-color: var(--surface, #fff);
 }
 
-/* The colour every pattern is drawn in. Low enough to sit under text at any
-   size, and it follows the theme's own text colour so dark mode needs no
-   second rule. Set on the elements themselves rather than inherited, because
-   `currentColor` above would otherwise pick up whatever text colour the
-   surrounding component happened to have. */
-.ssp-pat-dots, .ssp-pat-grid, .ssp-pat-diagonal, .ssp-pat-waves, .ssp-pat-topography,
-.ss-pat-dots,  .ss-pat-grid,  .ss-pat-diagonal,  .ss-pat-waves,  .ss-pat-topography {
-    color: rgba(0, 0, 0, 0.055);
+/* The colour every pattern is drawn in.
+ *
+ * 🔴 ~2%, not the 5.5% this started at. Set on the elements themselves rather
+ * than inherited, because `currentColor` would otherwise pick up whatever text
+ * colour the surrounding component happened to have - which is how a "subtle"
+ * pattern turns solid inside a dark header. */
+.ssp-pat-dots, .ssp-pat-grid, .ssp-pat-diagonal, .ssp-pat-topography,
+.ss-pat-dots,  .ss-pat-grid,  .ss-pat-diagonal,  .ss-pat-topography {
+    color: rgba(0, 0, 0, 0.022);
 }
 
-:root:not([data-theme="light"]) [data-theme-mode="dark"] .ssp-pat-dots,
+/* Dark mode carries a little more, because a light mark on a dark ground reads
+   fainter than the same mark inverted - but still barely there. */
 [data-theme-mode="dark"] .ssp-pat-dots,
 [data-theme-mode="dark"] .ssp-pat-grid,
 [data-theme-mode="dark"] .ssp-pat-diagonal,
-[data-theme-mode="dark"] .ssp-pat-waves,
 [data-theme-mode="dark"] .ssp-pat-topography,
 [data-theme-mode="dark"] .ss-pat-dots,
 [data-theme-mode="dark"] .ss-pat-grid,
 [data-theme-mode="dark"] .ss-pat-diagonal,
-[data-theme-mode="dark"] .ss-pat-waves,
 [data-theme-mode="dark"] .ss-pat-topography {
-    color: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.032);
+}
+
+/* The swatches on the settings screen are 92x62px, so at page spacing most of
+   them would show one mark or none. They get their own tighter, stronger copy -
+   a preview has to be legible to be a preview, and it is the only place these
+   are deliberately visible. */
+.ssp-pattern.ssp-pat-dots      { background-size: 12px 12px; }
+.ssp-pattern.ssp-pat-grid      { background-size: 16px 16px; }
+.ssp-pattern.ssp-pat-diagonal  { background-image: repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 10px); }
+.ssp-pattern.ssp-pat-topography{ background-image:
+        repeating-radial-gradient(circle at 30% 40%, transparent 0 10px, currentColor 10px 11px, transparent 11px 22px); }
+.ssp-pattern.ssp-pat-dots, .ssp-pattern.ssp-pat-grid,
+.ssp-pattern.ssp-pat-diagonal, .ssp-pattern.ssp-pat-topography {
+    color: rgba(0, 0, 0, 0.16);
+}
+[data-theme-mode="dark"] .ssp-pattern.ssp-pat-dots,
+[data-theme-mode="dark"] .ssp-pattern.ssp-pat-grid,
+[data-theme-mode="dark"] .ssp-pattern.ssp-pat-diagonal,
+[data-theme-mode="dark"] .ssp-pattern.ssp-pat-topography {
+    color: rgba(255, 255, 255, 0.22);
 }

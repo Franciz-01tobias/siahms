@@ -36,7 +36,7 @@ requireModuleAccess('system');
     <script src="../../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../../assets/css/self-service-patterns.css?v=1">
+    <link rel="stylesheet" href="../../assets/css/self-service-patterns.css?v=2">
     <style>
         body {
             --accent: var(--sys-accent, #546e7a);

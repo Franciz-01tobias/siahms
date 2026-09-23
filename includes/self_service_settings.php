@@ -17,7 +17,11 @@
  * this reaches a class attribute, and "none" is the absence of a value rather
  * than an entry, so an install that has never chosen one gets a plain page.
  */
-const SELF_SERVICE_PATTERNS = ['dots', 'grid', 'diagonal', 'waves', 'topography'];
+// 'waves' was removed after review: it drew a chain of overlapping ovals
+// rather than texture, and no amount of lightening made it calm. An install
+// that had already chosen it degrades to no pattern, because the getter below
+// blanks any value not on this list.
+const SELF_SERVICE_PATTERNS = ['dots', 'grid', 'diagonal', 'topography'];
 
 /**
  * Every self-service portal setting, with its default.

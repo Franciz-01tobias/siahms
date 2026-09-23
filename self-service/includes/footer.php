@@ -60,6 +60,15 @@ $pageData    = $pageData ?? [];
     <?php endif; ?>
     <script>const API_BASE = '../api/self-service/';</script>
     <script>window.PAGE = <?php echo json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+    <?php /* The administrator's portal switches, in one place for any page that
+             needs them. 🔑 These decide what is DRAWN, never what is allowed:
+             every endpoint re-checks the same setting, because a button that is
+             not on the page is not a permission. $ssAppearance is resolved by
+             the header, which every signed-in portal page goes through. */ ?>
+    <script>window.SS_PORTAL = <?php echo json_encode([
+        'allow_self_close' => !empty($ssAppearance['allow_self_close']),
+        'show_my_assets'   => !empty($ssAppearance['show_my_assets']),
+    ]); ?>;</script>
     <?php if ($pageScripts !== ''): ?>
     <?php if (strpos($pageScripts, '<?php') !== false): ?>
     <?php /* Fail LOUD. A PHP tag in here never ran (see the note above) and would
