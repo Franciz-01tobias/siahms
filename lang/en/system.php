@@ -1799,6 +1799,10 @@ return [
         'logo_remove'      => 'Remove',
         'logo_hint'        => 'PNG or JPG, up to 2MB. SVG is not accepted: it is XML that can carry script, and this image is served to everyone who visits the portal.',
         'logo_saved'       => 'Portal logo updated',
+        'logo_position_label'  => 'Where the logo goes',
+        'logo_position_desc'   => 'In the bar it sits beside the portal name, small and always on screen. On the page it appears once at the top, larger, on the page background &mdash; and the bar then shows the portal name alone rather than repeating it.',
+        'logo_position_header' => 'In the top bar',
+        'logo_position_page'   => 'At the top of the page',
 
         'header_colour_label' => 'Header bar colour',
         'header_colour_desc'  => 'The bar across the top of every portal page. Leave it empty to follow the colour theme.',

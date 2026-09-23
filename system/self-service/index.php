@@ -133,6 +133,18 @@ requireModuleAccess('system');
                 <div class="ssp-desc ssp-logo-hint"><?php echo htmlspecialchars(t('system.self_service.logo_hint')); ?></div>
             </div>
 
+            <?php /* Only meaningful once there is a logo of your own - the
+                     bundled mark always sits in the bar. Shown regardless so
+                     the choice is discoverable before you upload. */ ?>
+            <div class="ssp-field">
+                <label class="ssp-label" for="sspLogoPosition"><?php echo htmlspecialchars(t('system.self_service.logo_position_label')); ?></label>
+                <div class="ssp-desc"><?php echo t('system.self_service.logo_position_desc'); ?></div>
+                <select class="ssp-input" id="sspLogoPosition" style="max-width: 320px;">
+                    <option value="header"><?php echo htmlspecialchars(t('system.self_service.logo_position_header')); ?></option>
+                    <option value="page"><?php echo htmlspecialchars(t('system.self_service.logo_position_page')); ?></option>
+                </select>
+            </div>
+
             <div class="ssp-field">
                 <label class="ssp-label" for="sspHeaderColour"><?php echo htmlspecialchars(t('system.self_service.header_colour_label')); ?></label>
                 <div class="ssp-desc"><?php echo htmlspecialchars(t('system.self_service.header_colour_desc')); ?></div>
@@ -336,6 +348,7 @@ requireModuleAccess('system');
 
     function sspPaint(s) {
         sspSetLogo(s.logo_path || '');
+        document.getElementById('sspLogoPosition').value = s.logo_position || 'header';
         document.getElementById('sspHeaderColour').value = s.header_colour || '';
         document.getElementById('sspTableColour').value  = s.table_header_colour || '';
         if (s.header_colour) document.getElementById('sspHeaderColourPick').value = s.header_colour;
@@ -367,6 +380,7 @@ requireModuleAccess('system');
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    logo_position:       document.getElementById('sspLogoPosition').value,
                     // logo_path is NOT sent here. The file rides in its own
                     // multipart request (sspUploadLogo); sending an empty
                     // string from this form would clear the logo every time

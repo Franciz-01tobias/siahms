@@ -98,6 +98,14 @@ try {
         // admin turns a portal-specific logo back off.
         $clean['self_service_logo_path'] = trim((string)$in['logo_path']);
     }
+    if (array_key_exists('logo_position', $in)) {
+        $v = trim((string)$in['logo_position']);
+        if (!in_array($v, SELF_SERVICE_LOGO_POSITIONS, true)) {
+            echo json_encode(['success' => false, 'error' => 'Unknown logo position.']);
+            exit;
+        }
+        $clean['self_service_logo_position'] = $v;
+    }
     if (array_key_exists('header_colour', $in)) {
         $v = trim((string)$in['header_colour']);
         // Empty = follow the theme. Otherwise a hex colour and nothing else:

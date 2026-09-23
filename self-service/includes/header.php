@@ -192,7 +192,7 @@ try {
     <title><?php echo htmlspecialchars($pageTitle); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/self-service.css?v=17">
+    <link rel="stylesheet" href="../assets/css/self-service.css?v=18">
 <?php if ($ssAppearance['background_pattern'] !== ''): ?>
     <!-- Only fetched when a pattern is actually in use. -->
     <link rel="stylesheet" href="../assets/css/self-service-patterns.css?v=4">
@@ -224,11 +224,19 @@ $ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? '
         <?php /* Resolved BEFORE the div: the class depends on it, and the img
                  below is inside. */ ?>
         <?php $ssLogoUrl = selfServicePortalLogoUrl($conn ?? connectToDatabase()); ?>
-        <div class="portal-brand<?php echo $ssLogoUrl !== '' ? ' has-custom-logo' : ''; ?>">
+        <?php
+        /* A custom logo shown on the PAGE is not shown here as well: repeating
+           it twice on one screen is clutter, and falling back to the bundled
+           FreeITSM mark would put our branding beside theirs. */
+        $ssLogoOnPage = ($ssLogoUrl !== '' && ($ssAppearance['logo_position'] ?? 'header') === 'page');
+        ?>
+        <div class="portal-brand<?php echo $ssLogoUrl !== '' && !$ssLogoOnPage ? ' has-custom-logo' : ''; ?>">
             <?php /* A portal-specific logo if one is set, otherwise the shared
                      one from System → Branding. Empty means "use the main one",
                      so nothing changes for an install that has not set it. */ ?>
+            <?php if (!$ssLogoOnPage): ?>
             <img src="<?php echo htmlspecialchars($ssLogoUrl !== '' ? $ssLogoUrl : brandingLogoUrl()); ?>" alt="">
+            <?php endif; ?>
             <span><?php echo htmlspecialchars(t('self-service.portal')); ?></span>
         </div>
         <nav class="portal-nav" id="portalNav">
@@ -266,5 +274,13 @@ $ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? '
         if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
     </script>
+
+    <?php if ($ssLogoOnPage): ?>
+    <?php /* Across the top of the page rather than in the bar. Its own band so
+             it lines up with the page gutter below it, whatever the page is. */ ?>
+    <div class="portal-page-logo">
+        <img src="<?php echo htmlspecialchars($ssLogoUrl); ?>" alt="">
+    </div>
+    <?php endif; ?>
 
     <div class="portal-layout">

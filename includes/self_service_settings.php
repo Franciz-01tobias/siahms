@@ -23,6 +23,9 @@
 // blanks any value not on this list.
 const SELF_SERVICE_PATTERNS = ['dots', 'grid', 'diagonal', 'flow', 'mesh'];
 
+/** Where the portal logo sits. 'header' is the nav bar, and the default. */
+const SELF_SERVICE_LOGO_POSITIONS = ['header', 'page'];
+
 /**
  * Every self-service portal setting, with its default.
  *
@@ -37,7 +40,8 @@ function selfServicePortalSettings(PDO $conn): array
     if ($cache !== null) return $cache;
 
     $defaults = [
-        'self_service_logo_path'           => '',   // empty = use the main logo
+        'self_service_logo_path'           => '',
+        'self_service_logo_position'       => 'header',
         'self_service_header_colour'       => '',   // empty = follow the theme
         'self_service_table_header_colour' => '',
         'self_service_background_pattern'  => '',
@@ -77,6 +81,10 @@ function selfServicePortalSettings(PDO $conn): array
 
     return $cache = [
         'logo_path'           => $get('self_service_logo_path'),
+        // Anything unrecognised falls back to the nav bar rather than
+        // rendering nowhere - a logo that vanishes reads as a broken upload.
+        'logo_position'       => in_array($get('self_service_logo_position'), SELF_SERVICE_LOGO_POSITIONS, true)
+                                 ? $get('self_service_logo_position') : 'header',
         'header_colour'       => $colour('self_service_header_colour'),
         'table_header_colour' => $colour('self_service_table_header_colour'),
         'background_pattern'  => $pattern,
