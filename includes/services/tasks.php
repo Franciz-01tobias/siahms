@@ -879,8 +879,25 @@ class TasksService
                 'A subtask always belongs to the same company as its parent. Move the parent task instead.');
         }
 
+        // 🔴 NOT EVERY LINKED TABLE HAS A COMPANY. `contracts` has no tenant_id
+        // column at all - contracts are deliberately not company-scoped - so
+        // asking one which company it is in throws "Unknown column 'tenant_id'
+        // in 'field list'" and the move fails outright.
+        //
+        // That is not hypothetical: on a real install 19 of the top-level tasks
+        // are linked to a contract and only 2 to a ticket, so the contract path
+        // is the COMMON one and the ticket path is the exception. The first test
+        // of this picked a ticket-linked task and passed.
+        //
+        // Checked at runtime rather than hardcoding "contracts has no company":
+        // if contracts ever gain one, this starts enforcing it without anybody
+        // having to remember this function exists.
+        //
+        // A record with no company cannot constrain the move, so the link is
+        // simply not a reason to refuse.
         foreach ([['ticket_id', 'tickets', 'ticket'], ['change_id', 'changes', 'change'], ['contract_id', 'contracts', 'contract']] as [$col, $table, $label]) {
             if (empty($row[$col])) { continue; }
+            if (!self::tableHasTenantColumn($conn, $table)) { continue; }
             $s = $conn->prepare("SELECT tenant_id FROM `{$table}` WHERE id = ?");
             $s->execute([(int)$row[$col]]);
             $linked = $s->fetchColumn();
@@ -961,6 +978,32 @@ class TasksService
         } catch (Throwable $t) {
             if ($ownTransaction && $conn->inTransaction()) { $conn->rollBack(); }
             throw $t;
+        }
+    }
+
+    /**
+     * Does this table carry a `tenant_id` column?
+     *
+     * Asked of information_schema rather than assumed, because the answer
+     * differs per table and changes over time: tickets and changes have one,
+     * contracts do not. Cached per request - the move loop asks about the same
+     * three tables, and this is called on a path a person is waiting on.
+     */
+    private static function tableHasTenantColumn(PDO $conn, string $table): bool
+    {
+        static $cache = [];
+        if (array_key_exists($table, $cache)) { return $cache[$table]; }
+        try {
+            $s = $conn->prepare(
+                "SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = ? AND column_name = 'tenant_id'"
+            );
+            $s->execute([$table]);
+            return $cache[$table] = ((int)$s->fetchColumn() > 0);
+        } catch (Exception $e) {
+            // Cannot tell: treat the table as having no company rather than
+            // blocking the move on a question that could not be asked.
+            return $cache[$table] = false;
         }
     }
 
