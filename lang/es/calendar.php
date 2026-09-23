@@ -112,6 +112,12 @@ return [
         'left_panel_always_desc' => 'Mantén el panel izquierdo siempre fijo y abierto.',
         'left_panel_hover_desc' => 'Contrae el panel izquierdo a una franja delgada que se expande al pasar el cursor por encima, dejando más espacio para el calendario.',
     ],
+    'js' => [
+        'all_day' => 'Todo el día',
+        'uncategorised' => 'Sin categoría',
+        'move_failed' => 'No se pudo mover',
+        'error_prefix' => 'Error: {message}',
+    ],
     'toast' => [
         'saved' => 'Guardado',
         'deleted' => 'Eliminado',

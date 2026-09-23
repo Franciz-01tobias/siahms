@@ -1,8 +1,15 @@
 <?php
 /**
- * Deutsch (de) — Knowledge module strings.
- * Missing keys fall back to lang/en/knowledge.php per-key.
+ * FreeITSM — knowledge strings (de).
+ *
+ * Keys mirror lang/en/knowledge.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php de
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Wissen',
     'nav' => [
@@ -445,6 +452,60 @@ Weil die beiden Listen genau das Gegenteil bedeuten, werden die jetzt aufgeführ
         'embed_success' => 'Embeddings für {count} Artikel erfolgreich erzeugt!',
         'embed_errors' => 'Abgeschlossen mit {errors} Fehlern von {total} Artikeln.',
         'embed_get_failed' => 'Artikel konnten nicht abgerufen werden',
+    ],
+    'assistant' => [
+        'browser_title' => 'Wissensassistent',
+        'heading' => 'Assistent',
+        'sub' => 'Liest, was der Service Desk beantwortet hat, und sagt Ihnen, was der Wissensdatenbank fehlt. Er meldet sich nur, wenn dieselbe Frage immer wieder kommt.',
+        'run' => 'Lücken suchen',
+        'checking' => 'Wird geprüft…',
+        'tab_open' => 'Zu schreiben',
+        'tab_written' => 'Geschrieben',
+        'tab_dismissed' => 'Nicht nötig',
+        'modal_title' => 'Wird aufgeschrieben',
+        'modal_reading' => 'Ticket wird gelesen…',
+        'load_failed' => 'Laden fehlgeschlagen',
+        'last_looked' => 'Zuletzt gesucht {date}.',
+        'empty_open' => 'Nichts zu schreiben. Entweder hat der Assistent noch nicht gesucht, oder Ihre Wissensdatenbank deckt bereits ab, wonach ständig gefragt wird.',
+        'empty_written' => 'Noch nichts aus einer Lücke geschrieben.',
+        'empty_dismissed' => 'Nichts zurückgestellt.',
+        'draft' => 'Entwurf',
+        'dismiss' => 'Nicht nötig',
+        'restore' => 'Zurückholen',
+        'open_article' => 'Artikel öffnen',
+        'asked_one' => '<strong>Einmal</strong> gefragt',
+        'asked_many' => '<strong>{n}-mal</strong> gefragt',
+        'written_up_as' => 'aufgeschrieben als „{title}“',
+        'still_draft' => '(noch ein Entwurf)',
+        'show_tickets' => 'Tickets anzeigen',
+        'reading' => 'Wird gelesen…',
+        'start_failed' => 'Start fehlgeschlagen.',
+        'no_tickets' => 'Es gibt keine geschlossenen Tickets aus den letzten {days} Tagen zum Lesen.',
+        'reading_n' => 'Ihre geschlossenen Tickets werden gelesen… {done} von {total}.',
+        'stopped_early' => 'Vorzeitig beendet.',
+        'read_failed' => 'Die Tickets konnten nicht gelesen werden — prüfen Sie den OpenAI-Schlüssel unter Wissen → Einstellungen.',
+        'clustering' => 'Es wird ermittelt, was fehlt…',
+        'finish_failed' => 'Abschluss fehlgeschlagen.',
+        'wording_mode' => 'Abgleich nach Wortlaut. Fügen Sie unter Wissen → Einstellungen einen OpenAI-Schlüssel hinzu, um stattdessen nach Bedeutung abzugleichen.',
+        'update_failed' => 'Aktualisieren fehlgeschlagen',
+        'reading_best' => 'Das ausführlichste Ticket wird gelesen…',
+        'answer_one' => 'Beantworten Sie zuerst mindestens eine Frage.',
+        'writing_up' => 'Wird aufgeschrieben…',
+        'unreachable' => 'Der Assistent war nicht erreichbar.',
+        'not_enough_yet' => 'In diesen Tickets steht noch nicht genug.',
+        'draft_ready' => 'Entwurf fertig. Lesen Sie ihn, bevor Sie ihn veröffentlichen — er wurde aus Ticket {ref} geschrieben.',
+        'draft_note' => 'Beim Speichern landet dies als unveröffentlichter Entwurf in Ihrer Wissensdatenbank. Niemand kann ihn lesen, bis Sie ihn veröffentlichen.',
+        'save_draft' => 'Entwurf speichern',
+        'refused' => 'Noch zu wenig, um daraus zu schreiben.',
+        'refused_why' => 'Die Tickets sagen nicht, wodurch das verursacht wurde oder wie es behoben wurde.',
+        'refused_ask' => 'Beantworten Sie, was Sie können, dann versucht er es erneut. Sie waren dabei, er nicht.',
+        'try_again' => 'Erneut versuchen',
+        'untitled' => 'Ohne Titel',
+        'save_failed' => 'Speichern fehlgeschlagen',
+        'nothing_yet_readonly' => 'Noch nichts anzuzeigen. Jemand mit der Berechtigung, den Assistenten auszuführen, muss zuerst nach Lücken suchen.',
+        'unread_tickets' => 'Es gibt {n} geschlossene Tickets aus den letzten {days} Tagen, die ich noch nicht gelesen habe.',
+        'press_run' => 'Klicken Sie auf „Lücken suchen“.',
+        'none_to_read' => 'Keine geschlossenen Tickets aus den letzten {days} Tagen zum Lesen.',
     ],
     'help' => [
         'guide' => 'Leitfaden',

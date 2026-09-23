@@ -561,7 +561,7 @@ async function kaSaveDraft() {
             if (!has) {
                 el.textContent = st.tickets
                     ? ka('unread_tickets', { n: st.tickets, days: st.lookback_days })
-                      + (CAN_ANALYSE ? ka('press_run') : '')
+                      + (CAN_ANALYSE ? ' ' + ka('press_run') : '')
                     : ka('none_to_read', { days: st.lookback_days });
             }
         }

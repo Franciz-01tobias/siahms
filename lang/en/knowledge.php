@@ -570,7 +570,10 @@ return [
         // The opening line, which depends on what the reader is allowed to do
         'nothing_yet_readonly' => 'Nothing to show yet. Someone with permission to run the assistant needs to look for gaps first.',
         'unread_tickets'  => 'There are {n} closed tickets from the last {days} days I have not read yet.',
-        'press_run'       => ' Press “Look for gaps”.',
+        // No leading space: it is joined with one in the script. A value
+        // whose correctness depends on invisible whitespace is the same
+        // trap as the blank-English rule, and no translator can see it.
+        'press_run'       => 'Press “Look for gaps”.',
         'none_to_read'    => 'No closed tickets in the last {days} days to read.',
     ],
 

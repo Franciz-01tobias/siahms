@@ -75,6 +75,34 @@ $root = dirname(__DIR__);
  *   'paren'  the text inside brackets — "Allow it (Default)" -> "Default"
  *   'all'    the whole value
  */
+/**
+ * Sets of keys that are all shown TOGETHER on one screen, where any two
+ * collapsing onto the same word is a defect.
+ *
+ * 🔑 This is the pair check turned inside out. A pair rule asks "do these two
+ * specific strings collide?" and needs somebody to have thought of the pair. A
+ * set asks "do ANY two of these collide?" and needs nobody to have thought of
+ * anything — which is the only way to cover a 79-item palette, where the pair
+ * list would have to hold 3,081 entries to say the same thing.
+ *
+ * Found by translators, not by this file, before the set check existed:
+ *   Polish   "Monitor / gauge" and "Display / screen"  -> both "Monitor"
+ *   Spanish  "Registry" and "Log"                      -> both "Registro"
+ */
+$SETS = [
+    [
+        'name'   => 'network mapper icon palette',
+        'prefix' => 'network-mapper.icons.label',
+        'why'    => 'All 79 icon names are listed together in the icon picker. '
+                  . 'Two with the same name are two rows a user cannot tell apart.',
+    ],
+    [
+        'name'   => 'network mapper icon categories',
+        'prefix' => 'network-mapper.icons.category',
+        'why'    => 'The 13 category headings are stacked down the same modal.',
+    ],
+];
+
 $RULES = [
     [
         'name'   => 'checklist gate mode vs default marker (settings screen)',
@@ -195,12 +223,53 @@ foreach ($locales as $loc) {
     }
 }
 
-printf("%d pair(s) checked across %d locale(s), %d untranslated pair(s) skipped\n",
-    $checked, count($locales), $skipped);
+// ── set checks ────────────────────────────────────────────────────────────
+$setChecked = 0;
+foreach ($locales as $loc) {
+    foreach ($SETS as $set) {
+        [$ns, $path] = explode('.', $set['prefix'], 2);
+        $file = __DIR__ . "/../lang/$loc/$ns.php";
+        if (!is_file($file)) continue;
+        $data = require $file;
+        foreach (explode('.', $path) as $step) {
+            if (!is_array($data) || !array_key_exists($step, $data)) { $data = null; break; }
+            $data = $data[$step];
+        }
+        if (!is_array($data) || count($data) < 2) continue;
+
+        $setChecked++;
+        $seen = [];
+        foreach ($data as $k => $v) {
+            if (!is_string($v) || trim($v) === '') continue;
+            // Case and surrounding space are not what tells two labels apart
+            // on screen, so they are not what tells them apart here either.
+            $seen[mb_strtolower(trim($v))][] = $k;
+        }
+        foreach ($seen as $value => $keys) {
+            if (count($keys) < 2) continue;
+            $hits++;
+            echo "🔴 $loc — {$set['name']}\n";
+            echo "   " . count($keys) . " keys all read \"$value\": " . implode(', ', $keys) . "\n";
+            foreach ($keys as $k) {
+                $enFile = require __DIR__ . "/../lang/en/$ns.php";
+                $enVal = $enFile;
+                foreach (array_merge(explode('.', $path), [$k]) as $step) {
+                    $enVal = is_array($enVal) && array_key_exists($step, $enVal) ? $enVal[$step] : '?';
+                }
+                echo "      $k — English: \"$enVal\"\n";
+            }
+            echo "   why it matters: {$set['why']}\n\n";
+        }
+    }
+}
+
+printf("%d pair(s) and %d set(s) checked across %d locale(s), %d untranslated pair(s) skipped\n",
+    $checked, $setChecked, count($locales), $skipped);
 
 if ($hits) {
-    echo "🔴 $hits collision(s). Change ONE of the two words - usually the preset marker,\n";
-    echo "   since the gate name is a setting an administrator has to recognise.\n";
+    echo "🔴 $hits collision(s). Change ONE of the colliding values - for a pair that is\n";
+    echo "   usually the preset marker, since the gate name is a setting an administrator\n";
+    echo "   has to recognise; for a palette it is whichever label is less established.\n";
     exit(1);
 }
 echo "No collisions.\n";

@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - calendar strings.
+ * FreeITSM — calendar strings (da).
  *
- * Mirrors lang/en/calendar.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/calendar.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Kalender',
     'nav' => [
@@ -107,6 +111,12 @@ return [
         'left_panel_intro' => 'Vælg, hvordan det venstre panel opfører sig i kalenderen. Denne indstilling gemmes på din konto.',
         'left_panel_always_desc' => 'Hold det venstre panel fastgjort åbent hele tiden.',
         'left_panel_hover_desc' => 'Sammenfold det venstre panel til en smal strimmel, der udvides, når du holder musen over den, så kalenderen får mere plads.',
+    ],
+    'js' => [
+        'all_day' => 'Hele dagen',
+        'uncategorised' => 'Ukategoriseret',
+        'move_failed' => 'Kunne ikke flytte',
+        'error_prefix' => 'Fejl: {message}',
     ],
     'toast' => [
         'saved' => 'Gemt',

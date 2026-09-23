@@ -122,6 +122,12 @@ anything unusual; they simply produced the same content more than once.
   per file: the filename and the number of lines. Nothing else.
 - **To correct a line after writing, edit that line.** Never rewrite the whole
   file for a single fix.
+- **Use the Write tool, not a shell heredoc.** On the 2026-09-23 run a
+  `cat > file <<'EOF'` heredoc carrying a 171-line Malayalam chunk failed with
+  an unbalanced-quote parse error at roughly **28 KB of command text** - Git
+  Bash truncates the argument at about that size, and the failure looks like a
+  quoting mistake in your content rather than a length limit. Any chunk in a
+  script that expands (Malayalam, Hindi, Gujarati, Ukrainian) can cross 28 KB.
 
 > 🔑 These three rules are why a chunk can be as large as it is. Measured on the
 > 2026-09-22 runs: chunks of ~45 KB completed comfortably **with** these rules,

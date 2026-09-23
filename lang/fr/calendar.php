@@ -112,6 +112,12 @@ return [
         'left_panel_always_desc' => 'Gardez le panneau gauche ouvert et épinglé en permanence.',
         'left_panel_hover_desc' => 'Réduisez le panneau gauche à une fine bande qui s\'étend au survol, laissant plus de place au calendrier.',
     ],
+    'js' => [
+        'all_day' => 'Toute la journée',
+        'uncategorised' => 'Sans catégorie',
+        'move_failed' => 'Échec du déplacement',
+        'error_prefix' => 'Erreur : {message}',
+    ],
     'toast' => [
         'saved' => 'Enregistré',
         'deleted' => 'Supprimé',
