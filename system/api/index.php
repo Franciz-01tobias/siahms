@@ -30,9 +30,11 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - API</title>
+    <title><?php echo htmlspecialchars(t('system.api.browser_title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+    <script src="../../assets/js/i18n.js?v=2"></script>
     <style>
         /* System module accent (blue-grey) — pin the generic --accent to it. */
         body {
@@ -151,57 +153,55 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     <?php include '../includes/header.php'; ?>
 
     <div class="api-container">
-        <h1 class="page-title">API</h1>
-        <p class="page-subtitle">Create and manage keys for the FreeITSM REST API, with granular permissions per key.</p>
+        <h1 class="page-title"><?php echo htmlspecialchars(t('system.api.title')); ?></h1>
+        <p class="page-subtitle"><?php echo htmlspecialchars(t('system.api.subtitle')); ?></p>
 
         <div class="settings-card">
-            <h3>Base URL</h3>
-            <p class="card-desc">All v1 endpoints live under this URL. Authenticate with <strong>Authorization: Bearer &lt;key&gt;</strong>.</p>
+            <h3><?php echo htmlspecialchars(t('system.api.base_url')); ?></h3>
+            <p class="card-desc"><?php echo t('system.api.base_url_desc'); ?></p>
             <div class="base-url-box">
                 <code id="apiBaseUrl"><?php echo htmlspecialchars($apiBaseUrl); ?></code>
-                <button class="btn btn-secondary" id="copyBaseBtn">Copy</button>
-                <a class="btn btn-primary" href="docs.php">Documentation</a>
+                <button class="btn btn-secondary" id="copyBaseBtn"><?php echo htmlspecialchars(t('common.copy')); ?></button>
+                <a class="btn btn-primary" href="docs.php"><?php echo htmlspecialchars(t('system.api.documentation')); ?></a>
             </div>
             <p class="card-desc" style="margin-top:14px;">
-                <strong>Documentation</strong> is the interactive reference — browse every endpoint, try live calls, and copy ready-made code in seven languages.
+                <?php echo t('system.api.docs_desc'); ?>
             </p>
         </div>
 
         <div class="settings-card">
-            <h3>OpenAPI specification</h3>
+            <h3><?php echo htmlspecialchars(t('system.api.openapi')); ?></h3>
             <p class="card-desc">
-                A machine-readable description of the whole API. Import it into <strong>Postman</strong> or <strong>Insomnia</strong>,
-                generate a client library, or feed it to any OpenAPI tool &mdash; so you don't have to wire up each endpoint by hand.
-                New to this? See <a href="https://github.com/edmozley/freeitsm/wiki/REST-API-OpenAPI" target="_blank" rel="noopener">the guide</a>.
+                <?php echo t('system.api.openapi_desc'); ?>
             </p>
             <div class="base-url-box">
                 <code><?php echo htmlspecialchars($apiBaseUrl); ?>/openapi.json</code>
-                <a class="btn btn-secondary" href="<?php echo htmlspecialchars($apiBaseUrl); ?>/openapi.json" target="_blank" rel="noopener">View JSON</a>
-                <a class="btn btn-secondary" href="<?php echo htmlspecialchars($apiBaseUrl); ?>/openapi.yaml" target="_blank" rel="noopener">View YAML</a>
+                <a class="btn btn-secondary" href="<?php echo htmlspecialchars($apiBaseUrl); ?>/openapi.json" target="_blank" rel="noopener"><?php echo htmlspecialchars(t('system.api.view_json')); ?></a>
+                <a class="btn btn-secondary" href="<?php echo htmlspecialchars($apiBaseUrl); ?>/openapi.yaml" target="_blank" rel="noopener"><?php echo htmlspecialchars(t('system.api.view_yaml')); ?></a>
             </div>
         </div>
 
         <div class="settings-card">
             <div class="keys-head">
                 <div>
-                    <h3 style="margin:0;">API keys</h3>
-                    <p class="card-desc" style="margin:4px 0 0;">A key acts as an analyst and can only do what its permissions allow. The full key is shown once, at creation.</p>
+                    <h3 style="margin:0;"><?php echo htmlspecialchars(t('system.api.keys')); ?></h3>
+                    <p class="card-desc" style="margin:4px 0 0;"><?php echo htmlspecialchars(t('system.api.keys_desc')); ?></p>
                 </div>
-                <button class="add-btn" id="addKeyBtn">Add</button>
+                <button class="add-btn" id="addKeyBtn"><?php echo htmlspecialchars(t('common.add')); ?></button>
             </div>
             <div class="info-note" id="tableNotReady" style="display:none; margin-bottom:14px;">
-                The API key tables haven't been created yet — run <a href="../db-verify/">Database Verification</a> once, then reload this page.
+                <?php echo t('system.api.not_ready'); ?>
             </div>
             <table class="keys">
                 <thead>
                     <tr>
-                        <th>Name</th><th>Key</th><th>Acts as</th><th>Permissions</th>
-                        <th class="company-col" style="display:none;">Companies</th>
-                        <th>Status</th><th>Last used</th><th style="text-align:right;">Actions</th>
+                        <th><?php echo htmlspecialchars(t('system.api.col_name')); ?></th><th><?php echo htmlspecialchars(t('system.api.col_key')); ?></th><th><?php echo htmlspecialchars(t('system.api.col_acts_as')); ?></th><th><?php echo htmlspecialchars(t('system.api.col_permissions')); ?></th>
+                        <th class="company-col" style="display:none;"><?php echo htmlspecialchars(t('system.api.col_companies')); ?></th>
+                        <th><?php echo htmlspecialchars(t('system.api.col_status')); ?></th><th><?php echo htmlspecialchars(t('system.api.col_last_used')); ?></th><th style="text-align:right;"><?php echo htmlspecialchars(t('system.api.col_actions')); ?></th>
                     </tr>
                 </thead>
                 <tbody id="keysBody">
-                    <tr class="empty-row"><td colspan="8">Loading…</td></tr>
+                    <tr class="empty-row"><td colspan="8"><?php echo htmlspecialchars(t('common.loading')); ?></td></tr>
                 </tbody>
             </table>
         </div>
@@ -210,54 +210,54 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     <!-- Create / edit modal -->
     <div class="apik-modal-overlay" id="keyModal">
         <div class="apik-modal">
-            <div class="apik-modal-header" id="modalTitle">New API key</div>
+            <div class="apik-modal-header" id="modalTitle"><?php echo htmlspecialchars(t('system.api.new_key')); ?></div>
             <div class="apik-modal-body">
                 <input type="hidden" id="fKeyId">
                 <div class="form-2col">
                     <div class="form-field">
-                        <label>Name</label>
-                        <div class="hint">What this key is for, e.g. "Monitoring integration".</div>
-                        <input type="text" id="fName" placeholder="Monitoring integration">
+                        <label><?php echo htmlspecialchars(t('system.api.col_name')); ?></label>
+                        <div class="hint"><?php echo htmlspecialchars(t('system.api.name_hint')); ?></div>
+                        <input type="text" id="fName" placeholder="<?php echo htmlspecialchars(t('system.api.name_ph')); ?>">
                     </div>
                     <div class="form-field">
-                        <label>Acts as</label>
-                        <div class="hint">Tickets, notes and audit entries are attributed to this analyst.</div>
+                        <label><?php echo htmlspecialchars(t('system.api.col_acts_as')); ?></label>
+                        <div class="hint"><?php echo htmlspecialchars(t('system.api.acts_as_hint')); ?></div>
                         <select id="fAnalyst"></select>
                     </div>
                 </div>
 
                 <div class="form-field">
-                    <label>Permissions</label>
-                    <div class="hint">Grant only what the integration needs — everything else is denied.</div>
-                    <div class="perm-toolbar"><a id="permAll">Select all</a><a id="permNone">Clear all</a></div>
+                    <label><?php echo htmlspecialchars(t('system.api.col_permissions')); ?></label>
+                    <div class="hint"><?php echo htmlspecialchars(t('system.api.perms_hint')); ?></div>
+                    <div class="perm-toolbar"><a id="permAll"><?php echo htmlspecialchars(t('system.api.select_all')); ?></a><a id="permNone"><?php echo htmlspecialchars(t('system.api.clear_all')); ?></a></div>
                     <div class="perm-matrix" id="permMatrix"></div>
                 </div>
 
                 <div class="form-field" id="scopeField" style="display:none;">
-                    <label>Company access</label>
+                    <label><?php echo htmlspecialchars(t('system.api.scope')); ?></label>
                     <div class="scope-options">
-                        <label class="scope-option"><input type="radio" name="scope" value="all" checked> All companies</label>
-                        <label class="scope-option"><input type="radio" name="scope" value="specific"> Specific companies only</label>
+                        <label class="scope-option"><input type="radio" name="scope" value="all" checked> <?php echo htmlspecialchars(t('system.api.scope_all')); ?></label>
+                        <label class="scope-option"><input type="radio" name="scope" value="specific"> <?php echo htmlspecialchars(t('system.api.scope_specific')); ?></label>
                     </div>
                     <div class="company-checks" id="companyChecks" style="display:none;"></div>
                 </div>
 
                 <div class="form-2col">
                     <div class="form-field">
-                        <label>Expires</label>
-                        <div class="hint">Optional. The key stops working after this date.</div>
+                        <label><?php echo htmlspecialchars(t('system.api.expires')); ?></label>
+                        <div class="hint"><?php echo htmlspecialchars(t('system.api.expires_hint')); ?></div>
                         <input type="date" id="fExpires">
                     </div>
                     <div class="form-field">
-                        <label>Rate limit</label>
-                        <div class="hint">Requests per minute. Blank uses the system default (60).</div>
+                        <label><?php echo htmlspecialchars(t('system.api.rate_limit')); ?></label>
+                        <div class="hint"><?php echo htmlspecialchars(t('system.api.rate_limit_hint')); ?></div>
                         <input type="number" id="fRateLimit" min="1" placeholder="60">
                     </div>
                 </div>
             </div>
             <div class="apik-modal-footer">
-                <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
-                <button class="btn btn-primary" id="saveBtn">Save</button>
+                <button class="btn btn-secondary" id="cancelBtn"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button class="btn btn-primary" id="saveBtn"><?php echo htmlspecialchars(t('common.save')); ?></button>
             </div>
         </div>
     </div>
@@ -265,23 +265,25 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     <!-- New-key reveal modal -->
     <div class="apik-modal-overlay" id="revealModal">
         <div class="apik-modal">
-            <div class="apik-modal-header">Key created</div>
+            <div class="apik-modal-header"><?php echo htmlspecialchars(t('system.api.created')); ?></div>
             <div class="apik-modal-body">
                 <div class="newkey-box">
-                    Your new API key:
+                    <?php echo htmlspecialchars(t('system.api.your_new_key')); ?>
                     <code id="newKeyValue"></code>
-                    <div class="newkey-warning">Copy it now — it is stored hashed and can never be shown again.</div>
+                    <div class="newkey-warning"><?php echo htmlspecialchars(t('system.api.copy_now')); ?></div>
                 </div>
             </div>
             <div class="apik-modal-footer">
-                <button class="btn btn-secondary" id="copyKeyBtn">Copy</button>
-                <button class="btn btn-primary" id="revealCloseBtn">Close</button>
+                <button class="btn btn-secondary" id="copyKeyBtn"><?php echo htmlspecialchars(t('common.copy')); ?></button>
+                <button class="btn btn-primary" id="revealCloseBtn"><?php echo htmlspecialchars(t('common.close')); ?></button>
             </div>
         </div>
     </div>
 
     <script>
     const API = '../../api/system/api_keys/';
+    /** Shorthand for this page's namespace; window.t() comes from i18n.js. */
+    const ap = (k, p) => t('system.api.' + k, p);
     let catalog = {};
     let analysts = [];
     let companies = [];
@@ -313,36 +315,36 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
         const body = document.getElementById('keysBody');
         const colspan = multiTenant ? 8 : 7;
         if (!keys.length) {
-            body.innerHTML = `<tr class="empty-row"><td colspan="${colspan}">No API keys yet — click Add to create one.</td></tr>`;
+            body.innerHTML = `<tr class="empty-row"><td colspan="${colspan}">${esc(ap('empty'))}</td></tr>`;
             return;
         }
         const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
         body.innerHTML = keys.map(k => {
             const expired = k.expires_at && k.expires_at <= now;
-            const status = expired ? '<span class="status-badge expired">Expired</span>'
-                : k.active ? '<span class="status-badge on">Active</span>'
-                : '<span class="status-badge off">Disabled</span>';
+            const status = expired ? '<span class="status-badge expired">' + esc(ap('status_expired')) + '</span>'
+                : k.active ? '<span class="status-badge on">' + esc(ap('status_active')) + '</span>'
+                : '<span class="status-badge off">' + esc(ap('status_disabled')) + '</span>';
             let companyCell = '';
             if (multiTenant) {
-                const names = k.company_ids === null ? 'All'
+                const names = k.company_ids === null ? ap('all')
                     : k.company_ids.map(id => (companies.find(c => c.id === id) || {name: '#' + id}).name).join(', ');
                 companyCell = `<td>${esc(names)}</td>`;
             }
             // last_used_at is a server-stamped UTC timestamp (kind-1) — show in the analyst's zone.
         const lu = parseUTCDate(k.last_used_at);
-        const lastUsed = lu ? esc(fmtDateTime(lu)) : 'Never';
+        const lastUsed = lu ? esc(fmtDateTime(lu)) : esc(ap('never'));
             return `<tr>
                 <td><strong>${esc(k.name)}</strong></td>
                 <td class="key-prefix">${esc(k.key_prefix)}…</td>
                 <td>${esc(k.analyst_name || '')}</td>
-                <td><span class="perm-count">${permSummary(k.permissions)} granted</span></td>
+                <td><span class="perm-count">${esc(ap('perm_granted', { n: permSummary(k.permissions) }))}</span></td>
                 ${companyCell}
                 <td>${status}</td>
                 <td>${lastUsed}</td>
                 <td style="text-align:right; white-space:nowrap;">
-                    <button class="table-action-btn" onclick="openEdit(${k.id})">Edit</button>
-                    <button class="table-action-btn" onclick="toggleKey(${k.id}, ${k.active ? 'false' : 'true'})">${k.active ? 'Disable' : 'Enable'}</button>
-                    <button class="table-action-btn danger" onclick="deleteKey(${k.id})">Delete</button>
+                    <button class="table-action-btn" onclick="openEdit(${k.id})">${esc(t('common.edit'))}</button>
+                    <button class="table-action-btn" onclick="toggleKey(${k.id}, ${k.active ? 'false' : 'true'})">${esc(k.active ? ap('disable') : ap('enable'))}</button>
+                    <button class="table-action-btn danger" onclick="deleteKey(${k.id})">${esc(t('common.delete'))}</button>
                 </td>
             </tr>`;
         }).join('');
@@ -387,7 +389,7 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     }
 
     function openModal(key) {
-        document.getElementById('modalTitle').textContent = key ? 'Edit API key' : 'New API key';
+        document.getElementById('modalTitle').textContent = key ? ap('edit_key') : ap('new_key');
         document.getElementById('fKeyId').value = key ? key.id : '';
         document.getElementById('fName').value = key ? key.name : '';
         document.getElementById('fExpires').value = key && key.expires_at ? key.expires_at.slice(0, 10) : '';
@@ -414,16 +416,16 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
             body: JSON.stringify({id: id, active: active === true || active === 'true'})
         });
         const data = await res.json();
-        if (!data.success) { alert(data.error || 'Update failed'); return; }
+        if (!data.success) { alert(data.error || ap('update_failed')); return; }
         loadKeys();
     };
 
     window.deleteKey = async function (id) {
         const key = keys.find(k => k.id === id);
-        if (!confirm(`Delete the API key "${key ? key.name : id}"? Integrations using it will stop working immediately.`)) return;
+        if (!confirm(ap('confirm_delete', { name: key ? key.name : id }))) return;
         const res = await fetch(API + 'delete_key.php', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
         const data = await res.json();
-        if (!data.success) { alert(data.error || 'Delete failed'); return; }
+        if (!data.success) { alert(data.error || ap('delete_failed')); return; }
         loadKeys();
     };
 
@@ -441,10 +443,10 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
             payload.company_ids = specific
                 ? Array.from(document.querySelectorAll('#companyChecks input:checked')).map(cb => parseInt(cb.value, 10))
                 : null;
-            if (specific && !payload.company_ids.length) { alert('Choose at least one company, or select "All companies".'); return; }
+            if (specific && !payload.company_ids.length) { alert(ap('need_company')); return; }
         }
-        if (!payload.name) { alert('A key name is required.'); return; }
-        if (!Object.keys(payload.permissions).length) { alert('Grant the key at least one permission.'); return; }
+        if (!payload.name) { alert(ap('need_name')); return; }
+        if (!Object.keys(payload.permissions).length) { alert(ap('need_permission')); return; }
 
         const btn = document.getElementById('saveBtn');
         btn.disabled = true;
@@ -454,7 +456,7 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
                 method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
             });
             const data = await res.json();
-            if (!data.success) { alert(data.error || 'Save failed'); return; }
+            if (!data.success) { alert(data.error || ap('save_failed')); return; }
             closeModal();
             if (!id && data.key) {
                 document.getElementById('newKeyValue').textContent = data.key;
@@ -484,7 +486,7 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
             const b = document.getElementById(btnId);
             copyToClipboard(document.getElementById(sourceId).textContent).then(ok => {
                 const old = b.textContent;
-                b.textContent = ok ? 'Copied' : 'Copy failed';
+                b.textContent = ok ? t('common.copied') : ap('copy_failed');
                 setTimeout(() => { b.textContent = old; }, 1600);
                 if (!ok && failMsg) alert(failMsg);
             });
@@ -492,9 +494,9 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     }
     copyInto('copyBaseBtn', 'apiBaseUrl', null);
     copyInto('copyKeyBtn', 'newKeyValue',
-             'Could not copy the key automatically. Select it and copy it by hand - it cannot be shown again.');
+             ap('copy_key_failed'));
     document.getElementById('revealCloseBtn').addEventListener('click', () => {
-        if (confirm('Have you copied the key? It cannot be shown again.')) {
+        if (confirm(ap('confirm_copied'))) {
             document.getElementById('revealModal').classList.remove('open');
         }
     });

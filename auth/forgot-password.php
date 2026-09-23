@@ -8,6 +8,8 @@ session_start();
 // BASE_URL: this page is reachable as /forgot-password and as /auth/forgot-password.php,
 // so every link it emits has to be absolute. config.php is what defines it (#74).
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../includes/i18n_guarded.php';
+i18nGuardedInit('auth');
 
 // Already logged in
 if (isset($_SESSION['analyst_id'])) {
@@ -16,12 +18,12 @@ if (isset($_SESSION['analyst_id'])) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= trLocale() ?>">
 <head>
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forgot Password</title>
+    <title><?= trh('forgot_title', 'Forgot Password') ?></title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -152,22 +154,22 @@ if (isset($_SESSION['analyst_id'])) {
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
-            <h1>Forgot Password</h1>
-            <p>Enter your username or email address and we'll send you a link to reset your password.</p>
+            <h1><?= trh('forgot_title', 'Forgot Password') ?></h1>
+            <p><?= trh('forgot_intro', "Enter your username or email address and we'll send you a link to reset your password.") ?></p>
         </div>
 
         <div id="msg" class="msg"></div>
 
         <div id="formFields">
             <div class="form-group">
-                <label for="identifier">Username or Email</label>
+                <label for="identifier"><?= trh('forgot_identifier', 'Username or Email') ?></label>
                 <input type="text" id="identifier" autofocus autocomplete="username">
             </div>
 
-            <button type="button" class="submit-btn" id="submitBtn" onclick="requestReset()">Send Reset Link</button>
+            <button type="button" class="submit-btn" id="submitBtn" onclick="requestReset()"><?= trh('forgot_submit', 'Send Reset Link') ?></button>
         </div>
 
-        <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/login.php" class="back-link">Back to login</a>
+        <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/login.php" class="back-link"><?= trh('back_to_login', 'Back to login') ?></a>
     </div>
 
     <script>
@@ -185,12 +187,12 @@ if (isset($_SESSION['analyst_id'])) {
 
         if (!identifier) {
             msgEl.className = 'msg error';
-            msgEl.textContent = 'Please enter your username or email address.';
+            msgEl.textContent = <?= trj('forgot_err_missing', 'Please enter your username or email address.') ?>;
             return;
         }
 
         btn.disabled = true;
-        btn.textContent = 'Sending...';
+        btn.textContent = <?= trj('forgot_sending', 'Sending...') ?>;
 
         try {
             const resp = await fetch('<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>api/auth/request_password_reset.php', {
@@ -208,13 +210,13 @@ if (isset($_SESSION['analyst_id'])) {
                 msgEl.className = 'msg error';
                 msgEl.textContent = data.error;
                 btn.disabled = false;
-                btn.textContent = 'Send Reset Link';
+                btn.textContent = <?= trj('forgot_submit', 'Send Reset Link') ?>;
             }
         } catch (e) {
             msgEl.className = 'msg error';
-            msgEl.textContent = 'Something went wrong. Please try again.';
+            msgEl.textContent = <?= trj('err_generic', 'Something went wrong. Please try again.') ?>;
             btn.disabled = false;
-            btn.textContent = 'Send Reset Link';
+            btn.textContent = <?= trj('forgot_submit', 'Send Reset Link') ?>;
         }
     }
     </script>

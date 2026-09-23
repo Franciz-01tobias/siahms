@@ -1021,6 +1021,117 @@ return [
     ],
 
     // Help guide
+    // ── Printable QR labels (asset-management/labels.php) ───────────────
+    'labels' => [
+        'browser_title'  => 'Asset labels',
+        'heading'        => 'Asset labels',
+        'sheet_label'    => 'Label sheet',
+        // The dimensions are numbers and stay as they are; only "per sheet"
+        // is language. Splitting them means no locale can mistype a size.
+        'sheet_option'   => '{n} per sheet — {dims}',
+        'print'          => 'Print',
+        'csv'            => 'CSV for a printer',
+        'back'           => 'Back to Assets',
+        'count_one'      => '1 label',
+        'count_many'     => '{n} labels',
+        'no_tag'         => 'no tag',
+        'localhost_warn_title' => 'These codes point at {host} — a phone scanning them will fail.',
+        'localhost_warn_body'  => 'To a phone, <code>localhost</code> means the phone itself. Set the address this install is reached on (<strong>Tickets → Settings → Messaging → Public base URL</strong>) and reprint — the codes themselves don\'t change, only the address inside them.',
+        'not_ready'      => 'Asset labels need a database update first — an administrator can run <strong>System → Database Verification</strong>.',
+        'no_ids'         => 'No assets chosen. Open this page with a list of asset ids, e.g. <code>labels.php?ids=1,2,3</code>.',
+        'none_visible'   => 'None of those assets are visible to you.',
+        'alignment_hint' => 'Check the alignment on plain paper before using label stock — printers vary by a millimetre or two. The dashed guides are on screen only and won\'t print.',
+    ],
+    // ── The page a phone lands on after scanning a label (scan.php) ─────
+    // Deliberately reuses field.* for the fact labels and common.* for the
+    // save states: the same word on the same object should not get two
+    // chances to be translated differently.
+    'scan' => [
+        'asset'            => 'Asset',
+        'signin_heading'   => 'Sign in to view this asset',
+        'signin_body'      => 'You need to be signed in to FreeITSM to see asset details. Sign in, then scan the label again — it will open straight to this asset.',
+        'signin_btn'       => 'Sign in',
+        'noaccess_heading' => 'No access to Assets',
+        'noaccess_body'    => 'Your account doesn\'t have access to the Assets module, so this label can\'t be opened. Ask an administrator if you think that\'s wrong.',
+        'notready_heading' => 'Asset labels aren\'t set up yet',
+        'notready_body'    => 'This install needs a database update before QR labels work. An administrator can run <strong>System → Database Verification</strong>.',
+        'unknown_heading'  => 'Label not recognised',
+        'unknown_body'     => 'This label doesn\'t match an asset you can see. It may belong to another company, or the asset may have been deleted.',
+        'unknown_btn'      => 'Open Assets',
+        'asset_hash'       => 'Asset #{id}',
+        'fact_held_by'     => 'Held by',
+        'fact_make'        => 'Make',
+        'fact_serial'      => 'Serial',
+        'fact_os'          => 'OS',
+        'fact_warranty'    => 'Warranty',
+        'open_record'      => 'Open the full record',
+        'not_set'          => '(not set)',
+        'load_failed'      => 'Could not load',
+        'save_failed'      => 'Save failed',
+        'save_error'       => 'Could not save — {message}',
+    ],
+
+    // ── The camera scanner (asset-management/scanner.php) ───────────────
+    // A self-contained phone screen: no shared JS bundle, so its script gets
+    // every string in one server-rendered object rather than a t() bridge.
+    'scanner' => [
+        'browser_title'    => 'Scan assets',
+        'heading'          => 'Scan assets',
+        'not_ready'        => 'Asset labels need a database update first — an administrator can run <strong>System → Database Verification</strong>. Until then there are no codes to scan.',
+        'mode_question'    => 'What should a scan do?',
+        'mode_lookup'      => 'Look up',
+        'mode_stocktake'   => 'Stocktake',
+        'hint_lookup'      => 'Scan a label and the asset opens. One at a time.',
+        'hint_stocktake'   => 'Stay on this screen and keep scanning. Each one is updated as you go.',
+        'set_status'       => 'Set status to',
+        'set_location'     => 'Set location to',
+        'leave_unchanged'  => '(leave unchanged)',
+        'stocktake_hint'   => 'Every asset you scan gets these. An asset already set this way is counted as seen and left alone, so nothing pointless lands in its history.',
+        'torch'            => 'Light',
+        'torch_off'        => 'Light off',
+        'cam_starting'     => 'Starting camera…',
+        'undo'             => 'Undo last',
+        'start_camera'     => 'Start camera',
+        'manual_label'     => 'Or type a tag, serial or hostname',
+        'manual_hint'      => 'Works when the camera is blocked, the label is damaged, or the kit only has the manufacturer\'s own barcode on it.',
+        'session_heading'  => 'Scanned in this session',
+
+        // Camera states. These two carry a <br>, which the chunk verifier
+        // checks, because the sentence really is two lines on a phone.
+        'cam_insecure'     => 'The camera needs a secure (https) address.<br>Type a tag or serial below instead, or reach this install over https.',
+        'cam_unsupported'  => 'This browser has no camera support. Type a tag or serial below.',
+        'cam_denied'       => 'Camera permission was refused.<br>Allow it in your browser settings, or type a tag or serial below.',
+        'cam_failed'       => 'Could not start the camera. Type a tag or serial below.',
+
+        // Lookup results.
+        'looking_up'       => 'Looking up…',
+        'lookup_failed'    => 'Lookup failed',
+        'not_yours'        => 'That label isn\'t an asset you can see. It may belong to another company.',
+        'no_match'         => 'Nothing matches {q}',
+        'server_error'     => 'Could not reach the server — {message}',
+
+        // Stocktake results. Every one of these was string concatenation
+        // before, which fixes English word order into every language.
+        'already_scanned'  => 'Already scanned — still {status}',
+        'unchanged'        => 'unchanged',
+        'seen_nothing_set' => 'Seen — nothing chosen to set yet',
+        'already_set'      => 'Already set — counted as seen',
+        'update_failed'    => 'Could not update {label}',
+        'updated'          => 'Updated {what}',
+        'field_status'     => 'status',
+        'field_location'   => 'location',
+        'both_fields'      => '{a} and {b}',
+        'undoing'          => 'Undoing…',
+        'put_back'         => 'Put {label} back',
+
+        // The session list's own notes.
+        'note_seen'        => 'seen',
+        'note_already_set' => 'already set',
+        'note_updated'     => 'updated {what}',
+        'note_undone'      => 'undone',
+        'counter'          => '{n} scanned',
+    ],
+
     'help' => [
         'page_title'    => 'Asset Management Guide',
         'guide'         => 'Guide',

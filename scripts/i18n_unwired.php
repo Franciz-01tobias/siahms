@@ -35,6 +35,12 @@ chdir($root);
 
 $all  = in_array('--all', array_slice($argv, 1), true);
 
+/** --list=<path> prints one file's visible strings instead of scanning the tree. */
+$list = '';
+foreach (array_slice($argv, 1) as $a) {
+    if (str_starts_with($a, '--list=')) $list = substr($a, 7);
+}
+
 /** A file needs at least this many visible strings before a zero score is damning. */
 const MIN_STRINGS = 5;
 
@@ -107,7 +113,72 @@ function visibleStrings(string $src, bool $isJs): int
     return $n;
 }
 
+/**
+ * The same matches visibleStrings() counts, but kept rather than tallied, with
+ * the line each one sits on.
+ *
+ * Counting told us WHICH files are unwired. Wiring one needs to know WHAT is in
+ * it, and reading that off by eye is how a string gets missed - so the list and
+ * the count come from the same patterns, and cannot drift apart.
+ *
+ * @return array<int, array{0:int, 1:string}> [line, string]
+ */
+function visibleStringList(string $src, bool $isJs): array
+{
+    $lineOf = function (int $offset) use ($src): int {
+        return substr_count($src, "\n", 0, $offset) + 1;
+    };
+    $out = [];
+
+    if ($isJs) {
+        preg_match_all(
+            '/([\'"])([A-Z][a-z]+(?:[ ,\'-][A-Za-z]+){1,12}[.?!]?)\1/',
+            $src, $m, PREG_OFFSET_CAPTURE
+        );
+        foreach ($m[2] as $hit) {
+            [$str, $off] = $hit;
+            if (preg_match('/^[A-Z][a-z]+ ?[A-Z]/', $str) && !str_contains($str, ' ')) continue;
+            $out[] = [$lineOf($off), $str];
+        }
+        return $out;
+    }
+
+    // Blanking rather than deleting keeps every offset, and so every line
+    // number, exactly where it was in the original file.
+    $blank = fn($m) => str_repeat(' ', strlen($m[0] ?? ''));
+    $stripped = preg_replace_callback('~<script\b.*?</script>~is', fn($m) => preg_replace('/[^\n]/', ' ', $m[0]), $src);
+    $stripped = preg_replace_callback('~<style\b.*?</style>~is',  fn($m) => preg_replace('/[^\n]/', ' ', $m[0]), $stripped);
+
+    preg_match_all(
+        '~>\s*([A-Z][A-Za-z]*(?:[ ,\'&;-][A-Za-z]+){1,15}[.?!]?)\s*<~',
+        $stripped, $m, PREG_OFFSET_CAPTURE
+    );
+    foreach ($m[1] as [$str, $off]) $out[] = [$lineOf($off), $str];
+
+    preg_match_all(
+        '~\b(?:placeholder|title|aria-label)\s*=\s*"([A-Z][^"]{4,60})"~',
+        $stripped, $m2, PREG_OFFSET_CAPTURE
+    );
+    foreach ($m2[1] as [$str, $off]) $out[] = [$lineOf($off), $str];
+
+    usort($out, fn($a, $b) => $a[0] <=> $b[0]);
+    return $out;
+}
+
 // ---------------------------------------------------------------- scan
+
+if ($list !== '') {
+    $list = str_replace('\\', '/', $list);
+    if (!is_file($list)) { fwrite(STDERR, "not a file: $list\n"); exit(2); }
+    $src  = (string) file_get_contents($list);
+    $rows = visibleStringList($src, str_ends_with($list, '.js'));
+    printf("%s - %d visible string(s), %d t() call(s)\n\n", $list, count($rows), tCalls($src));
+    foreach ($rows as [$ln, $str]) printf("%5d  %s\n", $ln, $str);
+    echo "\n⚠️  These are what the COUNTER sees. It is deliberately conservative:\n";
+    echo "   a lower-case opener, a one-word label or text built in PHP will not\n";
+    echo "   appear here and still has to be wired. Read the file too.\n";
+    exit(0);
+}
 
 $files = [];
 foreach (['php', 'js'] as $ext) {

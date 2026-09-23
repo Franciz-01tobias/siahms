@@ -8,6 +8,8 @@ session_start();
 // BASE_URL: this page is reachable as /reset-password and as /auth/reset-password.php,
 // so every link it emits has to be absolute. config.php is what defines it (#74).
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../includes/i18n_guarded.php';
+i18nGuardedInit('auth');
 
 // Already logged in
 if (isset($_SESSION['analyst_id'])) {
@@ -18,12 +20,12 @@ if (isset($_SESSION['analyst_id'])) {
 $token = $_GET['token'] ?? '';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= trLocale() ?>">
 <head>
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset Password</title>
+    <title><?= trh('reset_title', 'Reset Password') ?></title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -154,30 +156,30 @@ $token = $_GET['token'] ?? '';
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
-            <h1>Reset Password</h1>
-            <p>Enter your new password below.</p>
+            <h1><?= trh('reset_title', 'Reset Password') ?></h1>
+            <p><?= trh('reset_intro', 'Enter your new password below.') ?></p>
         </div>
 
         <div id="msg" class="msg"></div>
 
         <?php if (empty($token)): ?>
-            <div class="msg error">Invalid or missing reset link. Please request a new one.</div>
-            <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/forgot-password.php" class="back-link">Request a new reset link</a>
+            <div class="msg error"><?= trh('reset_bad_link', 'Invalid or missing reset link. Please request a new one.') ?></div>
+            <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/forgot-password.php" class="back-link"><?= trh('reset_request_new', 'Request a new reset link') ?></a>
         <?php else: ?>
             <div id="formFields">
                 <div class="form-group">
-                    <label for="newPw">New Password</label>
+                    <label for="newPw"><?= trh('new_password', 'New Password') ?></label>
                     <input type="password" id="newPw" autocomplete="new-password" autofocus>
                 </div>
 
                 <div class="form-group">
-                    <label for="confirmPw">Confirm Password</label>
+                    <label for="confirmPw"><?= trh('reset_confirm_pw', 'Confirm Password') ?></label>
                     <input type="password" id="confirmPw" autocomplete="new-password">
                 </div>
 
-                <button type="button" class="submit-btn" id="submitBtn" onclick="resetPassword()">Reset Password</button>
+                <button type="button" class="submit-btn" id="submitBtn" onclick="resetPassword()"><?= trh('reset_submit', 'Reset Password') ?></button>
             </div>
-            <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/login.php" class="back-link">Back to login</a>
+            <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/login.php" class="back-link"><?= trh('back_to_login', 'Back to login') ?></a>
 
             <script>
             document.querySelectorAll('input').forEach(input => {
@@ -197,24 +199,24 @@ $token = $_GET['token'] ?? '';
 
                 if (!newPw || !confirmPw) {
                     msgEl.className = 'msg error';
-                    msgEl.textContent = 'Please fill in both fields.';
+                    msgEl.textContent = <?= trj('reset_err_both', 'Please fill in both fields.') ?>;
                     return;
                 }
 
                 if (newPw !== confirmPw) {
                     msgEl.className = 'msg error';
-                    msgEl.textContent = 'Passwords do not match.';
+                    msgEl.textContent = <?= trj('reset_err_mismatch', 'Passwords do not match.') ?>;
                     return;
                 }
 
                 if (newPw.length < 6) {
                     msgEl.className = 'msg error';
-                    msgEl.textContent = 'Password must be at least 6 characters.';
+                    msgEl.textContent = <?= trj('reset_err_short', 'Password must be at least 6 characters.') ?>;
                     return;
                 }
 
                 btn.disabled = true;
-                btn.textContent = 'Resetting...';
+                btn.textContent = <?= trj('reset_working', 'Resetting...') ?>;
 
                 try {
                     const resp = await fetch('<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>api/auth/reset_password.php', {
@@ -230,20 +232,20 @@ $token = $_GET['token'] ?? '';
 
                     if (data.success) {
                         msgEl.className = 'msg success';
-                        msgEl.textContent = 'Password reset successfully. Redirecting to login...';
+                        msgEl.textContent = <?= trj('reset_success', 'Password reset successfully. Redirecting to login...') ?>;
                         document.getElementById('formFields').style.display = 'none';
                         setTimeout(() => { window.location.href = '<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/login.php'; }, 2000);
                     } else {
                         msgEl.className = 'msg error';
                         msgEl.textContent = data.error;
                         btn.disabled = false;
-                        btn.textContent = 'Reset Password';
+                        btn.textContent = <?= trj('reset_submit', 'Reset Password') ?>;
                     }
                 } catch (e) {
                     msgEl.className = 'msg error';
-                    msgEl.textContent = 'Something went wrong. Please try again.';
+                    msgEl.textContent = <?= trj('err_generic', 'Something went wrong. Please try again.') ?>;
                     btn.disabled = false;
-                    btn.textContent = 'Reset Password';
+                    btn.textContent = <?= trj('reset_submit', 'Reset Password') ?>;
                 }
             }
             </script>

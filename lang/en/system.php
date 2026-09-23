@@ -1575,6 +1575,78 @@ return [
 
     // Companies page (system/companies/index.php). "Company" is the
     // user-facing word for a tenant; the underlying table/code stays `tenants`.
+    // ── REST API keys (system/api/index.php) ────────────────────────────
+    'api' => [
+        'browser_title'   => 'Service Desk - API',
+        'title'           => 'API',
+        'subtitle'        => 'Create and manage keys for the FreeITSM REST API, with granular permissions per key.',
+
+        'base_url'        => 'Base URL',
+        'base_url_desc'   => 'All v1 endpoints live under this URL. Authenticate with <strong>Authorization: Bearer &lt;key&gt;</strong>.',
+        'documentation'   => 'Documentation',
+        'docs_desc'       => '<strong>Documentation</strong> is the interactive reference — browse every endpoint, try live calls, and copy ready-made code in seven languages.',
+
+        'openapi'         => 'OpenAPI specification',
+        'openapi_desc'    => 'A machine-readable description of the whole API. Import it into <strong>Postman</strong> or <strong>Insomnia</strong>, generate a client library, or feed it to any OpenAPI tool &mdash; so you don\'t have to wire up each endpoint by hand. New to this? See <a href="https://github.com/edmozley/freeitsm/wiki/REST-API-OpenAPI" target="_blank" rel="noopener">the guide</a>.',
+        'view_json'       => 'View JSON',
+        'view_yaml'       => 'View YAML',
+
+        'keys'            => 'API keys',
+        'keys_desc'       => 'A key acts as an analyst and can only do what its permissions allow. The full key is shown once, at creation.',
+        'not_ready'       => 'The API key tables haven\'t been created yet — run <a href="../db-verify/">Database Verification</a> once, then reload this page.',
+        'col_name'        => 'Name',
+        'col_key'         => 'Key',
+        'col_acts_as'     => 'Acts as',
+        'col_permissions' => 'Permissions',
+        'col_companies'   => 'Companies',
+        'col_status'      => 'Status',
+        'col_last_used'   => 'Last used',
+        'col_actions'     => 'Actions',
+
+        // Modal
+        'new_key'         => 'New API key',
+        'edit_key'        => 'Edit API key',
+        'name_hint'       => 'What this key is for, e.g. "Monitoring integration".',
+        'name_ph'         => 'Monitoring integration',
+        'acts_as_hint'    => 'Tickets, notes and audit entries are attributed to this analyst.',
+        'perms_hint'      => 'Grant only what the integration needs — everything else is denied.',
+        'select_all'      => 'Select all',
+        'clear_all'       => 'Clear all',
+        'scope'           => 'Company access',
+        'scope_all'       => 'All companies',
+        'scope_specific'  => 'Specific companies only',
+        'expires'         => 'Expires',
+        'expires_hint'    => 'Optional. The key stops working after this date.',
+        'rate_limit'      => 'Rate limit',
+        'rate_limit_hint' => 'Requests per minute. Blank uses the system default (60).',
+
+        // Reveal modal
+        'created'         => 'Key created',
+        'your_new_key'    => 'Your new API key:',
+        'copy_now'        => 'Copy it now — it is stored hashed and can never be shown again.',
+
+        // Script
+        'empty'           => 'No API keys yet — click Add to create one.',
+        'all'             => 'All',
+        'never'           => 'Never',
+        'status_expired'  => 'Expired',
+        'status_active'   => 'Active',
+        'status_disabled' => 'Disabled',
+        'perm_granted'    => '{n} granted',
+        'disable'         => 'Disable',
+        'enable'          => 'Enable',
+        'update_failed'   => 'Update failed',
+        'delete_failed'   => 'Delete failed',
+        'save_failed'     => 'Save failed',
+        'confirm_delete'  => 'Delete the API key "{name}"? Integrations using it will stop working immediately.',
+        'need_company'    => 'Choose at least one company, or select "All companies".',
+        'need_name'       => 'A key name is required.',
+        'need_permission' => 'Grant the key at least one permission.',
+        'copy_failed'     => 'Copy failed',
+        'copy_key_failed' => 'Could not copy the key automatically. Select it and copy it by hand - it cannot be shown again.',
+        'confirm_copied'  => 'Have you copied the key? It cannot be shown again.',
+    ],
+
     'companies' => [
         'title'    => 'Companies',
         'subtitle' => 'The client companies this install serves. Each new company is a separate space; the default company always stays active.',

@@ -57,10 +57,10 @@ $ids = array_slice(array_values(array_unique($ids)), 0, 200);
 // Label stock. Sizes are the common European sheet pitches; "custom" is
 // deliberately absent from v1 rather than half-done.
 $sheets = [
-    '65' => ['label' => '65 per sheet — 38.1 × 21.2 mm', 'w' => 38.1, 'h' => 21.2, 'cols' => 5, 'qr' => 17],
-    '40' => ['label' => '40 per sheet — 45.7 × 25.4 mm', 'w' => 45.7, 'h' => 25.4, 'cols' => 4, 'qr' => 20],
-    '24' => ['label' => '24 per sheet — 63.5 × 33.9 mm', 'w' => 63.5, 'h' => 33.9, 'cols' => 3, 'qr' => 27],
-    '12' => ['label' => '12 per sheet — 63.5 × 72 mm',   'w' => 63.5, 'h' => 72.0, 'cols' => 3, 'qr' => 40],
+    '65' => ['dims' => '38.1 × 21.2 mm', 'w' => 38.1, 'h' => 21.2, 'cols' => 5, 'qr' => 17],
+    '40' => ['dims' => '45.7 × 25.4 mm', 'w' => 45.7, 'h' => 25.4, 'cols' => 4, 'qr' => 20],
+    '24' => ['dims' => '63.5 × 33.9 mm', 'w' => 63.5, 'h' => 33.9, 'cols' => 3, 'qr' => 27],
+    '12' => ['dims' => '63.5 × 72 mm',   'w' => 63.5, 'h' => 72.0, 'cols' => 3, 'qr' => 40],
 ];
 // ⚠️ These keys are NUMERIC STRINGS, which PHP silently casts to integer array
 // keys — so a `===` comparison against the string from $_GET never matches and
@@ -146,7 +146,7 @@ if ($ready && $ids) {
 <head>
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
-    <title>Asset labels · FreeITSM</title>
+    <title><?php echo htmlspecialchars(t('asset-management.labels.browser_title')); ?> · FreeITSM</title>
     <script src="../assets/js/qrcode.min.js"></script>
     <style>
         /* Screen chrome — everything here disappears for the printer. */
@@ -202,22 +202,26 @@ if ($ready && $ids) {
 </head>
 <body>
 <div class="bar">
-    <h1>Asset labels</h1>
-    <label>Label sheet
+    <h1><?php echo htmlspecialchars(t('asset-management.labels.heading')); ?></h1>
+    <label><?php echo htmlspecialchars(t('asset-management.labels.sheet_label')); ?>
         <select onchange="location.search = '?sheet=' + this.value + '&ids=<?php echo htmlspecialchars(implode(',', $ids)); ?>'">
             <?php foreach ($sheets as $k => $s): ?>
                 <option value="<?php echo htmlspecialchars((string)$k); ?>" <?php echo (string)$k === $sheetKey ? 'selected' : ''; ?>>
-                    <?php echo htmlspecialchars($s['label']); ?>
+                    <?php echo htmlspecialchars(t('asset-management.labels.sheet_option', ['n' => $k, 'dims' => $s['dims']])); ?>
                 </option>
             <?php endforeach; ?>
         </select>
     </label>
-    <button class="primary" onclick="window.print()">Print</button>
+    <button class="primary" onclick="window.print()"><?php echo htmlspecialchars(t('asset-management.labels.print')); ?></button>
     <?php /* For a print house: one row per label, the QR payload as a literal
              URL for their variable-data merge. */ ?>
-    <a class="btn" href="?csv=1&amp;ids=<?php echo htmlspecialchars(implode(',', $ids)); ?>">CSV for a printer</a>
-    <a class="btn" href="./">Back to Assets</a>
-    <span style="opacity:0.85;font-size:13px;"><?php echo count($assets); ?> label(s)</span>
+    <a class="btn" href="?csv=1&amp;ids=<?php echo htmlspecialchars(implode(',', $ids)); ?>"><?php echo htmlspecialchars(t('asset-management.labels.csv')); ?></a>
+    <a class="btn" href="./"><?php echo htmlspecialchars(t('asset-management.labels.back')); ?></a>
+    <span style="opacity:0.85;font-size:13px;"><?php
+        echo htmlspecialchars(count($assets) === 1
+            ? t('asset-management.labels.count_one')
+            : t('asset-management.labels.count_many', ['n' => count($assets)]));
+    ?></span>
 </div>
 
 <?php
@@ -232,23 +236,20 @@ $hostIsLocal = in_array(strtolower($labelHost), ['localhost', '127.0.0.1', '::1'
 ?>
 <?php if ($ready && $hostIsLocal): ?>
     <div class="hint" style="background:#fdeceb;border-bottom-color:#f5c6cb;color:#8a1f1a;">
-        <strong>These codes point at <code><?php echo htmlspecialchars($labelHost); ?></code> — a phone scanning them will fail.</strong>
-        To a phone, <code>localhost</code> means the phone itself. Set the address this install is reached on
-        (<strong>Tickets → Settings → Messaging → Public base URL</strong>) and reprint — the codes themselves
-        don't change, only the address inside them.
+        <strong><?php echo t('asset-management.labels.localhost_warn_title', ['host' => '<code>' . htmlspecialchars($labelHost) . '</code>']); ?></strong>
+        <?php echo t('asset-management.labels.localhost_warn_body'); ?>
     </div>
 <?php endif; ?>
 
 <?php if (!$ready): ?>
-    <div class="hint">Asset labels need a database update first — an administrator can run <strong>System → Database Verification</strong>.</div>
+    <div class="hint"><?php echo t('asset-management.labels.not_ready'); ?></div>
 <?php elseif (!$ids): ?>
-    <div class="hint">No assets chosen. Open this page with a list of asset ids, e.g. <code>labels.php?ids=1,2,3</code>.</div>
+    <div class="hint"><?php echo t('asset-management.labels.no_ids'); ?></div>
 <?php elseif (!$assets): ?>
-    <div class="hint">None of those assets are visible to you.</div>
+    <div class="hint"><?php echo htmlspecialchars(t('asset-management.labels.none_visible')); ?></div>
 <?php else: ?>
     <div class="hint">
-        Check the alignment on plain paper before using label stock — printers vary by a millimetre or two.
-        The dashed guides are on screen only and won't print.
+        <?php echo htmlspecialchars(t('asset-management.labels.alignment_hint')); ?>
     </div>
 <?php endif; ?>
 
@@ -259,7 +260,7 @@ $hostIsLocal = in_array(strtolower($labelHost), ['localhost', '127.0.0.1', '::1'
                 <div class="qr" data-url="<?php echo htmlspecialchars($a['url']); ?>"></div>
                 <div class="txt">
                     <div class="tag<?php echo empty($a['asset_tag']) ? ' empty-tag' : ''; ?>">
-                        <?php echo htmlspecialchars($a['asset_tag'] ?: 'no tag'); ?>
+                        <?php echo htmlspecialchars($a['asset_tag'] ?: t('asset-management.labels.no_tag')); ?>
                     </div>
                     <div class="host"><?php echo htmlspecialchars($a['hostname'] ?: ('#' . $a['id'])); ?></div>
                 </div>

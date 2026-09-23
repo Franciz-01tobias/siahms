@@ -2187,6 +2187,42 @@ return [
 
     // tickets/csat/index.php — CSAT analytics page
     'csat' => [
+        // ── The survey a CUSTOMER fills in (tickets/csat/survey.php) ────
+        //
+        // 🔴 PUBLIC AND UNAUTHENTICATED. There is no session, so the locale
+        // comes from the browser Accept-Language header - see
+        // I18n::initFromSession() step 2. A customer who reads Spanish gets a
+        // Spanish survey without ever having had an account, which is the
+        // whole reason these strings are worth translating.
+        'survey' => [
+            // Punctuation is stored as real characters, not HTML entities, so
+            // every one of these can be escaped on output. A translator who
+            // types an entity is then a defect the chunk verifier can see.
+            'title'            => 'How did we do?',
+            'thanks_heading'   => 'Thanks for your feedback!',
+            'thanks_body'      => 'We’ve recorded your response. The team will use it to keep improving the service.',
+            'invalid_heading'  => 'This survey link isn’t valid',
+            'invalid_body'     => 'The link may have been mistyped, or it’s already been used. If you believe this is a mistake, please reply to the original ticket email.',
+            'already_heading'  => 'You’ve already responded',
+            'already_body'     => 'Thanks — we’ve already got your feedback for this ticket. Each survey link can only be used once.',
+            'error_heading'    => 'Something went wrong',
+            'error_body'       => 'We couldn’t save your response just now. Please try again in a minute, or reply to the original ticket email.',
+            'ticket_line'      => 'Ticket',
+            'intro'            => 'Hi {name}, thanks for letting us help. How would you rate the experience?',
+            // Used when the requester record has no name to take a first name from.
+            'intro_fallback'   => 'there',
+            'need_rating'      => 'Please pick a rating before submitting.',
+            'hint'             => 'Hover and click to rate',
+            'comment_ph'       => 'Anything you\'d like to add? (optional)',
+            'submit'           => 'Submit feedback',
+            // The caption under the stars, e.g. "4 / 5 — Satisfied".
+            'caption'          => '{n} / 5 — {label}',
+            'rating_1'         => 'Very dissatisfied',
+            'rating_2'         => 'Dissatisfied',
+            'rating_3'         => 'Neutral',
+            'rating_4'         => 'Satisfied',
+            'rating_5'         => 'Very satisfied',
+        ],
         'page_title'           => 'CSAT — Service Desk',
         'heading'              => 'Customer Satisfaction',
         'range_days'           => '{days}d',

@@ -73,4 +73,46 @@ return [
     // Email-first lookup, in the page's JavaScript
     'js_need_email'     => 'Please enter your email.',
     'js_no_provider'    => 'No single sign-on provider is set up for that email. Please contact your administrator.',
+    // ── Forgot password (auth/forgot-password.php) ──────────────────────
+    // The English here is what the screen showed before it was wired, down to
+    // the capitalisation: wiring a page must not change what anyone reads.
+    'forgot_title'        => 'Forgot Password',
+    'forgot_intro'        => 'Enter your username or email address and we\'ll send you a link to reset your password.',
+    'forgot_identifier'   => 'Username or Email',
+    'forgot_submit'       => 'Send Reset Link',
+    'forgot_sending'      => 'Sending...',
+    'forgot_err_missing'  => 'Please enter your username or email address.',
+
+    // ── Reset password (auth/reset-password.php) ────────────────────────
+    'reset_title'         => 'Reset Password',
+    'reset_intro'         => 'Enter your new password below.',
+    'reset_bad_link'      => 'Invalid or missing reset link. Please request a new one.',
+    'reset_request_new'   => 'Request a new reset link',
+    'reset_confirm_pw'    => 'Confirm Password',
+    'reset_submit'        => 'Reset Password',
+    'reset_working'       => 'Resetting...',
+    'reset_success'       => 'Password reset successfully. Redirecting to login...',
+    'reset_err_both'      => 'Please fill in both fields.',
+    'reset_err_short'     => 'Password must be at least 6 characters.',
+    'reset_err_mismatch'  => 'Passwords do not match.',
+
+    // ── Password expired (auth/force_password_change.php) ───────────────
+    'expired_title'       => 'Service Desk - Change Password',
+    'expired_heading'     => 'Password Expired',
+    'expired_intro'       => 'Your password has expired and must be changed before you can continue.',
+    'expired_current_pw'  => 'Current Password',
+    'expired_confirm_pw'  => 'Confirm New Password',
+    'expired_submit'      => 'Change Password',
+    'expired_working'     => 'Changing...',
+    'expired_success'     => 'Password changed successfully. Redirecting...',
+    'expired_logout'      => 'Logout instead',
+    'expired_err_all'     => 'All fields are required',
+    'expired_err_failed'  => 'Failed to change password. Please try again.',
+
+    // Shared by the three password screens above. 'new_password' is one key
+    // rather than three because all three screens label the field identically;
+    // three keys would be three chances for the locales to disagree.
+    'back_to_login'       => 'Back to login',
+    'new_password'        => 'New Password',
+    'err_generic'         => 'Something went wrong. Please try again.',
 ];

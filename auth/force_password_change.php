@@ -5,6 +5,8 @@
  */
 session_start();
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../includes/i18n_guarded.php';
+i18nGuardedInit('auth');
 
 // Must be logged in with expired password flag
 if (!isset($_SESSION['analyst_id']) || empty($_SESSION['password_expired'])) {
@@ -15,12 +17,12 @@ if (!isset($_SESSION['analyst_id']) || empty($_SESSION['password_expired'])) {
 $analyst_name = $_SESSION['analyst_name'] ?? 'Analyst';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= trLocale() ?>">
 <head>
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Change Password</title>
+    <title><?= trh('expired_title', 'Service Desk - Change Password') ?></title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -151,29 +153,29 @@ $analyst_name = $_SESSION['analyst_name'] ?? 'Analyst';
                 <line x1="12" y1="9" x2="12" y2="13"></line>
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
             </svg>
-            <h1>Password Expired</h1>
-            <p>Your password has expired and must be changed before you can continue.</p>
+            <h1><?= trh('expired_heading', 'Password Expired') ?></h1>
+            <p><?= trh('expired_intro', 'Your password has expired and must be changed before you can continue.') ?></p>
         </div>
 
         <div id="msg" class="msg"></div>
 
         <div class="form-group">
-            <label for="currentPw">Current Password</label>
+            <label for="currentPw"><?= trh('expired_current_pw', 'Current Password') ?></label>
             <input type="password" id="currentPw" autocomplete="current-password" autofocus>
         </div>
 
         <div class="form-group">
-            <label for="newPw">New Password</label>
+            <label for="newPw"><?= trh('new_password', 'New Password') ?></label>
             <input type="password" id="newPw" autocomplete="new-password">
         </div>
 
         <div class="form-group">
-            <label for="confirmPw">Confirm New Password</label>
+            <label for="confirmPw"><?= trh('expired_confirm_pw', 'Confirm New Password') ?></label>
             <input type="password" id="confirmPw" autocomplete="new-password">
         </div>
 
-        <button type="button" class="submit-btn" id="submitBtn" onclick="changePassword()">Change Password</button>
-        <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/analyst_logout.php" class="logout-link">Logout instead</a>
+        <button type="button" class="submit-btn" id="submitBtn" onclick="changePassword()"><?= trh('expired_submit', 'Change Password') ?></button>
+        <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>auth/analyst_logout.php" class="logout-link"><?= trh('expired_logout', 'Logout instead') ?></a>
     </div>
 
     <script>
@@ -189,12 +191,12 @@ $analyst_name = $_SESSION['analyst_name'] ?? 'Analyst';
 
         if (!current || !newPw || !confirm) {
             msgEl.className = 'msg error';
-            msgEl.textContent = 'All fields are required';
+            msgEl.textContent = <?= trj('expired_err_all', 'All fields are required') ?>;
             return;
         }
 
         btn.disabled = true;
-        btn.textContent = 'Changing...';
+        btn.textContent = <?= trj('expired_working', 'Changing...') ?>;
 
         try {
             const resp = await fetch('<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>api/myaccount/change_password.php', {
@@ -210,19 +212,19 @@ $analyst_name = $_SESSION['analyst_name'] ?? 'Analyst';
 
             if (data.success) {
                 msgEl.className = 'msg success';
-                msgEl.textContent = 'Password changed successfully. Redirecting...';
+                msgEl.textContent = <?= trj('expired_success', 'Password changed successfully. Redirecting...') ?>;
                 setTimeout(() => { window.location.href = '<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>index.php'; }, 1500);
             } else {
                 msgEl.className = 'msg error';
                 msgEl.textContent = data.error;
                 btn.disabled = false;
-                btn.textContent = 'Change Password';
+                btn.textContent = <?= trj('expired_submit', 'Change Password') ?>;
             }
         } catch (e) {
             msgEl.className = 'msg error';
-            msgEl.textContent = 'Failed to change password. Please try again.';
+            msgEl.textContent = <?= trj('expired_err_failed', 'Failed to change password. Please try again.') ?>;
             btn.disabled = false;
-            btn.textContent = 'Change Password';
+            btn.textContent = <?= trj('expired_submit', 'Change Password') ?>;
         }
     }
 
