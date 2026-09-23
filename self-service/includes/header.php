@@ -89,6 +89,12 @@ $portalNav = [
     // permanent Training tab leading to an empty page is a worse answer than no
     // tab at all. `cap` is resolved below.
     'training'    => ['href' => 'training.php',    'label' => t('self-service.nav.training'), 'cap' => 'has_training'],
+    // ⚠️ SHOWN ONLY WHEN THE ADMINISTRATOR HAS TURNED IT ON *AND* THE PERSON
+    // ACTUALLY HAS KIT — the same judgement Training makes just above, for the
+    // same reason: a permanent tab leading to "you have no equipment" is a
+    // worse answer than no tab. The page re-checks the setting itself, because
+    // a hidden link is not a permission.
+    'equipment'   => ['href' => 'my-equipment.php', 'label' => t('self-service.nav.equipment'), 'cap' => 'has_equipment'],
     'help'        => ['href' => 'help.php',        'label' => t('self-service.nav.help')],
 ];
 
@@ -106,6 +112,25 @@ $portalNav = [
  * has never opened is mid-migration.
  */
 $portalNavCap = function (string $cap) use ($ss_user_id) {
+    if ($cap === 'has_equipment') {
+        try {
+            $conn = connectToDatabase();
+            // The switch first: it is one cached array and settles most installs
+            // without touching the assets tables at all.
+            if (!selfServicePortalSettings($conn)['show_my_assets']) return false;
+            // Then whether there is anything to show. Mirrors the endpoint's own
+            // rule (an INNER JOIN, because users_assets has orphan rows on real
+            // installs) so the tab cannot appear over an empty page.
+            $st = $conn->prepare(
+                "SELECT 1 FROM users_assets ua JOIN assets a ON a.id = ua.asset_id
+                  WHERE ua.user_id = ? LIMIT 1"
+            );
+            $st->execute([(int)$ss_user_id]);
+            return (bool)$st->fetchColumn();
+        } catch (Throwable $e) {
+            return false;   // fails closed and quietly, like the training one
+        }
+    }
     if ($cap !== 'has_training') return false;
     try {
         require_once __DIR__ . '/../../includes/lms_access.php';

@@ -21,6 +21,17 @@ return [
     // because the pages still use it for their own headings.
     // The portal end of the LMS. The tab only appears for somebody who actually
     // has a course assigned — see self-service/includes/header.php.
+    // ── My equipment (the assets assigned to this person) ───────────────
+    'equipment' => [
+        'title'       => 'My equipment',
+        'subtitle'    => 'The equipment assigned to you. If something here is wrong, or you have kit that is not listed, raise a ticket and the service desk will sort it out.',
+        'none'        => 'No equipment is assigned to you at the moment.',
+        'load_failed' => 'Your equipment could not be loaded just now. Please try again in a minute.',
+        'unnamed'     => 'Unnamed item',
+        'asset_tag'   => 'Asset tag',
+        'serial'      => 'Serial number',
+        'make'        => 'Make and model',
+    ],
     'training' => [
         'title'    => 'Training',
         'heading'  => 'My training',
@@ -53,6 +64,7 @@ return [
         'dashboard'   => 'Dashboard',
         'tickets'     => 'My Tickets',
         'help_centre' => 'Knowledge',
+        'equipment'   => 'My equipment',
         'training'    => 'Training',
         'help'        => 'Help',
         // Screen-reader label for the phone nav drawer's toggle.
