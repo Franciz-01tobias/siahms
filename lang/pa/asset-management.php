@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'ਸੰਪਤੀ ਨੂੰ ਉਪਭੋਗਤਾ ਸੌਂਪੋ',
-        'search_label'           => 'ਉਪਭੋਗਤਾ ਖੋਜੋ',
         'search_placeholder'     => 'ਨਾਮ ਜਾਂ ਈਮੇਲ ਨਾਲ ਖੋਜੋ...',
-        'type_to_search'         => 'ਉਪਭੋਗਤਾ ਖੋਜਣ ਲਈ ਟਾਈਪ ਕਰੋ',
         'min_chars'              => 'ਖੋਜਣ ਲਈ ਘੱਟੋ-ਘੱਟ 2 ਅੱਖਰ ਟਾਈਪ ਕਰੋ',
         'no_users'               => 'ਕੋਈ ਉਪਭੋਗਤਾ ਨਹੀਂ ਮਿਲਿਆ',
         'expected_return_label'  => 'ਉਮੀਦ ਕੀਤੀ ਵਾਪਸੀ ਮਿਤੀ (ਚੋਣਵੀਂ)',

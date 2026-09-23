@@ -246,6 +246,92 @@ class AssetsService
     }
 
     /**
+     * Assign an ANALYST to an asset — the desk's own kit.
+     *
+     * 🔑 Why this exists at all. Assets could only be held by a REQUESTER, and
+     * analysts are not requesters: on a real install five of seven analysts had
+     * no `users` row, so most of the desk could not be recorded as holding
+     * anything. Asked for in the 2.5.0 request list.
+     *
+     * 🔴 EXACTLY ONE HOLDER COLUMN IS SET. A row names a requester or an
+     * analyst, never both. The database cannot express that (a CHECK across two
+     * columns is not portable to every MySQL version supported here), so it is
+     * enforced here and nowhere else — which is precisely why assignment must
+     * go through this service rather than an INSERT somewhere convenient.
+     *
+     * $in: analyst_id | analyst_email, plus optional notes,
+     * expected_return_date, previous_analyst_id.
+     */
+    public static function assignAnalyst(PDO $conn, ActorContext $ctx, int $assetId, array $in): array
+    {
+        self::loadRow($conn, $assetId);   // 404 if gone
+        $actorId = $ctx->actorId;
+
+        if (isset($in['analyst_id']) && $in['analyst_id'] !== '') {
+            $a = $conn->prepare("SELECT id, full_name FROM analysts WHERE id = ? AND is_active = 1");
+            $a->execute([(int)$in['analyst_id']]);
+        } elseif (isset($in['analyst_email']) && trim((string)$in['analyst_email']) !== '') {
+            $a = $conn->prepare("SELECT id, full_name FROM analysts WHERE email = ? AND is_active = 1");
+            $a->execute([strtolower(trim((string)$in['analyst_email']))]);
+        } else {
+            throw new ServiceError('validation', 'missing_field', "Provide 'analyst_id' or 'analyst_email'.");
+        }
+        $row = $a->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            // Inactive is named separately from unknown: "there is no such
+            // analyst" sends somebody looking for a typo that is not there.
+            throw new ServiceError('validation', 'invalid_field', 'Unknown or inactive analyst.');
+        }
+        $analystId   = (int)$row['id'];
+        $analystName = $row['full_name'];
+
+        $notes = trim((string)($in['notes'] ?? '')) ?: null;
+        $expectedReturn = self::parseDate($in['expected_return_date'] ?? null, 'expected_return_date');
+
+        $check = $conn->prepare("SELECT id FROM users_assets WHERE asset_id = ? AND analyst_id = ?");
+        $check->execute([$assetId, $analystId]);
+        if ($check->fetchColumn()) {
+            throw new ServiceError('conflict', 'conflict', 'This analyst is already assigned to this asset.');
+        }
+
+        // user_id is left NULL. That column was NOT NULL until this feature; see
+        // api/system/db_verify.php, which relaxes it on an existing install.
+        $conn->prepare(
+            "INSERT INTO users_assets (asset_id, analyst_id, assigned_by_analyst_id, notes, expected_return_date, assigned_datetime)
+             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
+        )->execute([$assetId, $analystId, $actorId, $notes, $expectedReturn]);
+
+        // Custody trail, best-effort as elsewhere. asset_checkout_log.user_id
+        // names a requester, so an analyst handover records the NAME and leaves
+        // the id NULL rather than writing an analyst id into a requester column.
+        try {
+            $conn->prepare(
+                "INSERT INTO asset_checkout_log (asset_id, user_id, user_name, action, expected_return_date, analyst_id, notes, action_datetime)
+                 VALUES (?, NULL, ?, 'checkout', ?, ?, ?, UTC_TIMESTAMP())"
+            )->execute([$assetId, $analystName, $expectedReturn, $actorId, $notes]);
+        } catch (Exception $clogEx) { /* custody log not critical */ }
+
+        $oldName = null;
+        if (!empty($in['previous_analyst_id'])) {
+            $prev = $conn->prepare("SELECT full_name FROM analysts WHERE id = ?");
+            $prev->execute([(int)$in['previous_analyst_id']]);
+            $prevRow = $prev->fetch(PDO::FETCH_ASSOC);
+            $oldName = $prevRow ? $prevRow['full_name'] : (string)$in['previous_analyst_id'];
+        }
+        self::auditWrite($conn, $assetId, $actorId, 'assigned_analyst', $oldName, $analystName);
+
+        self::dispatch('asset.assigned', $conn, $assetId, 0, $analystName);
+
+        return [
+            'asset_id'             => $assetId,
+            'analyst_id'           => $analystId,
+            'name'                 => $analystName,
+            'expected_return_date' => $expectedReturn,
+            'notes'                => $notes,
+        ];
+    }
+
+    /**
      * Assign a requester to an asset. $in: user_id | user_email, plus optional
      * notes, expected_return_date, previous_user_id (UI re-assign old_value).
      * Returns [asset_id, user_id, name, expected_return_date, notes].
@@ -326,6 +412,8 @@ class AssetsService
         $actorId = $ctx->actorId;
 
         // Snapshot holder + due-back before removal, for the custody trail + audit.
+        // Filtered on user_id, so this only ever sees a requester assignment —
+        // an analyst one is removed by unassignAnalyst() below.
         $snap = $conn->prepare(
             "SELECT u.display_name, ua.expected_return_date
              FROM users_assets ua INNER JOIN users u ON u.id = ua.user_id
@@ -353,6 +441,50 @@ class AssetsService
         self::dispatch('asset.unassigned', $conn, $assetId, $userId, $row['display_name']);
 
         return ['asset_id' => $assetId, 'user_id' => $userId];
+    }
+
+    /**
+     * Remove an analyst from an asset — the mirror of unassignUser().
+     *
+     * Separate for the same reason assignAnalyst() is: it matches on a different
+     * column, and a shared function would be an `if` at every line.
+     */
+    public static function unassignAnalyst(PDO $conn, ActorContext $ctx, int $assetId, int $analystId, bool $skipAudit = false): array
+    {
+        self::loadRow($conn, $assetId);   // 404 if gone
+        $actorId = $ctx->actorId;
+
+        $snap = $conn->prepare(
+            "SELECT a.full_name, ua.expected_return_date
+             FROM users_assets ua INNER JOIN analysts a ON a.id = ua.analyst_id
+             WHERE ua.asset_id = ? AND ua.analyst_id = ?"
+        );
+        $snap->execute([$assetId, $analystId]);
+        $row = $snap->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            throw new ServiceError('not_found', 'not_found', 'Assignment not found.');
+        }
+
+        $conn->prepare("DELETE FROM users_assets WHERE asset_id = ? AND analyst_id = ?")->execute([$assetId, $analystId]);
+
+        // As in assignAnalyst: the custody log's user_id names a REQUESTER, so an
+        // analyst handover records the name and leaves the id NULL rather than
+        // writing an analyst id into a requester column, where it would later be
+        // read back as whichever requester happened to share that number.
+        try {
+            $conn->prepare(
+                "INSERT INTO asset_checkout_log (asset_id, user_id, user_name, action, expected_return_date, analyst_id, action_datetime)
+                 VALUES (?, NULL, ?, 'checkin', ?, ?, UTC_TIMESTAMP())"
+            )->execute([$assetId, $row['full_name'], $row['expected_return_date'], $actorId]);
+        } catch (Exception $clogEx) { /* custody log not critical */ }
+
+        if (!$skipAudit) {
+            self::auditWrite($conn, $assetId, $actorId, 'assigned_analyst', $row['full_name'], null);
+        }
+
+        self::dispatch('asset.unassigned', $conn, $assetId, 0, $row['full_name']);
+
+        return ['asset_id' => $assetId, 'analyst_id' => $analystId];
     }
 
     /** Fire an asset.* workflow event (best-effort; the engine swallows its own errors). */

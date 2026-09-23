@@ -104,7 +104,11 @@ try {
         }
 
         $sql .= "
-                    COUNT(ua.user_id) as user_count
+                    -- 🔴 COUNT(ua.id), not COUNT(ua.user_id). A holder may be an
+                    -- analyst, whose user_id is NULL - and COUNT ignores NULLs,
+                    -- so counting that column would quietly report one fewer
+                    -- holder than the asset actually has.
+                    COUNT(ua.id) as user_count
                 FROM assets a
                 LEFT JOIN users_assets ua ON ua.asset_id = a.id";
 

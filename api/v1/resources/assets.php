@@ -311,8 +311,17 @@ function apiAssetsGet(PDO $conn, array $apiKey, array $params, array $body): voi
 
     // Current holders inline — the one child collection you nearly always want.
     $uStmt = $conn->prepare(
-        "SELECT ua.user_id, u.display_name, u.email, ua.assigned_datetime, ua.expected_return_date, ua.notes
-         FROM users_assets ua LEFT JOIN users u ON u.id = ua.user_id
+        // A holder is a requester OR an analyst. analyst_id and holder_type are
+        // ADDED rather than replacing anything, so an existing API consumer
+        // reading user_id and display_name keeps working unchanged.
+        "SELECT ua.user_id, ua.analyst_id,
+                CASE WHEN ua.analyst_id IS NOT NULL THEN 'analyst' ELSE 'user' END AS holder_type,
+                COALESCE(u.display_name, ha.full_name) AS display_name,
+                COALESCE(u.email, ha.email)            AS email,
+                ua.assigned_datetime, ua.expected_return_date, ua.notes
+         FROM users_assets ua
+         LEFT JOIN users u     ON u.id  = ua.user_id
+         LEFT JOIN analysts ha ON ha.id = ua.analyst_id
          WHERE ua.asset_id = ? ORDER BY ua.assigned_datetime ASC"
     );
     $uStmt->execute([$params[0]]);

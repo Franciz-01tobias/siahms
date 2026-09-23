@@ -2468,9 +2468,27 @@ CREATE TABLE IF NOT EXISTS `assets` (
     -- the suppliers table is defined later in this file, so the FK can't be inline here.
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Who is holding an asset.
+--
+-- EITHER a requester (`user_id`) OR a member of the desk (`analyst_id`), never
+-- both and never neither. AssetsService enforces that; the database cannot,
+-- because a CHECK across two columns is not portable to every MySQL version
+-- this product supports.
+--
+-- 🔴 `user_id` IS NULLABLE, AND WAS NOT. Assets could only be assigned to a
+-- requester, and analysts are not requesters - on a real install most of the
+-- desk had no `users` row at all, so an analyst holding a laptop simply could
+-- not be recorded. Relaxing the rule cannot invalidate an existing row, because
+-- every existing row already has a user.
+--
+-- ⚠️ TWO unique keys, one per kind of holder. MySQL permits repeated NULLs in a
+-- unique key, so `uq_user_asset` no longer constrains analyst rows at all (their
+-- user_id is NULL) and would have let the same analyst be given the same asset
+-- any number of times. `uq_analyst_asset` is what actually stops that.
 CREATE TABLE IF NOT EXISTS `users_assets` (
     `id`                        INT NOT NULL AUTO_INCREMENT,
-    `user_id`                   INT NOT NULL,
+    `user_id`                   INT NULL,
+    `analyst_id`                INT NULL,
     `asset_id`                  INT NOT NULL,
     `assigned_datetime`         DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
     `assigned_by_analyst_id`    INT NULL,
@@ -2479,7 +2497,9 @@ CREATE TABLE IF NOT EXISTS `users_assets` (
     `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,   -- set by the demo data importer (#1297)
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_user_asset` (`user_id`, `asset_id`),
+    UNIQUE KEY `uq_analyst_asset` (`analyst_id`, `asset_id`),
     CONSTRAINT `fk_users_assets_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+    CONSTRAINT `fk_users_assets_holder_analyst` FOREIGN KEY (`analyst_id`) REFERENCES `analysts` (`id`),
     CONSTRAINT `fk_users_assets_analyst` FOREIGN KEY (`assigned_by_analyst_id`) REFERENCES `analysts` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

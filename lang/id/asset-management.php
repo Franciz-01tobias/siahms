@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'Tugaskan pengguna ke aset',
-        'search_label'           => 'Cari pengguna',
         'search_placeholder'     => 'Cari berdasarkan nama atau email...',
-        'type_to_search'         => 'Ketik untuk mencari pengguna',
         'min_chars'              => 'Ketik minimal 2 karakter untuk mencari',
         'no_users'               => 'Tidak ada pengguna ditemukan',
         'expected_return_label'  => 'Tanggal pengembalian yang diharapkan (opsional)',

@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'Assegna utente all\'asset',
-        'search_label'           => 'Cerca utente',
         'search_placeholder'     => 'Cerca per nome o email...',
-        'type_to_search'         => 'Digita per cercare utenti',
         'min_chars'              => 'Digita almeno 2 caratteri per cercare',
         'no_users'               => 'Nessun utente trovato',
         'expected_return_label'  => 'Data di restituzione prevista (facoltativa)',

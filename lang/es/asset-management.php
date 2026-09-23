@@ -273,10 +273,7 @@ Hay dos formas de evitarlo: cambie también el nombre en la hoja de cálculo, o 
         'duplicate' => 'Ya existe un activo llamado «{name}». Los nombres deben ser únicos — búsquelo en la lista, o dele un nombre distinto a este.',
     ],
     'assign' => [
-        'heading' => 'Asignar usuario al activo',
-        'search_label' => 'Buscar usuario',
         'search_placeholder' => 'Buscar por nombre o correo electrónico...',
-        'type_to_search' => 'Escriba para buscar usuarios',
         'min_chars' => 'Escriba al menos 2 caracteres para buscar',
         'no_users' => 'No se encontraron usuarios',
         'expected_return_label' => 'Fecha de devolución prevista (opcional)',

@@ -1694,9 +1694,20 @@ return [
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
+    // Who is holding an asset. EITHER a requester (user_id) OR a member of the
+    // desk (analyst_id) - never both, never neither. TicketsService' sibling
+    // AssetsService enforces that; the database cannot, because a CHECK across
+    // two columns is not portable to the MySQL versions this supports.
+    //
+    // 🔴 user_id is NULLABLE, and was not. Assets could only ever be assigned to
+    // a requester, and analysts are not requesters - on a real install most of
+    // the desk had no `users` row at all, so an analyst holding a laptop could
+    // not be recorded. api/system/db_verify.php relaxes the column on existing
+    // installs, the same probe-then-MODIFY it has used five times before.
     'users_assets' => [
         'id'                        => 'INT NOT NULL AUTO_INCREMENT',
-        'user_id'                   => 'INT NOT NULL',
+        'user_id'                   => 'INT NULL',
+        'analyst_id'                => 'INT NULL',
         'asset_id'                  => 'INT NOT NULL',
         'assigned_datetime'         => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'assigned_by_analyst_id'    => 'INT NULL',

@@ -331,14 +331,31 @@ return [
     ],
 
     // Assign-user modal
+    // An asset can be given to a requester OR to a member of the desk, so three
+    // of these no longer say "user".
+    //
+    // Those three had to be EVICTED from every locale, not merely reworded here.
+    // A translation is keyed on the key, never on the English, so 24 locales
+    // would have gone on showing a faithful translation of the OLD wording -
+    // still scoring 100%, and still telling a Danish reader the dialog only
+    // assigns users.
     'assign' => [
-        'heading'                => 'Assign user to asset',
-        'search_label'           => 'Search for user',
-        'search_placeholder'     => 'Search by name or email...',
-        'type_to_search'         => 'Type to search for users',
-        'min_chars'              => 'Type at least 2 characters to search',
-        'no_users'               => 'No users found',
-        'expected_return_label'  => 'Expected return date (optional)',
+        'heading'                    => 'Assign this asset',
+        'search_label'               => 'Search',
+        'search_placeholder'         => 'Search by name or email...',
+        'search_placeholder_analyst' => 'Search analysts by name or email...',
+        'type_to_search'             => 'Type to search',
+        'min_chars'                  => 'Type at least 2 characters to search',
+        'no_users'                   => 'No users found',
+        'no_analysts'                => 'No analysts found',
+        'expected_return_label'      => 'Expected return date (optional)',
+        // The two sides of the picker. "User" is the product's word for the
+        // people the desk serves; "Analyst" is its word for the desk itself.
+        // Both already carry that meaning everywhere else in the UI, so neither
+        // introduces a noun a translator has to guess at.
+        'who_label'                  => 'Assign to',
+        'kind_user'                  => 'User',
+        'kind_analyst'               => 'Analyst',
     ],
 
     // Storage / disk cards

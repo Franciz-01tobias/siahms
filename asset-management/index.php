@@ -1395,6 +1395,40 @@ $translationNamespaces = ['common', 'asset-management'];
             background-color: #fff3e0;
             color: #e65100;
         }
+        /* The people/analyst switch in the assign dialog. Two buttons rather
+           than a <select>: with exactly two choices both are readable at once,
+           and the one in force is visible without opening anything. */
+        .assign-kind-toggle {
+            display: inline-flex;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .assign-kind-btn {
+            padding: 6px 16px;
+            font-size: 13px;
+            font-family: inherit;
+            border: none;
+            background: var(--bg-secondary, #f5f5f5);
+            color: var(--text-primary, #333);
+            cursor: pointer;
+        }
+        .assign-kind-btn + .assign-kind-btn {
+            border-left: 1px solid var(--border-color, #ddd);
+        }
+        .assign-kind-btn.active {
+            background: var(--primary-color, #4a90d9);
+            color: #fff;
+        }
+        .holder-kind-tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 11px;
+            background: var(--bg-secondary, #eee);
+            color: var(--text-muted, #666);
+        }
     </style>
     <?php /* Mobile-friendly opt-in (#936). Deliberately AFTER this page's own
              <style> block so its @media rules win on ties — the ordering rule
@@ -1550,6 +1584,18 @@ $translationNamespaces = ['common', 'asset-management'];
                 <span><?php echo htmlspecialchars(t('asset-management.assign.heading')); ?></span>
             </div>
             <div class="modal-body">
+                <div class="form-group">
+                    <?php /* Which directory to search. Analysts are not in
+                             `users` - on a real install most of the desk has no
+                             requester record at all - so this genuinely changes
+                             where the names come from, not just how they are
+                             filtered. */ ?>
+                    <label class="form-label"><?php echo htmlspecialchars(t('asset-management.assign.who_label')); ?></label>
+                    <div class="assign-kind-toggle">
+                        <button type="button" class="assign-kind-btn active" data-kind="user" onclick="setAssignKind('user')"><?php echo htmlspecialchars(t('asset-management.assign.kind_user')); ?></button>
+                        <button type="button" class="assign-kind-btn" data-kind="analyst" onclick="setAssignKind('analyst')"><?php echo htmlspecialchars(t('asset-management.assign.kind_analyst')); ?></button>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label class="form-label"><?php echo htmlspecialchars(t('asset-management.assign.search_label')); ?></label>
                     <input type="text" class="search-box" id="userSearchInput" placeholder="<?php echo htmlspecialchars(t('asset-management.assign.search_placeholder')); ?>" oninput="searchUsersForAssign()">
@@ -1716,6 +1762,13 @@ $translationNamespaces = ['common', 'asset-management'];
         let searchTimeout = null;
         let selectedUserForAssign = null;
         let currentAssignedUserId = null;
+        // An asset can be held by a requester OR by a member of the desk. Both
+        // kinds are tracked separately rather than as one id plus a flag,
+        // because the two ids come from different tables and a single variable
+        // holding "3" would be ambiguous at every read.
+        let selectedAnalystForAssign = null;
+        let currentAssignedAnalystId = null;
+        let assignTargetKind = 'user';
         let assetTypes = [];
         let assetStatusTypes = [];
         let assetLocations = [];
@@ -2743,26 +2796,37 @@ $translationNamespaces = ['common', 'asset-management'];
                 const buttonsSpan = document.getElementById('assignButtons');
 
                 if (data.success) {
-                    const user = data.users.length > 0 ? data.users[0] : null;
+                    const holder = data.users.length > 0 ? data.users[0] : null;
 
-                    if (user) {
-                        currentAssignedUserId = user.user_id;
+                    if (holder) {
+                        const isAnalyst = (holder.holder_type === 'analyst');
+                        currentAssignedUserId = isAnalyst ? null : holder.user_id;
+                        currentAssignedAnalystId = isAnalyst ? holder.analyst_id : null;
                         // The holder's name is a link to their record (Ed). The
                         // journey already worked the other way round after #85;
                         // this is the return leg, so "who has this?" and "what
                         // do they have?" are each one click from the other.
+                        //
+                        // An analyst has no `users` record to link to, so their
+                        // name is plain text with a tag saying which kind of
+                        // person they are. A link to users.php with an analyst
+                        // id would open somebody else's record entirely.
+                        const nameHtml = isAnalyst
+                            ? `${escapeHtml(holder.display_name || window.t('asset-management.common.unknown'))}<span class="holder-kind-tag">${window.t('asset-management.assign.kind_analyst')}</span>`
+                            : `<a class="user-name-link" href="users.php?user_id=${holder.user_id}">${escapeHtml(holder.display_name || window.t('asset-management.common.unknown'))}</a>`;
                         infoSpan.innerHTML = `
-                            <span class="user-name"><a class="user-name-link" href="users.php?user_id=${user.user_id}">${escapeHtml(user.display_name || window.t('asset-management.common.unknown'))}</a></span>
-                            <span class="user-email">${escapeHtml(user.email || '')}</span>
-                            <span class="user-assigned-date">${window.t('asset-management.detail.assigned_on', { date: formatDate(user.assigned_datetime) })}</span>
-                            ${user.expected_return_date ? `<span class="user-assigned-date">${window.t('asset-management.detail.due_back', { date: escapeHtml(user.expected_return_date) })}</span>` : ''}
+                            <span class="user-name">${nameHtml}</span>
+                            <span class="user-email">${escapeHtml(holder.email || '')}</span>
+                            <span class="user-assigned-date">${window.t('asset-management.detail.assigned_on', { date: formatDate(holder.assigned_datetime) })}</span>
+                            ${holder.expected_return_date ? `<span class="user-assigned-date">${window.t('asset-management.detail.due_back', { date: escapeHtml(holder.expected_return_date) })}</span>` : ''}
                         `;
                         buttonsSpan.innerHTML = `
                             <button class="btn btn-primary btn-sm" onclick="reassignUser()">${window.t('asset-management.detail.reassign')}</button>
-                            <button class="btn btn-danger btn-sm" onclick="unassignUser(${user.user_id})">${window.t('asset-management.detail.remove')}</button>
+                            <button class="btn btn-danger btn-sm" onclick="unassignUser(${isAnalyst ? holder.analyst_id : holder.user_id}, '${isAnalyst ? 'analyst' : 'user'}')">${window.t('asset-management.detail.remove')}</button>
                         `;
                     } else {
                         currentAssignedUserId = null;
+                        currentAssignedAnalystId = null;
                         infoSpan.innerHTML = `<span class="unassigned-text">${window.t('asset-management.status.unassigned')}</span>`;
                         buttonsSpan.innerHTML = `
                             <button class="btn btn-primary btn-sm" onclick="openAssignModal()">${window.t('asset-management.detail.assign')}</button>
@@ -3782,21 +3846,49 @@ $translationNamespaces = ['common', 'asset-management'];
         // Open assign user modal
         function openAssignModal() {
             selectedUserForAssign = null;
+            selectedAnalystForAssign = null;
+            setAssignKind('user');
             document.getElementById('userSearchInput').value = '';
-            document.getElementById('userSearchResults').innerHTML = `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.assign.type_to_search')}</div>`;
             document.getElementById('assignExpectedReturn').value = '';
             document.getElementById('assignBtn').disabled = true;
             document.getElementById('assignUserModal').classList.add('active');
             document.getElementById('userSearchInput').focus();
         }
 
+        /**
+         * Switch the picker between the two directories.
+         *
+         * CLEARS THE SELECTION. Somebody who picks a name, changes their mind
+         * about which directory they wanted and picks nothing would otherwise
+         * assign the person they had already chosen - from the wrong table, to
+         * a holder column that does not match. Forgetting is the safe behaviour
+         * here even though it costs a click.
+         */
+        function setAssignKind(kind) {
+            assignTargetKind = (kind === 'analyst') ? 'analyst' : 'user';
+            selectedUserForAssign = null;
+            selectedAnalystForAssign = null;
+            document.getElementById('assignBtn').disabled = true;
+            document.querySelectorAll('.assign-kind-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.kind === assignTargetKind);
+            });
+            const input = document.getElementById('userSearchInput');
+            input.placeholder = window.t(assignTargetKind === 'analyst'
+                ? 'asset-management.assign.search_placeholder_analyst'
+                : 'asset-management.assign.search_placeholder');
+            document.getElementById('userSearchResults').innerHTML =
+                `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.assign.type_to_search')}</div>`;
+            if (input.value) { searchUsersForAssign(); }
+        }
+
         // Close assign modal
         function closeAssignModal() {
             document.getElementById('assignUserModal').classList.remove('active');
             selectedUserForAssign = null;
+            selectedAnalystForAssign = null;
         }
 
-        // Search users for assignment
+        // Search the chosen directory for somebody to give the asset to
         async function searchUsersForAssign() {
             const search = document.getElementById('userSearchInput').value;
 
@@ -3805,33 +3897,44 @@ $translationNamespaces = ['common', 'asset-management'];
                 return;
             }
 
+            const analystMode = (assignTargetKind === 'analyst');
+            const url = analystMode
+                ? `${API_BASE}get_analysts.php?search=${encodeURIComponent(search)}`
+                : `${API_TICKETS}get_users.php?search=${encodeURIComponent(search)}`;
+
             try {
-                const response = await fetch(`${API_TICKETS}get_users.php?search=${encodeURIComponent(search)}`);
+                const response = await fetch(url);
                 const data = await response.json();
 
                 const container = document.getElementById('userSearchResults');
+                const rows = data.success ? (analystMode ? data.analysts : data.users) : [];
+                const selectedId = analystMode ? selectedAnalystForAssign : selectedUserForAssign;
 
-                if (data.success && data.users.length > 0) {
-                    container.innerHTML = data.users.map(user => `
-                        <div class="user-search-item ${selectedUserForAssign == user.id ? 'selected' : ''}" onclick="selectUserForAssign(${user.id}, '${escapeHtml(user.display_name)}')">
-                            <div class="user-search-name">${escapeHtml(user.display_name || window.t('asset-management.common.unknown'))}</div>
-                            <div class="user-search-email">${escapeHtml(user.email || '')}</div>
+                if (rows && rows.length > 0) {
+                    container.innerHTML = rows.map(person => `
+                        <div class="user-search-item ${selectedId == person.id ? 'selected' : ''}" onclick="selectUserForAssign(${person.id})">
+                            <div class="user-search-name">${escapeHtml(person.display_name || window.t('asset-management.common.unknown'))}</div>
+                            <div class="user-search-email">${escapeHtml(person.email || '')}</div>
                         </div>
                     `).join('');
                 } else {
-                    container.innerHTML = `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.assign.no_users')}</div>`;
+                    container.innerHTML = `<div class="empty-state" style="padding: 20px;">${window.t(analystMode ? 'asset-management.assign.no_analysts' : 'asset-management.assign.no_users')}</div>`;
                 }
             } catch (error) {
-                console.error('Error searching users:', error);
+                console.error('Error searching for an asset holder:', error);
             }
         }
 
-        // Select a user for assignment
-        function selectUserForAssign(userId, userName) {
-            selectedUserForAssign = userId;
+        // Select somebody for assignment. The id lands in whichever variable
+        // matches the directory it came from - see setAssignKind.
+        function selectUserForAssign(personId) {
+            if (assignTargetKind === 'analyst') {
+                selectedAnalystForAssign = personId;
+            } else {
+                selectedUserForAssign = personId;
+            }
             document.getElementById('assignBtn').disabled = false;
 
-            // Update UI to show selection
             document.querySelectorAll('.user-search-item').forEach(item => {
                 item.classList.remove('selected');
             });
@@ -3843,33 +3946,41 @@ $translationNamespaces = ['common', 'asset-management'];
             openAssignModal();
         }
 
-        // Confirm user assignment (handles both assign and re-assign)
+        // Confirm the assignment (handles both assign and re-assign, and both
+        // kinds of holder).
         async function confirmAssignUser() {
-            if (!selectedUserForAssign || !selectedAssetId) return;
+            const analystMode = (assignTargetKind === 'analyst');
+            const chosenId = analystMode ? selectedAnalystForAssign : selectedUserForAssign;
+            if (!chosenId || !selectedAssetId) return;
 
             try {
+                // Re-assign removes whoever holds it now - which may be a
+                // requester or an analyst, and is not necessarily the same kind
+                // as the person taking it over.
                 const previousUserId = currentAssignedUserId;
+                const previousAnalystId = currentAssignedAnalystId;
 
-                // If re-assigning, remove current user first (skip audit, assign will log it)
-                if (previousUserId) {
+                if (previousUserId || previousAnalystId) {
+                    const removeBody = { asset_id: selectedAssetId, skip_audit: true };
+                    if (previousAnalystId) { removeBody.analyst_id = previousAnalystId; }
+                    else { removeBody.user_id = previousUserId; }
                     await fetch(API_BASE + 'unassign_asset_user.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            asset_id: selectedAssetId,
-                            user_id: previousUserId,
-                            skip_audit: true
-                        })
+                        body: JSON.stringify(removeBody)
                     });
                 }
 
                 const assignBody = {
                     asset_id: selectedAssetId,
-                    user_id: selectedUserForAssign,
                     expected_return_date: document.getElementById('assignExpectedReturn').value || null
                 };
-                if (previousUserId) {
-                    assignBody.previous_user_id = previousUserId;
+                if (analystMode) {
+                    assignBody.analyst_id = chosenId;
+                    if (previousAnalystId) { assignBody.previous_analyst_id = previousAnalystId; }
+                } else {
+                    assignBody.user_id = chosenId;
+                    if (previousUserId) { assignBody.previous_user_id = previousUserId; }
                 }
 
                 const response = await fetch(API_BASE + 'assign_asset_user.php', {
@@ -3889,23 +4000,25 @@ $translationNamespaces = ['common', 'asset-management'];
                     showToast(window.t('asset-management.toast.assign_error', { error: data.error }), 'error');
                 }
             } catch (error) {
-                console.error('Error assigning user:', error);
+                console.error('Error assigning asset:', error);
                 showToast(window.t('asset-management.toast.assign_failed'), 'error');
             }
         }
 
-        // Unassign a user from the asset
-        async function unassignUser(userId) {
+        // Take the asset back off whoever holds it. `kind` says which column the
+        // id belongs in - passing an analyst id as a user id would find no
+        // assignment and report "not found" for a row plainly on screen.
+        async function unassignUser(personId, kind) {
             if (!(await showConfirm({ title: window.t('asset-management.common.delete'), message: window.t('asset-management.confirm.remove_user'), okLabel: window.t('asset-management.common.delete'), okClass: 'danger' }))) return;
+
+            const body = { asset_id: selectedAssetId };
+            if (kind === 'analyst') { body.analyst_id = personId; } else { body.user_id = personId; }
 
             try {
                 const response = await fetch(API_BASE + 'unassign_asset_user.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        asset_id: selectedAssetId,
-                        user_id: userId
-                    })
+                    body: JSON.stringify(body)
                 });
                 const data = await response.json();
 

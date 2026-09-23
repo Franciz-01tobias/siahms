@@ -290,9 +290,18 @@ function recordPreviewAsset(PDO $conn, int $analystId, int $id): ?array
                 -- laptop, a meeting-room screen - so the count comes back with
                 -- the name. Naming the most recent holder alone would say one
                 -- person has something two people do.
-                (SELECT COALESCE(NULLIF(TRIM(u.preferred_name), ''), u.display_name)
-                   FROM users_assets ua JOIN users u ON u.id = ua.user_id
-                  WHERE ua.asset_id = a.id ORDER BY ua.assigned_datetime DESC LIMIT 1) AS holder,
+                -- 🔴 Both kinds of holder, or the preview lies QUIETLY: the
+                -- count below is COUNT(*) and includes analyst rows, so an
+                -- analyst-held asset used to show a holder count of one with no name
+                -- beside it. A blank where a name should be reads as a bug in
+                -- the preview rather than as information.
+                (SELECT COALESCE(NULLIF(TRIM(u.preferred_name), ''), u.display_name, ha.full_name)
+                   FROM users_assets ua
+                   LEFT JOIN users u     ON u.id  = ua.user_id
+                   LEFT JOIN analysts ha ON ha.id = ua.analyst_id
+                  WHERE ua.asset_id = a.id
+                    AND (u.id IS NOT NULL OR ha.id IS NOT NULL)
+                  ORDER BY ua.assigned_datetime DESC LIMIT 1) AS holder,
                 (SELECT COUNT(*) FROM users_assets ua WHERE ua.asset_id = a.id) AS holders
            FROM assets a
       LEFT JOIN asset_types ty ON ty.id = a.asset_type_id
