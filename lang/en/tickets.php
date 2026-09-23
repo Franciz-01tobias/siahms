@@ -1243,7 +1243,7 @@ return [
                 'event_note_shared'          => 'Note shared with requester',
                 'event_csat_request'         => 'CSAT survey',
             'event_assigned'      => 'Ticket assigned',
-                'event_closed'        => 'Ticket closed',
+                'event_analyst_assigned' => 'Assigned to an analyst',            'event_closed'        => 'Ticket closed',
                 'subject'             => 'Subject',
                 'subject_placeholder' => 'e.g., Your request has been received',
                 'subject_help'        => '[SDREF:...] is added automatically for reply threading.',
@@ -1253,7 +1253,7 @@ return [
                 // matched literally at send time and a translated one silently
                 // never fills in. The two under "Only on some triggers" are listed
                 // separately on purpose: they were in prose and nobody could find them.
-                'body_help'           => '<strong>Always available:</strong> [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date].<br><br><strong>Only on some triggers:</strong><br>[note_text] &mdash; on <strong>Note shared with requester</strong>, the note itself. Leave it out and the email simply says there is an update.<br>[ticket_closed_message] &mdash; on <strong>Ticket closed</strong>, a one-off note the analyst types as they close. Add it and they are asked for one; leave it out and they are not.<br><br>HTML is supported (e.g. styled buttons).',
+                'body_help' => '<strong>Always available:</strong> [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date].<br><br><strong>For an email to the analyst:</strong><br>[assigned_analyst_name], [assigned_analyst_first_name], [assigned_analyst_email] &mdash; the analyst the ticket is <em>assigned</em> to.<br>[ticket_url_analyst] &mdash; a link into the ticket in the inbox. Use this instead of [ticket_url], which opens the customer&rsquo;s own view and needs a portal account.<br><br>&#9888; <strong>[analyst_name] is not always the assigned analyst.</strong> It gives the ticket&rsquo;s <em>owner</em> where one is set, and falls back to the assignee otherwise &mdash; on most desks those are different people. It is the right code for telling a customer who is looking after them. When the email is <em>to</em> an analyst about work they have just been given, use [assigned_analyst_name].<br><br><strong>Only on some triggers:</strong><br>[note_text] &mdash; on <strong>Note shared with requester</strong>, the note itself. Leave it out and the email simply says there is an update.<br>[ticket_closed_message] &mdash; on <strong>Ticket closed</strong>, a one-off note the analyst types as they close. Add it and they are asked for one; leave it out and they are not.<br><br>HTML is supported (e.g. styled buttons).',
                 'display_order'       => 'Display order',
                 'active'              => 'Active',
                 'tab_edit'            => 'Edit',
@@ -1427,7 +1427,12 @@ return [
             'rule_help'        => 'An address with an @ matches that one sender; anything else is treated as a domain. The most specific rule wins, so a template naming an exact address beats one naming its domain, and both beat a template that goes to everyone. The order templates appear in does not affect which one is sent.',
             'rule_invalid'     => 'Enter an email address, or a domain such as example.com.',
             'rule_duplicate'   => 'That is already in the list.',
-            'badge_everyone'   => 'Everyone',
+        // The "Sends to" column answers two separate questions and used to
+        // answer only one. WHICH ROLE gets the email (this pair) and WHICH
+        // CUSTOMERS the template covers (badge_everyone / badge_senders below).
+        'audience_requester' => 'Requester',
+        'audience_analyst'   => 'Assigned analyst',
+        'audience_title'     => 'Who receives this email',            'badge_everyone'   => 'Everyone',
             'badge_senders'    => '{count} sender(s)',
             'warn_title'       => 'Some senders will get no reply at all',
             'warn_body'        => 'Every active template for {events} is limited to particular senders, so anyone who matches none of them gets nothing. Add a template set to Everyone if that is not what you intended. Where it happens, it is recorded on the ticket and in the mailbox send log as Not sent.',

@@ -617,7 +617,25 @@ class TicketsService
         try {
             require_once __DIR__ . '/../template_email.php';
             if ($analystSent && $newAnalystId !== null) {
+                // TWO AUDIENCES, TWO EVENTS (#148).
+                //
+                // 'ticket_assigned' tells the REQUESTER their ticket is moving -
+                // "assigned to Sam, we will update you soon". That is what every
+                // install's template says, because that is who it has always
+                // gone to, and it is not changing.
+                //
+                // 'analyst_assigned' tells the ANALYST they have just been given
+                // work. Both fire; each is silent unless somebody configured a
+                // template for it, so an install that wants neither gets neither.
                 sendTemplateEmail($conn, $ticketId, 'ticket_assigned');
+
+                // ⚠️ Not when you assign a ticket to YOURSELF. An email telling
+                // somebody what they did three seconds ago is the kind of noise
+                // that gets a whole notification switched off, and picking a
+                // ticket up off the queue is the commonest assignment there is.
+                if ($newAnalystId !== $actorId) {
+                    sendTemplateEmail($conn, $ticketId, 'analyst_assigned');
+                }
             }
             if ($newIsClosed && !$oldIsClosed) {
                 // A one-off note for THIS closure, typed by the analyst as they

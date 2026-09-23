@@ -33,6 +33,23 @@
  * translate → verify → merge path refills.
  *
  * ──────────────────────────────────────────────────────────────────────────
+ * ⚠️ IT REWRITES THE WHOLE FILE, AND THAT IS NOT FREE.
+ *
+ * Every file it touches is re-emitted from the parsed array, so it comes back
+ * with the COMMENTS GONE and the `=>` alignment re-normalised. Evicting one
+ * key from 24 locale files on 2026-09-23 produced a 3,191-insertion /
+ * 3,463-deletion diff and stripped every explanatory comment those files had.
+ *
+ * 🔑 Its self-proof did not catch that, and could not: the proof compares
+ * VALUES, and the values were all correct. What was lost was everything around
+ * them. A check that only looks where you expect the damage will always say
+ * the damage did not happen.
+ *
+ * So: for a SMALL eviction - one key, a handful of locales - remove the line
+ * in place instead and leave the rest of the file byte-identical. Use this
+ * tool when the eviction is large enough that a reformat is the lesser cost,
+ * and read the diffstat before you commit either way.
+ *
  * 🔴 IT DELETES REAL TRANSLATIONS, SO IT PROVES ITSELF BEFORE WRITING
  *
  * For every locale it flattens the file before and after and asserts:

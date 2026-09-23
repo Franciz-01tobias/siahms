@@ -32,6 +32,11 @@ try {
     $rules = templateRulesByTemplate($conn, array_column($templates, 'id'));
     foreach ($templates as &$tpl) {
         $tpl['rules'] = $rules[(int)$tpl['id']] ?? [];
+        // 🔑 The screen does NOT keep its own copy of this map. It comes from
+        // templateEventAudience() in includes/template_email.php - the same
+        // function the sender uses to pick the address - so a column reading
+        // "Requester" while the mail goes to an analyst is not reachable.
+        $tpl['audience'] = templateEventAudience((string)$tpl['event_trigger']);
     }
     unset($tpl);
 

@@ -392,6 +392,22 @@ $translationNamespaces = ['common', 'tickets'];
             font-size: 11px; background: var(--surface-2, #f1f1f1);
             border: 1px solid var(--border, #ddd); color: var(--text-muted, #666);
         }
+        /* WHO the email goes to, beside WHICH customers it covers. Deliberately
+           a different shape from .tpl-scope-badge - the two answer different
+           questions and sit in the same cell, so they must not read as a pair
+           of the same thing. The analyst variant is tinted because an internal
+           notification going out to a customer is the mistake worth seeing. */
+        .tpl-audience-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 3px;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
+            background: var(--surface-2, #f1f1f1);
+            border: 1px solid var(--border, #ddd); color: var(--text-muted, #666);
+        }
+        .tpl-audience-badge.analyst {
+            background: var(--accent-soft, #ede7f6);
+            border-color: var(--accent, #6a1b9a);
+            color: var(--accent, #6a1b9a);
+        }
         /* Public web address panel — the setting [ticket_url] depends on (#80). */
         .tpl-baseurl {
             border: 1px solid var(--border, #ddd);
@@ -1443,6 +1459,7 @@ $translationNamespaces = ['common', 'tickets'];
                     <select id="tplSimEvent">
                         <option value="new_ticket_email"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_new_ticket')); ?></option>
                         <option value="ticket_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_assigned')); ?></option>
+                        <option value="analyst_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_analyst_assigned')); ?></option>
                         <option value="ticket_closed"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_closed')); ?></option>
                         <option value="note_shared"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_note_shared')); ?></option>
                         <option value="csat_request"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_csat_request')); ?></option>
@@ -2986,6 +3003,7 @@ $translationNamespaces = ['common', 'tickets'];
                             <option value=""><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_select')); ?></option>
                             <option value="new_ticket_email"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_new_ticket')); ?></option>
                             <option value="ticket_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_assigned')); ?></option>
+                            <option value="analyst_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_analyst_assigned')); ?></option>
                             <option value="ticket_closed"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_closed')); ?></option>
                             <option value="note_shared"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_note_shared')); ?></option>
                             <option value="csat_request"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_csat_request')); ?></option>
@@ -6396,6 +6414,7 @@ $translationNamespaces = ['common', 'tickets'];
         const EVENT_LABELS = {
             'new_ticket_email': 'New ticket from email',
             'ticket_assigned': 'Ticket assigned',
+            'analyst_assigned': 'Assigned to an analyst',
             'ticket_closed': 'Ticket closed',
             'note_shared': 'Note shared with requester',
             'csat_request': 'CSAT survey'
@@ -6531,7 +6550,7 @@ $translationNamespaces = ['common', 'tickets'];
                 <tr>
                     <td>${escapeHtml(tpl.name)}</td>
                     <td>${EVENT_LABELS[tpl.event_trigger] || tpl.event_trigger}</td>
-                    <td>${templateScopeBadge(tpl)}</td>
+                    <td>${templateAudienceBadge(tpl)} ${templateScopeBadge(tpl)}</td>
                     <td>${escapeHtml(tpl.subject_template)}</td>
                     <td>${tpl.display_order}</td>
                     <td><span class="status-badge status-${tpl.is_active == 1 ? 'active' : 'inactive'}">${tpl.is_active == 1 ? 'Active' : 'Inactive'}</span></td>
@@ -6557,6 +6576,7 @@ $translationNamespaces = ['common', 'tickets'];
         const TPL_EVENT_LABELS = {
             new_ticket_email: t('tickets.settings.modals.template.event_new_ticket'),
             ticket_assigned:  t('tickets.settings.modals.template.event_assigned'),
+            analyst_assigned: t('tickets.settings.modals.template.event_analyst_assigned'),
             ticket_closed:    t('tickets.settings.modals.template.event_closed'),
             note_shared:      t('tickets.settings.modals.template.event_note_shared'),
             csat_request:     t('tickets.settings.modals.template.event_csat_request')
@@ -6625,6 +6645,28 @@ $translationNamespaces = ['common', 'tickets'];
         }
 
         // What the list column shows for each template.
+        /**
+         * WHO gets this email - the half of "Sends to" that was missing.
+         *
+         * The column used to show only the sender scope ("Everyone", or a list
+         * of domains), which answers "which customers does this template cover"
+         * and says nothing about whether the customer or the analyst receives
+         * it. With two assignment events that distinction is the whole point.
+         *
+         * 🔑 tpl.audience comes from the SERVER, from the same function the
+         * sender uses to choose the address. There is deliberately no map here
+         * to drift out of step with it.
+         */
+        function templateAudienceBadge(tpl) {
+            const analyst = tpl.audience === 'analyst';
+            const label = analyst
+                ? t('tickets.settings.scope.audience_analyst')
+                : t('tickets.settings.scope.audience_requester');
+            return '<span class="tpl-audience-badge' + (analyst ? ' analyst' : '') + '" title="'
+                 + escapeHtml(t('tickets.settings.scope.audience_title')) + '">'
+                 + escapeHtml(label) + '</span>';
+        }
+
         function templateScopeBadge(tpl) {
             const rules = tpl.rules || [];
             if (!rules.length) {
@@ -6799,6 +6841,10 @@ $translationNamespaces = ['common', 'tickets'];
             requester_email: 'ed.mozley@example.com',
             analyst_name: 'Sam Carter',
             analyst_email: 'sam.carter@example.com',
+            assigned_analyst_name: 'Sam Carter',
+            assigned_analyst_first_name: 'Sam',
+            assigned_analyst_email: 'sam.carter@example.com',
+            ticket_url_analyst: 'https://itsm.example.com/tickets/index.php?ticket_id=409',
             department_name: 'IT Support',
             created_date: '14 Feb 2026 09:15',
             closed_date: '14 Feb 2026 16:40',
