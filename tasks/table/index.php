@@ -31,7 +31,7 @@ $translationNamespaces = ['common', 'tasks'];
     <title>Service Desk - <?php echo htmlspecialchars(t('tasks.title') . ' ' . t('tasks.nav.table')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=31">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=32">
     <link rel="stylesheet" href="../../assets/css/data-table.css?v=4">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>

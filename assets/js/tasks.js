@@ -1414,6 +1414,10 @@ function renderDetailPanel(task) {
                 <input type="date" id="newSubtaskDue" class="subtask-add-due"
                        title="${escAttr(window.t('tasks.detail.subtask_set_due'))}"
                        onkeydown="if(event.key==='Enter')addSubtask()">
+                <!-- Enter still works. The button exists because picking a date
+                     moves focus out of the text box, and without it the only way
+                     to commit was to click back into the box first. -->
+                <button type="button" class="subtask-add-btn" id="newSubtaskBtn" onclick="addSubtask()">${esc(window.t('tasks.detail.subtask_add'))}</button>
             </div>
         </div>` : ''}
 
@@ -2456,16 +2460,66 @@ async function setSubtaskDue(subtaskId, value) {
     if (ok && selectedTaskId) openDetailPanel(selectedTaskId);
 }
 
+/**
+ * Put one newly-created subtask into the list already on screen.
+ *
+ * Deliberately minimal: a new subtask has no assignee badge, no priority dot
+ * and is never complete, so the row is the same shape as a freshly rendered one
+ * without needing the server's copy. Anything richer would mean refetching,
+ * which is the thing this exists to avoid.
+ */
+function appendSubtaskRow(sub) {
+    const list = document.querySelector('.subtask-list');
+    if (!list) return;
+    const empty = list.querySelector('.subtask-empty');
+    if (empty) empty.remove();
+
+    const row = document.createElement('div');
+    row.className = 'subtask-item';
+    row.setAttribute('onclick', 'openDetailPanel(' + sub.id + ')');
+    const due = sub.due_date
+        ? '<span class="subtask-due">' + esc(sub.due_date) + '</span>'
+        : '<input type="date" class="subtask-due-set" onclick="event.stopPropagation()"'
+          + ' onchange="event.stopPropagation(); setSubtaskDue(' + sub.id + ', this.value)">';
+    row.innerHTML =
+        '<input type="checkbox" onclick="event.stopPropagation()" onchange="toggleSubtask(' + sub.id + ')">'
+      + '<span class="subtask-title">' + esc(sub.title) + '</span>'
+      + '<span class="subtask-meta">' + due + '</span>';
+    list.appendChild(row);
+}
+/**
+ * Add a subtask to the task the panel is showing.
+ *
+ * 🔴 DOES NOT REBUILD THE PANEL. It used to call openDetailPanel(), which
+ * refetches the task and re-renders everything - and, deliberately, resets the
+ * scroll position to the top (right when you OPEN a task, wrong when you are
+ * already in one). So adding a subtask threw you back to the title every time,
+ * and the wait people read as "the database is slow" was the rebuild: measured
+ * over HTTP, save.php is ~95ms and get.php ~20ms, which is not what three
+ * seconds feels like.
+ *
+ * The new row is inserted into the list that is already on screen. Nothing else
+ * moves, the scroll position is untouched, and the cursor goes back to the box
+ * so several subtasks can be typed one after another.
+ */
 async function addSubtask() {
     const input = document.getElementById('newSubtaskInput');
-    const title = input.value.trim();
+    const btn   = document.getElementById('newSubtaskBtn');
+    const title = input ? input.value.trim() : '';
     if (!title || !selectedTaskId) return;
+    // Guard against a second click, and against Enter while the first is still
+    // in flight - both would create the same subtask twice.
+    if (btn && btn.disabled) return;
+
+    const parentId = selectedTaskId;
+    if (btn) { btn.disabled = true; btn.classList.add('working'); }
+    if (input) input.disabled = true;
 
     try {
         // A due date is optional and only sent when one was typed, so a subtask
         // created without a date is stored exactly as it always was (#90).
         const dueEl   = document.getElementById('newSubtaskDue');
-        const payload = { title, parent_task_id: selectedTaskId, assigned_analyst_id: ANALYST_ID };
+        const payload = { title, parent_task_id: parentId, assigned_analyst_id: ANALYST_ID };
         if (dueEl && dueEl.value) payload.due_date = dueEl.value;
 
         const data = await fetch(API_BASE + 'save.php', {
@@ -2477,9 +2531,28 @@ async function addSubtask() {
         if (data.success) {
             input.value = '';
             if (dueEl) dueEl.value = '';
-            openDetailPanel(selectedTaskId);
+            // Someone may have clicked into a different task while this was in
+            // flight; appending then would put the row under the wrong parent.
+            if (selectedTaskId === parentId) {
+                appendSubtaskRow({ id: data.id, title, due_date: payload.due_date || null });
+                input.focus();
+            }
+            // The board card shows "2/5", so it has to catch up - but in the
+            // background, because nobody is waiting to look at it.
+            loadTasks();
+        } else {
+            showToast(data.error || window.t('tasks.toast.save_failed'), 'error');
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+        showToast(window.t('tasks.toast.save_failed'), 'error');
+    } finally {
+        // 🔴 ALWAYS re-enable. Without this a dropped connection leaves the
+        // box and the button disabled until the panel is reopened, and the
+        // person cannot even retry what just failed.
+        if (btn) { btn.disabled = false; btn.classList.remove('working'); }
+        if (input) { input.disabled = false; }
+    }
 }
 
 // ── Comments ───────────────────────────────────────────────────────

@@ -995,6 +995,47 @@ body {
 
 .subtask-add input:focus { border-color: var(--tsk-accent, #7c3aed); }
 
+/* The Add button. Enter still works; this exists because picking a due date
+   moves focus out of the text box, and without it the only way to commit was
+   to click back into the box first. */
+.subtask-add-btn {
+    flex: none;
+    padding: 6px 14px;
+    border: 1px solid var(--tsk-accent, #7c3aed);
+    border-radius: 6px;
+    background: var(--tsk-accent, #7c3aed);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.subtask-add-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.subtask-add-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* The working state. The save is normally ~100ms so this is rarely seen, but a
+   slow connection is not a reason to leave somebody wondering whether their
+   click registered. Colour is never the only signal - the button is disabled
+   and dimmed too. */
+.subtask-add-btn.working { position: relative; color: transparent; }
+.subtask-add-btn.working::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 13px;
+    height: 13px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: subtaskSpin 0.6s linear infinite;
+}
+@keyframes subtaskSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .subtask-add-btn.working::after { animation-duration: 2.4s; }
+}
+
 /* Links section */
 .link-section { margin-top: 20px; }
 

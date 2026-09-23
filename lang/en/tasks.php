@@ -143,6 +143,7 @@ return [
         'subtasks'       => 'Subtasks',
         'remove_tag'               => 'Remove',
         'add_subtask'    => 'Add subtask...',
+        'subtask_add'    => 'Add',
         'subtask_of' => 'Subtask of',
         'subtask_set_due' => 'Give this subtask a due date',
         'comments'       => 'Comments',
