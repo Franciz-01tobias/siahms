@@ -93,6 +93,15 @@ requireModuleAccess('system');
         .ssp-preview-table th { background: var(--surface-2, #eceff1); text-align: left; padding: 6px 8px; color: var(--text, #333); }
         .ssp-preview-table td { padding: 6px 8px; border-top: 1px solid var(--border-soft, #eee); color: var(--text-muted, #666); }
         .ssp-saved { font-size: 13px; color: var(--success-text, #166534); margin-left: 12px; }
+        .ssp-logo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        /* Bounded both ways: a tall logo would otherwise push the rest of the
+           form down the page, and a wide one would stretch the row. */
+        .ssp-logo-preview {
+            max-height: 40px; max-width: 180px;
+            border: 1px solid var(--border, #e0e0e0); border-radius: 4px;
+            padding: 4px; background: var(--surface, #fff);
+        }
+        .ssp-logo-hint { margin-top: 6px; }
     </style>
     <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
 </head>
@@ -110,9 +119,18 @@ requireModuleAccess('system');
             <p><?php echo t('system.self_service.appearance_desc'); ?></p>
 
             <div class="ssp-field">
-                <label class="ssp-label" for="sspLogo"><?php echo htmlspecialchars(t('system.self_service.logo_label')); ?></label>
+                <label class="ssp-label" for="sspLogoFile"><?php echo htmlspecialchars(t('system.self_service.logo_label')); ?></label>
                 <div class="ssp-desc"><?php echo t('system.self_service.logo_desc'); ?></div>
-                <input type="text" class="ssp-input" id="sspLogo" placeholder="<?php echo htmlspecialchars(t('system.self_service.logo_placeholder')); ?>">
+                <?php /* A picker, not a path box. The old field asked for a
+                         path that only the server could create, so there was
+                         no way to answer it. Uploading is handled by the same
+                         helper the main branding logo uses. */ ?>
+                <div class="ssp-logo-row">
+                    <img id="sspLogoPreview" class="ssp-logo-preview" alt="" hidden>
+                    <input type="file" id="sspLogoFile" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
+                    <button type="button" class="btn btn-secondary" id="sspLogoRemove" hidden><?php echo htmlspecialchars(t('system.self_service.logo_remove')); ?></button>
+                </div>
+                <div class="ssp-desc ssp-logo-hint"><?php echo htmlspecialchars(t('system.self_service.logo_hint')); ?></div>
             </div>
 
             <div class="ssp-field">
@@ -232,10 +250,75 @@ requireModuleAccess('system');
         pick.addEventListener('input', function () { text.value = pick.value; sspPaintPreview(); });
     }
 
+    /* The stored path, held here rather than read back out of a text box - the
+       box is gone, and the preview and the save both need to know it. */
+    let sspLogoPath = '';
+
+    /**
+     * Show whichever logo is stored, and offer to remove it only when there is
+     * one. An empty path means "use the main logo", which is the default and
+     * the way an admin turns a portal-specific logo back off.
+     */
+    function sspSetLogo(path) {
+        sspLogoPath = path || '';
+        const img = document.getElementById('sspLogoPreview');
+        const rm  = document.getElementById('sspLogoRemove');
+        if (sspLogoPath) {
+            // Cache-busted: replacing a logo keeps the same <img> on screen, and
+            // without this the browser shows the old one until a hard refresh.
+            img.src = '../../' + sspLogoPath + '?t=' + Date.now();
+            img.hidden = false;
+            rm.hidden = false;
+        } else {
+            img.hidden = true;
+            rm.hidden = true;
+            img.removeAttribute('src');
+        }
+        sspPaintPreview();
+    }
+
+    /**
+     * Send the file, or the instruction to clear it.
+     *
+     * Its OWN request, separate from the colour/switch form: a file cannot ride
+     * in a JSON body, and folding logo_path into that form would clear the logo
+     * every time somebody saved a colour.
+     */
+    async function sspUploadLogo(file, remove) {
+        const fd = new FormData();
+        if (file)   { fd.append('logo', file); }
+        if (remove) { fd.append('remove_logo', '1'); }
+
+        const input = document.getElementById('sspLogoFile');
+        input.disabled = true;
+        try {
+            const res  = await fetch(SSP_API, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!data.success) {
+                if (typeof showToast === 'function') showToast(data.error || t('system.self_service.save_failed'), 'error');
+                return;
+            }
+            sspSetLogo(data.settings ? (data.settings.logo_path || '') : (remove ? '' : sspLogoPath));
+            if (typeof showToast === 'function') showToast(t('system.self_service.logo_saved'), 'success');
+        } catch (e) {
+            if (typeof showToast === 'function') showToast(t('system.self_service.save_failed'), 'error');
+        } finally {
+            input.disabled = false;
+            input.value = '';   // so picking the same file again still fires change
+        }
+    }
+
+    document.getElementById('sspLogoFile').addEventListener('change', function () {
+        if (this.files && this.files[0]) { sspUploadLogo(this.files[0], false); }
+    });
+    document.getElementById('sspLogoRemove').addEventListener('click', function () {
+        sspUploadLogo(null, true);
+    });
+
     function sspPaintPreview() {
         const header = document.getElementById('sspHeaderColour').value.trim();
         const table  = document.getElementById('sspTableColour').value.trim();
-        const logo   = document.getElementById('sspLogo').value.trim();
+        const logo   = sspLogoPath;
 
         const bar = document.getElementById('sspPreviewBar');
         bar.style.background = /^#[0-9a-fA-F]{6}$/.test(header) ? header : '';
@@ -252,7 +335,7 @@ requireModuleAccess('system');
     }
 
     function sspPaint(s) {
-        document.getElementById('sspLogo').value        = s.logo_path || '';
+        sspSetLogo(s.logo_path || '');
         document.getElementById('sspHeaderColour').value = s.header_colour || '';
         document.getElementById('sspTableColour').value  = s.table_header_colour || '';
         if (s.header_colour) document.getElementById('sspHeaderColourPick').value = s.header_colour;
@@ -284,7 +367,10 @@ requireModuleAccess('system');
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    logo_path:           document.getElementById('sspLogo').value.trim(),
+                    // logo_path is NOT sent here. The file rides in its own
+                    // multipart request (sspUploadLogo); sending an empty
+                    // string from this form would clear the logo every time
+                    // somebody saved a colour.
                     header_colour:       document.getElementById('sspHeaderColour').value.trim(),
                     table_header_colour: document.getElementById('sspTableColour').value.trim(),
                     background_pattern:  sspPattern,

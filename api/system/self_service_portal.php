@@ -21,6 +21,7 @@ require_once '../../config.php';
 require_once '../../includes/admin_api_guard.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/self_service_settings.php';
+require_once '../../includes/uploads.php';         // the ONE home for file writes
 
 header('Content-Type: application/json');
 
@@ -32,10 +33,61 @@ try {
         exit;
     }
 
-    $in = json_decode(file_get_contents('php://input'), true);
-    if (!is_array($in)) {
-        echo json_encode(['success' => false, 'error' => 'Invalid request body']);
-        exit;
+    /* A file cannot ride in a JSON body, so the logo arrives as multipart and
+       the text settings arrive as JSON. Which one this is decides how the body
+       is read; everything after this point works on the same $in array. */
+    $isMultipart = strpos($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data') === 0;
+
+    if ($isMultipart) {
+        $in = ['__multipart' => true];
+
+        $uploadDir = __DIR__ . '/../../system/uploads/branding/portal';
+        $hasFile   = isset($_FILES['logo']) && is_array($_FILES['logo'])
+                     && $_FILES['logo']['error'] !== UPLOAD_ERR_NO_FILE;
+        $remove    = ($_POST['remove_logo'] ?? '') === '1';
+
+        // Its OWN directory, not branding's. They are two different logos and
+        // the tear-down below deletes everything in the folder - pointed at the
+        // shared one, replacing the portal logo would silently remove the main
+        // one too.
+        if ($hasFile || $remove) {
+            uploadPrepareWebServableDir($uploadDir);
+
+            // Clear the previous file before writing the next, so switching
+            // from PNG to JPG does not leave the old one on disk for ever.
+            $prev = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'self_service_logo_path'");
+            $prev->execute();
+            $prevPath = (string)($prev->fetchColumn() ?: '');
+            if ($prevPath !== '' && strpos($prevPath, 'system/uploads/branding/portal/') === 0) {
+                @unlink(__DIR__ . '/../../' . $prevPath);
+            }
+        }
+
+        if ($hasFile) {
+            // 2MB, PNG/JPG only - UPLOAD_TYPES_IMAGE excludes SVG on purpose:
+            // an SVG is XML that can carry <script>, and a logo is served to
+            // every visitor of the portal.
+            // Caught HERE rather than by the handler at the bottom: the uploads
+            // helper throws messages written for the person doing the uploading
+            // ("That file type is not allowed. Accepted: png, jpg..."), and the
+            // generic "Could not save the settings" throws that away - leaving
+            // somebody to guess why a perfectly good-looking file was refused.
+            try {
+                $stored = uploadStoreFile($_FILES['logo'], $uploadDir, UPLOAD_TYPES_IMAGE, 2 * 1024 * 1024);
+            } catch (Throwable $upEx) {
+                echo json_encode(['success' => false, 'error' => $upEx->getMessage()]);
+                exit;
+            }
+            $in['logo_path'] = 'system/uploads/branding/portal/' . $stored['stored_name'];
+        } elseif ($remove) {
+            $in['logo_path'] = '';   // empty = fall back to the main logo
+        }
+    } else {
+        $in = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($in)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid request body']);
+            exit;
+        }
     }
 
     $clean = [];

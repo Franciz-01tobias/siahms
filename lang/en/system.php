@@ -1796,7 +1796,9 @@ return [
 
         'logo_label'       => 'Portal logo',
         'logo_desc'        => 'A different logo for the portal &mdash; useful when the service desk trades under another name, or when the main logo was drawn for a dark app header and looks wrong on a light page. Leave it empty to use the main logo.',
-        'logo_placeholder' => 'uploads/branding/portal-logo.png',
+        'logo_remove'      => 'Remove',
+        'logo_hint'        => 'PNG or JPG, up to 2MB. SVG is not accepted: it is XML that can carry script, and this image is served to everyone who visits the portal.',
+        'logo_saved'       => 'Portal logo updated',
 
         'header_colour_label' => 'Header bar colour',
         'header_colour_desc'  => 'The bar across the top of every portal page. Leave it empty to follow the colour theme.',
