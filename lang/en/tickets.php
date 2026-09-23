@@ -2210,8 +2210,10 @@ return [
             'ticket_line'      => 'Ticket',
             'intro'            => 'Hi {name}, thanks for letting us help. How would you rate the experience?',
             // Used when the requester record has no name to take a first name from.
-            'intro_fallback'   => 'there',
-            'need_rating'      => 'Please pick a rating before submitting.',
+            // The nameless case is its own sentence, not the named one with a
+            // filler in the slot: "Hi there" has no equivalent in most
+            // languages, and asking for one produced the wrong register in two.
+            'intro_noname'     => 'Hi, thanks for letting us help. How would you rate the experience?',            'need_rating'      => 'Please pick a rating before submitting.',
             'hint'             => 'Hover and click to rate',
             'comment_ph'       => 'Anything you\'d like to add? (optional)',
             'submit'           => 'Submit feedback',

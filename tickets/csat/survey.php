@@ -230,7 +230,10 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 <?php else: ?>
     <h1><?= trh('title', 'How did we do?') ?></h1>
     <p class="ticket"><?= trh('ticket_line', 'Ticket') ?> <strong><?= htmlspecialchars($ticket['number']) ?></strong> &middot; <?= htmlspecialchars($ticket['subject']) ?></p>
-    <p class="intro"><?= trh('intro', 'Hi {name}, thanks for letting us help. How would you rate the experience?', ['name' => explode(' ', $ticket['name'])[0] ?: tr('intro_fallback', 'there')]) ?></p>
+    <?php $firstName = explode(' ', (string)$ticket['name'])[0]; ?>
+    <p class="intro"><?= $firstName !== ''
+        ? trh('intro', 'Hi {name}, thanks for letting us help. How would you rate the experience?', ['name' => $firstName])
+        : trh('intro_noname', 'Hi, thanks for letting us help. How would you rate the experience?') ?></p>
 
     <?php if ($error === 'invalid_rating'): ?>
         <div class="error-box"><?= trh('need_rating', 'Please pick a rating before submitting.') ?></div>
