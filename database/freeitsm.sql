@@ -262,6 +262,24 @@ CREATE TABLE IF NOT EXISTS `user_preferences` (
 -- column on `users`; this is the generic twin, so the next portal preference does
 -- not become a third one-off column.
 --
+-- 🔒 COMPANY SCOPE: deliberately NONE, and that is the answer to the question
+-- the Multi-Tenancy Developer Guide §1 says to ask before adding any table.
+--
+-- This is not a fourth meaning of NULL; there is no tenant_id to give one.
+-- A row here is keyed to a PERSON, and `users.tenant_id` already records
+-- which company that person belongs to - so the company is reachable through
+-- the foreign key and duplicating it here would create a second copy that
+-- could disagree with the first.
+--
+-- It is also the right shape on its own terms: how somebody likes their
+-- knowledge base laid out is a fact about them, not about the company whose
+-- tickets they are reading. `user_preferences` above, keyed by analyst_id,
+-- is unscoped for the same reason.
+--
+-- ⚠️ Nothing here is readable across people: api/self-service/preference.php
+-- only ever acts on the signed-in portal user's own id, so there is no list
+-- read to scope in the first place.
+--
 -- ⚠️ A fresh install gets the unique key and the foreign key below. An EXISTING
 -- install gains this table from Database Verification, which creates columns but
 -- not indexes - so includes/portal_preferences.php deliberately does a
