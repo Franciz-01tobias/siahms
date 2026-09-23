@@ -127,12 +127,22 @@ $pageStyles = <<<'CSS'
 /* Quiet by default. Closing your own ticket is a useful escape hatch, not
    something the page should be encouraging on every visit. */
 .tk-close-btn {
-    /* The far end of the action row, away from Send. */
+    /* The far end of the action row, away from Send: it shares the row for
+       consistency but is the one action a requester cannot casually undo. */
     margin-left: auto;
-    margin-left: auto; flex-shrink: 0; align-self: center;
-    background: transparent; color: var(--text-muted, #666);
+    flex-shrink: 0;
+    align-self: center;
+    /* Same box as .btn beside it. `.btn` is padding 10/20 with NO border, so
+       9/19 plus a 1px border comes to the same height and width - matching the
+       padding alone would have made this one 2px taller than its neighbours. */
+    padding: 9px 19px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    background: transparent;
+    color: var(--text-muted, #666);
     border: 1px solid var(--border, #e5e7eb);
-    padding: 6px 12px; border-radius: 6px; font-size: 12.5px; cursor: pointer;
+    cursor: pointer;
 }
 .tk-close-btn:hover:not(:disabled) {
     border-color: var(--danger-border, #f5c6c2);
