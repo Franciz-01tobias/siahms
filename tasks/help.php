@@ -17,6 +17,17 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 requireModuleAccess('tasks');
 
+// Multi-company installs only. Wrapped in try/catch and defaulting to FALSE
+// because a help page must render even if the tenancy tables are not there
+// yet - the worst outcome is one missing section, not a broken help page.
+$showTenancyHelp = false;
+try {
+    require_once '../includes/tenancy.php';
+    $showTenancyHelp = isMultiTenant(connectToDatabase());
+} catch (Exception $e) {
+    $showTenancyHelp = false;
+}
+
 $current_page = 'help';
 $path_prefix = '../';
 $translationNamespaces = ['common', 'tasks'];
@@ -86,6 +97,11 @@ $translationNamespaces = ['common', 'tasks'];
             <a href="#tips" class="help-nav-link" data-section="tips">
                 <span class="help-nav-num">11</span> <?php echo htmlspecialchars(t('tasks.help.nav_tips')); ?>
             </a>
+            <?php if ($showTenancyHelp): ?>
+            <a href="#companies" class="help-nav-link" data-section="companies">
+                <span class="help-nav-num">12</span> <?php echo htmlspecialchars(t('tasks.help.nav_companies')); ?>
+            </a>
+            <?php endif; ?>
         </div>
 
         <!-- Main content area -->
@@ -479,6 +495,24 @@ $translationNamespaces = ['common', 'tasks'];
                         </div>
                     </div>
                 </div>
+
+                <?php if ($showTenancyHelp): ?>
+                <!-- 12. Companies (multi-company installs only) -->
+                <div class="help-section" id="companies">
+                    <div class="help-section-header">
+                        <span class="help-section-num">12</span>
+                        <div>
+                            <h3><?php echo htmlspecialchars(t('tasks.help.companies_heading')); ?></h3>
+                            <p><?php echo t('tasks.help.companies_intro'); ?></p>
+                        </div>
+                    </div>
+
+                    <p><?php echo t('tasks.help.companies_scope'); ?></p>
+                    <p><?php echo t('tasks.help.companies_move'); ?></p>
+                    <p><?php echo t('tasks.help.companies_subtasks'); ?></p>
+                    <p><?php echo t('tasks.help.companies_links'); ?></p>
+                </div>
+                <?php endif; ?>
 
             </div>
         </div>
