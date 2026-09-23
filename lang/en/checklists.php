@@ -65,7 +65,7 @@ return [
     'list' => [
         'page_title'      => 'Checklists',
         'heading'         => 'Checklist templates',
-        'heading_sub'     => 'Standard checklist templates with task-level role assignments',
+        'heading_sub'     => 'Standard checklist templates with step-level role assignments',
         'new_template'    => 'New template',
         'search_ph'       => 'Search templates...',
         'scope'           => 'Scope',
