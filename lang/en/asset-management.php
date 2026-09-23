@@ -240,7 +240,12 @@ return [
 
     'detail' => [
         'select_prompt'     => 'Select an asset to view details and assigned users',
-        'service_tag'       => 'Service Tag',
+        // ⚠️ The KEY is the database column (`assets.service_tag`); the LABEL is
+        // what people call it. Those parted company when this was renamed to
+        // Serial Number - deliberately, because renaming the key to match would
+        // have moved seven call sites and fourteen locale files to change one
+        // word on a screen.
+        'service_tag'       => 'Serial number',
         'view_history'      => 'View History',
         'custody'           => 'Custody',
         'print_label'       => 'Print label',

@@ -196,7 +196,7 @@ return [
     ],
     'detail' => [
         'select_prompt' => 'Wählen Sie ein Asset, um Details und zugewiesene Benutzer anzuzeigen',
-        'service_tag' => 'Service-Tag',
+        'service_tag' => 'Seriennummer',
         'view_history' => 'Verlauf anzeigen',
         'custody' => 'Verwahrung',
         'print_label' => 'Etikett drucken',

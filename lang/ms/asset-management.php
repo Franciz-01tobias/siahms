@@ -196,7 +196,7 @@ return [
     ],
     'detail' => [
         'select_prompt' => 'Pilih aset untuk melihat butiran dan pengguna yang ditugaskan',
-        'service_tag' => 'Tag Servis',
+        'service_tag' => 'Nombor siri',
         'view_history' => 'Lihat Sejarah',
         'custody' => 'Jagaan',
         'print_label' => 'Cetak label',

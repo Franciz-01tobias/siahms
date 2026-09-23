@@ -196,7 +196,7 @@ return [
     ],
     'detail' => [
         'select_prompt' => 'Seleccione un activo para ver los detalles y los usuarios asignados',
-        'service_tag' => 'Etiqueta de servicio',
+        'service_tag' => 'Número de serie',
         'view_history' => 'Ver historial',
         'custody' => 'Custodia',
         'print_label' => 'Imprimir etiqueta',

@@ -196,7 +196,7 @@ return [
     ],
     'detail' => [
         'select_prompt' => 'Vel ein ressurs for å sjå detaljar og tildelte brukarar',
-        'service_tag' => 'Service Tag',
+        'service_tag' => 'Serienummer',
         'view_history' => 'Vis historikk',
         'custody' => 'Utlån',
         'print_label' => 'Skriv ut etikett',

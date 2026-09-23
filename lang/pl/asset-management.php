@@ -196,7 +196,7 @@ return [
     ],
     'detail' => [
         'select_prompt' => 'Wybierz zasób, aby zobaczyć szczegóły i przypisanych użytkowników',
-        'service_tag' => 'Service Tag',
+        'service_tag' => 'Numer seryjny',
         'view_history' => 'Pokaż historię',
         'custody' => 'Powierzenie',
         'print_label' => 'Drukuj etykietę',

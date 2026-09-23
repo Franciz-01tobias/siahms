@@ -196,7 +196,7 @@ return [
     ],
     'detail' => [
         'select_prompt' => 'Vælg et aktiv for at se detaljer og tildelte brugere',
-        'service_tag' => 'Service Tag',
+        'service_tag' => 'Serienummer',
         'view_history' => 'Vis historik',
         'custody' => 'Overdragelse',
         'print_label' => 'Udskriv etiket',
