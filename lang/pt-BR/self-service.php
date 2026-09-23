@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Todos os tickets',
     ],
     'ticket' => [
-        'self_close' => 'Não preciso mais',
         'self_close_hint' => 'Feche este ticket se você mesmo resolveu ou não precisa mais de ajuda',
         'self_close_title' => 'Fechar este ticket?',
         'self_close_confirm' => 'A equipe de suporte vai parar de trabalhar nele. Se precisar de ajuda de novo, você sempre pode abrir um novo ticket.',

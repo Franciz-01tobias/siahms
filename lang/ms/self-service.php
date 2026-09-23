@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Semua tiket',
     ],
     'ticket' => [
-        'self_close' => 'Tidak diperlukan lagi',
         'self_close_hint' => 'Tutup tiket ini jika anda sudah menyelesaikannya sendiri atau tidak memerlukan bantuan lagi',
         'self_close_title' => 'Tutup tiket ini?',
         'self_close_confirm' => 'Meja bantuan akan berhenti mengerjakannya. Jika anda perlukan bantuan lagi, anda sentiasa boleh membuka tiket baharu.',

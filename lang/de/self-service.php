@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Alle Tickets',
     ],
     'ticket' => [
-        'self_close' => 'Nicht mehr nötig',
         'self_close_hint' => 'Schließen Sie dieses Ticket, wenn Sie es selbst gelöst haben oder keine Hilfe mehr brauchen',
         'self_close_title' => 'Dieses Ticket schließen?',
         'self_close_confirm' => 'Der Service Desk arbeitet dann nicht weiter daran. Wenn Sie wieder Hilfe brauchen, können Sie jederzeit ein neues Ticket erstellen.',

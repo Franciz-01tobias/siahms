@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Alle saker',
     ],
     'ticket' => [
-        'self_close' => 'Trengs ikke lenger',
         'self_close_hint' => 'Lukk denne saken hvis du har ordnet det selv eller ikke trenger hjelp lenger',
         'self_close_title' => 'Lukke denne saken?',
         'self_close_confirm' => 'IT-avdelingen slutter å jobbe med den. Trenger du hjelp igjen, kan du når som helst opprette en ny sak.',

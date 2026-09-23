@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Wszystkie zgłoszenia',
     ],
     'ticket' => [
-        'self_close' => 'Już niepotrzebne',
         'self_close_hint' => 'Zamknij to zgłoszenie, jeśli sprawa rozwiązała się sama lub nie potrzebujesz już pomocy',
         'self_close_title' => 'Zamknąć to zgłoszenie?',
         'self_close_confirm' => 'Dział IT przestanie nad nim pracować. Jeśli znów będziesz potrzebować pomocy, zawsze możesz utworzyć nowe zgłoszenie.',

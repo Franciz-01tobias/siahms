@@ -127,6 +127,8 @@ $pageStyles = <<<'CSS'
 /* Quiet by default. Closing your own ticket is a useful escape hatch, not
    something the page should be encouraging on every visit. */
 .tk-close-btn {
+    /* The far end of the action row, away from Send. */
+    margin-left: auto;
     margin-left: auto; flex-shrink: 0; align-self: center;
     background: transparent; color: var(--text-muted, #666);
     border: 1px solid var(--border, #e5e7eb);
@@ -550,10 +552,9 @@ let ssTickets = [];
               +     (t.department_name ? '<span>' + esc(t.department_name) + '</span>' : '')
               +     '<span>' + esc(window.t('self-service.ticket.created', { date: fullDate(t.created_datetime) })) + '</span>'
               +   '</div>'
-              +   closeButtonHtml(t)
               + '</div>'
               + '<div class="tk-thread" id="tkThread">' + (msgs || '<div class="loading-state">' + esc(window.t('self-service.ticket.no_conversation')) + '</div>') + '</div>'
-              + composerHtml();
+              + composerHtml(t);
 
             ssCurrentTicketId = Number(t.id) || 0;
             wireComposer();
@@ -683,12 +684,17 @@ let ssTickets = [];
             }
         }
 
-        function composerHtml() {
+        function composerHtml(t) {
             return '<div class="tk-composer">'
                  +   '<textarea id="ssReply" placeholder="' + esc(window.t('self-service.ticket.reply_placeholder')) + '"></textarea>'
                  +   '<div class="tk-composer-files" id="ssFiles"></div>'
                  +   '<div class="tk-composer-actions">'
                  +     '<button type="button" class="btn btn-primary" id="ssSend">' + esc(window.t('self-service.ticket.reply_send')) + '</button>'
+                 // Closing sits in this row for consistency but at the far END
+                 // of it (margin-left:auto in the stylesheet), because Send is
+                 // pressed constantly and this is the one action a requester
+                 // cannot casually undo.
+                 +     closeButtonHtml(t)
                  +     '<input type="file" id="ssFileInput" multiple style="display:none">'
                  // The "attach screenshots, logs or documents" line is the
                  // button's TOOLTIP rather than a line of body text beside it:

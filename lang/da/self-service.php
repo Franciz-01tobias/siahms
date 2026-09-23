@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Alle sager',
     ],
     'ticket' => [
-        'self_close' => 'Ikke længere nødvendig',
         'self_close_hint' => 'Luk denne sag, hvis du selv har løst det, eller ikke længere har brug for hjælp',
         'self_close_title' => 'Luk denne sag?',
         'self_close_confirm' => 'IT-teamet stopper med at arbejde på den. Har du brug for hjælp igen, kan du altid oprette en ny sag.',

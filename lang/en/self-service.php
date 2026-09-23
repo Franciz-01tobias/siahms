@@ -306,7 +306,7 @@ return [
 
     'ticket' => [
         // ── Closing your own ticket (off unless an admin turns it on) ───
-        'self_close'              => 'No longer needed',
+        'self_close'              => 'Close ticket',
         'self_close_hint'         => 'Close this ticket if you have sorted it yourself or no longer need help',
         'self_close_title'        => 'Close this ticket?',
         'self_close_confirm'      => 'The service desk will stop working on it. If you need help again you can always raise a new ticket.',

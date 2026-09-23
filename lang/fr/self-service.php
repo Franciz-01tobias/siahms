@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Tous les tickets',
     ],
     'ticket' => [
-        'self_close' => 'Plus nécessaire',
         'self_close_hint' => 'Fermez ce ticket si vous avez résolu le problème vous-même ou si vous n\'avez plus besoin d\'aide',
         'self_close_title' => 'Fermer ce ticket ?',
         'self_close_confirm' => 'Le service d\'assistance cessera d\'y travailler. Si vous avez de nouveau besoin d\'aide, vous pouvez toujours créer un nouveau ticket.',

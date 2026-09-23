@@ -254,7 +254,6 @@ return [
         'back_to_list' => 'Alle saker',
     ],
     'ticket' => [
-        'self_close' => 'Treng det ikkje lenger',
         'self_close_hint' => 'Lukk denne saka dersom du har ordna det sjølv eller ikkje treng hjelp lenger',
         'self_close_title' => 'Lukke denne saka?',
         'self_close_confirm' => 'Servicedesken sluttar å arbeide med saka. Treng du hjelp igjen, kan du når som helst melde ei ny sak.',
