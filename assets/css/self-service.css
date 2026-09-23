@@ -31,7 +31,10 @@ body {
  * waffle-menu.php's emitted <style> block — which the portal deliberately does
  * not include (no waffle for customers) — so the equivalent rules live here. */
 .portal-header {
-    background: linear-gradient(135deg, var(--ss-accent, #0078d4), var(--ss-accent-hover, #005a9e));
+    /* --ss-header-bg is set on <body> only when an administrator has chosen a
+       header colour (System → Self-service portal). Unset, this is exactly the
+       gradient it always was. */
+    background: var(--ss-header-bg, linear-gradient(135deg, var(--ss-accent, #0078d4), var(--ss-accent-hover, #005a9e)));
     color: var(--ss-on-accent, #fff);
     padding: 0 20px;
     height: 48px;
@@ -370,7 +373,8 @@ body.portal-app .portal-layout { padding: 0; max-width: none; margin: 0; }
 .portal-section .ticket-table { margin: 0; }
 .ticket-table { width: 100%; border-collapse: collapse; }
 .ticket-table th {
-    background: var(--surface-hover, #f9fafb);
+    /* Same pattern: the admin colour wins if set, otherwise the theme token. */
+    background: var(--ss-table-header-bg, var(--surface-hover, #f9fafb));
     padding: 10px 16px;
     text-align: left;
     font-size: 11px;

@@ -124,7 +124,9 @@ return [
         'status_portal_title'      => 'Service status on the portal',
         'status_portal_desc'       => 'Whether end users see outages and their updates in the self-service portal, and how far back.',
         'status_portal_keywords'   => 'status portal outage incident public external customer self-service updates transparency',
-        'portal_profile_title'     => 'Portal profile',
+        'self_service_title'    => 'Self-service portal',
+        'self_service_desc'     => 'The portal logo, colours and background, and whether people may close their own tickets or see their equipment.',
+        'self_service_keywords' => 'self service portal branding logo colour color background pattern customer close ticket assets equipment',        'portal_profile_title'     => 'Portal profile',
         'portal_profile_desc'      => 'Which of their own contact details people may change in the self-service portal, and whether a change reaches your address book.',
         'portal_profile_keywords'  => 'self-service portal profile my account contact details job title office phone mobile edit own details gdpr article 16 rectification carddav address book write back customers',
         'colours_title'     => 'Colours',
@@ -1782,6 +1784,53 @@ return [
         'lat_seconds'     => '{n}s',
         'lat_minutes'     => '{n}m',
         'lat_hours'       => '{n}h',
+    ],
+
+    // ── System → Self-service portal ────────────────────────────────────
+    'self_service' => [
+        'heading'  => 'Self-service portal',
+        'intro'    => 'How the portal looks to the people who raise tickets, and what it lets them do. For most organisations the portal is the only part of FreeITSM a customer ever sees, so it is the one screen worth branding separately from the rest.',
+
+        'appearance_heading' => 'Appearance',
+        'appearance_desc'    => 'These apply to the portal only. The logo under <strong>System &rarr; Branding</strong> still covers the app, the login screen and your emails.',
+
+        'logo_label'       => 'Portal logo',
+        'logo_desc'        => 'A different logo for the portal &mdash; useful when the service desk trades under another name, or when the main logo was drawn for a dark app header and looks wrong on a light page. Leave it empty to use the main logo.',
+        'logo_placeholder' => 'uploads/branding/portal-logo.png',
+
+        'header_colour_label' => 'Header bar colour',
+        'header_colour_desc'  => 'The bar across the top of every portal page. Leave it empty to follow the colour theme.',
+        'table_colour_label'  => 'Table header colour',
+        'table_colour_desc'   => 'The heading row of the ticket and asset lists. Leave it empty to follow the colour theme.',
+        'use_theme'           => 'Use the theme',
+
+        'pattern_label' => 'Background',
+        'pattern_desc'  => 'A light pattern behind the page. Drawn in CSS rather than an image, and tinted from the theme, so it stays readable in both light and dark.',
+        'pattern_none'       => 'None',
+        'pattern_dots'       => 'Dots',
+        'pattern_grid'       => 'Grid',
+        'pattern_diagonal'   => 'Diagonal',
+        'pattern_waves'      => 'Waves',
+        'pattern_topography' => 'Contours',
+
+        'preview_heading'     => 'Preview',
+        'preview_desc'        => 'What a customer sees. Updates as you change the settings above; nothing is saved until you press Save.',
+        'preview_portal'      => 'Support portal',
+        'preview_col_ref'     => 'Reference',
+        'preview_col_subject' => 'Subject',
+        'preview_row'         => 'Laptop will not turn on',
+
+        'behaviour_heading' => 'What the portal lets people do',
+        'behaviour_desc'    => 'Both are off to begin with, so an existing portal behaves exactly as it did before these settings arrived.',
+
+        'self_close_label' => 'Let people close their own ticket',
+        'self_close_desc'  => 'Adds a <strong>No longer needed</strong> button to a ticket in the portal. The ticket is closed with a note saying the requester closed it, so the trail shows who did it rather than an analyst appearing to have resolved something they never touched. They cannot close a ticket somebody is already working on if it has been resolved awaiting their confirmation &mdash; that one is already theirs to confirm.',
+
+        'my_assets_label' => 'Show people the equipment assigned to them',
+        'my_assets_desc'  => 'Adds a <strong>My equipment</strong> page listing the assets assigned to that person, so they can check a serial number without raising a ticket to ask. Read only, and only ever their own.',
+
+        'load_failed' => 'Could not load the settings. Nothing has been changed.',
+        'save_failed' => 'Could not save the settings.',
     ],
 
     'companies' => [

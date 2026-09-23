@@ -47,6 +47,7 @@ if (!defined('FREEITSM_SELF_SERVICE')) {
 }
 
 require_once __DIR__ . '/../../includes/theme.php';
+require_once __DIR__ . '/../../includes/self_service_settings.php';
 // The logo the header draws (GH #87). login.php and register.php require this
 // themselves; the six signed-in pages come through here, so it belongs here.
 require_once __DIR__ . '/../../includes/branding.php';
@@ -136,6 +137,24 @@ $pageHead   = $pageHead   ?? '';
 // Pages hand us a translation KEY, because i18n only comes up inside this file —
 // a page can't call t() before including it.
 $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal');
+
+/**
+ * Portal appearance (System → Self-service portal).
+ *
+ * 🔑 Every one of these is emitted ONLY if it has been set, so an install that
+ * has never opened that screen renders exactly the markup it rendered before.
+ * That is the whole reason the defaults are empty rather than "the current
+ * colour": an empty value means "do nothing", which cannot regress anybody.
+ */
+$ssAppearance = ['logo_path' => '', 'header_colour' => '', 'table_header_colour' => '',
+                 'background_pattern' => '', 'allow_self_close' => false, 'show_my_assets' => false];
+try {
+    if (function_exists('connectToDatabase')) {
+        $ssAppearance = selfServicePortalSettings(connectToDatabase());
+    }
+} catch (Throwable $e) {
+    // The portal must render even if the settings cannot be read.
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>"
@@ -148,7 +167,11 @@ $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal')
     <title><?php echo htmlspecialchars($pageTitle); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/self-service.css?v=15">
+    <link rel="stylesheet" href="../assets/css/self-service.css?v=16">
+<?php if ($ssAppearance['background_pattern'] !== ''): ?>
+    <!-- Only fetched when a pattern is actually in use. -->
+    <link rel="stylesheet" href="../assets/css/self-service-patterns.css?v=1">
+<?php endif; ?>
 <?php if (!empty($needsFormLogic)): ?>
     <!-- Form blocks (notes). In the HEAD rather than beside form-logic.js in the
          footer: a stylesheet in the body risks a flash of unstyled content, and
@@ -162,10 +185,22 @@ $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal')
     <script src="../assets/js/tz.js?v=5"></script>
     <?php echo $pageHead; ?>
 </head>
-<body class="<?php echo htmlspecialchars($bodyClass); ?>">
+<?php
+// The colours are written as CSS CUSTOM PROPERTIES on <body> rather than inline
+// on each element: one declaration, and every rule that already reads the token
+// picks it up - including rules added later, which an inline style could not.
+$ssVars = '';
+if ($ssAppearance['header_colour'] !== '')       $ssVars .= '--ss-header-bg:' . $ssAppearance['header_colour'] . ';';
+if ($ssAppearance['table_header_colour'] !== '') $ssVars .= '--ss-table-header-bg:' . $ssAppearance['table_header_colour'] . ';';
+$ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? ' ss-pat-' . $ssAppearance['background_pattern'] : ''));
+?>
+<body class="<?php echo htmlspecialchars($ssBodyClass); ?>"<?php echo $ssVars !== '' ? ' style="' . htmlspecialchars($ssVars, ENT_QUOTES) . '"' : ''; ?>>
     <div class="portal-header">
         <div class="portal-brand">
-            <img src="<?php echo htmlspecialchars(brandingLogoUrl()); ?>" alt="">
+            <?php /* A portal-specific logo if one is set, otherwise the shared
+                     one from System → Branding. Empty means "use the main one",
+                     so nothing changes for an install that has not set it. */ ?>
+            <img src="<?php echo htmlspecialchars($ssAppearance['logo_path'] !== '' ? $ssAppearance['logo_path'] : brandingLogoUrl()); ?>" alt="">
             <span><?php echo htmlspecialchars(t('self-service.portal')); ?></span>
         </div>
         <nav class="portal-nav" id="portalNav">
