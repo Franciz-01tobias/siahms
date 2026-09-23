@@ -100,6 +100,9 @@ return [
         'team'           => 'Team',
         'unassigned'     => 'Unassigned',
         'no_team'        => 'No team',
+        // Multi-company installs only; hidden on a subtask, which always
+        // follows its parent.
+        'company'        => 'Company',
 
         // Who else is on the task (GH #89). ⚠️ TRANSLATORS: see the note beside
         // 'tab_involved' in the settings block below — "collaborator" is the code

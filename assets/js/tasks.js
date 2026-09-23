@@ -1264,6 +1264,17 @@ function renderDetailPanel(task) {
             </div>
         </div>
 
+        <!-- WHICH COMPANY THIS TASK IS FOR. Hidden on a single-company install
+             and on a subtask, which always follows its parent - the same rule
+             that hides Involved below. -->
+        ${(moveCompanies.length > 1 && !task.parent_task_id) ? `
+        <div class="detail-field">
+            <label>${esc(window.t('tasks.detail.company'))}</label>
+            <select class="detail-select" id="detailCompany" data-previous="${task.tenant_id ?? defaultTenantId}" onchange="moveToCompanyFromPanel(this)">
+                ${moveCompanies.map(co => `<option value="${co.id}"${String(co.id) === String(task.tenant_id ?? defaultTenantId) ? ' selected' : ''}>${esc(co.name)}</option>`).join('')}
+            </select>
+        </div>` : ''}
+
         <!-- Who else is on this task (GH #89). Directly under Assignee, because
              "who owns it" and "who else is on it" are one question asked twice,
              and separating them would make the second look like an afterthought.
@@ -1633,6 +1644,66 @@ async function postTaskChange(payload, failedKey) {
     return false;
 }
 
+/* The companies this analyst can reach, for the panel's Company picker.
+   Fetched once on load: the list does not change while somebody works, and a
+   fetch per panel open would leave the select empty for the first frame.
+   An empty list hides the field, which is the right way round - a picker that
+   cannot work is worse than no picker. */
+let moveCompanies = [];
+let defaultTenantId = null;
+
+async function loadMoveCompanies() {
+    try {
+        const res = await fetch('../api/system/get_tenants.php?accessible=1');
+        const data = await res.json();
+        moveCompanies = (data && data.success && data.companies) ? data.companies : [];
+        // A task with no company belongs to the Default one, so the picker has
+        // to resolve NULL to a real id or it would show nothing selected.
+        const def = moveCompanies.find(co => co.is_default);
+        defaultTenantId = def ? def.id : (moveCompanies.length ? moveCompanies[0].id : null);
+    } catch (e) {
+        moveCompanies = [];
+    }
+}
+loadMoveCompanies();
+
+/**
+ * Move the open task to the company just chosen in the panel.
+ *
+ * Deliberately NOT saveField(): this is its own endpoint, it takes the subtasks
+ * with it, and it can be refused outright - a task linked to a ticket in
+ * another company, for instance. On a refusal the select is put BACK to where
+ * it was, because leaving it showing a company the task is not in would let
+ * somebody walk away believing the move happened.
+ */
+async function moveToCompanyFromPanel(sel) {
+    const id = selectedTaskId;
+    const chosen = parseInt(sel.value, 10);
+    const previous = sel.dataset.previous || '';
+    if (!id || !chosen) return;
+    sel.disabled = true;
+    try {
+        const res = await fetch(API_BASE + 'move_to_company.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: id, tenant_id: chosen })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            if (previous) sel.value = previous;
+            showToast(data.error || window.t('tasks.context.move_error'), 'error');
+            return;
+        }
+        sel.dataset.previous = String(chosen);
+        showToast(data.message || window.t('tasks.context.moved'), 'success');
+        loadTasks();
+    } catch (e) {
+        if (previous) sel.value = previous;
+        showToast(window.t('tasks.context.move_error'), 'error');
+    } finally {
+        sel.disabled = false;
+    }
+}
 async function saveField(field, value) {
     if (!selectedTaskId) return;
     if (field === 'status' && !(await confirmCloseWithInvolved(value))) return;

@@ -298,7 +298,7 @@ $translationNamespaces = ['common', 'tasks'];
     window.TASK_FILTER = <?php echo json_encode($taskFilter); ?>;</script>
     <script src="../assets/js/tasks-priority.js?v=1"></script>
     <script src="../assets/js/tasks-ctx-menu.js?v=4"></script>
-    <script src="../assets/js/tasks.js?v=39"></script>
+    <script src="../assets/js/tasks.js?v=40"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
 </body>
 </html>
