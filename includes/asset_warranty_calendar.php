@@ -104,6 +104,11 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
         string $description,
         bool $ready
     ): int {
+        // 🔴 BEFORE the delete, not after. The rows about to be removed are the
+        // only record of which category this kind of entry is currently using,
+        // so asking afterwards finds nothing and quietly makes a second one.
+        awcAdoptExistingCategory($conn, $source);
+
         $del = $conn->prepare("DELETE FROM calendar_events WHERE source = ?");
         $del->execute([$source]);
 
@@ -111,7 +116,7 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
             return 0;
         }
 
-        $categoryId = awcEnsureCategory($conn, $categoryName, $categoryColour);
+        $categoryId = awcEnsureCategory($conn, $source, $categoryName, $categoryColour);
 
         // The column name is interpolated, never bound - a placeholder cannot
         // stand for an identifier. It comes from this file's own two call sites
@@ -142,22 +147,105 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
         return $n;
     }
 
-    /** Find or create a calendar category by name; returns its id (or null). */
-    function awcEnsureCategory(PDO $conn, string $name, string $colour): ?int
+    /**
+     * Which calendar category should this kind of entry use?
+     *
+     * 🔴 REMEMBERED BY ID, NEVER BY NAME. Looking it up by name meant that
+     * renaming the category - the first thing anybody does, and the ONLY way to
+     * get the word in their own language, since these rows are stored data
+     * rather than interface text - caused the next sync to miss it, create a
+     * second category under the original name, and split the entries across the
+     * two with nothing on screen to explain it.
+     *
+     * Four steps, most specific first:
+     *   1. the id recorded last time, if that category still exists;
+     *   2. otherwise whatever category the EXISTING entries of this kind are
+     *      already in - which adopts a category that was renamed before this
+     *      code existed, with no migration to run and nothing for anybody to do;
+     *   3. otherwise one matching the default name, for a fresh install whose
+     *      categories were seeded;
+     *   4. otherwise create it.
+     *
+     * Colour is only ever set at creation. Changing it afterwards is somebody
+     * expressing a preference, and a sync that reset it every night would be
+     * quietly overruling them.
+     */
+    function awcEnsureCategory(PDO $conn, string $source, string $name, string $colour): ?int
     {
+        $settingKey = $source . '_category_id';   // asset_lease_category_id, asset_warranty_category_id
+
+        // 1. the one we recorded, if it is still there
+        $recorded = (int)awcGetSetting($conn, $settingKey, '0');
+        if ($recorded > 0) {
+            $chk = $conn->prepare("SELECT id FROM calendar_categories WHERE id = ?");
+            $chk->execute([$recorded]);
+            if ($chk->fetchColumn()) { return $recorded; }
+        }
+
+        // 2. is done earlier, by awcAdoptExistingCategory, because it has to run
+        //    before this kind's entries are cleared. If it found anything, step 1
+        //    above has already returned it.
+
+        // 3. a category already carrying the default name
         $sel = $conn->prepare("SELECT id FROM calendar_categories WHERE name = ? LIMIT 1");
         $sel->execute([$name]);
-        $id = $sel->fetchColumn();
-        if ($id) {
-            return (int)$id;
+        $id = (int)$sel->fetchColumn();
+        if ($id > 0) {
+            awcSetSetting($conn, $settingKey, (string)$id);
+            return $id;
         }
+
+        // 4. make one
         try {
             $ins = $conn->prepare("INSERT INTO calendar_categories (name, color, is_active) VALUES (?, ?, 1)");
             $ins->execute([$name, $colour]);
-            return (int)$conn->lastInsertId();
+            $new = (int)$conn->lastInsertId();
+            awcSetSetting($conn, $settingKey, (string)$new);
+            return $new;
         } catch (Exception $e) {
             return null; // category column shape differs / table missing — events just go uncategorised
         }
+    }
+
+    /**
+     * Adopt whatever category this kind of entry is already filed under.
+     *
+     * This is what makes renaming safe for an install that renamed the category
+     * BEFORE ids were recorded - there is no migration to run and nothing for
+     * anybody to do; the entries themselves say where they live.
+     *
+     * Does nothing once an id is recorded, and nothing if there are no entries.
+     */
+    function awcAdoptExistingCategory(PDO $conn, string $source): void
+    {
+        $settingKey = $source . '_category_id';
+        $recorded = (int)awcGetSetting($conn, $settingKey, '0');
+        if ($recorded > 0) {
+            $chk = $conn->prepare("SELECT id FROM calendar_categories WHERE id = ?");
+            $chk->execute([$recorded]);
+            if ($chk->fetchColumn()) { return; }   // already known and still there
+        }
+        try {
+            $used = $conn->prepare(
+                "SELECT category_id FROM calendar_events
+                  WHERE source = ? AND category_id IS NOT NULL
+               GROUP BY category_id ORDER BY COUNT(*) DESC LIMIT 1"
+            );
+            $used->execute([$source]);
+            $adopted = (int)$used->fetchColumn();
+            if ($adopted > 0) { awcSetSetting($conn, $settingKey, (string)$adopted); }
+        } catch (Exception $e) { /* the name lookup will cope */ }
+    }
+
+    /** Remember a value; best-effort, because losing it only costs one lookup. */
+    function awcSetSetting(PDO $conn, string $key, string $value): void
+    {
+        try {
+            $conn->prepare(
+                "INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+            )->execute([$key, $value]);
+        } catch (Exception $e) { /* next sync will work it out again */ }
     }
 
     function awcGetSetting(PDO $conn, string $key, string $default): string
