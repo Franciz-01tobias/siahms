@@ -123,6 +123,11 @@ try {
                    t.start_date, t.due_date,
                    t.assigned_analyst_id, t.assigned_team_id,
                    t.ticket_id, t.change_id, t.contract_id, t.board_position,
+                   -- Which company the task is in, so the move-to-company menu
+                   -- can tick the one it is already in. Discloses nothing: this
+                   -- list is already scoped, so every row returned is one the
+                   -- caller may see, in a company they can already name.
+                   t.tenant_id,
                    -- Needed by any caller that opts into subtasks, to tell the two
                    -- apart and to name the parent a subtask belongs to (#90).
                    t.parent_task_id, pt.title AS parent_title,

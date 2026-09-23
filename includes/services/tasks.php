@@ -834,6 +834,167 @@ class TasksService
         return $row;
     }
 
+    /**
+     * Move a task to another company.
+     *
+     * Asked for in the 2.5.0 request list. Tasks could be CREATED in a company
+     * but never moved between them, so a task raised against the wrong client
+     * could only be deleted and retyped - losing its comments, its time entries
+     * and its history along with the mistake.
+     *
+     * The twin of api/change-management/move_to_company.php, gated the same way:
+     * the actor must be able to reach the task where it currently sits AND the
+     * company it is going to. Two things make this harder than the Changes
+     * version, and both are refusals rather than quiet fixes:
+     *
+     *  1. A SUBTASK inherits its parent's company, always (see
+     *     parentTaskTenant). Moving one on its own would break that invariant
+     *     silently - the subtask would sit in a company its parent is not in,
+     *     and the board would show a parent with a child nobody else can see.
+     *     So it is refused, naming the parent to move instead.
+     *
+     *  2. A task LINKED to a ticket, change or contract belongs where that
+     *     record belongs; createTask already enforces exactly that and refuses a
+     *     tenant_id that disagrees with the linked ticket. Moving the task alone
+     *     would leave the two disagreeing, so this refuses too and says which
+     *     link is in the way. Unlinking first is a decision for the person, not
+     *     something to do on their behalf while they are looking elsewhere.
+     *
+     * SUBTASKS MOVE WITH THE PARENT. That is not a convenience - leaving them
+     * behind is the same broken state as (1), reached from the other direction.
+     *
+     * @return array{moved:int, from:string, to:string}
+     */
+    public static function moveTaskToCompany(PDO $conn, ActorContext $ctx, int $taskId, int $targetTenantId): array
+    {
+        $row = self::loadTaskRow($conn, $ctx, $taskId);          // 404 if gone or out of scope
+
+        if (!isMultiTenant($conn)) {
+            throw new ServiceError('validation', 'invalid_field',
+                'This install has only one company, so there is nowhere to move a task to.');
+        }
+
+        if (!empty($row['parent_task_id'])) {
+            throw new ServiceError('validation', 'invalid_field',
+                'A subtask always belongs to the same company as its parent. Move the parent task instead.');
+        }
+
+        foreach ([['ticket_id', 'tickets', 'ticket'], ['change_id', 'changes', 'change'], ['contract_id', 'contracts', 'contract']] as [$col, $table, $label]) {
+            if (empty($row[$col])) { continue; }
+            $s = $conn->prepare("SELECT tenant_id FROM `{$table}` WHERE id = ?");
+            $s->execute([(int)$row[$col]]);
+            $linked = $s->fetchColumn();
+            if ($linked === false) { continue; }                 // link points at nothing; not this method's problem
+            $linkedTenant = ($linked === null) ? getDefaultTenantId($conn) : (int)$linked;
+            if ($linkedTenant !== $targetTenantId) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "This task is linked to a {$label} in another company. Remove the link first, or move the {$label} too.");
+            }
+        }
+
+        // BOTH checks, and the order matters.
+        //
+        // 🔴 companyScope is not the same question as analystCanAccessTenant.
+        // The scope is what THIS caller is allowed to touch; the analyst check
+        // is what the person behind it could reach in general. For a session
+        // they agree, because fromSession() builds the scope from that same
+        // access - so testing only the second one looks fine for ever. They
+        // come apart for an API key issued for one company: the key's holder
+        // may well have wider access, and honouring that would let a key move
+        // work into a company it was deliberately not given. createTask already
+        // checks the scope this way (resolveNewTaskTenant); leaving move to
+        // check only the other would have made the two disagree about the same
+        // question.
+        if ($ctx->companyScope !== null && !in_array($targetTenantId, $ctx->companyScope, true)) {
+            throw new ServiceError('validation', 'invalid_field', 'You do not have access to that company.');
+        }
+        if (!analystCanAccessTenant($conn, $ctx->actorId, $targetTenantId)) {
+            throw new ServiceError('validation', 'invalid_field', 'You do not have access to that company.');
+        }
+        $target = getTenantById($conn, $targetTenantId);
+        if (!$target) {
+            // Rarely reached: an id naming no company fails the access check
+            // above first, and says "no access" rather than "no such company".
+            // That is deliberate - one message for both cases means probing ids
+            // cannot be used to learn which companies exist. This branch covers
+            // the narrow case of a company removed between the two checks.
+            throw new ServiceError('validation', 'invalid_field', 'That company does not exist.');
+        }
+
+        // NULL means the Default company, NOT "shared" - so it is resolved to a
+        // real id before comparing, or moving a Default-company task into the
+        // Default company would look like a real move and write a nonsense
+        // audit line saying it came from nowhere.
+        $oldTenantId = ($row['tenant_id'] === null) ? getDefaultTenantId($conn) : (int)$row['tenant_id'];
+        if ($oldTenantId === $targetTenantId) {
+            $name = $target['name'] ?? '';
+            return ['moved' => 0, 'from' => $name, 'to' => $name];
+        }
+        $oldTenant = getTenantById($conn, $oldTenantId);
+        $oldName   = $oldTenant['name'] ?? 'Unknown';
+
+        // The task and everything filed beneath it, in one transaction: a move
+        // that got halfway would leave a parent and its children in different
+        // companies, which is the exact state the refusals above exist to stop.
+        $ownTransaction = !$conn->inTransaction();
+        if ($ownTransaction) { $conn->beginTransaction(); }
+        try {
+            $ids = self::taskAndDescendantIds($conn, $taskId);
+            $in  = implode(',', array_fill(0, count($ids), '?'));
+            $conn->prepare("UPDATE tasks SET tenant_id = ?, updated_datetime = UTC_TIMESTAMP() WHERE id IN ($in)")
+                 ->execute(array_merge([$targetTenantId], $ids));
+
+            // Audited on every row that moved, not just the one that was asked
+            // for: somebody opening a subtask later needs to see why its company
+            // changed without having to know the parent was the thing moved.
+            $aud = $conn->prepare(
+                "INSERT INTO task_audit (task_id, analyst_id, field_name, old_value, new_value, source, created_datetime)
+                 VALUES (?, ?, 'Company', ?, ?, 'app', UTC_TIMESTAMP())"
+            );
+            foreach ($ids as $id) {
+                try { $aud->execute([$id, $ctx->actorId ?: null, $oldName, $target['name']]); }
+                catch (Exception $e) { /* audit is best-effort, as elsewhere */ }
+            }
+
+            if ($ownTransaction) { $conn->commit(); }
+            return ['moved' => count($ids), 'from' => $oldName, 'to' => $target['name']];
+        } catch (Throwable $t) {
+            if ($ownTransaction && $conn->inTransaction()) { $conn->rollBack(); }
+            throw $t;
+        }
+    }
+
+    /**
+     * A task and every task beneath it, however deep.
+     *
+     * Iterative rather than recursive SQL: MySQL 5.7 has no recursive CTE and
+     * this product still supports it. The visited set is not decoration - a
+     * parent chain that somehow loops would otherwise spin here for ever, and a
+     * bad row in the database should not be able to hang a request.
+     */
+    private static function taskAndDescendantIds(PDO $conn, int $rootId): array
+    {
+        $all     = [$rootId];
+        $seen    = [$rootId => true];
+        $frontier = [$rootId];
+
+        while ($frontier) {
+            $in = implode(',', array_fill(0, count($frontier), '?'));
+            $stmt = $conn->prepare("SELECT id FROM tasks WHERE parent_task_id IN ($in)");
+            $stmt->execute($frontier);
+            $next = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $childId) {
+                $childId = (int)$childId;
+                if (isset($seen[$childId])) { continue; }
+                $seen[$childId] = true;
+                $all[]  = $childId;
+                $next[] = $childId;
+            }
+            $frontier = $next;
+        }
+        return $all;
+    }
+
     /** A subtask inherits its parent's company, always. */
     private static function parentTaskTenant(PDO $conn, int $parentId): ?int
     {

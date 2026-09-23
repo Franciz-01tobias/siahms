@@ -252,6 +252,14 @@ $translationNamespaces = ['common', 'tasks'];
             <span class="ctx-arrow">&rsaquo;</span>
             <div class="ctx-submenu" id="ctxDue"></div>
         </div>
+        <?php /* Move to company. Hidden at N=1 and never rendered on a
+                 single-company install, so nothing changes for anyone who does
+                 not use companies. The menu module fills and unhides it. */ ?>
+        <div class="ctx-item ctx-has-sub" data-action="company" id="ctxCompanyParent" style="display:none;">
+            <span class="ctx-item-label"><?php echo htmlspecialchars(t('tasks.context.move_company')); ?></span>
+            <span class="ctx-arrow">&rsaquo;</span>
+            <div class="ctx-submenu" id="ctxCompany"></div>
+        </div>
         <div class="ctx-sep"></div>
         <!-- Label flips between Mark complete and Reopen, set per task in
              buildSubmenus() from the status's is_closed FLAG — never by comparing
@@ -289,7 +297,7 @@ $translationNamespaces = ['common', 'tasks'];
     window.TASK_VIEW = <?php echo json_encode($taskView); ?>;
     window.TASK_FILTER = <?php echo json_encode($taskFilter); ?>;</script>
     <script src="../assets/js/tasks-priority.js?v=1"></script>
-    <script src="../assets/js/tasks-ctx-menu.js?v=3"></script>
+    <script src="../assets/js/tasks-ctx-menu.js?v=4"></script>
     <script src="../assets/js/tasks.js?v=39"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
 </body>

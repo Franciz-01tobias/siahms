@@ -24,6 +24,12 @@
     let ctxTaskId = null;
     let wired = false;
 
+    // The companies this analyst can reach. Fetched ONCE on init rather than
+    // per right-click: the list does not change while somebody is dragging
+    // cards around, and a fetch on every menu open would show an empty submenu
+    // for the first frame every time.
+    let moveCompanies = [];
+
     function init(config) {
         cfg = Object.assign({
             targetSelector: '.task-card',
@@ -32,6 +38,8 @@
             onUpdate: () => {},
             onCreateSubtask: null,
         }, config);
+
+        loadMoveCompanies();
 
         if (!wired) {
             document.addEventListener('contextmenu', onDocCtx);
@@ -52,6 +60,25 @@
             subtaskItem.style.display = show ? '' : 'none';
             const sep = subtaskItem.previousElementSibling;
             if (sep && sep.classList.contains('ctx-sep')) sep.style.display = show ? '' : 'none';
+        }
+    }
+
+    /**
+     * Same source as the tickets and changes "Move to company" submenus.
+     * accessible=1 means the server decides what this analyst may see, so the
+     * menu cannot offer a company the move would then refuse.
+     *
+     * A failure here leaves the list empty, which hides the menu item. That is
+     * the right way round: an item that is there but cannot work is worse than
+     * one that is not there.
+     */
+    async function loadMoveCompanies() {
+        try {
+            const res = await fetch('../api/system/get_tenants.php?accessible=1');
+            const data = await res.json();
+            moveCompanies = (data && data.success && data.companies) ? data.companies : [];
+        } catch (e) {
+            moveCompanies = [];
         }
     }
 
@@ -122,6 +149,28 @@
                 opt('status', s.name, s.name, task.status === s.name, sw(s.colour))).join('')
             || `<div class="ctx-sub-empty">${esc(T('context.no_statuses'))}</div>`;
 
+        // ── Move to company ───────────────────────────────────────────────
+        // The parent row is hidden unless there is somewhere to move TO. One
+        // company, or a failed lookup, means no item at all rather than an
+        // item that opens onto nothing.
+        const elC = document.getElementById('ctxCompany');
+        const elCP = document.getElementById('ctxCompanyParent');
+        if (elCP) {
+            // A SUBTASK cannot be moved on its own - it belongs to whatever
+            // company its parent is in. The service refuses it; hiding the
+            // item here means nobody is offered something that will only come
+            // back as an error they then have to interpret.
+            const isSubtask = !!(task && task.parent_task_id);
+            const canMove = moveCompanies.length > 1 && !isSubtask;
+            elCP.style.display = canMove ? '' : 'none';
+            if (canMove && elC) {
+                const currentTid = (task && task.tenant_id != null) ? String(task.tenant_id) : null;
+                elC.innerHTML = moveCompanies.map(co =>
+                    opt('__company', co.id, co.name, currentTid !== null && String(co.id) === currentTid)
+                ).join('');
+            }
+        }
+
         const elP = document.getElementById('ctxPriority');
         if (elP) elP.innerHTML =
             (lookups.priorities || []).map(p =>
@@ -175,6 +224,13 @@
         if (subOpt) {
             const field = subOpt.dataset.field;
             let value = subOpt.dataset.value;
+            // Moving company is NOT a field save. It has its own endpoint
+            // because it is not one column - it moves the subtasks too, and it
+            // refuses outright in cases an ordinary save has no opinion about.
+            if (field === '__company') {
+                moveToCompany(parseInt(value, 10));
+                return;
+            }
             if (field === 'assigned_analyst_id' || field === 'assigned_team_id') {
                 value = value === '' ? null : parseInt(value, 10);
             }
@@ -247,6 +303,36 @@
             closeCtx();
             if (id && cfg.onDelete) cfg.onDelete(id, task);
             return;
+        }
+    }
+
+    /**
+     * Move the task - and everything beneath it - to another company.
+     *
+     * Every rule lives in TasksService::moveTaskToCompany, so this reports
+     * what the server says rather than second-guessing it. The message is
+     * shown as the server phrased it: it is the only party that knows how
+     * many subtasks went along, or which link stood in the way.
+     */
+    async function moveToCompany(tenantId) {
+        const id = ctxTaskId;
+        closeCtx();
+        if (!id || !tenantId) return;
+        try {
+            const res = await fetch(cfg.apiBase + 'move_to_company.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: id, tenant_id: tenantId })
+            });
+            const data = await res.json();
+            if (!data.success) {
+                if (window.showToast) window.showToast(data.error || window.t('tasks.context.move_error'), 'error');
+                return;
+            }
+            if (window.showToast) window.showToast(data.message || window.t('tasks.context.moved'), 'success');
+            cfg.onUpdate();
+        } catch (e) {
+            if (window.showToast) window.showToast(window.t('tasks.context.move_error'), 'error');
         }
     }
 

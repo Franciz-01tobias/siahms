@@ -113,11 +113,17 @@ $translationNamespaces = ['common', 'tasks'];
             <span class="ctx-arrow">&rsaquo;</span>
             <div class="ctx-submenu" id="ctxPriority"></div>
         </div>
+        <?php /* Move to company - hidden at N=1; filled by tasks-ctx-menu.js. */ ?>
+        <div class="ctx-item ctx-has-sub" data-action="company" id="ctxCompanyParent" style="display:none;">
+            <span class="ctx-item-label"><?php echo htmlspecialchars(t('tasks.context.move_company')); ?></span>
+            <span class="ctx-arrow">&rsaquo;</span>
+            <div class="ctx-submenu" id="ctxCompany"></div>
+        </div>
     </div>
 
     <script>window.API_BASE = '../../api/tasks/';</script>
     <script src="../../assets/js/tasks-priority.js?v=1"></script>
-    <script src="../../assets/js/tasks-ctx-menu.js?v=1"></script>
+    <script src="../../assets/js/tasks-ctx-menu.js?v=4"></script>
     <script src="../../assets/js/tasks-quick-panel.js?v=1"></script>
     <script src="../../assets/js/tasks-timeline.js?v=12"></script>
     <script src="../../assets/js/mobile.js?v=65"></script>

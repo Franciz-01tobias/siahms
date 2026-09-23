@@ -159,6 +159,12 @@ return [
     ],
 
     'context' => [
+        // Moving a task between companies. The menu item is hidden entirely
+        // on a single-company install and on a subtask, so most people never
+        // see any of these.
+        'move_company'   => 'Move to company',
+        'moved'          => 'Task moved',
+        'move_error'     => 'Could not move the task',
         'assign_analyst' => 'Assign analyst',
         'assign_team'    => 'Assign team',
         'change_status'  => 'Change status',
