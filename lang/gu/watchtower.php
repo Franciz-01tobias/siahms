@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'નોલેજ',
         'card_knowledge_desc' => 'તાજેતરના લેખ અને હવે મુદત વીતેલી સમીક્ષાઓ.',
         'card_assets' => 'એસેટ્સ',
+        'card_assets_desc' => 'સમાપ્ત થતી વોરંટી અને લીઝ, અને તાજેતરમાં ન દેખાયેલી એસેટ્સ.',
         'card_tasks' => 'કાર્યો',
         'card_tasks_desc' => 'સ્થિતિ પ્રમાણે ખુલ્લા કાર્યો, મુદત વીતેલા અને આજે નિયત.',
         'card_workflows' => 'વર્કફ્લો',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'કુલ',
         'metric_offline' => 'ઓફલાઇન',
+        'metric_lease' => 'લીઝ',
         'metric_warranty' => 'વોરંટી',
         'warranty' => '<span class="wt-attention-bold">{count}</span> સંપત્તિની વોરંટી સમાપ્ત થઈ ગઈ છે અથવા {days} દિવસની અંદર સમાપ્ત થઈ રહી છે',
+        'lease' => '<span class="wt-attention-bold">{count}</span> એસેટ્સની લીઝ સમાપ્ત થઈ છે અથવા {days} દિવસમાં થશે',
         'offline' => '<span class="wt-attention-bold">{count}</span> સંપત્તિ 7+ દિવસથી દેખાઈ નથી',
         'all_active' => 'બધી સંપત્તિ તાજેતરમાં સક્રિય હતી',
     ],
