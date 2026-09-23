@@ -54,11 +54,17 @@ $pageStyles = <<<'CSS'
 }
 .tk-filter:focus { outline: none; border-color: var(--ss-accent, #10b981); }
 
+/* The line between tickets. Translucent so it takes its weight from the
+   surface beneath it, and keyed on the theme MODE so any dark palette is
+   covered, not just the one called "dark". */
+:root { --tk-divider: rgba(0, 0, 0, 0.055); }
+[data-theme-mode="dark"] { --tk-divider: rgba(255, 255, 255, 0.05); }
+
 .tk-list-body { flex: 1; overflow-y: auto; }
 
 .tk-item {
     padding: 12px 18px;
-    border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    border-bottom: 1px solid var(--tk-divider);
     cursor: pointer;
     transition: background 0.15s;
     display: block;
