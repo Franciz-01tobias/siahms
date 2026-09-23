@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'ज्ञान',
         'card_knowledge_desc' => 'हाल के लेख और अब अतिदेय हो चुकी समीक्षाएँ।',
         'card_assets' => 'संपत्तियाँ',
+        'card_assets_desc' => 'समाप्त हो रही वारंटी और लीज़, और वे एसेट जो हाल में नहीं दिखे।',
         'card_tasks' => 'कार्य',
         'card_tasks_desc' => 'खुले कार्य स्थिति के अनुसार, अतिदेय और आज देय।',
         'card_workflows' => 'वर्कफ़्लो',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'कुल',
         'metric_offline' => 'ऑफ़लाइन',
+        'metric_lease' => 'लीज़',
         'metric_warranty' => 'वारंटी',
         'warranty' => '<span class="wt-attention-bold">{count}</span> संपत्तियाँ जिनकी वारंटी समाप्त हो चुकी है या {days} दिनों के भीतर समाप्त हो रही है',
+        'lease' => '<span class="wt-attention-bold">{count}</span> एसेट जिनकी लीज़ समाप्त हो चुकी है या {days} दिन के भीतर समाप्त हो रही है',
         'offline' => '<span class="wt-attention-bold">{count}</span> संपत्तियाँ 7+ दिनों से नहीं देखी गईं',
         'all_active' => 'सभी संपत्तियाँ हाल ही में सक्रिय',
     ],

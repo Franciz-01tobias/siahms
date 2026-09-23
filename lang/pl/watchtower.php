@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'Baza wiedzy',
         'card_knowledge_desc' => 'Ostatnie artykuły i zaległe przeglądy.',
         'card_assets' => 'Zasoby',
+        'card_assets_desc' => 'Wygasające gwarancje i leasingi oraz zasoby, które dawno się nie zgłosiły.',
         'card_tasks' => 'Zadania',
         'card_tasks_desc' => 'Otwarte zadania według statusu, zaległe i z terminem na dzisiaj.',
         'card_workflows' => 'Przepływy pracy',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'Łącznie',
         'metric_offline' => 'Offline',
+        'metric_lease' => 'Leasing',
         'metric_warranty' => 'Gwarancja',
         'warranty' => '<span class="wt-attention-bold">{count}</span> zasobów z gwarancją wygasłą lub wygasającą w ciągu {days} dni',
+        'lease' => '<span class="wt-attention-bold">{count}</span> zasobów z leasingiem zakończonym lub kończącym się w ciągu {days} dni',
         'offline' => '<span class="wt-attention-bold">{count}</span> zasobów niewidzianych od 7+ dni',
         'all_active' => 'Wszystkie zasoby ostatnio aktywne',
     ],

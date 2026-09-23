@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'Kunnskap',
         'card_knowledge_desc' => 'Nylige artikler og gjennomganger som nå er forfalt.',
         'card_assets' => 'Ressurser',
+        'card_assets_desc' => 'Garantier og leasingavtaler som utløper, og ressurser som ikke er sett nylig.',
         'card_tasks' => 'Oppgaver',
         'card_tasks_desc' => 'Åpne oppgaver etter status, forfalt og med frist i dag.',
         'card_workflows' => 'Arbeidsflyter',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'Totalt',
         'metric_offline' => 'Frakoblet',
+        'metric_lease' => 'Leasing',
         'metric_warranty' => 'Garanti',
         'warranty' => '<span class="wt-attention-bold">{count}</span> ressurser har utløpt garanti, eller garanti som utløper innen {days} dager',
+        'lease' => '<span class="wt-attention-bold">{count}</span> ressurser har utløpt leasing, eller leasing som utløper innen {days} dager',
         'offline' => '<span class="wt-attention-bold">{count}</span> ressurser er ikke sett på 7 dager eller mer',
         'all_active' => 'Alle ressurser har vært aktive nylig',
     ],

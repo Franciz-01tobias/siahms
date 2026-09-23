@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'Conhecimento',
         'card_knowledge_desc' => 'Artigos recentes e revisões agora atrasadas.',
         'card_assets' => 'Ativos',
+        'card_assets_desc' => 'Garantias e leasings vencendo, e ativos sem contato recente.',
         'card_tasks' => 'Tarefas',
         'card_tasks_desc' => 'Tarefas abertas por status, atrasadas e com vencimento hoje.',
         'card_workflows' => 'Workflows',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'Total',
         'metric_offline' => 'Offline',
+        'metric_lease' => 'Leasing',
         'metric_warranty' => 'Garantia',
         'warranty' => '<span class="wt-attention-bold">{count}</span> ativo(s) com garantia expirada ou expirando em até {days} dias',
+        'lease' => '<span class="wt-attention-bold">{count}</span> ativo(s) com leasing encerrado ou encerrando em até {days} dias',
         'offline' => '<span class="wt-attention-bold">{count}</span> ativo(s) sem contato há 7+ dias',
         'all_active' => 'Todos os ativos ativos recentemente',
     ],

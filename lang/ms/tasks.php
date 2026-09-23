@@ -139,6 +139,9 @@ return [
         'create' => 'Cipta “{name}”',
     ],
     'context' => [
+        'move_company' => 'Pindah ke syarikat',
+        'moved' => 'Tugas dipindahkan',
+        'move_error' => 'Tidak dapat memindahkan tugas',
         'assign_analyst' => 'Tugaskan penganalisis',
         'assign_team' => 'Tugaskan pasukan',
         'change_status' => 'Tukar status',

@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'Wissen',
         'card_knowledge_desc' => 'Neue Artikel und nun überfällige Überprüfungen.',
         'card_assets' => 'Assets',
+        'card_assets_desc' => 'Ablaufende Garantien und Leasingverträge sowie länger nicht gesehene Assets.',
         'card_tasks' => 'Aufgaben',
         'card_tasks_desc' => 'Offene Aufgaben nach Status, überfällig und heute fällig.',
         'card_workflows' => 'Workflows',
@@ -151,8 +152,10 @@ return [
     'assets' => [
         'metric_total' => 'Gesamt',
         'metric_offline' => 'Offline',
+        'metric_lease' => 'Leasing',
         'metric_warranty' => 'Garantie',
         'warranty' => '<span class="wt-attention-bold">{count}</span> Asset(s) mit abgelaufener oder innerhalb von {days} Tagen ablaufender Garantie',
+        'lease' => '<span class="wt-attention-bold">{count}</span> Asset(s), deren Leasing beendet ist oder innerhalb von {days} Tagen endet',
         'offline' => '<span class="wt-attention-bold">{count}</span> Asset(s) seit 7+ Tagen nicht gesehen',
         'all_active' => 'Alle Assets kürzlich aktiv',
     ],

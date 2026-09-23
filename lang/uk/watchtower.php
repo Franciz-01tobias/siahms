@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'База знань',
         'card_knowledge_desc' => 'Останні статті та прострочені перевірки.',
         'card_assets' => 'Активи',
+        'card_assets_desc' => 'Гарантії та оренда, що закінчуються, і активи, яких давно не було видно.',
         'card_tasks' => 'Завдання',
         'card_tasks_desc' => 'Відкриті завдання за статусом, прострочені та із терміном сьогодні.',
         'card_workflows' => 'Процеси',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'Всього',
         'metric_offline' => 'Офлайн',
+        'metric_lease' => 'Оренда',
         'metric_warranty' => 'Гарантія',
         'warranty' => '<span class="wt-attention-bold">{count}</span> активів з гарантією, що закінчилась або закінчується протягом {days} днів',
+        'lease' => '<span class="wt-attention-bold">{count}</span> активів з орендою, що закінчилась або закінчується протягом {days} днів',
         'offline' => '<span class="wt-attention-bold">{count}</span> активів не виявлено протягом 7+ днів',
         'all_active' => 'Усі активи нещодавно були активні',
     ],

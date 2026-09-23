@@ -139,6 +139,9 @@ return [
         'create' => 'Crear «{name}»',
     ],
     'context' => [
+        'move_company' => 'Mover a empresa',
+        'moved' => 'Tarea movida',
+        'move_error' => 'No se ha podido mover la tarea',
         'assign_analyst' => 'Asignar analista',
         'assign_team' => 'Asignar equipo',
         'change_status' => 'Cambiar estado',

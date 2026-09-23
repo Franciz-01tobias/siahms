@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'Connaissances',
         'card_knowledge_desc' => 'Articles récents et révisions désormais en retard.',
         'card_assets' => 'Actifs',
+        'card_assets_desc' => 'Garanties et locations qui expirent, et actifs non vus récemment.',
         'card_tasks' => 'Tâches',
         'card_tasks_desc' => 'Tâches ouvertes par statut, en retard et dues aujourd\'hui.',
         'card_workflows' => 'Workflows',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'Total',
         'metric_offline' => 'Hors ligne',
+        'metric_lease' => 'Location',
         'metric_warranty' => 'Garantie',
         'warranty' => '<span class="wt-attention-bold">{count}</span> actif(s) avec garantie expirée ou expirant sous {days} jours',
+        'lease' => '<span class="wt-attention-bold">{count}</span> actif(s) dont la location a pris fin ou prend fin sous {days} jours',
         'offline' => '<span class="wt-attention-bold">{count}</span> actif(s) non vu(s) depuis 7 jours ou plus',
         'all_active' => 'Tous les actifs récemment actifs',
     ],

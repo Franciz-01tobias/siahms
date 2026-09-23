@@ -139,6 +139,9 @@ return [
         'create' => 'Opprett “{name}”',
     ],
     'context' => [
+        'move_company' => 'Flytt til selskap',
+        'moved' => 'Oppgåva er flytta',
+        'move_error' => 'Kunne ikkje flytte oppgåva',
         'assign_analyst' => 'Tildel analytikar',
         'assign_team' => 'Tildel team',
         'change_status' => 'Endre status',

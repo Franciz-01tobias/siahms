@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'Kunnskap',
         'card_knowledge_desc' => 'Nylege artiklar og gjennomgangar som no er over fristen.',
         'card_assets' => 'Ressursar',
+        'card_assets_desc' => 'Garantiar og leasingavtalar som går ut, og ressursar som ikkje er sette nyleg.',
         'card_tasks' => 'Oppgåver',
         'card_tasks_desc' => 'Opne oppgåver etter status, over fristen og med frist i dag.',
         'card_workflows' => 'Arbeidsflytar',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'Totalt',
         'metric_offline' => 'Fråkopla',
+        'metric_lease' => 'Leasing',
         'metric_warranty' => 'Garanti',
         'warranty' => '<span class="wt-attention-bold">{count}</span> ressursar har garanti som har gått ut eller går ut innan {days} dagar',
+        'lease' => '<span class="wt-attention-bold">{count}</span> ressursar har leasing som har gått ut eller går ut innan {days} dagar',
         'offline' => '<span class="wt-attention-bold">{count}</span> ressursar er ikkje sedde på 7 dagar eller meir',
         'all_active' => 'Alle ressursar har vore aktive nyleg',
     ],

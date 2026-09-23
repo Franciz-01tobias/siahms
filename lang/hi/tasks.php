@@ -139,6 +139,9 @@ return [
         'create' => '"{name}" बनाएँ',
     ],
     'context' => [
+        'move_company' => 'कंपनी में ले जाएँ',
+        'moved' => 'टास्क ले जाया गया',
+        'move_error' => 'टास्क को ले जाया नहीं जा सका',
         'assign_analyst' => 'विश्लेषक सौंपें',
         'assign_team' => 'टीम सौंपें',
         'change_status' => 'स्थिति बदलें',

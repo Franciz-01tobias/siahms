@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'Pengetahuan',
         'card_knowledge_desc' => 'Artikel terkini dan semakan yang kini tertunggak.',
         'card_assets' => 'Aset',
+        'card_assets_desc' => 'Waranti dan pajakan yang akan tamat, dan aset yang lama tidak kelihatan.',
         'card_tasks' => 'Tugasan',
         'card_tasks_desc' => 'Tugasan terbuka mengikut status, tertunggak dan tarikh akhir hari ini.',
         'card_workflows' => 'Aliran Kerja',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'Jumlah',
         'metric_offline' => 'Luar Talian',
+        'metric_lease' => 'Pajakan',
         'metric_warranty' => 'Waranti',
         'warranty' => '<span class="wt-attention-bold">{count}</span> aset dengan waranti tamat tempoh atau tamat dalam masa {days} hari',
+        'lease' => '<span class="wt-attention-bold">{count}</span> aset dengan pajakan yang telah tamat atau akan tamat dalam {days} hari',
         'offline' => '<span class="wt-attention-bold">{count}</span> aset tidak dikesan selama 7+ hari',
         'all_active' => 'Semua aset aktif baru-baru ini',
     ],

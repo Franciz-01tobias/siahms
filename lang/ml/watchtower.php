@@ -60,6 +60,7 @@ return [
         'card_knowledge' => 'അറിവ്',
         'card_knowledge_desc' => 'സമീപകാല ലേഖനങ്ങളും കാലാവധി കഴിഞ്ഞ അവലോകനങ്ങളും.',
         'card_assets' => 'ആസ്തികൾ',
+        'card_assets_desc' => 'കാലാവധി തീരുന്ന വാറന്റികളും ലീസുകളും, അടുത്തിടെ കാണാത്ത അസറ്റുകളും.',
         'card_tasks' => 'ടാസ്കുകൾ',
         'card_tasks_desc' => 'നില പ്രകാരം തുറന്ന ടാസ്കുകൾ, കാലാവധി കഴിഞ്ഞത്, ഇന്ന് അവസാനിക്കുന്നത്.',
         'card_workflows' => 'വർക്ക്ഫ്ലോകൾ',
@@ -163,8 +164,10 @@ return [
     'assets' => [
         'metric_total' => 'ആകെ',
         'metric_offline' => 'ഓഫ്‌ലൈൻ',
+        'metric_lease' => 'ലീസ്',
         'metric_warranty' => 'വാറന്റി',
         'warranty' => '<span class="wt-attention-bold">{count}</span> ആസ്തി(കൾ) വാറന്റി കാലഹരണപ്പെട്ടു അല്ലെങ്കിൽ {days} ദിവസത്തിനുള്ളിൽ കാലഹരണപ്പെടുന്നു',
+        'lease' => 'ലീസ് കഴിഞ്ഞതോ {days} ദിവസത്തിനുള്ളിൽ കഴിയുന്നതോ ആയ <span class="wt-attention-bold">{count}</span> അസറ്റ്',
         'offline' => '<span class="wt-attention-bold">{count}</span> ആസ്തി(കൾ) 7+ ദിവസമായി കണ്ടിട്ടില്ല',
         'all_active' => 'എല്ലാ ആസ്തികളും അടുത്തിടെ സജീവമായിരുന്നു',
     ],
