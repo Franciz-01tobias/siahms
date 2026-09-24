@@ -3625,7 +3625,7 @@ $translationNamespaces = ['common', 'tickets'];
         // shared defaults it inherits, each with a Hide/Show toggle.
         function renderTicketTypesScoped(tbody, scoped) {
             const groupRow = (label, hint) =>
-                `<tr class="tt-group-row"><td colspan="5" style="background:#f7f9fa;border-top:1px solid #e3e8ea;font-size:12px;font-weight:600;color:#455a64;padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:#90a4ae;">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
+                `<tr class="tt-group-row"><td colspan="5" style="background:var(--surface-2, #f7f9fa);border-top:1px solid var(--border, #e3e8ea);font-size:12px;font-weight:600;color:var(--text-muted, #455a64);padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:var(--text-faint, #90a4ae);">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
 
             let html = '';
 
@@ -3714,7 +3714,7 @@ $translationNamespaces = ['common', 'tickets'];
 
         function renderTicketOriginsScoped(tbody, scoped) {
             const groupRow = (label, hint) =>
-                `<tr class="tt-group-row"><td colspan="5" style="background:#f7f9fa;border-top:1px solid #e3e8ea;font-size:12px;font-weight:600;color:#455a64;padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:#90a4ae;">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
+                `<tr class="tt-group-row"><td colspan="5" style="background:var(--surface-2, #f7f9fa);border-top:1px solid var(--border, #e3e8ea);font-size:12px;font-weight:600;color:var(--text-muted, #455a64);padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:var(--text-faint, #90a4ae);">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
 
             let html = '';
             html += groupRow(`${scoped.company.name}’s own origins`);
