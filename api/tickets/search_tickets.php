@@ -81,6 +81,14 @@ try {
     // Multi-tenancy: scope search to the analyst's active company (no-op at N=1).
     list($ttSql, $ttParams) = ticketTenantFilter($conn, (int)$_SESSION['analyst_id'], 't');
     $ttSql .= " AND t.deleted_datetime IS NULL"; // hide trashed tickets
+    // "Include closed tickets" (#149). ON unless the panel says otherwise:
+    // searching is usually a hunt for an old ticket, and a search that quietly
+    // skipped closed ones would look broken. Absent = included, so any other
+    // caller keeps the behaviour it had.
+    if (array_key_exists('include_closed', $input) && !$input['include_closed']) {
+        $ttSql .= " AND NOT EXISTS (SELECT 1 FROM ticket_statuses vf_ts
+                                     WHERE vf_ts.id = t.status_id AND vf_ts.is_closed = 1)";
+    }
     $sql .= $ttSql . " ORDER BY e.received_datetime DESC";
     $params = array_merge($params, $ttParams);
 

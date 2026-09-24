@@ -39,7 +39,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars(t('tickets.help.page_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=71">
     <link rel="stylesheet" href="../assets/css/help.css?v=3">
     <style>
         /* Tickets is the one module with no accent of its own — it uses the
@@ -188,6 +188,7 @@ try {
                     <p><?php echo t('tickets.help.inbox.switch_body'); ?></p>
 
                     <p><?php echo t('tickets.help.inbox.p_actions'); ?></p>
+                    <p><?php echo t('tickets.help.inbox.filter_body'); ?></p>
                     <!-- What the name on a row means, and where to change it (#143). -->
                     <p><?php echo t('tickets.help.inbox.row_name'); ?></p>
                     <p class="help-note"><?php echo t('tickets.help.inbox.tip'); ?></p>

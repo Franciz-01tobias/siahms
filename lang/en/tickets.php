@@ -111,6 +111,9 @@ return [
         // #1566. Only rendered when the install actually has teams.
         'group_team'       => 'Team',
         'group_analyst'    => 'Analyst',
+        // #149. Your own analyst folder, pinned to the top of the Analyst
+        // grouping under this name instead of your own.
+        'my_tickets'       => 'My tickets',
     ],
 
     'list' => [
@@ -129,6 +132,16 @@ return [
         // Default owns it by convention, but saying so would hide the fact that
         // somebody still has to triage it.
         'company_unrouted'   => 'Unrouted',
+        // The view filter (#149) - the funnel button beside Search. "Mine" means
+        // tickets ASSIGNED to you. The chips show beside the list title while a
+        // filter is on, so nobody wonders where half their tickets went.
+        'filter_btn'          => 'Filter tickets',
+        'filter_show'         => 'Show',
+        'filter_all'          => 'All',
+        'filter_mine'         => 'Mine',
+        'filter_hide_closed'  => 'Hide closed',
+        'filter_analyst_hint' => 'Grouped by analyst, your tickets are under My tickets.',
+        'filter_chip_closed'  => 'Closed hidden',
     ],
 
     'reading_pane' => [
@@ -664,6 +677,7 @@ return [
         'content'           => 'Anywhere in the ticket',
         'content_ph'        => 'Words from a message, a note, or a subject',
         'content_hint'      => 'Searches inside every message and note, not just subjects.',
+        'include_closed'    => 'Include closed tickets',   // #149
         'found_in'          => 'Found in',
         'part_ticket'       => 'subject',
         'part_email'        => 'message',
@@ -2465,7 +2479,9 @@ return [
             'field_dept'     => '<strong>Department folders</strong> &mdash; tickets grouped by department (e.g. IT, HR, Finance). Departments are configured in Settings and appear as sub-folders automatically.',
             'switch_heading' => '<strong>Switching between Department and Analyst grouping</strong>',
             'switch_body'    => 'A small two-button toggle at the top of the folder panel switches between two views of the same data. <strong>Department</strong> grouping (default) lists tickets under each department with status sub-folders inside; <strong>Analyst</strong> grouping flips it so each top-level folder represents an analyst\'s personal queue with status sub-folders inside. The <strong>Unassigned</strong> folder is context-aware in each view &mdash; in Department view it lists tickets with no department set; in Analyst view it lists tickets with no assignee &mdash; so you can always see what needs picking up. Your choice is saved per-analyst so each team member keeps the view they prefer across sessions.',
-            'p_actions'      => 'Above the ticket list, you have three action buttons: <strong>New</strong> to create a ticket, <strong>Search</strong> to find tickets by keyword, reference, or requester, and <strong>Refresh</strong> to reload the current folder.',
+            'p_actions'      => 'Above the ticket list, you have four action buttons: <strong>New</strong> to create a ticket, <strong>Search</strong> to find tickets by keyword, reference, or requester, <strong>Filter</strong> to narrow what you see, and <strong>Refresh</strong> to reload the current folder.',
+            // #149
+            'filter_body'    => 'The <strong>Filter</strong> button (the funnel) narrows the folders and the list together, whichever way they are grouped. <strong>Mine</strong> shows only tickets assigned to you, and <strong>Hide closed</strong> leaves out every ticket whose status is marked as closed. While a filter is on, the funnel carries a dot and a label appears beside the list title, so you always know you are not seeing everything. When folders are grouped by <strong>Analyst</strong>, your own folder sits at the top as <strong>My tickets</strong> instead. Search has its own <strong>Include closed tickets</strong> switch, on by default, because a search is usually a hunt for an old ticket. Both choices are saved for you alone.',
             'row_name'       => 'Each row shows the ticket reference and then a name. By default that is <strong>the person who raised the ticket</strong>, and it stays the same for the life of the ticket. If you would rather see whoever sent the most recent message &mdash; which becomes your own mailbox once you have replied &mdash; change <strong>Name beside the ticket number</strong> under <strong>Settings &rarr; Row display</strong>, where you can also hide the name and leave just the reference. That tab is your own setting: it changes nothing for anyone else.',
             'tip'            => 'Click any ticket in the list to load it in the reading pane. From there you can update fields, add comments, reply by email, or attach files &mdash; all without navigating away from the inbox.',
         ],

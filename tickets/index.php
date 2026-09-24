@@ -35,7 +35,7 @@ $translationNamespaces = ['common', 'tickets'];
     <title><?php echo htmlspecialchars(t('tickets.title')); ?> - <?php echo htmlspecialchars(t('tickets.nav.inbox')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../checklists/ticket_checklist.css?v=4">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=71">
     <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
@@ -81,7 +81,13 @@ $translationNamespaces = ['common', 'tickets'];
         <!-- Email List -->
         <div class="email-list-container">
             <div class="email-list-header">
-                <h3 id="emailListTitle"><?php echo htmlspecialchars(t('tickets.list.all_tickets')); ?></h3>
+                <div class="email-list-title-wrap">
+                    <h3 id="emailListTitle"><?php echo htmlspecialchars(t('tickets.list.all_tickets')); ?></h3>
+                    <?php /* #149. Filled by JS while a view filter is on - a filter
+                             you cannot see is one you forget, and then half your
+                             tickets have "vanished". Clicking a chip opens the filter. */ ?>
+                    <span class="view-filter-chips" id="viewFilterChips"></span>
+                </div>
                 <div class="email-list-actions">
                     <button class="icon-btn icon-btn-new" onclick="openNewTicketModal()" title="<?php echo htmlspecialchars(t('tickets.list.new_ticket_btn')); ?>" aria-label="<?php echo htmlspecialchars(t('tickets.list.new_ticket_btn')); ?>">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -89,6 +95,30 @@ $translationNamespaces = ['common', 'tickets'];
                     <button class="icon-btn" onclick="openSearchModal()" title="<?php echo htmlspecialchars(t('tickets.list.search_btn')); ?>" aria-label="<?php echo htmlspecialchars(t('tickets.list.search_btn')); ?>">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </button>
+                    <?php /* The view filter (#149): "My tickets" and "Hide closed".
+                             A FILTER, not a folder - it narrows whichever tree you
+                             are grouped by, rather than building a second copy of
+                             it under "My tickets". Saved per analyst. */ ?>
+                    <div class="view-filter-wrap">
+                        <button class="icon-btn" id="viewFilterBtn" onclick="toggleViewFilterMenu(event)" title="<?php echo htmlspecialchars(t('tickets.list.filter_btn')); ?>" aria-label="<?php echo htmlspecialchars(t('tickets.list.filter_btn')); ?>" aria-haspopup="true" aria-expanded="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        </button>
+                        <div class="view-filter-menu" id="viewFilterMenu" role="dialog" aria-label="<?php echo htmlspecialchars(t('tickets.list.filter_btn')); ?>">
+                            <div class="view-filter-label"><?php echo htmlspecialchars(t('tickets.list.filter_show')); ?></div>
+                            <div class="folder-group-toggle view-filter-show" role="group">
+                                <button type="button" class="folder-group-btn" data-mine="0" onclick="setViewFilter('mine', false)"><?php echo htmlspecialchars(t('tickets.list.filter_all')); ?></button>
+                                <button type="button" class="folder-group-btn" data-mine="1" onclick="setViewFilter('mine', true)"><?php echo htmlspecialchars(t('tickets.list.filter_mine')); ?></button>
+                            </div>
+                            <div class="view-filter-hint" id="viewFilterAnalystHint" hidden><?php echo htmlspecialchars(t('tickets.list.filter_analyst_hint')); ?></div>
+                            <label class="view-filter-row">
+                                <span><?php echo htmlspecialchars(t('tickets.list.filter_hide_closed')); ?></span>
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="viewFilterHideClosed" onchange="setViewFilter('hide_closed', this.checked)">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
                     <button class="icon-btn" onclick="refreshCurrentView()" title="<?php echo htmlspecialchars(t('tickets.list.refresh_btn')); ?>" aria-label="<?php echo htmlspecialchars(t('tickets.list.refresh_btn')); ?>">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                     </button>
@@ -516,6 +546,15 @@ $translationNamespaces = ['common', 'tickets'];
                     <input type="text" id="searchContent" placeholder="<?php echo htmlspecialchars(t('tickets.search_modal.content_ph')); ?>">
                     <div class="search-field-hint"><?php echo htmlspecialchars(t('tickets.search_modal.content_hint')); ?></div>
                 </div>
+                <?php /* #149. ON by default and independent of the inbox's "Hide
+                         closed": a search is usually a hunt for an old ticket. */ ?>
+                <label class="view-filter-row search-include-closed">
+                    <span><?php echo htmlspecialchars(t('tickets.search_modal.include_closed')); ?></span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="searchIncludeClosed" checked onchange="saveSearchIncludeClosed(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </span>
+                </label>
                 <div class="search-actions">
                     <button class="btn btn-primary" onclick="performSearch()"><?php echo htmlspecialchars(t('tickets.search_modal.search_btn')); ?></button>
                     <button class="btn btn-secondary" onclick="clearSearch()"><?php echo htmlspecialchars(t('tickets.search_modal.clear_btn')); ?></button>
@@ -951,7 +990,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../assets/js/schedule.js?v=1"></script>
     <script src="../checklists/search_scoring.js?v=1"></script>
     <script src="../checklists/ticket_view.js?v=8"></script>
-    <script src="../assets/js/inbox.js?v=133"></script>
+    <script src="../assets/js/inbox.js?v=134"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
     <script>
     // Auto-check mailboxes every 60 seconds

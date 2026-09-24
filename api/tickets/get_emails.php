@@ -8,6 +8,7 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/ticket_snooze.php';
+require_once '../../includes/inbox_view_filter.php';
 
 header('Content-Type: application/json');
 
@@ -192,6 +193,13 @@ try {
         $sql .= snoozeOnlySql($conn, 't');
     } elseif (empty($_GET['trashed'])) {
         $sql .= snoozeHiddenSql($conn, 't');
+    }
+
+    // The view filter (#149) - "My tickets" / "Hide closed". The same helper the
+    // folder counts use, so the list and its badge cannot disagree. Trash and
+    // Snoozed are exempt on both sides: their counts are unfiltered too.
+    if (empty($_GET['trashed']) && empty($_GET['snoozed'])) {
+        $sql .= inboxViewFilterSql(inboxViewFilterFromRequest(), (int)$_SESSION['analyst_id'], 't');
     }
 
     // The Snoozed folder sorts by when each ticket comes back — the only order

@@ -422,6 +422,84 @@ body {
     color: #0b5c0b;
 }
 
+/* ── The view filter (#149) ──────────────────────────────────────────────
+   Funnel button + a small popover: "Show All / Mine" and "Hide closed".
+   🔑 While a filter is ON the funnel is tinted and dotted, and chips sit
+   beside the list title. A filter nobody can see is one they forget, and
+   then their tickets have "vanished". */
+.email-list-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.view-filter-chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.view-filter-chip {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent-soft, #e8f0f8);
+    color: var(--accent, #0078d4);
+    cursor: pointer;
+}
+.view-filter-wrap { position: relative; }
+.icon-btn.filter-on { color: var(--accent, #0078d4); position: relative; }
+.icon-btn.filter-on::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 7px;
+    min-width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent, #0078d4);
+}
+.view-filter-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    width: 230px;
+    padding: 12px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    z-index: 60;
+}
+.view-filter-menu.open { display: block; }
+.view-filter-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #555);
+}
+.view-filter-menu .folder-group-toggle { margin-top: 6px; }
+.view-filter-menu .folder-group-btn:disabled { opacity: 0.45; cursor: default; }
+.view-filter-menu .folder-group-btn:disabled:hover { color: var(--text-muted, #555); }
+.view-filter-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted, #555);
+}
+/* Caption left, switch right - also used for "Include closed tickets" in search. */
+.view-filter-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text, #333);
+    cursor: pointer;
+}
+.search-include-closed { margin: 4px 0 14px; }
+
 .email-list {
     flex: 1;
     overflow-y: auto;

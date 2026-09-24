@@ -37,6 +37,9 @@ let emails = [];
 let selectedEmailId = null;
 let composeMode = 'new';
 let folderGrouping = 'department'; // 'department' or 'analyst' — persisted via user_preferences
+// The view filter (#149) — persisted as one JSON preference, tickets_view_filter.
+// "mine" is ignored while grouped by analyst: there, "My tickets" is a folder.
+let viewFilter = { mine: false, hide_closed: false };
 
 /**
  * Defensive HTML cleaner for email bodies. The real work lives in
@@ -444,6 +447,137 @@ async function loadFolderGroupingPreference() {
     });
 }
 
+// ── The view filter (#149) ───────────────────────────────────────────────
+//
+// "My tickets" and "Hide closed", from the funnel beside Search. A FILTER, not
+// a folder: it narrows whichever tree the analyst is grouped by, rather than
+// rebuilding a copy of that tree under "My tickets".
+//
+// 🔑 BOTH the counts and the list are fetched with it (viewFilterParams), and
+// the server builds both from one helper — includes/inbox_view_filter.php — so
+// a badge and the list under it cannot disagree.
+
+async function loadViewFilterPreference() {
+    try {
+        const res = await fetch(sharedApiBase() + 'system/get_user_preference.php?key=tickets_view_filter');
+        const data = await res.json();
+        if (data && data.success && data.value) {
+            const saved = JSON.parse(data.value);
+            viewFilter = { mine: !!saved.mine, hide_closed: !!saved.hide_closed };
+        }
+    } catch (e) { /* unreadable or absent: no filter, which is the safe default */ }
+    updateViewFilterUI();
+}
+
+// "Mine" means nothing while grouped by analyst — every other analyst's folder
+// would read 0. The saved choice is kept and comes back with the other groupings.
+function viewFilterMineActive() {
+    return viewFilter.mine && folderGrouping !== 'analyst';
+}
+
+// What an analyst folder is CALLED — "My tickets" for your own (#149). Used for
+// the folder row and the list title; NOT where a real name is needed, such as
+// the toast after dragging a ticket onto someone.
+function analystFolderLabel(an) {
+    return an.id == (window.CURRENT_ANALYST_ID || 0) ? t('tickets.folders.my_tickets') : an.name;
+}
+
+function viewFilterParams() {
+    const p = [];
+    if (viewFilterMineActive()) p.push('mine=1');
+    if (viewFilter.hide_closed) p.push('hide_closed=1');
+    return p.join('&');
+}
+
+function setViewFilter(key, value) {
+    if (key !== 'mine' && key !== 'hide_closed') return;
+    if (key === 'mine' && folderGrouping === 'analyst') return;
+    if (viewFilter[key] === !!value) return;
+    viewFilter[key] = !!value;
+    updateViewFilterUI();
+    loadFolderCounts();
+    loadEmails();
+    fetch(sharedApiBase() + 'system/set_user_preference.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'tickets_view_filter', value: JSON.stringify(viewFilter) })
+    }).catch(() => {});
+}
+
+function updateViewFilterUI() {
+    const mine = viewFilterMineActive();
+    const inAnalyst = folderGrouping === 'analyst';
+    const on = mine || viewFilter.hide_closed;
+
+    const btn = document.getElementById('viewFilterBtn');
+    if (btn) btn.classList.toggle('filter-on', on);
+
+    document.querySelectorAll('.view-filter-show .folder-group-btn').forEach(b => {
+        b.classList.toggle('active', (b.dataset.mine === '1') === mine);
+        b.disabled = inAnalyst;
+    });
+    const hint = document.getElementById('viewFilterAnalystHint');
+    if (hint) hint.hidden = !inAnalyst;
+    const hc = document.getElementById('viewFilterHideClosed');
+    if (hc) hc.checked = viewFilter.hide_closed;
+
+    const chips = document.getElementById('viewFilterChips');
+    if (chips) {
+        let html = '';
+        if (mine) html += `<button type="button" class="view-filter-chip" onclick="toggleViewFilterMenu(event)">${escapeHtml(t('tickets.list.filter_mine'))}</button>`;
+        if (viewFilter.hide_closed) html += `<button type="button" class="view-filter-chip" onclick="toggleViewFilterMenu(event)">${escapeHtml(t('tickets.list.filter_chip_closed'))}</button>`;
+        chips.innerHTML = html;
+    }
+}
+
+function toggleViewFilterMenu(event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById('viewFilterMenu');
+    const btn = document.getElementById('viewFilterBtn');
+    if (!menu) return;
+    const open = !menu.classList.contains('open');
+    menu.classList.toggle('open', open);
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeViewFilterMenu() {
+    const menu = document.getElementById('viewFilterMenu');
+    if (!menu || !menu.classList.contains('open')) return;
+    menu.classList.remove('open');
+    document.getElementById('viewFilterBtn')?.setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('.view-filter-wrap')) closeViewFilterMenu();
+});
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeViewFilterMenu();
+});
+
+// Search's own "Include closed tickets" (#149) — separate from the view filter,
+// and ON by default: a search is usually a hunt for an old ticket.
+async function loadSearchIncludeClosedPreference() {
+    try {
+        const res = await fetch(sharedApiBase() + 'system/get_user_preference.php?key=tickets_search_include_closed');
+        const data = await res.json();
+        const box = document.getElementById('searchIncludeClosed');
+        if (box && data && data.success && data.value === '0') box.checked = false;
+    } catch (e) { /* default stays on */ }
+}
+
+function saveSearchIncludeClosed(checked) {
+    fetch(sharedApiBase() + 'system/set_user_preference.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'tickets_search_include_closed', value: checked ? '1' : '0' })
+    }).catch(() => {});
+}
+
+function searchIncludeClosed() {
+    const box = document.getElementById('searchIncludeClosed');
+    return box ? box.checked : true;
+}
+
 async function setFolderGrouping(mode) {
     // ⚠️ A WHITELIST, so an unknown value cannot become a grouping nothing
     // renders. 'team' was added in #1566 — and it is only reachable when the
@@ -463,6 +597,10 @@ async function setFolderGrouping(mode) {
 
     renderFolders();
     loadEmails();
+    // "Mine" switches off in Analyst grouping and back on outside it (#149), so
+    // the counts on screen were fetched under the other rule — fetch them again.
+    updateViewFilterUI();
+    if (viewFilter.mine) loadFolderCounts();
 
     // Persist (fire-and-forget)
     fetch(sharedApiBase() + 'system/set_user_preference.php', {
@@ -484,12 +622,19 @@ document.addEventListener('DOMContentLoaded', function() {
     loadAnalysts();
     loadMoveCompanies();
     loadMultiSelectPanePreference();
-    loadFolderGroupingPreference().then(loadFolderCounts);
+    loadSearchIncludeClosedPreference();
+    // Both the counts and the list depend on the view filter (#149), so neither
+    // is fetched until it is known — otherwise the list paints unfiltered and
+    // then changes under the analyst a moment later.
+    const inboxPrefsReady = Promise.all([loadFolderGroupingPreference(), loadViewFilterPreference()]);
+    // updateViewFilterUI again once BOTH are in: whether "Mine" applies depends
+    // on the grouping, and the two preferences can arrive in either order.
+    inboxPrefsReady.then(() => { updateViewFilterUI(); loadFolderCounts(); });
     initTinyMCE();
     initAttachmentHandlers();
 
     // Load all tickets by default
-    loadEmails();
+    inboxPrefsReady.then(loadEmails);
 
     // Check for ticket_id in URL and auto-load that ticket
     const urlParams = new URLSearchParams(window.location.search);
@@ -873,7 +1018,8 @@ async function loadAnalysts() {
 // Load folder counts
 async function loadFolderCounts() {
     try {
-        const response = await fetch(API_BASE + 'get_ticket_counts.php');
+        const vf = viewFilterParams();   // #149 — the badges obey the same filter as the list
+        const response = await fetch(API_BASE + 'get_ticket_counts.php' + (vf ? '?' + vf : ''));
         const data = await response.json();
 
         if (data.success) {
@@ -976,8 +1122,17 @@ function renderFolders() {
     html += '<div class="folder-divider"></div>';
 
     if (folderGrouping === 'analyst') {
-        const analysts = folderCounts.analysts || [];
+        // "My tickets" (#149): your own folder is MOVED to the top under that
+        // name, not copied — listed twice, it would carry the same count twice.
+        // It stays an ordinary analyst folder underneath (same data-analyst-id),
+        // so drag-to-assign, status children and the active highlight all work
+        // unchanged. Anyone not in the list (an inactive account) sees no pin.
+        const myId = window.CURRENT_ANALYST_ID || 0;
+        const all = folderCounts.analysts || [];
+        const me = all.find(a => a.id == myId);
+        const analysts = me ? [me, ...all.filter(a => a !== me)] : all;
         analysts.forEach(an => {
+            const isMe = an === me;
             const folderKey = `analyst_${an.id}`;
             const isExpanded = expandedFolders[folderKey];
             const isActive = currentFilter.type === 'analyst' && currentFilter.id == an.id;
@@ -987,8 +1142,8 @@ function renderFolders() {
                      data-drop-type="analyst" data-analyst-id="${an.id}"
                      onclick="toggleFolder('${folderKey}', ${an.id}, { kind: 'analyst' })">
                     <div class="folder-name">
-                        <span class="folder-icon">👤</span>
-                        <span>${escapeHtml(an.name)}</span>
+                        <span class="folder-icon">${isMe ? '🙋' : '👤'}</span>
+                        <span>${escapeHtml(analystFolderLabel(an))}</span>
                     </div>
                     <span class="folder-count">${an.count}</span>
                 </div>
@@ -1008,6 +1163,7 @@ function renderFolders() {
                 `;
             });
             html += `</div></div>`;
+            if (isMe && analysts.length > 1) html += '<div class="folder-divider"></div>';
         });
     } else if (folderGrouping === 'team') {
         // One folder per team (#1566). Teams that own no tickets are still listed,
@@ -1210,7 +1366,7 @@ function toggleFolder(folderId, groupId, opts = {}) {
         } else if (kind === 'analyst') {
             currentFilter = { type: 'analyst', id: groupId };
             const an = folderCounts.analysts?.find(a => a.id == groupId);
-            document.getElementById('emailListTitle').textContent = an ? an.name : 'Analyst';
+            document.getElementById('emailListTitle').textContent = an ? analystFolderLabel(an) : 'Analyst';
         } else if (kind === 'team') {
             // ⚠️ WITHOUT THIS BRANCH a team folder falls through to the
             // department case below and filters by department_id = <team id>.
@@ -1289,7 +1445,7 @@ function selectAllStatus(status) {
 function selectAnalystStatus(analystId, status) {
     currentFilter = { type: 'analyst_status', analyst_id: analystId, status: status };
     const an = folderCounts.analysts?.find(a => a.id == analystId);
-    document.getElementById('emailListTitle').textContent = `${an ? an.name : 'Analyst'} - ${status}`;
+    document.getElementById('emailListTitle').textContent = `${an ? analystFolderLabel(an) : 'Analyst'} - ${status}`;
 
     updateActiveFolderClasses();
     loadEmails();
@@ -1647,6 +1803,10 @@ async function loadEmails() {
         } else if (currentFilter.type === 'snoozed') {
             url += 'snoozed=1';
         }
+        // The view filter (#149). Sent for Trash and Snoozed too; the server
+        // ignores it there, matching their unfiltered counts.
+        const vf = viewFilterParams();
+        if (vf) url += '&' + vf;
 
         // 🔴 LAST RESPONSE WINS, NOT LAST CLICK. Two folder clicks in quick
         // succession start two fetches, and without this the SLOWER one paints
@@ -7942,7 +8102,8 @@ async function performSearch() {
             body: JSON.stringify({
                 ticket_number: ticketNumber,
                 email: email,
-                subject: subject
+                subject: subject,
+                include_closed: searchIncludeClosed()   // #149
             })
         });
 
@@ -7997,7 +8158,7 @@ async function performContentSearch(query) {
         const response = await fetch(API_BASE + 'search_content.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: query })
+            body: JSON.stringify({ query: query, include_closed: searchIncludeClosed() })   // #149
         });
         const data = await response.json();
 
