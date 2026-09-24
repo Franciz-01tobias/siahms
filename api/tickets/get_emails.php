@@ -99,6 +99,8 @@ try {
                 ts.name AS status,
                 t.department_id,
                 t.assigned_analyst_id,
+                -- #1566. So a drag onto a team folder can audit the team it came FROM.
+                t.assigned_team_id,
                 $snoozeCols
                 $schedCols
                 tp.name AS priority,

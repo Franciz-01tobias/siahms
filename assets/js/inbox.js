@@ -1422,6 +1422,16 @@ function selectDeptStatus(deptId, status) {
     loadEmails();
 }
 
+// Select team + status (#1566) — the team twin of selectDeptStatus.
+function selectTeamStatus(teamId, status) {
+    currentFilter = { type: 'team_status', team_id: teamId, status: status };
+    const tm = folderCounts.teams?.find(x => x.id == teamId);
+    document.getElementById('emailListTitle').textContent = `${tm ? tm.name : 'Team'} - ${status}`;
+
+    updateActiveFolderClasses();
+    loadEmails();
+}
+
 // Select a status within Unassigned. ⚠️ What "unassigned" means follows the
 // active grouping, so this filter has to carry the grouping with it.
 function selectUnassignedStatus(status) {
@@ -1547,6 +1557,11 @@ function attachFolderDropHandlers() {
             } else if (dropType === 'analyst_status') {
                 const analystId = parseInt(el.dataset.analystId, 10);
                 if (analystId && status) selectAnalystStatus(analystId, status);
+            } else if (dropType === 'team_status') {
+                // ⚠️ Without this a team's status fell through to the department
+                // branch, read an undefined data-dept-id, and did nothing at all.
+                const teamId = parseInt(el.dataset.teamId, 10);
+                if (teamId && status) selectTeamStatus(teamId, status);
             } else {
                 const deptId = parseInt(el.dataset.deptId, 10);
                 if (deptId && status) selectDeptStatus(deptId, status);
@@ -1563,14 +1578,16 @@ function attachFolderDropHandlers() {
 
             // Hover-to-expand on collapsed group folders (works for both dept and analyst)
             const dt = el.dataset.dropType;
-            if (dt === 'department' || dt === 'analyst' || dt === 'unassigned') {
+            if (dt === 'department' || dt === 'analyst' || dt === 'team' || dt === 'unassigned') {
                 // ⚠️ Unassigned has no id, so it cannot go through the `${kind}_${id}`
-                // key the other two use — that would give 'dept_undefined' and the
+                // key the others use — that would give 'dept_undefined' and the
                 // hover would silently expand nothing.
                 const groupId  = dt === 'unassigned' ? null
-                               : (dt === 'analyst' ? el.dataset.analystId : el.dataset.deptId);
+                               : dt === 'analyst' ? el.dataset.analystId
+                               : dt === 'team'    ? el.dataset.teamId
+                               : el.dataset.deptId;
                 const folderId = dt === 'unassigned' ? 'unassigned'
-                               : `${dt === 'analyst' ? 'analyst' : 'dept'}_${groupId}`;
+                               : `${dt === 'analyst' ? 'analyst' : dt === 'team' ? 'team' : 'dept'}_${groupId}`;
                 if (!expandedFolders[folderId]) {
                     if (dragHoverFolderId !== folderId) {
                         cancelDragHover();
@@ -1590,6 +1607,8 @@ function attachFolderDropHandlers() {
             if (dt === 'department' && dragHoverFolderId === `dept_${el.dataset.deptId}`) {
                 cancelDragHover();
             } else if (dt === 'analyst' && dragHoverFolderId === `analyst_${el.dataset.analystId}`) {
+                cancelDragHover();
+            } else if (dt === 'team' && dragHoverFolderId === `team_${el.dataset.teamId}`) {
                 cancelDragHover();
             }
         });
@@ -1648,17 +1667,27 @@ async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
     const oldDeptName = sourceEmail ? getDisplayName('department', sourceEmail.department_id) : null;
     const oldStatusName = sourceEmail ? sourceEmail.status : null;
     const oldAnalystName = sourceEmail ? getDisplayName('owner', sourceEmail.assigned_analyst_id) : null;
+    // #1566 teams. From the row, which carries assigned_team_id for exactly this.
+    const teamName = id => id ? ((ticketTeams.find(tm => String(tm.id) === String(id)) || {}).name || '') : '';
+    const oldTeamName = sourceEmail ? teamName(sourceEmail.assigned_team_id) : '';
 
     let newDeptName = null;
     let newStatusName = null;
     let newAnalystName = null;
+    let newTeamName = null;   // stays null unless this drop sets or clears the team
 
-    // "Unassigned" target means different things depending on the active grouping
+    // "Unassigned" target means different things depending on the active grouping.
+    // 🔴 In TEAM grouping it means "no team". It used to fall into the department
+    // branch, so dropping a ticket on Unassigned in Team view silently cleared its
+    // DEPARTMENT and left the team exactly where it was.
     if (dropType === 'unassigned_status') {
         // Both halves of what the row means: unassigned in the sense the
         // current grouping uses, plus the status it sits under.
         if (folderGrouping === 'analyst') {
             payload.assigned_analyst_id = '';
+        } else if (folderGrouping === 'team') {
+            payload.assigned_team_id = null;
+            newTeamName = '';
         } else {
             payload.department_id = '';
         }
@@ -1670,6 +1699,10 @@ async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
         if (folderGrouping === 'analyst') {
             payload.assigned_analyst_id = '';
             toastMsg = `${ticketNumber || 'Ticket'} → Unassigned (no analyst)`;
+        } else if (folderGrouping === 'team') {
+            payload.assigned_team_id = null;
+            newTeamName = '';
+            toastMsg = `${ticketNumber || 'Ticket'} → ${t('tickets.context.clear_team')}`;
         } else {
             payload.department_id = '';
             toastMsg = `${ticketNumber || 'Ticket'} → Unassigned`;
@@ -1704,6 +1737,19 @@ async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
         newAnalystName = an ? an.name : null;
         newStatusName = payload.status;
         toastMsg = `${ticketNumber || 'Ticket'} → ${newAnalystName || 'Analyst'} / ${payload.status}`;
+    } else if (dropType === 'team' || dropType === 'team_status') {
+        // #1566. The team ONLY — the analyst is left alone, exactly as the
+        // reading pane and the right-click menu do: team and analyst are separate
+        // facts. These two drop types used to reach the `return` below, so a
+        // ticket dragged onto a team highlighted the folder and then did nothing.
+        payload.assigned_team_id = parseInt(targetEl.dataset.teamId, 10);
+        newTeamName = teamName(payload.assigned_team_id);
+        toastMsg = `${ticketNumber || 'Ticket'} → ${newTeamName || 'Team'}`;
+        if (dropType === 'team_status') {
+            payload.status = targetEl.dataset.status;
+            newStatusName = payload.status;
+            toastMsg += ` / ${payload.status}`;
+        }
     } else {
         return;
     }
@@ -1738,7 +1784,7 @@ async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
         // Audit log — only for fields that actually changed
         const ticketIdInt = parseInt(ticketId, 10);
         const auditCalls = [];
-        if (newDeptName !== oldDeptName && (dropType === 'department' || dropType === 'dept_status' || ((dropType === 'unassigned' || dropType === 'unassigned_status') && folderGrouping !== 'analyst'))) {
+        if (newDeptName !== oldDeptName && (dropType === 'department' || dropType === 'dept_status' || ((dropType === 'unassigned' || dropType === 'unassigned_status') && folderGrouping === 'department'))) {
             auditCalls.push(logAudit(ticketIdInt, 'Department', oldDeptName, newDeptName));
         }
         if (newStatusName !== null && newStatusName !== oldStatusName) {
@@ -1748,6 +1794,9 @@ async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
             if (newAnalystName !== oldAnalystName) {
                 auditCalls.push(logAudit(ticketIdInt, 'Owner', oldAnalystName, newAnalystName));
             }
+        }
+        if (newTeamName !== null && newTeamName !== oldTeamName) {
+            auditCalls.push(logAudit(ticketIdInt, 'Team', oldTeamName, newTeamName));
         }
         await Promise.all(auditCalls);
 
