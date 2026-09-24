@@ -43,6 +43,10 @@ try {
     require_once '../../includes/asset_labels.php';
     $tagsReady = assetLabelsSchemaReady($conn);
     $tagCol = $tagsReady ? "a.asset_tag," : "NULL AS asset_tag,";
+    // Which company the asset is in, so the Key info Company picker can show it
+    // and move the asset (2.6.0). Rides on $tagCol because both SELECT branches
+    // already include it. Guarded like the columns around it.
+    $tagCol .= tenancyColumnExists($conn, 'assets', 'tenant_id') ? " a.tenant_id," : " NULL AS tenant_id,";
 
     // `lease_expiry` is newer than the rest of the procurement block and is
     // absent until Database Verification has run, so it gets the same

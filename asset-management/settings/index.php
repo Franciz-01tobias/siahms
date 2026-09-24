@@ -257,6 +257,13 @@ $translationNamespaces = ['common', 'asset-management'];
 
         .loc-name { flex: 1; font-size: 14px; color: var(--text, #222); }
         .loc-name .loc-count { color: var(--text-faint, #999); font-size: 12px; margin-left: 6px; }
+        /* 2.6.0 shared locations */
+        .loc-shared {
+            margin-left: 8px; padding: 1px 7px; border-radius: 9px;
+            font-size: 11px; font-weight: 600;
+            background: var(--accent-soft, #e8f0f8); color: var(--accent, #0078d4);
+        }
+        .loc-actions-locked .action-btn:not(:first-child) { display: none; }
 
         .loc-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.12s; }
         .loc-row:hover .loc-actions { opacity: 1; }
@@ -1199,6 +1206,19 @@ $translationNamespaces = ['common', 'asset-management'];
                         <option value=""><?php echo htmlspecialchars(t('asset-management.settings.none_top_level')); ?></option>
                     </select>
                     <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.parent_location_hint')); ?></div>
+                </div>
+                <?php /* 2.6.0. Only for someone who can reach every company (the
+                         list endpoint says so as can_share); the save endpoint
+                         enforces the same rule whatever this shows. */ ?>
+                <div class="form-group" id="locationSharedGroup" hidden>
+                    <label class="toggle-label">
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="locationShared">
+                            <span class="toggle-slider"></span>
+                        </span>
+                        <?php echo htmlspecialchars(t('asset-management.settings.location_shared')); ?>
+                    </label>
+                    <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.location_shared_hint')); ?></div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeLocationModal()"><?php echo htmlspecialchars(t('asset-management.common.cancel')); ?></button>
@@ -2168,6 +2188,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         // ─── Locations (arbitrary-depth tree) ───────────────────────────────
         let allLocations = [];
+        let canShareLocations = false;   // 2.6.0 — from get_asset_locations.php
         const collapsedLocations = new Set();
 
         async function loadLocations() {
@@ -2180,6 +2201,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     return;
                 }
                 allLocations = data.locations || [];
+                canShareLocations = !!data.can_share;
                 renderLocationTree();
             } catch (e) {
                 console.error('Error loading locations:', e);
@@ -2207,11 +2229,17 @@ $translationNamespaces = ['common', 'asset-management'];
             const collapsed = collapsedLocations.has(loc.id);
             const caretClass = hasKids ? (collapsed ? 'collapsed' : '') : 'leaf';
             const count = hasKids ? `<span class="loc-count">${kids.length}</span>` : '';
+            // 2.6.0. A shared location is every company's, so someone who
+            // cannot reach them all may add inside it but not change or remove
+            // it: the buttons would only lead to a refusal.
+            const shared = loc.is_shared
+                ? `<span class="loc-shared" title="${escapeHtml(window.t('asset-management.settings.location_shared_hint'))}">${escapeHtml(window.t('asset-management.settings.location_shared_badge'))}</span>` : '';
+            const locked = loc.is_shared && !canShareLocations;
             const row = `
                 <div class="loc-row">
                     <span class="loc-caret ${caretClass}" onclick="toggleLocation(${loc.id})">&#9662;</span>
-                    <span class="loc-name">${escapeHtml(loc.name)}${count}</span>
-                    <span class="loc-actions">
+                    <span class="loc-name">${escapeHtml(loc.name)}${shared}${count}</span>
+                    <span class="loc-actions${locked ? ' loc-actions-locked' : ''}">
                         <button class="action-btn" title="${window.t('asset-management.settings.add_sublocation')}" onclick="openAddLocation(${loc.id})">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         </button>
@@ -2267,8 +2295,17 @@ $translationNamespaces = ['common', 'asset-management'];
             const sel = document.getElementById('locationParent');
             sel.innerHTML = buildParentOptions(null);
             sel.value = parentId != null ? String(parentId) : '';
+            setLocationSharedField(false);
             document.getElementById('locationModal').classList.add('active');
             setTimeout(() => document.getElementById('locationName').focus(), 50);
+        }
+
+        // The Shared tick (2.6.0): shown only to someone who may use it, and
+        // pre-set on edit — the save sends it every time, so leaving it unset on
+        // a shared location would unshare it on an unrelated rename.
+        function setLocationSharedField(isShared) {
+            document.getElementById('locationSharedGroup').hidden = !canShareLocations;
+            document.getElementById('locationShared').checked = !!isShared;
         }
 
         function editLocation(id) {
@@ -2280,6 +2317,7 @@ $translationNamespaces = ['common', 'asset-management'];
             const sel = document.getElementById('locationParent');
             sel.innerHTML = buildParentOptions(loc.id);
             sel.value = loc.parent_id != null ? String(loc.parent_id) : '';
+            setLocationSharedField(loc.is_shared);
             document.getElementById('locationModal').classList.add('active');
             setTimeout(() => document.getElementById('locationName').focus(), 50);
         }
@@ -2313,6 +2351,7 @@ $translationNamespaces = ['common', 'asset-management'];
                 name: document.getElementById('locationName').value.trim(),
                 parent_id: document.getElementById('locationParent').value || null
             };
+            if (canShareLocations) payload.is_shared = document.getElementById('locationShared').checked;
             if (!payload.name) { showToast(window.t('asset-management.settings.name_required'), 'error'); return; }
             if (id) payload.id = parseInt(id);
             try {

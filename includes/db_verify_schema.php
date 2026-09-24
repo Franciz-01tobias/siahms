@@ -1692,6 +1692,9 @@ return [
         // above): a company's sites are entirely its own, so NULL = the Default
         // company's, set = that company's. Read via activeTenantFilter().
         'tenant_id'         => 'INT NULL',
+        // 2.6.0: a location every company can pick (a shared data centre or
+        // head office). Stored with tenant_id NULL. See includes/asset_locations.php.
+        'is_shared'         => 'TINYINT(1) NOT NULL DEFAULT 0',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 

@@ -13,6 +13,22 @@ Tz::init();
 
 requireModuleAccess('assets');
 
+// Company context for the New asset form's Company picker and the Key info
+// Company field (2.6.0). Single-company installs get multi=false and see
+// neither. Defensive: this page must render even if tenancy cannot be read.
+require_once '../includes/tenancy.php';
+$assetTenancy = ['multi' => false, 'active' => 0, 'all' => false, 'default' => 0];
+try {
+    $tconn = connectToDatabase();
+    $tAid  = (int)($_SESSION['analyst_id'] ?? 0);
+    $assetTenancy = [
+        'multi'   => isMultiTenant($tconn),
+        'active'  => getActiveTenantId($tconn, $tAid),
+        'all'     => isActiveTenantAll($tconn),
+        'default' => getDefaultTenantId($tconn),
+    ];
+} catch (Exception $e) { /* single-company behaviour */ }
+
 $current_page = 'assets';
 $path_prefix = '../';
 $translationNamespaces = ['common', 'asset-management'];
@@ -1556,6 +1572,17 @@ $translationNamespaces = ['common', 'asset-management'];
             <form id="newAssetForm" class="modal-form">
                 <div class="modal-body">
                     <p class="new-asset-intro"><?php echo t('asset-management.new.intro'); ?></p>
+                    <?php /* 2.6.0. Only on a multi-company install, and only when
+                             the analyst can reach more than one company (JS
+                             reveals it). In the All companies view it starts
+                             EMPTY and must be answered - a customer found new
+                             assets landing in whichever company they had last
+                             picked. Changing it reloads the three lists below
+                             for that company. */ ?>
+                    <div class="form-group" id="naCompanyGroup" hidden>
+                        <label class="form-label" for="naCompany"><?php echo htmlspecialchars(t('asset-management.new.company')); ?></label>
+                        <select class="search-box" id="naCompany"></select>
+                    </div>
                     <div class="form-group">
                         <label class="form-label" for="naName"><?php echo htmlspecialchars(t('asset-management.new.name')); ?></label>
                         <input type="text" class="search-box" id="naName" required maxlength="50" autocomplete="off"
@@ -1782,6 +1809,17 @@ $translationNamespaces = ['common', 'asset-management'];
     <script>
         const API_BASE = '../api/assets/';
         const API_TICKETS = '../api/tickets/';
+        // 2.6.0 — see the PHP at the top. `active` is the company this list
+        // shows; `all` is the All companies view, where it is only the LAST one
+        // picked, which is why adding an asset there must ask.
+        const ASSET_TENANCY = <?php echo json_encode($assetTenancy); ?>;
+        let assetCompanies = [];   // the companies this analyst can reach
+        // The detail pane's "nothing selected" state, as the page drew it, so an
+        // asset moved out of this company can leave the pane as it started.
+        const ASSET_DETAIL_EMPTY = document.getElementById('assetDetail').innerHTML;
+        function showNoAssetSelected() {
+            document.getElementById('assetDetail').innerHTML = ASSET_DETAIL_EMPTY;
+        }
         let assets = [];
         let selectedAssetId = null;
         let selectedAsset = null;
@@ -1871,8 +1909,10 @@ $translationNamespaces = ['common', 'asset-management'];
         //   UK
         //      London
         //         Office 1
-        function buildLocationOptions(selectedId) {
-            const childrenOf = (pid) => assetLocations.filter(l => l.parent_id === pid);
+        // `list` defaults to the page's locations; the New asset form passes
+        // another company's when its Company picker names one (2.6.0).
+        function buildLocationOptions(selectedId, list = assetLocations) {
+            const childrenOf = (pid) => list.filter(l => l.parent_id === pid);
             const opts = [`<option value="">${window.t('asset-management.common.none_option')}</option>`];
             const walk = (pid, depth) => {
                 childrenOf(pid).forEach(loc => {
@@ -2218,6 +2258,7 @@ $translationNamespaces = ['common', 'asset-management'];
                                    placeholder="${window.t('asset-management.field.asset_tag_ph')}"
                                    onchange="saveAssetTag(this.value)">
                         </div>
+                        ${assetCompanyFieldHtml(selectedAsset)}
                         <div class="info-item">
                             <span class="info-label">${window.t('asset-management.field.type')}</span>
                             <select class="info-value-select" onchange="updateAssetField('asset_type_id', this.value)">
@@ -2973,25 +3014,148 @@ $translationNamespaces = ['common', 'asset-management'];
         //  monitors, headsets, televisions.
         // ════════════════════════════════════════════════════════════════
 
+        /* The companies this analyst can reach (2.6.0), for the New asset
+           Company picker and the Key info Company field. Fetched once: the list
+           does not change while somebody works. Empty on a single-company
+           install, which hides both. Same source as the Tasks move picker. */
+        async function loadAssetCompanies() {
+            if (!ASSET_TENANCY.multi) return;
+            try {
+                const res  = await fetch('../api/system/get_tenants.php?accessible=1');
+                const data = await res.json();
+                assetCompanies = (data && data.success && data.companies) ? data.companies : [];
+            } catch (e) { assetCompanies = []; }
+        }
+        loadAssetCompanies();
+
+        // Fill the form's three lists. `lists` is the page's own arrays for the
+        // company on screen, or a freshly fetched set for another company.
+        function naFillLists(lists) {
+            const none = `<option value="">${window.t('asset-management.common.none_option')}</option>`;
+            document.getElementById('naType').innerHTML = none + lists.types.map(ty =>
+                `<option value="${ty.id}">${escapeHtml(ty.name)}</option>`).join('');
+            document.getElementById('naStatus').innerHTML = none + lists.statuses.map(s =>
+                `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+            document.getElementById('naLocation').innerHTML = buildLocationOptions(null, lists.locations);
+            naSyncNext();
+        }
+
+        // The chosen company's types, statuses and locations. The company on
+        // screen uses what the page already holds; any other is fetched, since
+        // types and statuses can be company-specific and locations always are.
+        async function naLoadListsFor(tenantId) {
+            if (!tenantId || tenantId === ASSET_TENANCY.active) {
+                naFillLists({ types: assetTypes, statuses: assetStatusTypes, locations: assetLocations });
+                return;
+            }
+            const q = `?for_tenant=${encodeURIComponent(tenantId)}`;
+            try {
+                const [ty, st, lo] = await Promise.all([
+                    fetch(`${API_BASE}get_asset_types.php${q}`).then(r => r.json()),
+                    fetch(`${API_BASE}get_asset_status_types.php${q}`).then(r => r.json()),
+                    fetch(`${API_BASE}get_asset_locations.php${q}`).then(r => r.json())
+                ]);
+                naFillLists({
+                    types:     (ty.asset_types || []).filter(x => x.is_active !== false),
+                    statuses:  (st.asset_status_types || []).filter(x => x.is_active !== false),
+                    locations: lo.locations || []
+                });
+            } catch (e) {
+                naFillLists({ types: [], statuses: [], locations: [] });
+            }
+        }
+
+        /* The Key info Company field (2.6.0): shows which company the asset is
+           in, and changing it MOVES the asset. Empty string on a single-company
+           install or for someone who can reach only one company. */
+        function assetCompanyFieldHtml(asset) {
+            if (!ASSET_TENANCY.multi || assetCompanies.length < 2 || !asset) return '';
+            const current = asset.tenant_id != null ? Number(asset.tenant_id) : ASSET_TENANCY.default;
+            return `
+                <div class="info-item">
+                    <span class="info-label">${window.t('asset-management.field.company')}</span>
+                    <select class="info-value-select" data-previous="${current}" onchange="moveAssetToCompany(this)">
+                        ${assetCompanies.map(co => `<option value="${co.id}" ${co.id === current ? 'selected' : ''}>${escapeHtml(co.name)}</option>`).join('')}
+                    </select>
+                </div>`;
+        }
+
+        /**
+         * Move the open asset to the company just chosen in Key info.
+         *
+         * Asks first, because it can clear the location, type or status. On a
+         * refusal or a cancel the select is put BACK, so it never shows a
+         * company the asset is not in. A moved asset leaves this list (the list
+         * shows one company), so the detail pane is closed afterwards.
+         */
+        async function moveAssetToCompany(sel) {
+            const id       = selectedAssetId;
+            const chosen   = parseInt(sel.value, 10);
+            const previous = sel.dataset.previous || '';
+            if (!id || !chosen) return;
+            const co = assetCompanies.find(c => c.id === chosen);
+            const ok = await showConfirm({
+                title:   window.t('asset-management.move.confirm_title', { company: co ? co.name : '' }),
+                message: window.t('asset-management.move.confirm_body'),
+                okLabel: window.t('asset-management.move.confirm_ok')
+            });
+            if (!ok) { sel.value = previous; return; }
+            sel.disabled = true;
+            try {
+                const res  = await fetch(`${API_BASE}move_to_company.php`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ asset_id: id, tenant_id: chosen })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    sel.value = previous;
+                    showToast(data.error || window.t('asset-management.move.failed'), 'error');
+                    return;
+                }
+                sel.dataset.previous = String(chosen);
+                showToast(data.message, 'success');
+                if (data.moved && chosen !== ASSET_TENANCY.active) {
+                    selectedAssetId = null;
+                    selectedAsset   = null;
+                    await loadAssets();
+                    showNoAssetSelected();
+                } else {
+                    await loadAssets();
+                    selectAsset(id);
+                }
+            } catch (e) {
+                sel.value = previous;
+                showToast(window.t('asset-management.move.failed'), 'error');
+            } finally {
+                sel.disabled = false;
+            }
+        }
+
         function openNewAssetModal() {
             const typeSel = document.getElementById('naType');
-            const statSel = document.getElementById('naStatus');
-            const locSel  = document.getElementById('naLocation');
-
-            const none = `<option value="">${window.t('asset-management.common.none_option')}</option>`;
-            typeSel.innerHTML = none + assetTypes.map(t =>
-                `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-            statSel.innerHTML = none + assetStatusTypes.map(s =>
-                `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-            locSel.innerHTML  = buildLocationOptions(null);
+            const coGroup = document.getElementById('naCompanyGroup');
+            const coSel   = document.getElementById('naCompany');
 
             document.getElementById('newAssetForm').reset();
-            typeSel.value = ''; statSel.value = ''; locSel.value = '';
-            naSyncNext();
+
+            // Company picker: only worth asking when there is a choice to make.
+            // In the All companies view it starts empty and must be answered.
+            const ask = ASSET_TENANCY.multi && assetCompanies.length > 1;
+            coGroup.hidden = !ask;
+            if (ask) {
+                const choose = ASSET_TENANCY.all
+                    ? `<option value="">${escapeHtml(window.t('asset-management.new.company_choose'))}</option>` : '';
+                coSel.innerHTML = choose + assetCompanies.map(co =>
+                    `<option value="${co.id}">${escapeHtml(co.name)}</option>`).join('');
+                coSel.value = ASSET_TENANCY.all ? '' : String(ASSET_TENANCY.active);
+                coSel.onchange = () => naLoadListsFor(parseInt(coSel.value, 10) || 0);
+            }
+
+            naFillLists({ types: assetTypes, statuses: assetStatusTypes, locations: assetLocations });
             typeSel.onchange = naSyncNext;
 
             document.getElementById('newAssetModal').classList.add('active');
-            document.getElementById('naName').focus();
+            (ask && ASSET_TENANCY.all ? coSel : document.getElementById('naName')).focus();
         }
 
         function closeNewAssetModal() {
@@ -3065,6 +3229,14 @@ $translationNamespaces = ['common', 'asset-management'];
 
         document.getElementById('newAssetForm').addEventListener('submit', async function (e) {
             e.preventDefault();
+            // The Company question must be answered when it is asked (2.6.0).
+            const coGroup = document.getElementById('naCompanyGroup');
+            const coVal   = document.getElementById('naCompany').value;
+            if (!coGroup.hidden && !coVal) {
+                showToast(window.t('asset-management.new.company_required'), 'error');
+                document.getElementById('naCompany').focus();
+                return;
+            }
             const btn = document.getElementById('naSaveBtn');
             btn.disabled = true;   // a duplicate hostname is refused, but a
                                    // double-click should not even ask twice
@@ -3072,6 +3244,7 @@ $translationNamespaces = ['common', 'asset-management'];
                 const res = await fetch(`${API_BASE}create_asset.php`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        tenant_id:       coGroup.hidden ? null : (parseInt(coVal, 10) || null),
                         hostname:        document.getElementById('naName').value.trim(),
                         asset_type_id:   document.getElementById('naType').value,
                         asset_status_id: document.getElementById('naStatus').value,
@@ -3110,6 +3283,13 @@ $translationNamespaces = ['common', 'asset-management'];
                 }
 
                 closeNewAssetModal();
+                // Added to a company other than the one on screen: say where,
+                // rather than opening a record this list is not showing.
+                if (data.in_active === false) {
+                    showToast(fieldWarning || window.t('asset-management.new.created_elsewhere', { company: data.company_name }),
+                              fieldWarning ? 'error' : 'success');
+                    return;
+                }
                 showToast(fieldWarning || window.t('asset-management.new.created'),
                           fieldWarning ? 'error' : 'success');
                 await loadAssets();

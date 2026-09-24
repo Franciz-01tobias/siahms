@@ -2415,6 +2415,12 @@ CREATE TABLE IF NOT EXISTS `asset_locations` (
     -- which would hand them to Default. Assets pointing at a deleted location
     -- fall back to none via fk_assets_location (ON DELETE SET NULL).
     `tenant_id`         INT NULL,
+    -- 2.6.0: SHARED across companies, the one exception to the rule above (a
+    -- data centre or head office several clients' kit sits in). A shared row
+    -- has tenant_id NULL, so it belongs to no single company and survives any
+    -- company being deleted. Its parent must be shared too. Only an analyst who
+    -- can reach every company may change one. See includes/asset_locations.php.
+    `is_shared`         TINYINT(1) NOT NULL DEFAULT 0,
     `created_datetime`  DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_asset_locations_parent` (`parent_id`),

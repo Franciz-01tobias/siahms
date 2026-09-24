@@ -160,6 +160,8 @@ return [
         // may each run their own LT0001, and the message has to say so.
         'asset_tag'        => 'Asset tag',
         'asset_tag_ph'     => 'e.g. LT0001',
+        // 2.6.0 - the company an asset belongs to; also its history label.
+        'company'          => 'Company',
         'type'             => 'Type',
         'status'           => 'Status',
         'location'         => 'Location',
@@ -334,6 +336,28 @@ return [
         // The service's own wording is a published REST error body telling you
         // to send a PATCH, which is no use to anybody looking at a toast.
         'duplicate'   => 'There is already an asset called “{name}”. Names must be unique — search for it in the list, or give this one a different name.',
+        // 2.6.0. Asked on every multi-company install, and required in the All
+        // companies view: a customer found new assets silently landing in the
+        // company they had last selected. Toast strings are literal characters.
+        'company'              => 'Company',
+        'company_choose'       => 'Choose a company…',
+        'company_required'     => 'Choose which company this asset belongs to.',
+        'company_denied'       => 'You do not have access to that company.',
+        'lookup_wrong_company' => 'That type, status or location is not available in the chosen company. Pick it again.',
+        'created_elsewhere'    => 'Added to {company}. Switch to that company to open it.',
+    ],
+
+    // (settings.location_shared* live in the 'settings' section.)
+    // Moving an asset to another company (2.6.0). Toast and dialog strings are
+    // assigned as text, so literal characters, not HTML entities.
+    'move' => [
+        'confirm_title' => 'Move to {company}?',
+        'confirm_body'  => 'Anything that belongs only to the current company is cleared: its location (unless shared), and a type or status the new company does not have. The asset’s history, holders and custom fields move with it.',
+        'confirm_ok'    => 'Move',
+        'already'       => 'This asset is already in {company}.',
+        'done'          => 'Moved to {company}.',
+        'done_cleared'  => 'Moved to {company}. Cleared, because {company} does not have them: {fields}.',
+        'failed'        => 'Could not move this asset.',
     ],
 
     // Assign-user modal
@@ -947,6 +971,11 @@ return [
         'parent_location'        => 'Parent location',
         'none_top_level'         => '— None (top level) —',
         'parent_location_hint'   => 'Leave as "None" for a top-level location, or pick a parent to nest it underneath.',
+        // 2.6.0 shared locations. The hint is also the badge's tooltip, so it
+        // is plain text (no entities).
+        'location_shared'        => 'Shared with every company',
+        'location_shared_hint'   => 'Every company can pick a shared location, such as a data centre several clients use. Only someone with access to every company can change it.',
+        'location_shared_badge'  => 'Shared',
         'add_sublocation'        => 'Add sub-location',
         'no_locations'           => 'No locations yet. Click <strong>Add</strong> to create your first one.',
         'locations_load_failed'  => 'Failed to load locations',

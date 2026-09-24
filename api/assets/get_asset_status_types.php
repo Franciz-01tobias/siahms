@@ -30,8 +30,9 @@ try {
     $defaultId    = getDefaultTenantId($conn);
     $isDefaultCtx = (!$multi || $activeId === $defaultId);
 
+    // ?for_tenant= (2.6.0) — see get_asset_types.php.
     $rows = getTenantConfigRows(
-        $conn, 'asset_status_types', 'asset_status_type', $activeId,
+        $conn, 'asset_status_types', 'asset_status_type', $manage ? $activeId : requestedTenantId($conn, $analystId),
         'id, name, description, is_active, display_order, tenant_id, created_datetime',
         '', 'display_order, name'
     );

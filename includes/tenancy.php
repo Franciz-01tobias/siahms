@@ -754,6 +754,61 @@ function activeTenantReadFilter(PDO $conn, int $analystId, string $alias = 't', 
 }
 
 /**
+ * Can this analyst reach EVERY company on the install?
+ *
+ * The gate for anything that affects all companies at once, such as a shared
+ * asset location: editing one changes what every client sees, so only someone
+ * who can already see every client may do it. Compared against the real tenant
+ * list rather than the all-access flag alone, because access can also arrive
+ * through teams (see getAccessibleTenantIds).
+ */
+function analystHasAllTenantAccess(PDO $conn, int $analystId): bool {
+    if (!isMultiTenant($conn)) {
+        return true;
+    }
+    $mine = getAccessibleTenantIds($conn, $analystId);
+    foreach (getAllTenants($conn) as $t) {
+        if (!in_array((int)$t['id'], $mine, true)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * The company a request is FOR: `?for_tenant=` when it names a company this
+ * analyst may reach, otherwise the active company.
+ *
+ * Lets one screen ask about a company other than the active one without
+ * switching, such as the New asset form's Company picker loading that company's
+ * types and locations. 🔴 An id the analyst cannot reach is IGNORED, not
+ * honoured, so the worst a crafted request gets is the active company's lists.
+ */
+function requestedTenantId(PDO $conn, int $analystId, string $param = 'for_tenant'): int {
+    $raw = isset($_GET[$param]) ? (int)$_GET[$param] : 0;
+    if ($raw > 0 && isMultiTenant($conn) && analystCanAccessTenant($conn, $analystId, $raw)) {
+        return $raw;
+    }
+    return getActiveTenantId($conn, $analystId);
+}
+
+/**
+ * activeTenantFilter()'s clause for ONE NAMED company instead of the active one.
+ * Same Default-owns-NULL rule. ['', []] on a single-company install.
+ *
+ * @param string $qualified the already-qualified column, e.g. "l.tenant_id"
+ */
+function tenantScopeSqlFor(PDO $conn, int $tenantId, string $qualified): array {
+    if (!isMultiTenant($conn)) {
+        return ['', []];
+    }
+    if ($tenantId === getDefaultTenantId($conn)) {
+        return [" AND ($qualified = ? OR $qualified IS NULL)", [$tenantId]];
+    }
+    return [" AND $qualified = ?", [$tenantId]];
+}
+
+/**
  * Does $table have $column? Cached per request; false if the table is missing.
  *
  * ⚠️ Callers read `false` as "not migrated yet, so allow" — analystCanAccessArticle()

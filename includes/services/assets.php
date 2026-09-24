@@ -505,6 +505,133 @@ class AssetsService
         }
     }
 
+    /**
+     * Move an asset to another company (2.6.0, from a customer's request list).
+     *
+     * The asset twin of TasksService::moveTaskToCompany, gated the same way: the
+     * actor must reach the asset where it is AND the company it is going to,
+     * checked against BOTH companyScope (what this caller may touch) and
+     * analystCanAccessTenant (what the person may reach).
+     *
+     * An asset carries more company-owned things than a task, and they split
+     * into two kinds on purpose:
+     *
+     *  CLEARED, and reported: its LOCATION, TYPE and STATUS when they are the old
+     *  company's own. They simply do not exist in the new company, so keeping them
+     *  would leave the asset wearing a value its own company cannot see or pick.
+     *  A shared location, and a global type or status, move with it untouched.
+     *
+     *  REFUSED, with the reason: a HOSTNAME or ASSET TAG the new company already
+     *  uses (both are unique per company, and agent ingest matches on hostname),
+     *  and a HOLDER who is a person in another company. Those need a decision
+     *  from the person, not a guess made on their behalf.
+     *
+     * An analyst holder moves with it: analysts are not company-scoped.
+     *
+     * @return array{moved:bool, from:string, to:string, cleared:string[]}
+     *         `cleared` lists the audit keys (location/type/status) that were
+     *         emptied, so the UI can say what changed.
+     */
+    public static function moveToCompany(PDO $conn, ActorContext $ctx, int $assetId, int $targetTenantId): array
+    {
+        require_once __DIR__ . '/../asset_locations.php';
+
+        $row = self::loadRow($conn, $assetId);
+        self::assertScope($conn, $ctx, $row);                    // 404 if out of scope
+
+        if (!isMultiTenant($conn)) {
+            throw new ServiceError('validation', 'invalid_field',
+                'This install has only one company, so there is nowhere to move an asset to.');
+        }
+        // One message for "no access" and "no such company", so probing ids
+        // cannot reveal which companies exist.
+        if (($ctx->companyScope !== null && !in_array($targetTenantId, $ctx->companyScope, true))
+                || !analystCanAccessTenant($conn, $ctx->actorId, $targetTenantId)) {
+            throw new ServiceError('validation', 'invalid_field', 'You do not have access to that company.');
+        }
+        $target = getTenantById($conn, $targetTenantId);
+        if (!$target) {
+            throw new ServiceError('validation', 'invalid_field', 'You do not have access to that company.');
+        }
+
+        // NULL means the Default company, so resolve it before comparing, or a
+        // Default asset "moved" into Default would write a nonsense audit line.
+        $defaultId   = getDefaultTenantId($conn);
+        $oldTenantId = ($row['tenant_id'] === null) ? $defaultId : (int)$row['tenant_id'];
+        if ($oldTenantId === $targetTenantId) {
+            return ['moved' => false, 'from' => $target['name'], 'to' => $target['name'], 'cleared' => []];
+        }
+        $oldName     = getTenantById($conn, $oldTenantId)['name'] ?? 'Unknown';
+        $storeTenant = ($targetTenantId === $defaultId) ? null : $targetTenantId;
+
+        // --- refusals --------------------------------------------------------
+        $dup = $conn->prepare("SELECT id FROM assets WHERE hostname = ? AND id <> ? AND tenant_id <=> ?");
+        $dup->execute([$row['hostname'], $assetId, $storeTenant]);
+        if ($dup->fetchColumn() !== false) {
+            throw new ServiceError('conflict', 'conflict',
+                "{$target['name']} already has an asset called {$row['hostname']}. Rename one of them first.");
+        }
+        if (!empty($row['asset_tag'])) {
+            $tag = $conn->prepare("SELECT id FROM assets WHERE asset_tag = ? AND id <> ? AND tenant_id <=> ?");
+            $tag->execute([$row['asset_tag'], $assetId, $storeTenant]);
+            if ($tag->fetchColumn() !== false) {
+                throw new ServiceError('conflict', 'conflict',
+                    "{$target['name']} already uses the asset tag {$row['asset_tag']}. Change one of them first.");
+            }
+        }
+        // A person holding it who is not in the new company. NULL = Default.
+        $h = $conn->prepare(
+            "SELECT COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS name
+               FROM users_assets ua JOIN users u ON u.id = ua.user_id
+              WHERE ua.asset_id = ? AND COALESCE(u.tenant_id, ?) <> ?"
+        );
+        $h->execute([$assetId, $defaultId, $targetTenantId]);
+        $holders = $h->fetchAll(PDO::FETCH_COLUMN);
+        if ($holders) {
+            throw new ServiceError('validation', 'invalid_field',
+                'This asset is held by ' . implode(', ', $holders) . ", who is not in {$target['name']}. Unassign it first.");
+        }
+
+        // --- what does not exist in the new company -------------------------
+        $clear = [];   // column => audit key
+        if (!empty($row['location_id'])) {
+            [$lSql, $lArgs] = assetLocationScope($conn, $targetTenantId, '');
+            $lc = $conn->prepare("SELECT id FROM asset_locations WHERE id = ?" . $lSql);
+            $lc->execute(array_merge([(int)$row['location_id']], $lArgs));
+            if (!$lc->fetchColumn()) { $clear['location_id'] = 'location'; }
+        }
+        foreach ([['asset_type_id', 'asset_types', 'asset_type', 'type'],
+                  ['asset_status_id', 'asset_status_types', 'asset_status_type', 'status']] as [$col, $table, $entity, $key]) {
+            if (empty($row[$col])) continue;
+            $ids = array_map(fn($r) => (int)$r['id'],
+                             getTenantConfigRows($conn, $table, $entity, $targetTenantId, 'id'));
+            if (!in_array((int)$row[$col], $ids, true)) { $clear[$col] = $key; }
+        }
+
+        $map = self::fieldMap();
+        $ownTransaction = !$conn->inTransaction();
+        if ($ownTransaction) { $conn->beginTransaction(); }
+        try {
+            $sets = ['tenant_id = ?'];
+            $args = [$storeTenant];
+            foreach (array_keys($clear) as $col) { $sets[] = "$col = NULL"; }
+            $args[] = $assetId;
+            $conn->prepare("UPDATE assets SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
+
+            self::auditWrite($conn, $assetId, $ctx->actorId, 'company', $oldName, $target['name']);
+            foreach ($clear as $col => $key) {
+                self::auditWrite($conn, $assetId, $ctx->actorId, $key,
+                                 self::auditDisplay($conn, $col, $row[$col], $map[$col]), null);
+            }
+            if ($ownTransaction) { $conn->commit(); }
+        } catch (Throwable $t) {
+            if ($ownTransaction && $conn->inTransaction()) { $conn->rollBack(); }
+            throw $t;
+        }
+
+        return ['moved' => true, 'from' => $oldName, 'to' => $target['name'], 'cleared' => array_values($clear)];
+    }
+
     // ======================================================================
     //  Internals
     // ======================================================================
