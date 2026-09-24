@@ -1196,6 +1196,18 @@ return [
     ],
 
     'help' => [
+        // 2.6.0 — section 13 of the guide. These land in markup, so entities are fine.
+        'companies' => [
+            'nav'     => 'Assets and companies',
+            'heading' => 'Assets and companies',
+            'intro'   => 'On an install that looks after more than one company, every asset belongs to one of them. <em>This section does not apply if you run FreeITSM for a single company.</em>',
+            'move'    => '<strong>Moving an asset</strong> &mdash; on <strong>Key info</strong>, change the <strong>Company</strong> field beside the asset tag and confirm. You can only move an asset into a company you can reach yourself, and the move is recorded in its history.',
+            'cleared' => '<strong>What is cleared</strong> &mdash; anything that belongs only to the old company: its location (unless the location is shared), and a type or status the old company added for itself. The message after the move names what was cleared. History, custom fields, documents and an analyst holding it all move with it.',
+            'refused' => '<strong>When a move is refused</strong> &mdash; when the new company already has an asset with the same name or asset tag, or when the asset is held by a person from another company. The message says which, so you can fix it and try again.',
+            'add'     => '<strong>Adding an asset</strong> &mdash; when you can reach more than one company, <strong>Add asset</strong> asks which one it is for, and the type, status and location lists follow your choice. In the <strong>All companies</strong> view there is no default, so a new asset cannot land in whichever company you picked last.',
+            'shared'  => '<strong>Shared locations</strong> &mdash; under <strong>Settings &rarr; Locations</strong>, someone with access to every company can mark a location <strong>Shared with every company</strong>, such as a data centre several clients use. Every company can then pick it, alongside its own. A shared location cannot be unshared while other companies&rsquo; assets are still there.',
+            'note'    => 'The asset list still shows one company at a time, even in the <strong>All companies</strong> view. A moved asset leaves the list you are looking at &mdash; switch to its new company to see it.',
+        ],
         'page_title'    => 'Asset Management Guide',
         'guide'         => 'Guide',
         'hero_title'    => 'Asset management guide',

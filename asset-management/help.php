@@ -99,8 +99,12 @@ $translationNamespaces = ['common', 'asset-management'];
             <a href="#right-click" class="help-nav-link" data-section="right-click">
                 <span class="help-nav-num">12</span> Right-click an asset
             </a>
-            <a href="#tips" class="help-nav-link" data-section="tips">
+            <a href="#companies" class="help-nav-link" data-section="companies">
                 <span class="help-nav-num">13</span>
+                <?php echo htmlspecialchars(t('asset-management.help.companies.nav')); ?>
+            </a>
+            <a href="#tips" class="help-nav-link" data-section="tips">
+                <span class="help-nav-num">14</span>
                 <?php echo htmlspecialchars(t('asset-management.help.nav_tips')); ?>
             </a>
         </div>
@@ -573,9 +577,28 @@ $translationNamespaces = ['common', 'asset-management'];
                     <p class="help-note">A submenu that says <strong>None configured</strong> means that lookup is empty &mdash; add statuses, types or locations under <strong>Settings</strong> and they appear here straight away.</p>
                 </div>
 
-<div class="help-section" id="tips">
+<?php /* 2.6.0. Wired to t() from the start, unlike sections 10-12 above:
+         a section written straight into the page stays English in every
+         language while the translation score still reads 100%. */ ?>
+                <div class="help-section" id="companies">
                     <div class="help-section-header">
                         <span class="help-section-num">13</span>
+                        <h3><?php echo htmlspecialchars(t('asset-management.help.companies.heading')); ?></h3>
+                    </div>
+                    <p><?php echo t('asset-management.help.companies.intro'); ?></p>
+                    <div class="help-list">
+                        <div><?php echo t('asset-management.help.companies.move'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.cleared'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.refused'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.add'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.shared'); ?></div>
+                    </div>
+                    <p class="help-note"><?php echo t('asset-management.help.companies.note'); ?></p>
+                </div>
+
+<div class="help-section" id="tips">
+                    <div class="help-section-header">
+                        <span class="help-section-num">14</span>
                         <h3><?php echo htmlspecialchars(t('asset-management.help.nav_tips')); ?></h3>
                     </div>
                     <div class="help-cards">
