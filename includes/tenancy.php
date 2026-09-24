@@ -669,24 +669,7 @@ function ticketTenantFilter(PDO $conn, int $analystId, string $alias = 't', bool
     // shape as the requester-picker leak, where the COUNT was scoped and the
     // LIST was not. The clause below always names an explicit id list.
     if (!$forceSingle && isActiveTenantAll($conn)) {
-        $ids = array_values(array_unique(array_map('intval', getAccessibleTenantIds($conn, $analystId))));
-
-        // 🔴 FAIL CLOSED. An empty scope is not "everything" — it is an analyst
-        // with no companies at all, and `IN ()` is not even valid SQL. Match
-        // nothing rather than falling through to no filter.
-        if (!$ids) {
-            return [" AND 1 = 0", []];
-        }
-
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        // An unrouted ticket (tenant_id IS NULL — inbound email, the portal, a
-        // workflow) belongs to Default, so it is included only when Default is
-        // actually in scope. Same rule as the single-company branch below, not
-        // a relaxation of it.
-        if (in_array(getDefaultTenantId($conn), $ids, true)) {
-            return [" AND ($col IN ($placeholders) OR $col IS NULL)", $ids];
-        }
-        return [" AND $col IN ($placeholders)", $ids];
+        return allAccessibleTenantsFilter($conn, $analystId, $col);
     }
 
     $active  = getActiveTenantId($conn, $analystId);
@@ -717,6 +700,57 @@ function activeTenantFilter(PDO $conn, int $analystId, string $alias = 't', stri
         return [" AND ($qualified = ? OR $qualified IS NULL)", [$active]];
     }
     return [" AND $qualified = ?", [$active]];
+}
+
+/**
+ * The consolidated-view predicate: every company this analyst may see. The ONE
+ * copy of it, shared by ticketTenantFilter() and activeTenantReadFilter().
+ *
+ * 🔴 "ALL" MEANS "EVERY COMPANY I MAY SEE", NEVER "NO FILTER". The clause always
+ * names an explicit id list — returning ['', []] would read as "multi-tenancy is
+ * dormant" and hand every company's rows to everybody.
+ *
+ * @param string $qualified the already-qualified column, e.g. "t.tenant_id"
+ */
+function allAccessibleTenantsFilter(PDO $conn, int $analystId, string $qualified): array {
+    $ids = array_values(array_unique(array_map('intval', getAccessibleTenantIds($conn, $analystId))));
+
+    // 🔴 FAIL CLOSED. An empty scope is not "everything" — it is an analyst
+    // with no companies at all, and `IN ()` is not even valid SQL. Match
+    // nothing rather than falling through to no filter.
+    if (!$ids) {
+        return [" AND 1 = 0", []];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    // A NULL tenant (an unrouted ticket, a requester never given a company, a
+    // task from before companies existed) belongs to Default, so it is included
+    // only when Default is actually in scope. Same rule as the single-company
+    // branch, not a relaxation of it.
+    if (in_array(getDefaultTenantId($conn), $ids, true)) {
+        return [" AND ($qualified IN ($placeholders) OR $qualified IS NULL)", $ids];
+    }
+    return [" AND $qualified IN ($placeholders)", $ids];
+}
+
+/**
+ * activeTenantFilter() for a LIST READ that should widen in the "All companies"
+ * view — the opt-in the note above isActiveTenantAll() describes.
+ *
+ * 🔴 READS ONLY. Never use this to scope an UPDATE, DELETE or reorder: in the
+ * consolidated view it widens to every accessible company, and "act on every
+ * company at once" is not what anybody pressing a button in that view means.
+ * Writes keep activeTenantFilter(), which always answers with ONE company.
+ *
+ * Opted in so far: Tickets → Users (api/tickets/get_users.php) and the task
+ * list (api/tasks/list.php) — the two a customer reported showing "the last
+ * selected company" under All companies.
+ */
+function activeTenantReadFilter(PDO $conn, int $analystId, string $alias = 't', string $col = 'tenant_id'): array {
+    if (isMultiTenant($conn) && isActiveTenantAll($conn)) {
+        return allAccessibleTenantsFilter($conn, $analystId, $alias === '' ? $col : "$alias.$col");
+    }
+    return activeTenantFilter($conn, $analystId, $alias, $col);
 }
 
 /**

@@ -114,7 +114,11 @@ try {
     //
     // Only the parent query needs this: the subtask, tag and comment lookups below
     // all key off ids drawn from this result, so they inherit the scope.
-    [$tenantSql, $tenantParams] = activeTenantFilter($conn, (int) $analystId, 't');
+    //
+    // The READ variant: under "All companies" the board shows every company's
+    // tasks, not the last one selected (2.6.0 backlog). tenant_id is already in
+    // the SELECT, so the move-to-company menu still ticks the right one.
+    [$tenantSql, $tenantParams] = activeTenantReadFilter($conn, (int) $analystId, 't');
     $params = array_merge($params, $tenantParams);
 
     $sql = "SELECT t.id, t.title, t.description,
