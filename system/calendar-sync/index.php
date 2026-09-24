@@ -32,7 +32,7 @@ $translationNamespaces = ['common', 'system'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('system.calsync.title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=71">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <style>
         body {
             --accent: var(--sys-accent, #546e7a);

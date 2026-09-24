@@ -184,6 +184,28 @@ body {
     height: calc(100vh - 48px);
 }
 
+/* 🔴 The tickets inbox: the header is NOT 48px. The nav buttons make it ~62px,
+   so `100vh - 48px` pushed the bottom ~14px of every pane below the window,
+   where body's overflow:hidden cut it off - Ed found Trash half off-screen
+   and unreachable once "My tickets" (#149) made the folder list one row
+   taller. A column body lets the header take whatever height it really has
+   and the panes fill exactly the rest - the same fix mobile.css LAYER 2
+   already uses. Desktop only; mobile keeps its own. Scoped to this page by
+   class, because thirteen other stylesheets share the 48px assumption and
+   each wants checking on its own. */
+@media (min-width: 769px) {
+    body.inbox-page {
+        display: flex;
+        flex-direction: column;
+    }
+    body.inbox-page > .header { flex-shrink: 0; }
+    body.inbox-page > .main-container {
+        height: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+}
+
 /* Folder navigation */
 .folder-container {
     width: 280px;
@@ -480,13 +502,8 @@ body {
     color: var(--text-muted, #555);
 }
 .view-filter-menu .folder-group-toggle { margin-top: 6px; }
-.view-filter-menu .folder-group-btn:disabled { opacity: 0.45; cursor: default; }
-.view-filter-menu .folder-group-btn:disabled:hover { color: var(--text-muted, #555); }
-.view-filter-hint {
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--text-muted, #555);
-}
+/* Alone in Analyst grouping, Hide closed sits at the top with no gap above. */
+#viewFilterShowSection[hidden] + .view-filter-row { margin-top: 0; }
 /* Caption left, switch right - also used for "Include closed tickets" in search. */
 .view-filter-row {
     display: flex;

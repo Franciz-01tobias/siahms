@@ -35,7 +35,7 @@ $translationNamespaces = ['common', 'tickets'];
     <title><?php echo htmlspecialchars(t('tickets.title')); ?> - <?php echo htmlspecialchars(t('tickets.nav.inbox')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <link rel="stylesheet" href="../checklists/ticket_checklist.css?v=4">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=71">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
@@ -52,7 +52,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../assets/js/record-preview.js?v=1"></script>
     <script src="../assets/js/tinymce/tinymce.min.js"></script>
 </head>
-<body>
+<body class="inbox-page">
     <?php include 'includes/header.php'; ?>
 
     <div class="main-container">
@@ -104,12 +104,16 @@ $translationNamespaces = ['common', 'tickets'];
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                         </button>
                         <div class="view-filter-menu" id="viewFilterMenu" role="dialog" aria-label="<?php echo htmlspecialchars(t('tickets.list.filter_btn')); ?>">
-                            <div class="view-filter-label"><?php echo htmlspecialchars(t('tickets.list.filter_show')); ?></div>
-                            <div class="folder-group-toggle view-filter-show" role="group">
-                                <button type="button" class="folder-group-btn" data-mine="0" onclick="setViewFilter('mine', false)"><?php echo htmlspecialchars(t('tickets.list.filter_all')); ?></button>
-                                <button type="button" class="folder-group-btn" data-mine="1" onclick="setViewFilter('mine', true)"><?php echo htmlspecialchars(t('tickets.list.filter_mine')); ?></button>
+                            <?php /* HIDDEN, not disabled, in Analyst grouping: there
+                                     "My tickets" is a folder, and a greyed-out
+                                     control you cannot click reads as broken (Ed). */ ?>
+                            <div id="viewFilterShowSection">
+                                <div class="view-filter-label"><?php echo htmlspecialchars(t('tickets.list.filter_show')); ?></div>
+                                <div class="folder-group-toggle view-filter-show" role="group">
+                                    <button type="button" class="folder-group-btn" data-mine="0" onclick="setViewFilter('mine', false)"><?php echo htmlspecialchars(t('tickets.list.filter_all')); ?></button>
+                                    <button type="button" class="folder-group-btn" data-mine="1" onclick="setViewFilter('mine', true)"><?php echo htmlspecialchars(t('tickets.list.filter_mine')); ?></button>
+                                </div>
                             </div>
-                            <div class="view-filter-hint" id="viewFilterAnalystHint" hidden><?php echo htmlspecialchars(t('tickets.list.filter_analyst_hint')); ?></div>
                             <label class="view-filter-row">
                                 <span><?php echo htmlspecialchars(t('tickets.list.filter_hide_closed')); ?></span>
                                 <span class="toggle-switch">
@@ -990,7 +994,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../assets/js/schedule.js?v=1"></script>
     <script src="../checklists/search_scoring.js?v=1"></script>
     <script src="../checklists/ticket_view.js?v=8"></script>
-    <script src="../assets/js/inbox.js?v=134"></script>
+    <script src="../assets/js/inbox.js?v=135"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
     <script>
     // Auto-check mailboxes every 60 seconds

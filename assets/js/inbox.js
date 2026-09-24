@@ -514,10 +514,11 @@ function updateViewFilterUI() {
 
     document.querySelectorAll('.view-filter-show .folder-group-btn').forEach(b => {
         b.classList.toggle('active', (b.dataset.mine === '1') === mine);
-        b.disabled = inAnalyst;
     });
-    const hint = document.getElementById('viewFilterAnalystHint');
-    if (hint) hint.hidden = !inAnalyst;
+    // Hidden, not disabled, in Analyst grouping — a greyed-out All/Mine read as
+    // broken (Ed). There "My tickets" is a folder, and only Hide closed applies.
+    const showSection = document.getElementById('viewFilterShowSection');
+    if (showSection) showSection.hidden = inAnalyst;
     const hc = document.getElementById('viewFilterHideClosed');
     if (hc) hc.checked = viewFilter.hide_closed;
 

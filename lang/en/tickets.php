@@ -140,7 +140,6 @@ return [
         'filter_all'          => 'All',
         'filter_mine'         => 'Mine',
         'filter_hide_closed'  => 'Hide closed',
-        'filter_analyst_hint' => 'Grouped by analyst, your tickets are under My tickets.',
         'filter_chip_closed'  => 'Closed hidden',
     ],
 
