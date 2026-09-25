@@ -1,7 +1,9 @@
-FROM php:8.4-apache
+FROM php:8.1-apache
 
 # Enable required PHP extensions
-RUN docker-php-ext-install pdo pdo_mysql
+RUN apt-get update && apt-get install -y --no-install-recommends libc-client-dev && rm -rf /var/lib/apt/lists/* \
+    && docker-php-ext-configure imap --with-imap --with-imap-ssl \
+    && docker-php-ext-install pdo pdo_mysql imap
 
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite

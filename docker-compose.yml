@@ -19,6 +19,7 @@ services:
       db:
         condition: service_healthy
     environment:
+      - TZ=Africa/Nairobi
       - DB_SERVER=db
       - DB_NAME=freeitsm
       - DB_USERNAME=freeitsm
@@ -38,6 +39,7 @@ services:
   db:
     image: mysql:8.0
     environment:
+      TZ: Africa/Nairobi
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: freeitsm
       MYSQL_USER: freeitsm
