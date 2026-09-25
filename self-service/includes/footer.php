@@ -29,7 +29,7 @@ $pageData    = $pageData ?? [];
     </div><!-- /.portal-layout -->
 
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces ?? ['common', 'self-service']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <!-- Cleans untrusted message bodies; shared with the analyst inbox. -->
     <script src="../assets/js/safe-html.js?v=1"></script>
     <!-- The app-wide toast. Self-contained (injects its own CSS) and falls back
@@ -42,7 +42,7 @@ $pageData    = $pageData ?? [];
          the browser's own confirm() looks like a different application, and
          cannot be themed or translated beyond its message. Guards against a
          second load, so a page that also includes it (course.php) is fine. -->
-    <script src="../assets/js/confirm.js?v=4"></script>
+    <script src="../assets/js/confirm.js?v=5"></script>
     <?php if (!empty($needsFormLogic)): ?>
     <!-- Field types + conditional visibility for catalogue forms. Shared with the
          analyst side (forms/fill.php, the builder preview) and mirroring
@@ -60,6 +60,15 @@ $pageData    = $pageData ?? [];
     <?php endif; ?>
     <script>const API_BASE = '../api/self-service/';</script>
     <script>window.PAGE = <?php echo json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+    <?php /* The administrator's portal switches, in one place for any page that
+             needs them. 🔑 These decide what is DRAWN, never what is allowed:
+             every endpoint re-checks the same setting, because a button that is
+             not on the page is not a permission. $ssAppearance is resolved by
+             the header, which every signed-in portal page goes through. */ ?>
+    <script>window.SS_PORTAL = <?php echo json_encode([
+        'allow_self_close' => !empty($ssAppearance['allow_self_close']),
+        'show_my_assets'   => !empty($ssAppearance['show_my_assets']),
+    ]); ?>;</script>
     <?php if ($pageScripts !== ''): ?>
     <?php if (strpos($pageScripts, '<?php') !== false): ?>
     <?php /* Fail LOUD. A PHP tag in here never ran (see the note above) and would

@@ -100,6 +100,9 @@ return [
         'team'           => 'Team',
         'unassigned'     => 'Unassigned',
         'no_team'        => 'No team',
+        // Multi-company installs only; hidden on a subtask, which always
+        // follows its parent.
+        'company'        => 'Company',
 
         // Who else is on the task (GH #89). ⚠️ TRANSLATORS: see the note beside
         // 'tab_involved' in the settings block below — "collaborator" is the code
@@ -140,6 +143,7 @@ return [
         'subtasks'       => 'Subtasks',
         'remove_tag'               => 'Remove',
         'add_subtask'    => 'Add subtask...',
+        'subtask_add'    => 'Add',
         'subtask_of' => 'Subtask of',
         'subtask_set_due' => 'Give this subtask a due date',
         'comments'       => 'Comments',
@@ -159,6 +163,12 @@ return [
     ],
 
     'context' => [
+        // Moving a task between companies. The menu item is hidden entirely
+        // on a single-company install and on a subtask, so most people never
+        // see any of these.
+        'move_company'   => 'Move to company',
+        'moved'          => 'Task moved',
+        'move_error'     => 'Could not move the task',
         'assign_analyst' => 'Assign analyst',
         'assign_team'    => 'Assign team',
         'change_status'  => 'Change status',
@@ -381,6 +391,16 @@ return [
         'nav_tags'     => 'Tags',
         'nav_settings' => 'Settings',
         'nav_tips'     => 'Quick tips',
+        // Multi-company installs only. The help page renders this section
+        // and its nav entry solely when a second company exists, so a
+        // single-company desk never reads about a feature it cannot see.
+        'nav_companies'     => 'Companies',
+        'companies_heading'     => 'Tasks and companies',
+        'companies_intro'     => 'Which client a task belongs to, and how to move one that was filed under the wrong company.',
+        'companies_scope'     => 'Every task belongs to exactly one company. A task raised from a ticket takes that ticket\'s company; one you create yourself takes whichever company you are currently working in. You only ever see tasks for companies you have been given access to.',
+        'companies_move'     => 'Filed under the wrong client? Right-click the task and choose <strong>Move to company</strong> — on the board, the table or the timeline. You can only move a task into a company you yourself can reach, and the move is recorded in the task\'s history, so there is a record of what moved and when.',
+        'companies_subtasks'     => 'Subtasks move with their parent, in one go. A subtask cannot be moved on its own, because it has always belonged to the same company as the task above it — separating them would leave a parent with a child that some of your staff could not see.',
+        'companies_links'     => 'A task linked to a ticket or a change will not move away from it; you are told which link is in the way, so you can remove the link or move the other record too. A link to a contract never blocks a move, because contracts are not filed under a single company.',
 
         'hero_title'    => 'Tasks module guide',
         'hero_subtitle' => 'Plan, assign, and track internal work on a Kanban board &mdash; with calendar, timeline, tags, and per-status columns.',

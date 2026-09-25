@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'मालमत्तेस वापरकर्ता नियुक्त करा',
-        'search_label'           => 'वापरकर्ता शोधा',
         'search_placeholder'     => 'नाव किंवा ईमेलनुसार शोधा...',
-        'type_to_search'         => 'वापरकर्ते शोधण्यासाठी टाइप करा',
         'min_chars'              => 'शोधण्यासाठी किमान 2 अक्षरे टाइप करा',
         'no_users'               => 'कोणतेही वापरकर्ते आढळले नाहीत',
         'expected_return_label'  => 'अपेक्षित परतीची तारीख (पर्यायी)',
@@ -366,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'मालमत्ता स्थिती',
         'tab_locations'        => 'स्थाने',
         'tab_suppliers'        => 'पुरवठादार',
-        'tab_warranty'         => 'वॉरंटी सूचना',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

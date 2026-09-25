@@ -83,9 +83,9 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Checklist Settings</title>
+    <title><?php echo htmlspecialchars(t('checklists.settings.page_title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <style>
         /* Full-width settings shell — the same one tickets/settings and LMS use.
          * ⚠️ Dropping max-width alone is NOT enough: inbox.css sets
@@ -157,14 +157,14 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
 
     <div class="container">
         <div style="margin-bottom: 20px;">
-            <h1 style="font-size: 22px; font-weight: 700; color: var(--text, #0f172a); margin: 0 0 6px 0;">Checklist settings</h1>
-            <p style="font-size: 13px; color: var(--text-muted, #64748b); margin: 0;">Manage the categories and suggested roles your SOP templates can use.</p>
+            <h1 style="font-size: 22px; font-weight: 700; color: var(--text, #0f172a); margin: 0 0 6px 0;"><?php echo htmlspecialchars(t('checklists.settings.heading')); ?></h1>
+            <p style="font-size: 13px; color: var(--text-muted, #64748b); margin: 0;"><?php echo htmlspecialchars(t('checklists.settings.heading_sub')); ?></p>
         </div>
 
         <div class="tab-bar">
-            <button class="tab-btn <?php echo $activeTab === 'categories' ? 'active' : ''; ?>" onclick="switchTab('categories', this)">Categories</button>
-            <button class="tab-btn <?php echo $activeTab === 'roles' ? 'active' : ''; ?>" onclick="switchTab('roles', this)">Suggested roles</button>
-            <button class="tab-btn <?php echo $activeTab === 'layout' ? 'active' : ''; ?>" onclick="switchTab('layout', this)">Left panel</button>
+            <button class="tab-btn <?php echo $activeTab === 'categories' ? 'active' : ''; ?>" onclick="switchTab('categories', this)"><?php echo htmlspecialchars(t('checklists.settings.tab_categories')); ?></button>
+            <button class="tab-btn <?php echo $activeTab === 'roles' ? 'active' : ''; ?>" onclick="switchTab('roles', this)"><?php echo htmlspecialchars(t('checklists.settings.tab_roles')); ?></button>
+            <button class="tab-btn <?php echo $activeTab === 'layout' ? 'active' : ''; ?>" onclick="switchTab('layout', this)"><?php echo htmlspecialchars(t('checklists.settings.tab_layout')); ?></button>
         </div>
 
         <!-- Tab 1: Categories -->
@@ -172,31 +172,31 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
             <div class="settings-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div>
-                        <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: var(--text, #0f172a);">Categories</h3>
-                        <p style="margin: 0; font-size: 13px; color: var(--text-muted, #64748b);">How SOP templates are grouped. A category is created automatically the first time a template uses it.</p>
+                        <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('checklists.settings.categories')); ?></h3>
+                        <p style="margin: 0; font-size: 13px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.settings.categories_sub')); ?></p>
                     </div>
-                    <button type="button" class="btn-teal" onclick="lkOpenAdd('category')">Add</button>
+                    <button type="button" class="btn-teal" onclick="lkOpenAdd('category')"><?php echo htmlspecialchars(t('checklists.settings.add')); ?></button>
                 </div>
 
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Category</th>
-                            <th>Templates</th>
-                            <th style="width: 110px; text-align: right;">Actions</th>
+                            <th><?php echo htmlspecialchars(t('checklists.settings.col_category')); ?></th>
+                            <th><?php echo htmlspecialchars(t('checklists.settings.col_templates')); ?></th>
+                            <th style="width: 110px; text-align: right;"><?php echo htmlspecialchars(t('checklists.settings.col_actions')); ?></th>
                         </tr>
                     </thead>
                     <tbody id="lkCategoryList" data-kind="category">
                         <?php if (empty($categories)): ?>
-                            <tr><td colspan="3" style="text-align: center; color: var(--text-muted, #64748b);">No categories yet — one appears here as soon as a template uses it.</td></tr>
+                            <tr><td colspan="3" style="text-align: center; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.settings.categories_empty')); ?></td></tr>
                         <?php else: foreach ($categories as $c): ?>
                             <tr data-id="<?php echo (int)$c['id']; ?>" data-name="<?php echo htmlspecialchars($c['name'], ENT_QUOTES); ?>">
                                 <td class="lk-name" style="font-weight: 600;"><?php echo htmlspecialchars($c['name']); ?></td>
                                 <td><?php echo (int)($c['template_count'] ?? 0); ?></td>
                                 <td>
                                     <div class="row-actions">
-                                        <button type="button" class="action-btn lk-edit" title="Edit" aria-label="Edit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
-                                        <button type="button" class="action-btn delete lk-del" title="Delete" aria-label="Delete"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                                        <button type="button" class="action-btn lk-edit" title="<?php echo htmlspecialchars(t('checklists.settings.edit')); ?>" aria-label="<?php echo htmlspecialchars(t('checklists.settings.edit')); ?>"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                                        <button type="button" class="action-btn delete lk-del" title="<?php echo htmlspecialchars(t('checklists.settings.delete')); ?>" aria-label="<?php echo htmlspecialchars(t('checklists.settings.delete')); ?>"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                                     </div>
                                 </td>
                             </tr>
@@ -211,31 +211,31 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
             <div class="settings-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div>
-                        <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: var(--text, #0f172a);">Suggested roles</h3>
-                        <p style="margin: 0; font-size: 13px; color: var(--text-muted, #64748b);">Who normally carries out a step. Offered when building a template; it suggests, it does not assign.</p>
+                        <h3 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('checklists.settings.roles')); ?></h3>
+                        <p style="margin: 0; font-size: 13px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.settings.roles_sub')); ?></p>
                     </div>
-                    <button type="button" class="btn-teal" onclick="lkOpenAdd('role')">Add</button>
+                    <button type="button" class="btn-teal" onclick="lkOpenAdd('role')"><?php echo htmlspecialchars(t('checklists.settings.add')); ?></button>
                 </div>
 
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Role</th>
-                            <th>Steps using it</th>
-                            <th style="width: 110px; text-align: right;">Actions</th>
+                            <th><?php echo htmlspecialchars(t('checklists.settings.col_role')); ?></th>
+                            <th><?php echo htmlspecialchars(t('checklists.settings.col_steps_using')); ?></th>
+                            <th style="width: 110px; text-align: right;"><?php echo htmlspecialchars(t('checklists.settings.col_actions')); ?></th>
                         </tr>
                     </thead>
                     <tbody id="lkRoleList" data-kind="role">
                         <?php if (empty($roles)): ?>
-                            <tr><td colspan="3" style="text-align: center; color: var(--text-muted, #64748b);">No roles yet.</td></tr>
+                            <tr><td colspan="3" style="text-align: center; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.settings.roles_empty')); ?></td></tr>
                         <?php else: foreach ($roles as $r): ?>
                             <tr data-id="<?php echo (int)$r['id']; ?>" data-name="<?php echo htmlspecialchars($r['name'], ENT_QUOTES); ?>">
                                 <td class="lk-name" style="font-weight: 600;"><?php echo htmlspecialchars($r['name']); ?></td>
                                 <td><?php echo (int)($r['step_count'] ?? 0); ?></td>
                                 <td>
                                     <div class="row-actions">
-                                        <button type="button" class="action-btn lk-edit" title="Edit" aria-label="Edit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
-                                        <button type="button" class="action-btn delete lk-del" title="Delete" aria-label="Delete"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                                        <button type="button" class="action-btn lk-edit" title="<?php echo htmlspecialchars(t('checklists.settings.edit')); ?>" aria-label="<?php echo htmlspecialchars(t('checklists.settings.edit')); ?>"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                                        <button type="button" class="action-btn delete lk-del" title="<?php echo htmlspecialchars(t('checklists.settings.delete')); ?>" aria-label="<?php echo htmlspecialchars(t('checklists.settings.delete')); ?>"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                                     </div>
                                 </td>
                             </tr>
@@ -248,8 +248,8 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
         <!-- Tab 3: Left Panel (Hover Mode) -->
         <div id="tabLayout" class="tab-pane" style="display: <?php echo $activeTab === 'layout' ? 'block' : 'none'; ?>;">
             <div class="settings-card">
-                <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 600; color: var(--text, #0f172a);">Left panel visibility</h3>
-                <p style="margin: 0 0 20px 0; font-size: 13px; color: var(--text-muted, #64748b);">Choose how the checklist templates sidebar behaves on your account.</p>
+                <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('checklists.settings.layout_heading')); ?></h3>
+                <p style="margin: 0 0 20px 0; font-size: 13px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.settings.layout_sub')); ?></p>
 
                 <form method="POST">
                     <input type="hidden" name="action" value="save_sidebar_mode">
@@ -257,22 +257,22 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
                         <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
                             <input type="radio" name="mode" value="always" <?php echo $sidebarMode === 'always' ? 'checked' : ''; ?> style="margin-top: 3px;">
                             <div>
-                                <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);">Always visible</div>
-                                <div style="font-size: 12px; color: var(--text-muted, #64748b);">Keep the 260px filter panel permanently pinned to the left of the page.</div>
+                                <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('checklists.settings.layout_pinned')); ?></div>
+                                <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.settings.layout_pinned_desc')); ?></div>
                             </div>
                         </label>
 
                         <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
                             <input type="radio" name="mode" value="hover" <?php echo $sidebarMode === 'hover' ? 'checked' : ''; ?> style="margin-top: 3px;">
                             <div>
-                                <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);">Show on hover</div>
-                                <div style="font-size: 12px; color: var(--text-muted, #64748b);">Collapse the sidebar into a thin 16px strip that slides open when your cursor approaches it.</div>
+                                <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('checklists.settings.layout_hover')); ?></div>
+                                <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('checklists.settings.layout_hover_desc')); ?></div>
                             </div>
                         </label>
                     </div>
 
                     <div style="margin-top: 24px;">
-                        <button type="submit" class="btn-teal">Save</button>
+                        <button type="submit" class="btn-teal"><?php echo htmlspecialchars(t('checklists.settings.save')); ?></button>
                     </div>
                 </form>
             </div>
@@ -283,16 +283,16 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
     <div class="lk-modal-backdrop" id="lkRenameBackdrop">
         <div class="lk-modal" role="dialog" aria-modal="true" aria-labelledby="lkRenameTitle">
             <div class="lk-modal-header">
-                <h3 id="lkRenameTitle">Rename</h3>
+                <h3 id="lkRenameTitle"><?php echo htmlspecialchars(t('checklists.settings.rename')); ?></h3>
                 <button type="button" class="lk-modal-x" onclick="lkCloseRename()" aria-label="Close">&times;</button>
             </div>
             <div class="lk-modal-body">
-                <label for="lkRenameInput">Name</label>
+                <label for="lkRenameInput"><?php echo htmlspecialchars(t('checklists.settings.name')); ?></label>
                 <input type="text" id="lkRenameInput" class="lk-name-input" maxlength="100">
             </div>
             <div class="lk-modal-footer">
-                <button type="button" onclick="lkCloseRename()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-soft, #cbd5e1); background: var(--surface, #fff); color: var(--text, #334155); cursor: pointer; font-weight: 500; font-size: 13px;">Cancel</button>
-                <button type="button" class="btn-teal" id="lkRenameSave">Save</button>
+                <button type="button" onclick="lkCloseRename()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-soft, #cbd5e1); background: var(--surface, #fff); color: var(--text, #334155); cursor: pointer; font-weight: 500; font-size: 13px;"><?php echo htmlspecialchars(t('checklists.settings.cancel')); ?></button>
+                <button type="button" class="btn-teal" id="lkRenameSave"><?php echo htmlspecialchars(t('checklists.settings.save')); ?></button>
             </div>
         </div>
     </div>

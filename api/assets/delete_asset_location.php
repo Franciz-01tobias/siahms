@@ -13,6 +13,7 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/rbac.php';
 require_once '../../includes/tenancy.php';
+require_once '../../includes/asset_locations.php';
 
 header('Content-Type: application/json');
 
@@ -46,7 +47,14 @@ try {
         throw new Exception('Location not found');
     }
     $owner = ($row['tenant_id'] === null) ? null : (int)$row['tenant_id'];
-    if ($isDefaultCtx) {
+    if ($multi && assetLocationIsShared($conn, $id)) {
+        // 2.6.0. Shared by every company, so deleting it clears it from every
+        // company's assets: only someone who can reach all of them may do that,
+        // from whichever company they happen to be in.
+        if (!analystHasAllTenantAccess($conn, $analystId)) {
+            throw new Exception('That location is shared by every company. Only someone with access to every company can delete it.');
+        }
+    } elseif ($isDefaultCtx) {
         if ($owner !== null) {
             throw new Exception("That's a company's own location — switch to that company to delete it.");
         }

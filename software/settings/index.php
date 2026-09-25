@@ -18,6 +18,16 @@ requireModuleAccess('software');
 $settingsManifest = settingsManifestFor('software');
 $visibleTabs      = settingsVisibleTabs(connectToDatabase(), (int) $_SESSION['analyst_id'], $settingsManifest);
 $activeTabId      = settingsFirstTabId($visibleTabs);
+/* Honour ?tab=, so a link from elsewhere (the Watchtower settings signpost,
+   say) lands on the tab it names rather than on whichever is first.
+   Validated against the VISIBLE tabs, not just the manifest - a tab this
+   analyst has no capability for is never rendered, and asking for it must
+   not select nothing, nor slip past the check. Same three lines as
+   forms/settings/index.php. */
+if (!empty($_GET['tab']) && settingsTabVisible($visibleTabs, (string) $_GET['tab'])) {
+    $activeTabId = (string) $_GET['tab'];
+}
+
 
 $current_page = 'settings';
 $path_prefix = '../../';
@@ -33,9 +43,9 @@ $translationNamespaces = ['common', 'software'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <style>
         /* Module accent (indigo) — tabs, toggles, focus rings, shared buttons. */
         body { --accent: var(--sw-accent, #5c6bc0); --accent-hover: var(--sw-accent-hover, #3f51b5); }

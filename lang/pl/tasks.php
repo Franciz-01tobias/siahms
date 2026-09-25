@@ -139,6 +139,9 @@ return [
         'create' => 'Utwórz „{name}”',
     ],
     'context' => [
+        'move_company' => 'Przenieś do firmy',
+        'moved' => 'Zadanie przeniesione',
+        'move_error' => 'Nie udało się przenieść zadania',
         'assign_analyst' => 'Przypisz analityka',
         'assign_team' => 'Przypisz zespół',
         'change_status' => 'Zmień status',

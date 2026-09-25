@@ -23,12 +23,13 @@ requireModuleAccessJson('assets');
 
 $data = json_decode(file_get_contents('php://input'), true) ?: [];
 
-$assetId = $data['asset_id'] ?? null;
-$userId = $data['user_id'] ?? null;
+$assetId   = $data['asset_id'] ?? null;
+$userId    = $data['user_id'] ?? null;
+$analystId = $data['analyst_id'] ?? null;
 $skipAudit = $data['skip_audit'] ?? false;
 
-if (!$assetId || !$userId) {
-    echo json_encode(['success' => false, 'error' => 'Asset ID and User ID are required']);
+if (!$assetId || (!$userId && !$analystId)) {
+    echo json_encode(['success' => false, 'error' => 'Asset ID and either a User ID or an Analyst ID are required']);
     exit;
 }
 
@@ -38,8 +39,12 @@ try {
     if (!analystCanAccessAsset($conn, (int)$_SESSION['analyst_id'], (int)$assetId)) {
         throw new Exception('Asset not found');
     }
-    AssetsService::unassignUser($conn, ActorContext::fromSession($conn), (int)$assetId, (int)$userId, (bool)$skipAudit);
-    echo json_encode(['success' => true, 'message' => 'User removed from asset successfully']);
+    if ($analystId) {
+        AssetsService::unassignAnalyst($conn, ActorContext::fromSession($conn), (int)$assetId, (int)$analystId, (bool)$skipAudit);
+    } else {
+        AssetsService::unassignUser($conn, ActorContext::fromSession($conn), (int)$assetId, (int)$userId, (bool)$skipAudit);
+    }
+    echo json_encode(['success' => true, 'message' => 'Removed from asset successfully']);
 } catch (ServiceError $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 } catch (Exception $e) {

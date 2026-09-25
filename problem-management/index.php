@@ -18,7 +18,7 @@ $path_prefix = '../';
 // This module's own strings are still English-only, but the SHARED header it
 // draws is not: without window.t the notification bell threw before it could
 // fetch anything (GH #78). 'common' is what the header needs.
-$translationNamespaces = ['common'];
+$translationNamespaces = ['common', 'problem-management'];
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -28,11 +28,11 @@ $translationNamespaces = ['common'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - Problem Management</title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="<?php echo BASE_URL; ?>assets/js/i18n.js?v=2"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/record-preview.css?v=1">
     <script src="<?php echo BASE_URL; ?>assets/js/record-preview.js?v=1"></script>
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=72">
     <style>
         /* Pin the shared accent to the module red so shared components on this
            page (the editor modal's .btn-primary + input focus rings, confirm
@@ -137,11 +137,11 @@ $translationNamespaces = ['common'];
 
     <div class="pm-container">
         <div class="pm-sidebar">
-            <button class="search-btn" onclick="pmOpenSearchModal()">Search</button>
-            <button class="pm-new-btn" onclick="pmOpenEditor()">+ New problem</button>
-            <h3>Status</h3>
+            <button class="search-btn" onclick="pmOpenSearchModal()"><?php echo htmlspecialchars(t('problem-management.list.search')); ?></button>
+            <button class="pm-new-btn" onclick="pmOpenEditor()"><?php echo htmlspecialchars(t('problem-management.list.new')); ?></button>
+            <h3><?php echo htmlspecialchars(t('problem-management.list.status')); ?></h3>
             <div id="pmStatusFilters">
-                <div class="pm-filter active" data-status="all" onclick="pmFilter('all')"><span>All</span><span class="cnt" id="pmCountAll">0</span></div>
+                <div class="pm-filter active" data-status="all" onclick="pmFilter('all')"><span><?php echo htmlspecialchars(t('problem-management.list.all')); ?></span><span class="cnt" id="pmCountAll">0</span></div>
             </div>
         </div>
         <div class="pm-main">
@@ -149,11 +149,11 @@ $translationNamespaces = ['common'];
                 <div class="pm-list-head">
                     <h2><?php echo htmlspecialchars(t('common.modules.problems.name')); ?></h2>
                     <div style="display:flex;align-items:center;gap:12px;">
-                        <button class="pm-btn" onclick="pmSuggest()" title="Let AI scan recent open incidents for recurring patterns">🤖 Detect problems</button>
+                        <button class="pm-btn" onclick="pmSuggest()" title="<?php echo htmlspecialchars(t('problem-management.list.detect_title')); ?>"><?php echo htmlspecialchars(t('problem-management.list.detect')); ?></button>
                         <div id="pmCount" style="color:var(--text-dim, #6b7280);"></div>
                     </div>
                 </div>
-                <div id="pmList"><div class="pm-empty">Loading…</div></div>
+                <div id="pmList"><div class="pm-empty"><?php echo htmlspecialchars(t('problem-management.list.loading')); ?></div></div>
             </div>
             <div id="pmDetailView" style="display:none;"></div>
         </div>
@@ -163,26 +163,26 @@ $translationNamespaces = ['common'];
          Uses the shared .search-modal styling from inbox.css. -->
     <div class="search-modal" id="pmSearchModal">
         <div class="search-modal-header" id="pmSearchModalHeader">
-            <span>Search problems</span>
+            <span><?php echo htmlspecialchars(t('problem-management.search.heading')); ?></span>
             <button class="search-modal-close" onclick="pmCloseSearchModal()">&times;</button>
         </div>
         <div class="search-modal-body">
             <div class="search-form">
                 <div class="search-field">
-                    <label>Problem number</label>
-                    <input type="text" id="pmSearchNumber" placeholder="e.g. PRB-0001" onkeydown="if(event.key==='Enter')pmPerformSearch()">
+                    <label><?php echo htmlspecialchars(t('problem-management.search.number')); ?></label>
+                    <input type="text" id="pmSearchNumber" placeholder="<?php echo htmlspecialchars(t('problem-management.search.number_ph')); ?>" onkeydown="if(event.key==='Enter')pmPerformSearch()">
                 </div>
                 <div class="search-field">
-                    <label>Title</label>
-                    <input type="text" id="pmSearchTitle" placeholder="Search by title…" onkeydown="if(event.key==='Enter')pmPerformSearch()">
+                    <label><?php echo htmlspecialchars(t('problem-management.search.title')); ?></label>
+                    <input type="text" id="pmSearchTitle" placeholder="<?php echo htmlspecialchars(t('problem-management.search.title_ph')); ?>" onkeydown="if(event.key==='Enter')pmPerformSearch()">
                 </div>
                 <div class="search-actions">
-                    <button class="btn btn-primary" onclick="pmPerformSearch()">Search</button>
-                    <button class="btn btn-secondary" onclick="pmClearSearch()">Clear</button>
+                    <button class="btn btn-primary" onclick="pmPerformSearch()"><?php echo htmlspecialchars(t('problem-management.search.go')); ?></button>
+                    <button class="btn btn-secondary" onclick="pmClearSearch()"><?php echo htmlspecialchars(t('problem-management.search.clear')); ?></button>
                 </div>
             </div>
             <div class="search-results" id="pmSearchResults">
-                <div class="search-results-empty">Enter a problem number or title above and press Search.</div>
+                <div class="search-results-empty"><?php echo htmlspecialchars(t('problem-management.search.prompt')); ?></div>
             </div>
         </div>
     </div>
@@ -192,23 +192,23 @@ $translationNamespaces = ['common'];
          Settings modals exactly. -->
     <div class="modal" id="pmModal">
         <div class="modal-content" style="max-width: 640px;">
-            <div class="modal-header" id="pmModalTitle">New problem</div>
+            <div class="modal-header" id="pmModalTitle"><?php echo htmlspecialchars(t('problem-management.editor.new')); ?></div>
             <div class="modal-body">
                 <input type="hidden" id="pmId">
-                <div class="form-group"><label>Title *</label><input type="text" id="pmTitle" placeholder="Short summary of the underlying problem"></div>
+                <div class="form-group"><label><?php echo htmlspecialchars(t('problem-management.editor.title')); ?></label><input type="text" id="pmTitle" placeholder="<?php echo htmlspecialchars(t('problem-management.editor.title_ph')); ?>"></div>
                 <div class="form-row">
-                    <div class="form-group"><label>Status</label><select id="pmStatus"></select></div>
-                    <div class="form-group"><label>Priority</label><select id="pmPriority"></select></div>
-                    <div class="form-group"><label>Assigned to</label><select id="pmAssignee"></select></div>
-                    <div class="form-group"><label>&nbsp;</label><label style="font-weight:normal;"><input type="checkbox" id="pmKnownError"> Known error (workaround available)</label></div>
+                    <div class="form-group"><label><?php echo htmlspecialchars(t('problem-management.editor.status')); ?></label><select id="pmStatus"></select></div>
+                    <div class="form-group"><label><?php echo htmlspecialchars(t('problem-management.editor.priority')); ?></label><select id="pmPriority"></select></div>
+                    <div class="form-group"><label><?php echo htmlspecialchars(t('problem-management.editor.assignee')); ?></label><select id="pmAssignee"></select></div>
+                    <div class="form-group"><label>&nbsp;</label><label style="font-weight:normal;"><input type="checkbox" id="pmKnownError"> <?php echo htmlspecialchars(t('problem-management.editor.known_error')); ?></label></div>
                 </div>
-                <div class="form-group"><label>Description</label><textarea id="pmDescription" rows="3" placeholder="What's the problem?"></textarea></div>
-                <div class="form-group"><label>Root cause</label><textarea id="pmRootCause" rows="3" placeholder="The underlying cause (fill in as the investigation progresses)"></textarea></div>
-                <div class="form-group"><label>Workaround</label><textarea id="pmWorkaround" rows="2" placeholder="Temporary workaround for affected users"></textarea></div>
+                <div class="form-group"><label><?php echo htmlspecialchars(t('problem-management.editor.description')); ?></label><textarea id="pmDescription" rows="3" placeholder="<?php echo htmlspecialchars(t('problem-management.editor.description_ph')); ?>"></textarea></div>
+                <div class="form-group"><label><?php echo htmlspecialchars(t('problem-management.editor.root_cause')); ?></label><textarea id="pmRootCause" rows="3" placeholder="<?php echo htmlspecialchars(t('problem-management.editor.root_cause_ph')); ?>"></textarea></div>
+                <div class="form-group"><label><?php echo htmlspecialchars(t('problem-management.editor.workaround')); ?></label><textarea id="pmWorkaround" rows="2" placeholder="<?php echo htmlspecialchars(t('problem-management.editor.workaround_ph')); ?>"></textarea></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="pmCloseEditor()">Cancel</button>
-                <button class="btn btn-primary" onclick="pmSave()">Save</button>
+                <button class="btn btn-secondary" onclick="pmCloseEditor()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button class="btn btn-primary" onclick="pmSave()"><?php echo htmlspecialchars(t('common.save')); ?></button>
             </div>
         </div>
     </div>
@@ -216,15 +216,15 @@ $translationNamespaces = ['common'];
     <!-- Link-incident picker modal -->
     <div class="pm-modal" id="pmLinkModal">
         <div class="pm-modal-content" style="max-width: 780px;">
-            <div class="pm-modal-head">Link incidents to this problem</div>
+            <div class="pm-modal-head"><?php echo htmlspecialchars(t('problem-management.link.incidents_heading')); ?></div>
             <div class="pm-modal-body">
-                <input type="text" id="pmLinkSearch" class="pm-search" placeholder="Search open incidents by number or subject…" oninput="pmLinkSearchDebounced()" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border, #cfd8dc);border-radius:6px;">
-                <div id="pmLinkList" style="margin-top:12px; max-height:52vh; overflow-y:auto; border:1px solid var(--border-soft, #eee); border-radius:8px;"><div class="pm-empty">Loading…</div></div>
+                <input type="text" id="pmLinkSearch" class="pm-search" placeholder="<?php echo htmlspecialchars(t('problem-management.link.incidents_ph')); ?>" oninput="pmLinkSearchDebounced()" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border, #cfd8dc);border-radius:6px;">
+                <div id="pmLinkList" style="margin-top:12px; max-height:52vh; overflow-y:auto; border:1px solid var(--border-soft, #eee); border-radius:8px;"><div class="pm-empty"><?php echo htmlspecialchars(t('problem-management.list.loading')); ?></div></div>
             </div>
             <div class="pm-modal-foot">
-                <label style="margin-right:auto; font-size:13px; color:var(--text-muted, #555); display:flex; align-items:center; gap:6px;"><input type="checkbox" id="pmLinkAll" onchange="pmToggleAllLinkable(this.checked)"> Select all</label>
-                <button class="pm-btn" onclick="document.getElementById('pmLinkModal').classList.remove('active')">Cancel</button>
-                <button class="pm-btn pm-btn-primary" id="pmLinkSelBtn" onclick="pmLinkSelected()">Link selected</button>
+                <label style="margin-right:auto; font-size:13px; color:var(--text-muted, #555); display:flex; align-items:center; gap:6px;"><input type="checkbox" id="pmLinkAll" onchange="pmToggleAllLinkable(this.checked)"> <?php echo htmlspecialchars(t('problem-management.link.select_all')); ?></label>
+                <button class="pm-btn" onclick="document.getElementById('pmLinkModal').classList.remove('active')"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button class="pm-btn pm-btn-primary" id="pmLinkSelBtn" onclick="pmLinkSelected()"><?php echo htmlspecialchars(t('problem-management.link.link_selected')); ?></button>
             </div>
         </div>
     </div>
@@ -232,15 +232,15 @@ $translationNamespaces = ['common'];
     <!-- Link-change picker modal -->
     <div class="pm-modal" id="pmLinkChangeModal">
         <div class="pm-modal-content" style="max-width: 780px;">
-            <div class="pm-modal-head">Link the change that fixes this problem</div>
+            <div class="pm-modal-head"><?php echo htmlspecialchars(t('problem-management.link.changes_heading')); ?></div>
             <div class="pm-modal-body">
-                <input type="text" id="pmLinkChangeSearch" class="pm-search" placeholder="Search changes by title or ID…" oninput="pmLinkChangeSearchDebounced()" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border, #cfd8dc);border-radius:6px;">
-                <div id="pmLinkChangeList" style="margin-top:12px; max-height:52vh; overflow-y:auto; border:1px solid var(--border-soft, #eee); border-radius:8px;"><div class="pm-empty">Loading…</div></div>
+                <input type="text" id="pmLinkChangeSearch" class="pm-search" placeholder="<?php echo htmlspecialchars(t('problem-management.link.changes_ph')); ?>" oninput="pmLinkChangeSearchDebounced()" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border, #cfd8dc);border-radius:6px;">
+                <div id="pmLinkChangeList" style="margin-top:12px; max-height:52vh; overflow-y:auto; border:1px solid var(--border-soft, #eee); border-radius:8px;"><div class="pm-empty"><?php echo htmlspecialchars(t('problem-management.list.loading')); ?></div></div>
             </div>
             <div class="pm-modal-foot">
-                <label style="margin-right:auto; font-size:13px; color:var(--text-muted, #555); display:flex; align-items:center; gap:6px;"><input type="checkbox" id="pmLinkChangeAll" onchange="pmToggleAllLinkableChanges(this.checked)"> Select all</label>
-                <button class="pm-btn" onclick="document.getElementById('pmLinkChangeModal').classList.remove('active')">Cancel</button>
-                <button class="pm-btn pm-btn-primary" id="pmLinkChangeSelBtn" onclick="pmLinkChangeSelected()">Link selected</button>
+                <label style="margin-right:auto; font-size:13px; color:var(--text-muted, #555); display:flex; align-items:center; gap:6px;"><input type="checkbox" id="pmLinkChangeAll" onchange="pmToggleAllLinkableChanges(this.checked)"> <?php echo htmlspecialchars(t('problem-management.link.select_all')); ?></label>
+                <button class="pm-btn" onclick="document.getElementById('pmLinkChangeModal').classList.remove('active')"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button class="pm-btn pm-btn-primary" id="pmLinkChangeSelBtn" onclick="pmLinkChangeSelected()"><?php echo htmlspecialchars(t('problem-management.link.link_selected')); ?></button>
             </div>
         </div>
     </div>
@@ -248,15 +248,15 @@ $translationNamespaces = ['common'];
     <!-- AI suggestions modal -->
     <div class="pm-modal" id="pmSuggestModal">
         <div class="pm-modal-content">
-            <div class="pm-modal-head">Suggested problems</div>
+            <div class="pm-modal-head"><?php echo htmlspecialchars(t('problem-management.ai.suggest_heading')); ?></div>
             <div class="pm-modal-body" id="pmSuggestBody"></div>
-            <div class="pm-modal-foot"><button class="pm-btn" onclick="document.getElementById('pmSuggestModal').classList.remove('active')">Close</button></div>
+            <div class="pm-modal-foot"><button class="pm-btn" onclick="document.getElementById('pmSuggestModal').classList.remove('active')"><?php echo htmlspecialchars(t('common.close')); ?></button></div>
         </div>
     </div>
 
     <script src="<?php echo BASE_URL; ?>assets/js/toast.js"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/confirm.js"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/problem-management.js?v=21"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/problem-management.js?v=22"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
 </body>
 </html>

@@ -53,7 +53,7 @@ $translationNamespaces = ['common', 'system'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('system.title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <style>
         /* System module accent (blue-grey) — shared primitives pick this up. */
         body {
@@ -287,7 +287,7 @@ $translationNamespaces = ['common', 'system'];
          window.t did not exist on this page and the notification bell threw on its
          first line rather than fetching anything. Same fault as GH #78. -->
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <script src="../assets/js/tz.js?v=5"></script>
 </head>
 <body data-mobile-module="system" data-mobile-page="system-landing">

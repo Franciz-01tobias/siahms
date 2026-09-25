@@ -231,6 +231,38 @@ try {
         // Non-fatal: ticket history keeps working; only the workflow action stays broken.
     }
 
+    // `users_assets.user_id` was NOT NULL, so an asset could only ever be
+    // recorded against a REQUESTER. Analysts hold equipment too — and they are
+    // not requesters: on a real install five of seven analysts had no `users`
+    // row at all, so most of the desk could not be picked as a holder even by
+    // somebody willing to type the name. `analyst_id` is added beside it by the
+    // ordinary column pass; this relaxes the old rule so a row can name one
+    // without the other.
+    //
+    // Same probe-then-MODIFY shape as the blocks above, and safe for the same
+    // reason: every existing row already has a user, so nothing becomes invalid.
+    // `fk_users_assets_user` is unaffected — a NULL never violates a foreign
+    // key, it simply has nothing to check.
+    try {
+        $uaCol = $conn->prepare(
+            "SELECT IS_NULLABLE FROM information_schema.columns
+             WHERE table_schema = ? AND table_name = 'users_assets' AND column_name = 'user_id'"
+        );
+        $uaCol->execute([$dbName]);
+        $uaRow = $uaCol->fetch(PDO::FETCH_ASSOC);
+        if ($uaRow && strtoupper($uaRow['IS_NULLABLE']) === 'NO') {
+            $conn->exec("ALTER TABLE `users_assets` MODIFY `user_id` INT NULL");
+            $results[] = [
+                'table'   => 'users_assets',
+                'status'  => 'updated',
+                'details' => ["user_id: NOT NULL → NULL (an asset can be held by an analyst instead of a requester)"],
+            ];
+        }
+    } catch (Exception $e) {
+        // Non-fatal: assigning to a requester keeps working, only assigning to
+        // an analyst stays unavailable on this install.
+    }
+
     // `emails.from_address` was NOT NULL. A portal requester who signs in
     // through a directory may have no mailbox at all (GitHub #47), and their
     // ticket has no sender address to record — the INSERT failed outright, so

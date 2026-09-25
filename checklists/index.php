@@ -65,9 +65,9 @@ foreach ($templates as $t) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Checklists</title>
+    <title><?php echo htmlspecialchars(t('checklists.list.page_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <style>
         body { margin: 0; padding: 0; background: var(--app-bg, #f8fafc); }
         .chk-layout { display: flex; height: calc(100vh - 48px); width: 100%; overflow: hidden; }
@@ -97,28 +97,28 @@ foreach ($templates as $t) {
         <aside class="chk-sidebar">
             <button class="chk-btn-primary" onclick="location.href='edit/'">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                New template
+                <?php echo htmlspecialchars(t('checklists.list.new_template')); ?>
             </button>
 
             <div>
-                <input type="text" class="chk-search" id="chkSearchInput" placeholder="Search templates..." oninput="filterTemplates()">
+                <input type="text" class="chk-search" id="chkSearchInput" placeholder="<?php echo htmlspecialchars(t('checklists.list.search_ph')); ?>" oninput="filterTemplates()">
             </div>
 
             <!-- Scope Filter -->
             <div style="display: flex; flex-direction: column; gap: 4px;">
-                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase; margin-bottom: 4px;">Scope</div>
-                <a class="chk-filter-link active scope-link" onclick="setScopeFilter('all', this)">All scopes <span class="chk-filter-count"><?php echo count($templates); ?></span></a>
-                <a class="chk-filter-link scope-link" onclick="setScopeFilter('ticket', this)">Ticket</a>
-                <a class="chk-filter-link scope-link" onclick="setScopeFilter('task', this)">Task</a>
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase; margin-bottom: 4px;"><?php echo htmlspecialchars(t('checklists.list.scope')); ?></div>
+                <a class="chk-filter-link active scope-link" onclick="setScopeFilter('all', this)"><?php echo htmlspecialchars(t('checklists.list.scope_all')); ?> <span class="chk-filter-count"><?php echo count($templates); ?></span></a>
+                <a class="chk-filter-link scope-link" onclick="setScopeFilter('ticket', this)"><?php echo htmlspecialchars(t('checklists.list.scope_ticket')); ?></a>
+                <a class="chk-filter-link scope-link" onclick="setScopeFilter('task', this)"><?php echo htmlspecialchars(t('checklists.list.scope_task')); ?></a>
             </div>
 
             <!-- Category Quick-Filter -->
             <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border-soft, #e2e8f0); padding-top: 14px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase;">Categories</span>
-                    <a href="settings/?tab=categories" style="font-size: 11px; color: #0d9488; text-decoration: none; font-weight: 600;">Manage</a>
+                    <span style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase;"><?php echo htmlspecialchars(t('checklists.list.categories')); ?></span>
+                    <a href="settings/?tab=categories" style="font-size: 11px; color: #0d9488; text-decoration: none; font-weight: 600;"><?php echo htmlspecialchars(t('checklists.list.manage')); ?></a>
                 </div>
-                <a class="chk-filter-link active cat-link" onclick="setCategoryFilter('all', this)">All categories</a>
+                <a class="chk-filter-link active cat-link" onclick="setCategoryFilter('all', this)"><?php echo htmlspecialchars(t('checklists.list.categories_all')); ?></a>
                 <?php foreach ($categories as $cat): ?>
                     <?php $cName = $cat['name']; $cCount = $catCounts[$cName] ?? 0; ?>
                     <a class="chk-filter-link cat-link" onclick="setCategoryFilter('<?php echo htmlspecialchars(strtolower($cName)); ?>', this)">
@@ -131,10 +131,10 @@ foreach ($templates as $t) {
             <!-- Suggested Roles Quick-Filter -->
             <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border-soft, #e2e8f0); padding-top: 14px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase;">Suggested Roles</span>
-                    <a href="settings/?tab=roles" style="font-size: 11px; color: #0d9488; text-decoration: none; font-weight: 600;">Manage</a>
+                    <span style="font-size: 11px; font-weight: 700; color: var(--text-muted, #94a3b8); text-transform: uppercase;"><?php echo htmlspecialchars(t('checklists.list.roles')); ?></span>
+                    <a href="settings/?tab=roles" style="font-size: 11px; color: #0d9488; text-decoration: none; font-weight: 600;"><?php echo htmlspecialchars(t('checklists.list.manage')); ?></a>
                 </div>
-                <a class="chk-filter-link active role-link" onclick="setRoleFilter('all', this)">All roles</a>
+                <a class="chk-filter-link active role-link" onclick="setRoleFilter('all', this)"><?php echo htmlspecialchars(t('checklists.list.roles_all')); ?></a>
                 <?php foreach ($definedRoles as $r): ?>
                     <?php $rName = $r['name']; $rCount = $roleCounts[$rName] ?? 0; ?>
                     <a class="chk-filter-link role-link" onclick="setRoleFilter('<?php echo htmlspecialchars(strtolower($rName)); ?>', this)">
@@ -149,8 +149,8 @@ foreach ($templates as $t) {
         <main class="chk-main">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <div>
-                    <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 4px 0; color: var(--text, #0f172a);">Checklist and SOP templates</h1>
-                    <p style="font-size: 13px; color: var(--text-muted, #64748b); margin: 0;">Multi-use Standard Operating Procedures with task-level role assignments</p>
+                    <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 4px 0; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('checklists.list.heading')); ?></h1>
+                    <p style="font-size: 13px; color: var(--text-muted, #64748b); margin: 0;"><?php echo htmlspecialchars(t('checklists.list.heading_sub')); ?></p>
                 </div>
             </div>
 
@@ -159,7 +159,9 @@ foreach ($templates as $t) {
                     <?php
                         $items = $itemsByTemplate[$t['id']] ?? [];
                         $badgeClass = 'chk-pill-' . htmlspecialchars($t['scope']);
-                        $badgeLabel = $t['scope'] === 'ticket' ? 'Ticket' : ($t['scope'] === 'task' ? 'Task' : 'Both');
+                        $badgeLabel = $t['scope'] === 'ticket' ? t('checklists.list.badge_ticket')
+                                    : ($t['scope'] === 'task' ? t('checklists.list.badge_task')
+                                                              : t('checklists.list.badge_both'));
 
                         $tplRoles = [];
                         foreach ($items as $it) {
@@ -179,7 +181,14 @@ foreach ($templates as $t) {
                         <div>
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                                 <h3 style="font-size: 15px; font-weight: 600; margin: 0; color: var(--text, #0f172a);"><?php echo htmlspecialchars($t['title']); ?></h3>
-                                <span class="chk-pill <?php echo $badgeClass; ?>"><?php echo $badgeLabel; ?></span>
+                                <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                                    <?php if (($t['closure_mode'] ?? 'warn') === 'block'): ?>
+                                        <span title="<?php echo htmlspecialchars(t('checklists.editor.closure_block') ?: 'Block closure until complete'); ?>" style="display: inline-flex; color: #dc2626;" aria-label="Block closure until complete">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                        </span>
+                                    <?php endif; ?>
+                                    <span class="chk-pill <?php echo $badgeClass; ?>"><?php echo $badgeLabel; ?></span>
+                                </div>
                             </div>
 
                             <div style="margin-bottom: 10px;">
@@ -193,7 +202,7 @@ foreach ($templates as $t) {
                             <!-- Task-Level Steps with Assigned Role / Owner -->
                             <div style="border-top: 1px solid var(--border-soft, #e2e8f0); padding-top: 10px; font-size: 12px; display: flex; flex-direction: column; gap: 6px;">
                                 <?php if (empty($items)): ?>
-                                    <span style="color: var(--text-muted, #94a3b8); font-style: italic;">No checklist steps defined</span>
+                                    <span style="color: var(--text-muted, #94a3b8); font-style: italic;"><?php echo htmlspecialchars(t('checklists.list.no_steps')); ?></span>
                                 <?php else: ?>
                                     <?php foreach (array_slice($items, 0, 4) as $it): ?>
                                         <div class="chk-step-row" style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
@@ -212,7 +221,7 @@ foreach ($templates as $t) {
                                         </div>
                                     <?php endforeach; ?>
                                     <?php if (count($items) > 4): ?>
-                                        <div style="font-size: 11px; color: var(--text-muted, #94a3b8); margin-top: 2px;">+ <?php echo count($items) - 4; ?> more steps...</div>
+                                        <div style="font-size: 11px; color: var(--text-muted, #94a3b8); margin-top: 2px;"><?php echo htmlspecialchars(t('checklists.list.more_steps', ['count' => count($items) - 4])); ?></div>
                                     <?php endif; ?>
                                 <?php endif; ?>
                             </div>
@@ -221,10 +230,10 @@ foreach ($templates as $t) {
                         <!-- Card Action Buttons -->
                         <div style="border-top: 1px solid var(--border-soft, #e2e8f0); margin-top: 16px; padding-top: 12px; display: flex; justify-content: flex-end; gap: 8px;">
                             <button onclick="location.href='edit/?id=<?php echo (int)$t['id']; ?>'" style="padding: 5px 12px; font-size: 12px; border: 1px solid var(--border-soft, #cbd5e1); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #334155); cursor: pointer; font-weight: 500;">
-                                Edit
+                                <?php echo htmlspecialchars(t('checklists.list.edit')); ?>
                             </button>
                             <button onclick="deleteTemplate(<?php echo (int)$t['id']; ?>, <?php echo htmlspecialchars(json_encode($t['title']), ENT_QUOTES); ?>)" style="padding: 5px 12px; font-size: 12px; border: 1px solid #fecaca; border-radius: 4px; background: #fff; color: #ef4444; cursor: pointer; font-weight: 500;">
-                                Delete
+                                <?php echo htmlspecialchars(t('checklists.list.delete')); ?>
                             </button>
                         </div>
                     </div>
@@ -303,8 +312,8 @@ foreach ($templates as $t) {
 
         async function deleteTemplate(id, name) {
             const ok = await showConfirm({
-                title: 'Delete template',
-                message: 'Delete "' + name + '"? Checklists already attached to a ticket keep their steps — only the template goes.',
+                title: t('checklists.list.delete_title'),
+                message: t('checklists.list.delete_confirm', { name: name }),
                 okLabel: 'Delete', okClass: 'danger'
             });
             if (!ok) return;

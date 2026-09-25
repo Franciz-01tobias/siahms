@@ -36,11 +36,11 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('watchtower.title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <style>
         /* Pin the shared accent to the Watchtower slate so inbox.css components
            (modals, buttons, tabs) pick up the module colour. */
@@ -989,7 +989,11 @@ try {
         const as = d.assets;
 
         const warrantyAlert = as.warranty_show && as.warranty_soon > 0;
-        if (warrantyAlert) {
+        // A lease ending is red for the same reason a warranty is: both are
+        // dates that cost money once they pass, unlike a machine that has
+        // merely gone quiet.
+        const leaseAlert = as.lease_show && as.lease_soon > 0;
+        if (warrantyAlert || leaseAlert) {
             setDot('wtAsDot', 'red');
         } else if (as.not_seen_7d > 0) {
             setDot('wtAsDot', 'amber');
@@ -1003,11 +1007,17 @@ try {
         if (as.warranty_show) {
             html += metric(as.warranty_soon, window.t('watchtower.assets.metric_warranty'), as.warranty_soon > 0 ? '#d13438' : '#94a3b8');
         }
+        if (as.lease_show) {
+            html += metric(as.lease_soon, window.t('watchtower.assets.metric_lease'), as.lease_soon > 0 ? '#d13438' : '#94a3b8');
+        }
         html += '</div>';
 
         html += '<div class="wt-attention">';
         if (warrantyAlert) {
             html += attentionItem('red', window.t('watchtower.assets.warranty', { count: as.warranty_soon, days: as.warranty_days }));
+        }
+        if (leaseAlert) {
+            html += attentionItem('red', window.t('watchtower.assets.lease', { count: as.lease_soon, days: as.lease_days }));
         }
         if (as.not_seen_7d > 0) {
             // Clickable since #97. This count was a dead end: it told you nine
@@ -1017,7 +1027,7 @@ try {
             // opens is exactly the machines behind the number.
             html += attentionItem('amber', '<a href="../asset-management/table.php?stale=7" style="color:inherit;">'
                 + window.t('watchtower.assets.offline', { count: as.not_seen_7d }) + '</a>');
-        } else if (!warrantyAlert) {
+        } else if (!warrantyAlert && !leaseAlert) {
             html += attentionItem('green', window.t('watchtower.assets.all_active'));
         }
         html += '</div>';

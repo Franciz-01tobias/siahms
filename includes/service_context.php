@@ -41,6 +41,31 @@ final class ActorContext
         );
     }
 
+    /**
+     * Build from a signed-in SELF-SERVICE PORTAL user.
+     *
+     * 🔴 actorId is 0 ON PURPOSE. It names an ANALYST, and a requester is not
+     * one - there is no honest value. Anything that writes an actor must cope
+     * with 0 by storing NULL rather than inventing a member of staff, and
+     * ticket_audit.analyst_id is nullable for exactly this reason.
+     *
+     * companyScope is null because a portal user reaches nothing by scope: every
+     * portal endpoint is narrowed to rows they own, by user id, before a service
+     * is called at all.
+     *
+     * @param string $name the requester's display name, for the audit trail
+     */
+    public static function fromPortalUser(string $name = ''): self
+    {
+        return new self(
+            actorId:      0,
+            companyScope: null,
+            source:       'portal',
+            locale:       class_exists('I18n') ? I18n::getLocale() : 'en',
+            actorName:    $name
+        );
+    }
+
     /** Build from an authenticated API key row (API adapters). */
     public static function fromApiKey(array $apiKey): self
     {

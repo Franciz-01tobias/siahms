@@ -66,8 +66,13 @@ try {
         ? 'a.view_count DESC, a.title ASC'    // what most people needed
         : 'a.title ASC';
 
-    $sql = "SELECT a.id, a.title, a.modified_datetime, a.view_count, LEFT(a.body, 400) AS preview
+    // folder_name comes from a LEFT JOIN so an article filed nowhere still comes
+    // back - the tree groups those under its own heading rather than dropping
+    // them, which is what the analyst list does too.
+    $sql = "SELECT a.id, a.title, a.modified_datetime, a.view_count, LEFT(a.body, 400) AS preview,
+                   a.folder_id, f.name AS folder_name
             FROM knowledge_articles a
+       LEFT JOIN knowledge_folders f ON f.id = a.folder_id
             WHERE $where
             ORDER BY $order
             LIMIT $limit";

@@ -139,6 +139,9 @@ return [
         'create' => '„{name}“ erstellen',
     ],
     'context' => [
+        'move_company' => 'In andere Firma verschieben',
+        'moved' => 'Aufgabe verschoben',
+        'move_error' => 'Aufgabe konnte nicht verschoben werden',
         'assign_analyst' => 'Analyst zuweisen',
         'assign_team' => 'Team zuweisen',
         'change_status' => 'Status ändern',

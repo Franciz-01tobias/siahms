@@ -22,7 +22,7 @@ $translationNamespaces = ['common', 'tickets'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('tickets.triage.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <style>
         .triage-container { flex: 1; overflow-y: auto; padding: 30px 20px; }
         .page-title { font-size: 22px; font-weight: 600; color: #333; margin: 0 0 6px 0; }
@@ -152,7 +152,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script>
     const API = '<?php echo $path_prefix; ?>api/';
     let triageTickets = [];

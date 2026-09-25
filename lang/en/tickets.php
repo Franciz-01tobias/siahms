@@ -111,6 +111,9 @@ return [
         // #1566. Only rendered when the install actually has teams.
         'group_team'       => 'Team',
         'group_analyst'    => 'Analyst',
+        // #149. Your own analyst folder, pinned to the top of the Analyst
+        // grouping under this name instead of your own.
+        'my_tickets'       => 'My tickets',
     ],
 
     'list' => [
@@ -129,6 +132,15 @@ return [
         // Default owns it by convention, but saying so would hide the fact that
         // somebody still has to triage it.
         'company_unrouted'   => 'Unrouted',
+        // The view filter (#149) - the funnel button beside Search. "Mine" means
+        // tickets ASSIGNED to you. The chips show beside the list title while a
+        // filter is on, so nobody wonders where half their tickets went.
+        'filter_btn'          => 'Filter tickets',
+        'filter_show'         => 'Show',
+        'filter_all'          => 'All',
+        'filter_mine'         => 'Mine',
+        'filter_hide_closed'  => 'Hide closed',
+        'filter_chip_closed'  => 'Closed hidden',
     ],
 
     'reading_pane' => [
@@ -303,15 +315,38 @@ return [
         'ok'          => 'Close',
     ],
 
-    // SOP checklists on a ticket (PR #141, Santhosh Srinivasan).
+    // Checklists on a ticket (PR #141, Santhosh Srinivasan; per-template gating
+    // contributed later by the same author).
+    //
+    // 🔴 TRANSLATORS: THIS GROUP CONTAINS BOTH WARNINGS AND REFUSALS, and they
+    // must not be worded alike. A checklist is Standard (the ticket closes, the
+    // skipped steps are recorded) or Critical (the ticket does not close at
+    // all). Rendering a warning as "you cannot close this" is the opposite of
+    // what happens, and rendering a refusal as a warning promises something the
+    // server will not do. Each block below says which it is.
     'checklists' => [
-        'default_name'                 => 'SOP checklist',
-        // 🔴 TRANSLATORS: this is a WARNING, not a refusal. The ticket does
-        // close; the outstanding steps are recorded against it. Do not render
-        // it as "you cannot close this" — that is the opposite of what happens.
+        'default_name'                 => 'Checklist',
+
+        // ── WARNING. The ticket DOES close. ──────────────────────────────
         'close_with_mandatory_title'   => 'Close with steps outstanding?',
-        'close_with_mandatory'         => 'This ticket has {count} mandatory SOP step(s) still outstanding. Closing it now records which steps were skipped, and who skipped them, in the ticket notes.',
+        'close_with_mandatory'         => 'This ticket has {count} mandatory checklist step(s) still outstanding. Closing it now records which steps were skipped, and who skipped them, in the ticket notes.',
         'close_anyway'                 => 'Close anyway',
+
+        // ── WARNING. The ticket DOES close, with no checklist on it. ─────
+        'no_checklist_warn_title'      => 'No checklist attached',
+        'no_checklist_warn_msg'        => 'This ticket has no checklist attached. Close it anyway?',
+        'close_without_checklist'      => 'Close without a checklist',
+
+        // ── REFUSAL. The ticket does NOT close. ──────────────────────────
+        'blocked_title'                => 'Mandatory steps required',
+        'blocked_message'              => 'This ticket cannot be closed until its mandatory checklist steps are complete:',
+        'view_checklist'               => 'View checklist',
+        'no_checklist_blocked_title'   => 'Checklist required',
+        'no_checklist_blocked_msg'     => 'This ticket cannot be closed until a checklist is attached to it.',
+        'attach_checklist'             => 'Attach a checklist',
+
+        // Tooltip on the padlock marking a checklist that blocks closure.
+        'mandatory_for_closure'        => 'Mandatory for closure',
     ],
 
     // Closing a ticket with mandatory fields empty (Tickets → Settings →
@@ -641,6 +676,7 @@ return [
         'content'           => 'Anywhere in the ticket',
         'content_ph'        => 'Words from a message, a note, or a subject',
         'content_hint'      => 'Searches inside every message and note, not just subjects.',
+        'include_closed'    => 'Include closed tickets',   // #149
         'found_in'          => 'Found in',
         'part_ticket'       => 'subject',
         'part_email'        => 'message',
@@ -775,7 +811,7 @@ return [
         // some are more descriptive — kept separate so translators can pick
         // different phrasings where natural.
         'headings' => [
-            'checklists'       => 'Closing with steps outstanding',
+            'checklists'       => 'Closing a ticket with steps outstanding',
             'mandatory_fields' => 'Closing with fields empty',
             'departments'      => 'Departments',
             'teams'            => 'Teams',
@@ -1220,7 +1256,7 @@ return [
                 'event_note_shared'          => 'Note shared with requester',
                 'event_csat_request'         => 'CSAT survey',
             'event_assigned'      => 'Ticket assigned',
-                'event_closed'        => 'Ticket closed',
+                'event_analyst_assigned' => 'Assigned to an analyst',            'event_closed'        => 'Ticket closed',
                 'subject'             => 'Subject',
                 'subject_placeholder' => 'e.g., Your request has been received',
                 'subject_help'        => '[SDREF:...] is added automatically for reply threading.',
@@ -1230,7 +1266,7 @@ return [
                 // matched literally at send time and a translated one silently
                 // never fills in. The two under "Only on some triggers" are listed
                 // separately on purpose: they were in prose and nobody could find them.
-                'body_help'           => '<strong>Always available:</strong> [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date].<br><br><strong>Only on some triggers:</strong><br>[note_text] &mdash; on <strong>Note shared with requester</strong>, the note itself. Leave it out and the email simply says there is an update.<br>[ticket_closed_message] &mdash; on <strong>Ticket closed</strong>, a one-off note the analyst types as they close. Add it and they are asked for one; leave it out and they are not.<br><br>HTML is supported (e.g. styled buttons).',
+                'body_help' => '<strong>Always available:</strong> [ticket_reference], [ticket_url], [ticket_subject], [ticket_status], [ticket_priority], [requester_name], [requester_first_name], [requester_email], [analyst_name], [analyst_email], [department_name], [created_date], [closed_date].<br><br><strong>For an email to the analyst:</strong><br>[assigned_analyst_name], [assigned_analyst_first_name], [assigned_analyst_email] &mdash; the analyst the ticket is <em>assigned</em> to.<br>[ticket_url_analyst] &mdash; a link into the ticket in the inbox. Use this instead of [ticket_url], which opens the customer&rsquo;s own view and needs a portal account.<br><br>&#9888; <strong>[analyst_name] is not always the assigned analyst.</strong> It gives the ticket&rsquo;s <em>owner</em> where one is set, and falls back to the assignee otherwise &mdash; on most desks those are different people. It is the right code for telling a customer who is looking after them. When the email is <em>to</em> an analyst about work they have just been given, use [assigned_analyst_name].<br><br><strong>Only on some triggers:</strong><br>[note_text] &mdash; on <strong>Note shared with requester</strong>, the note itself. Leave it out and the email simply says there is an update.<br>[ticket_closed_message] &mdash; on <strong>Ticket closed</strong>, a one-off note the analyst types as they close. Add it and they are asked for one; leave it out and they are not.<br><br>HTML is supported (e.g. styled buttons).',
                 'display_order'       => 'Display order',
                 'active'              => 'Active',
                 'tab_edit'            => 'Edit',
@@ -1404,7 +1440,12 @@ return [
             'rule_help'        => 'An address with an @ matches that one sender; anything else is treated as a domain. The most specific rule wins, so a template naming an exact address beats one naming its domain, and both beat a template that goes to everyone. The order templates appear in does not affect which one is sent.',
             'rule_invalid'     => 'Enter an email address, or a domain such as example.com.',
             'rule_duplicate'   => 'That is already in the list.',
-            'badge_everyone'   => 'Everyone',
+        // The "Sends to" column answers two separate questions and used to
+        // answer only one. WHICH ROLE gets the email (this pair) and WHICH
+        // CUSTOMERS the template covers (badge_everyone / badge_senders below).
+        'audience_requester' => 'Requester',
+        'audience_analyst'   => 'Assigned analyst',
+        'audience_title'     => 'Who receives this email',            'badge_everyone'   => 'Everyone',
             'badge_senders'    => '{count} sender(s)',
             'warn_title'       => 'Some senders will get no reply at all',
             'warn_body'        => 'Every active template for {events} is limited to particular senders, so anyone who matches none of them gets nothing. Add a template set to Everyone if that is not what you intended. Where it happens, it is recorded on the ticket and in the mailbox send log as Not sent.',
@@ -1435,16 +1476,26 @@ return [
         // Instructional paragraphs / notes / info boxes shown at the top of (or
         // within) the various tabs. Values that contain intended HTML are echoed
         // raw (no htmlspecialchars) so the markup renders.
-        // The closure-mode choice itself. 🔴 TRANSLATORS: "warn" is not a
-        // refusal — the ticket closes either way under that option, and the
-        // skipped steps are written to the ticket notes in BOTH cases. Only the
-        // second option actually prevents the close.
+        // The two closure-gate choices. 🔴 TRANSLATORS: these are the names of
+        // SETTINGS, not messages shown to an analyst - the dialogues live in
+        // `checklists` near the top of this file. Only "block" options prevent a
+        // close; every option here still writes the audit note.
         'checklists' => [
-            'warn_title'       => 'Warn, and record it',
-            'warn_desc'        => 'The analyst is told which mandatory steps are outstanding and can close anyway. Recommended: a step that has become impossible never traps the ticket.',
-            'block_title'      => 'Refuse the close',
-            'block_desc'       => 'The ticket cannot reach a closed status until every mandatory step is ticked. Choose this where an external standard requires it.',
-            'always_recorded'  => 'Either way, closing with steps outstanding writes an internal note naming the skipped steps, who closed it and through which interface. The setting decides whether it is allowed, never whether it is logged.',
+            'per_template_title'  => 'Follow the setting on each checklist (Recommended)',
+            'per_template_desc'   => 'Each checklist carries its own gate, chosen by whoever wrote it: Standard warns the analyst and records the override, Critical refuses the close until every mandatory step is ticked.',
+            'block_all_title'     => 'Block every ticket with outstanding steps',
+            'block_all_desc'      => 'Overrides the checklists themselves: no ticket reaches a closed status until every mandatory step is ticked, whatever the checklist says. There is deliberately no setting in the other direction — to relax a Critical checklist, edit the checklist, where the people following it can see the change.',
+
+            'empty_section_title' => 'Closing a ticket with no checklist attached',
+            'empty_section_desc'  => 'Some teams want every ticket to have followed a procedure. Most do not — a password reset needs no checklist, and insisting on one adds friction to the tickets that least deserve it.',
+            'empty_off_title'     => 'Allow it (Default)',
+            'empty_off_desc'      => 'A ticket with no checklist closes like any other.',
+            'empty_warn_title'    => 'Warn, and record it',
+            'empty_warn_desc'     => 'The analyst is asked to confirm and offered the attach dialogue. Closing anyway writes an internal note saying the ticket closed with no checklist and who closed it.',
+            'empty_block_title'   => 'Refuse the close',
+            'empty_block_desc'    => 'The ticket cannot reach a closed status until at least one checklist is attached to it.',
+
+            'always_recorded'     => 'Either way, closing with steps outstanding writes an internal note naming the skipped steps, who closed it and through which interface. These settings decide whether it is allowed, never whether it is logged.',
         ],
 
         // Mandatory fields at closure. 🔴 TRANSLATORS: the first two options are
@@ -1487,7 +1538,7 @@ return [
         ],
 
         'intros' => [
-            'checklists'      => 'An SOP checklist can mark steps as mandatory. This decides what happens if somebody closes a ticket before those steps are ticked.',
+            'checklists'      => 'A checklist can mark steps as mandatory. This decides what happens if somebody closes a ticket before those steps are ticked.',
             'mandatory_fields' => 'Choose which ticket fields must be filled in before a ticket is closed, and what happens when somebody closes one with any of them empty. The rule applies everywhere a ticket can be closed: the ticket screen, bulk actions, the REST API and workflows.',
             'departments'     => 'Departments group and route tickets to the right area of your organisation — create the ones your service desk uses to categorise and assign work.',
             'teams'           => 'Teams determine which departments analysts can access. Assign departments to teams, then assign analysts to teams to control their access.',
@@ -2154,6 +2205,44 @@ return [
 
     // tickets/csat/index.php — CSAT analytics page
     'csat' => [
+        // ── The survey a CUSTOMER fills in (tickets/csat/survey.php) ────
+        //
+        // 🔴 PUBLIC AND UNAUTHENTICATED. There is no session, so the locale
+        // comes from the browser Accept-Language header - see
+        // I18n::initFromSession() step 2. A customer who reads Spanish gets a
+        // Spanish survey without ever having had an account, which is the
+        // whole reason these strings are worth translating.
+        'survey' => [
+            // Punctuation is stored as real characters, not HTML entities, so
+            // every one of these can be escaped on output. A translator who
+            // types an entity is then a defect the chunk verifier can see.
+            'title'            => 'How did we do?',
+            'thanks_heading'   => 'Thanks for your feedback!',
+            'thanks_body'      => 'We’ve recorded your response. The team will use it to keep improving the service.',
+            'invalid_heading'  => 'This survey link isn’t valid',
+            'invalid_body'     => 'The link may have been mistyped, or it’s already been used. If you believe this is a mistake, please reply to the original ticket email.',
+            'already_heading'  => 'You’ve already responded',
+            'already_body'     => 'Thanks — we’ve already got your feedback for this ticket. Each survey link can only be used once.',
+            'error_heading'    => 'Something went wrong',
+            'error_body'       => 'We couldn’t save your response just now. Please try again in a minute, or reply to the original ticket email.',
+            'ticket_line'      => 'Ticket',
+            'intro'            => 'Hi {name}, thanks for letting us help. How would you rate the experience?',
+            // Used when the requester record has no name to take a first name from.
+            // The nameless case is its own sentence, not the named one with a
+            // filler in the slot: "Hi there" has no equivalent in most
+            // languages, and asking for one produced the wrong register in two.
+            'intro_noname'     => 'Hi, thanks for letting us help. How would you rate the experience?',            'need_rating'      => 'Please pick a rating before submitting.',
+            'hint'             => 'Hover and click to rate',
+            'comment_ph'       => 'Anything you\'d like to add? (optional)',
+            'submit'           => 'Submit feedback',
+            // The caption under the stars, e.g. "4 / 5 — Satisfied".
+            'caption'          => '{n} / 5 — {label}',
+            'rating_1'         => 'Very dissatisfied',
+            'rating_2'         => 'Dissatisfied',
+            'rating_3'         => 'Neutral',
+            'rating_4'         => 'Satisfied',
+            'rating_5'         => 'Very satisfied',
+        ],
         'page_title'           => 'CSAT — Service Desk',
         'heading'              => 'Customer Satisfaction',
         'range_days'           => '{days}d',
@@ -2187,6 +2276,121 @@ return [
         'failed_remove'           => 'Failed to remove widget',
         'widget_removed'          => 'Widget removed',
         'widget_updated'          => 'Widget updated',
+        // ── The widget editor, shared by index.php and library.php ──────
+        // (tickets/dashboard/includes/widget_edit_form.php)
+        'form' => [
+            'title'            => 'Title',
+            'title_ph'         => 'e.g. Tickets by status',
+            'chart_type'       => 'Chart type',
+            'chart_bar'        => 'Bar',
+            'chart_doughnut'   => 'Doughnut',
+            'chart_pie'        => 'Pie',
+            'chart_line'       => 'Line',
+            'description'      => 'Description',
+            'description_ph'   => 'Brief description of what this widget shows',
+            'property'         => 'Aggregate property',
+            'group_categorical' => 'Categorical',
+            'group_timeseries' => 'Time series',
+            'group_comparison' => 'Comparison',
+            'prop_status'      => 'Status',
+            'prop_priority'    => 'Priority',
+            'prop_department'  => 'Department',
+            'prop_ticket_type' => 'Ticket type',
+            'prop_analyst'     => 'Assigned analyst',
+            'prop_owner'       => 'Owner',
+            'prop_origin'      => 'Origin',
+            'prop_ftf'         => 'First time fix',
+            'prop_training'    => 'Training provided',
+            'prop_created'     => 'Created',
+            'prop_closed'      => 'Closed',
+            'prop_created_vs_closed' => 'Created vs closed',
+            'time_grouping'    => 'Time grouping',
+            'time_day'         => 'Day',
+            'time_month'       => 'Month',
+            'time_year'        => 'Year',
+            'series'           => 'Series breakdown',
+            'series_none'      => 'None (single series)',
+            'series_status'    => 'By status',
+            'series_priority'  => 'By priority',
+            'date_range'       => 'Date range',
+            'range_all'        => 'All time',
+            'range_7d'         => 'Last 7 days',
+            'range_30d'        => 'Last 30 days',
+            'range_this_month' => 'This month',
+            'range_3m'         => 'Last 3 months',
+            'range_6m'         => 'Last 6 months',
+            'range_12m'        => 'Last 12 months',
+            'range_this_year'  => 'This year',
+            'dept_filter'      => 'Department filter',
+            'dept_hint'        => 'Leave all unchecked to include all departments',
+            'filterable'       => 'Allow status filtering',
+        ],
+        // ── The auto-written widget description (assets/js/widget-editor.js) ──
+        //
+        // This was assembled in JavaScript by concatenating English and then
+        // calling .toLowerCase() on the result. Two things are wrong with that
+        // in any other language: word order is fixed to English, and German
+        // capitalises its nouns mid-sentence. So each shape is a whole
+        // sentence, and the mid-sentence forms are their own keys rather than
+        // a lower-cased title.
+        //
+        // 🔴 It also carried a real English bug: the unit came from lower-casing
+        // "Daily"/"Monthly"/"Yearly" and stripping a trailing "ly", which gives
+        // "month" and "year" but turns "Daily" into "dai" - the description read
+        // "Tickets created per dai". The unit is now its own word.
+        'auto_desc' => [
+            'created_vs_closed'     => 'Created vs closed',
+            'created_vs_closed_per' => 'Created vs closed per {unit}',
+            'per'                   => 'Tickets {verb} per {unit}',
+            'per_by'                => 'Tickets {verb} per {unit} by {series}',
+            'by'                    => 'Tickets by {property}',
+            'by_and'                => 'Tickets by {property} and {series}',
+            'with_range'            => '{desc} ({range})',
+            'with_depts'            => '{desc} — {names}',
+            'with_dept_count'       => '{desc} — {n} departments',
+
+            'verb_created'          => 'created',
+            'verb_closed'           => 'closed',
+            'unit_day'              => 'day',
+            'unit_month'            => 'month',
+            'unit_year'             => 'year',
+
+            // Mid-sentence forms of the aggregate property and the series.
+            'of_status'             => 'status',
+            'of_priority'           => 'priority',
+            'of_department'         => 'department',
+            'of_ticket_type'        => 'ticket type',
+            'of_analyst'            => 'assigned analyst',
+            'of_owner'              => 'owner',
+            'of_origin'             => 'origin',
+            'of_first_time_fix'     => 'first time fix',
+            'of_training_provided'  => 'training provided',
+            'of_category'           => 'category',
+            'of_closure_category'   => 'category at close',
+            'of_resolution_code'    => 'resolution code',
+
+            // Mid-sentence forms of the date range, for the "( ... )" suffix.
+            'in_7d'                 => 'last 7 days',
+            'in_30d'                => 'last 30 days',
+            'in_this_month'         => 'this month',
+            'in_3m'                 => 'last 3 months',
+            'in_6m'                 => 'last 6 months',
+            'in_12m'                => 'last 12 months',
+            'in_this_year'          => 'this year',
+
+            // Three properties the shared form partial does not offer, but the
+            // editor still has to label when an existing widget uses one.
+            'prop_category'         => 'Category',
+            'prop_closure_category' => 'Category at close',
+            'prop_resolution_code'  => 'Resolution code',
+
+            'grouping_daily'        => 'Daily',
+            'grouping_monthly'      => 'Monthly',
+            'grouping_yearly'       => 'Yearly',
+
+            'err_title'             => 'Title is required',
+            'err_time_grouping'     => 'Time grouping is required for time-based aggregates',
+        ],
         'library' => [
             'page_title'          => 'Service Desk - Ticket Widget Library',
             'back_dashboard'      => 'Dashboard',
@@ -2274,7 +2478,9 @@ return [
             'field_dept'     => '<strong>Department folders</strong> &mdash; tickets grouped by department (e.g. IT, HR, Finance). Departments are configured in Settings and appear as sub-folders automatically.',
             'switch_heading' => '<strong>Switching between Department and Analyst grouping</strong>',
             'switch_body'    => 'A small two-button toggle at the top of the folder panel switches between two views of the same data. <strong>Department</strong> grouping (default) lists tickets under each department with status sub-folders inside; <strong>Analyst</strong> grouping flips it so each top-level folder represents an analyst\'s personal queue with status sub-folders inside. The <strong>Unassigned</strong> folder is context-aware in each view &mdash; in Department view it lists tickets with no department set; in Analyst view it lists tickets with no assignee &mdash; so you can always see what needs picking up. Your choice is saved per-analyst so each team member keeps the view they prefer across sessions.',
-            'p_actions'      => 'Above the ticket list, you have three action buttons: <strong>New</strong> to create a ticket, <strong>Search</strong> to find tickets by keyword, reference, or requester, and <strong>Refresh</strong> to reload the current folder.',
+            'p_actions'      => 'Above the ticket list, you have four action buttons: <strong>New</strong> to create a ticket, <strong>Search</strong> to find tickets by keyword, reference, or requester, <strong>Filter</strong> to narrow what you see, and <strong>Refresh</strong> to reload the current folder.',
+            // #149
+            'filter_body'    => 'The <strong>Filter</strong> button (the funnel) narrows the folders and the list together, whichever way they are grouped. <strong>Mine</strong> shows only tickets assigned to you, and <strong>Hide closed</strong> leaves out every ticket whose status is marked as closed. While a filter is on, the funnel carries a dot and a label appears beside the list title, so you always know you are not seeing everything. When folders are grouped by <strong>Analyst</strong>, your own folder sits at the top as <strong>My tickets</strong> instead. Search has its own <strong>Include closed tickets</strong> switch, on by default, because a search is usually a hunt for an old ticket. Both choices are saved for you alone.',
             'row_name'       => 'Each row shows the ticket reference and then a name. By default that is <strong>the person who raised the ticket</strong>, and it stays the same for the life of the ticket. If you would rather see whoever sent the most recent message &mdash; which becomes your own mailbox once you have replied &mdash; change <strong>Name beside the ticket number</strong> under <strong>Settings &rarr; Row display</strong>, where you can also hide the name and leave just the reference. That tab is your own setting: it changes nothing for anyone else.',
             'tip'            => 'Click any ticket in the list to load it in the reading pane. From there you can update fields, add comments, reply by email, or attach files &mdash; all without navigating away from the inbox.',
         ],
@@ -2511,7 +2717,7 @@ return [
             // than in its own settings, because it is a rule about closing
             // tickets and that is where somebody looks for it.
             'card_checklists_title' => 'Checklists',
-            'card_checklists_body'  => 'Decide what happens when somebody closes a ticket that still has mandatory SOP steps outstanding: <strong>warn</strong> and record an internal note naming the steps and who closed it, or <strong>block</strong> the close until they are done. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
+            'card_checklists_body'  => 'Decide what happens when somebody closes a ticket that still has mandatory checklist steps outstanding: <strong>warn</strong> and record an internal note naming the steps and who closed it, or <strong>block</strong> the close until they are done. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
             'card_mandatory_title' => 'Mandatory fields',
             'card_mandatory_body'  => 'Tick the fields that must be filled in before a ticket can close - category, resolution code, owner and so on. Then choose what happens when somebody closes one with a field empty: <strong>warn</strong>, <strong>warn and email</strong> someone such as a service delivery manager, or <strong>refuse</strong> the close. A separate switch records it on the ticket as an internal note. A field switched off for a company is never required, and merging tickets never triggers it. Enforced everywhere a ticket can be closed - bulk actions, the REST API and workflow automation included',
             'card_cleanup_title'   => 'Reply Cleanup AI',

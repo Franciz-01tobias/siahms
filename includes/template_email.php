@@ -12,6 +12,25 @@ require_once __DIR__ . '/public_url.php';   // publicAbsoluteUrl(), for the [tic
 require_once __DIR__ . '/timezone.php';     // fmt_local(), for the [created_date] merge code (GH #126)
 
 /**
+ * Who an event's email is addressed to: 'requester' or 'analyst'.
+ *
+ * 🔑 THIS IS THE ONLY DEFINITION. The settings screen shows the audience in
+ * its "Sends to" column and must not keep a second copy of this map - a screen
+ * that says "Requester" while the sender picks the analyst is worse than no
+ * column at all. api/tickets/get_email_templates.php calls this and hands the
+ * answer to the browser.
+ *
+ * Everything except analyst_assigned goes to the requester, and that is the
+ * safe default for any event added later: an email that reaches the customer
+ * when it should not have is a bad day, but an internal notification quietly
+ * sent to nobody is a feature that looks broken.
+ */
+function templateEventAudience(string $eventTrigger): string
+{
+    return $eventTrigger === 'analyst_assigned' ? 'analyst' : 'requester';
+}
+
+/**
  * Main entry point — send a template email for a ticket event.
  * Returns silently if no active template exists or no mailbox is found.
  * Never throws — errors go to error_log().
@@ -29,6 +48,10 @@ function sendTemplateEmail(PDO $conn, int $ticketId, string $eventTrigger, array
             return;
         }
 
+        // 🔑 SELECTION IS ALWAYS KEYED ON THE REQUESTER, even for an event whose
+        // email goes to an analyst. Sender rules answer "which customers does
+        // this template cover" (#80) - scoping an analyst notification by the
+        // analyst's own domain would match every ticket or none of them.
         $choice   = templateSelectForRecipient($conn, $eventTrigger, $mergeData['requester_email'] ?? '');
         $template = $choice['template'];
         if (!$template) {
@@ -136,7 +159,13 @@ function sendTemplateEmail(PDO $conn, int $ticketId, string $eventTrigger, array
         }
 
         // Get recipient (the ticket requester)
-        $recipientEmail = $mergeData['requester_email'] ?? '';
+        // The analyst address is read from the ASSIGNED ANALYST alone, never
+        // from [analyst_email] - that code is COALESCE(owner, analyst) and
+        // resolves to the owner whenever the two differ, which on real data is
+        // most tickets.
+        $recipientEmail = templateEventAudience($eventTrigger) === 'analyst'
+            ? ($mergeData['assigned_analyst_email'] ?? '')
+            : ($mergeData['requester_email'] ?? '');
         if (empty($recipientEmail)) {
             error_log("Template email: no requester email for ticket $ticketId");
             return;
@@ -308,6 +337,12 @@ function buildTicketMergeData(PDO $conn, int $ticketId): ?array {
                    t.created_datetime, t.closed_datetime,
                    COALESCE(o.full_name, a.full_name) AS analyst_name,
                    COALESCE(o.email, a.email) AS analyst_email,
+                   -- The assigned analyst ONLY. [analyst_name]/[analyst_email]
+                   -- above prefer the OWNER, which is a different person on most
+                   -- tickets; an email telling somebody they have been assigned
+                   -- work cannot use a code that might name their colleague.
+                   a.full_name AS assigned_analyst_name,
+                   a.email AS assigned_analyst_email,
                    d.name AS department_name
             FROM tickets t
             LEFT JOIN ticket_statuses ts ON ts.id = t.status_id
@@ -345,6 +380,13 @@ function buildTicketMergeData(PDO $conn, int $ticketId): ?array {
         'requester_email' => $row['requester_email'] ?? '',
         'analyst_name' => $row['analyst_name'] ?? '',
         'analyst_email' => $row['analyst_email'] ?? '',
+        'assigned_analyst_name' => $row['assigned_analyst_name'] ?? '',
+        'assigned_analyst_first_name' => trim(explode(' ', trim($row['assigned_analyst_name'] ?? ''))[0]),
+        'assigned_analyst_email' => $row['assigned_analyst_email'] ?? '',
+        // [ticket_url] points at the SELF-SERVICE view because everything else
+        // built from this data is addressed to the requester. An analyst has no
+        // account there, so an analyst-bound email needs the inbox link instead.
+        'ticket_url_analyst' => publicAbsoluteUrl($conn, 'tickets/index.php?ticket_id=' . $ticketId),
         'department_name' => $row['department_name'] ?? '',
         // 🔴 These were `date('d M Y H:i', strtotime($utc))` (GH #126). Both halves
         // run in PHP's default zone — which config.php pins to Europe/London — so

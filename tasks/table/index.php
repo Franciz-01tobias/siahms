@@ -30,13 +30,13 @@ $translationNamespaces = ['common', 'tasks'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('tasks.title') . ' ' . t('tasks.nav.table')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=31">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=32">
     <link rel="stylesheet" href="../../assets/css/data-table.css?v=4">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
 </head>
 <body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>">
@@ -100,10 +100,16 @@ $translationNamespaces = ['common', 'tasks'];
             <span class="ctx-arrow">&rsaquo;</span>
             <div class="ctx-submenu" id="ctxPriority"></div>
         </div>
+        <?php /* Move to company - hidden at N=1; filled by tasks-ctx-menu.js. */ ?>
+        <div class="ctx-item ctx-has-sub" data-action="company" id="ctxCompanyParent" style="display:none;">
+            <span class="ctx-item-label"><?php echo htmlspecialchars(t('tasks.context.move_company')); ?></span>
+            <span class="ctx-arrow">&rsaquo;</span>
+            <div class="ctx-submenu" id="ctxCompany"></div>
+        </div>
     </div>
 
     <script src="../../assets/js/data-table.js?v=6"></script>
-    <script src="../../assets/js/tasks-ctx-menu.js?v=1"></script>
+    <script src="../../assets/js/tasks-ctx-menu.js?v=4"></script>
     <script src="../../assets/js/tasks-table.js?v=5"></script>
     <script src="../../assets/js/mobile.js?v=65"></script>
 </body>

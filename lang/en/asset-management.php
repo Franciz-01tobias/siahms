@@ -160,6 +160,8 @@ return [
         // may each run their own LT0001, and the message has to say so.
         'asset_tag'        => 'Asset tag',
         'asset_tag_ph'     => 'e.g. LT0001',
+        // 2.6.0 - the company an asset belongs to; also its history label.
+        'company'          => 'Company',
         'type'             => 'Type',
         'status'           => 'Status',
         'location'         => 'Location',
@@ -176,6 +178,7 @@ return [
         'purchase_cost'    => 'Purchase cost',
         'supplier'         => 'Supplier',
         'order_number'     => 'Order number',
+        'lease_expiry'                => 'Lease ends',
         'warranty_expiry'  => 'Warranty expiry',
         'assigned_user'    => 'Assigned User',
 
@@ -239,8 +242,18 @@ return [
     ],
 
     'detail' => [
+        // The flags beside a warranty or lease date. {days} is always 0-30
+        // here, but the number is passed rather than baked into the string,
+        // because several locales inflect the noun on it.
+        'expired'                 => 'Expired',
+        'expires_in_days'         => 'in {days} days',
         'select_prompt'     => 'Select an asset to view details and assigned users',
-        'service_tag'       => 'Service Tag',
+        // ⚠️ The KEY is the database column (`assets.service_tag`); the LABEL is
+        // what people call it. Those parted company when this was renamed to
+        // Serial Number - deliberately, because renaming the key to match would
+        // have moved seven call sites and fourteen locale files to change one
+        // word on a screen.
+        'service_tag'       => 'Serial number',
         'view_history'      => 'View History',
         'custody'           => 'Custody',
         'print_label'       => 'Print label',
@@ -323,17 +336,56 @@ return [
         // The service's own wording is a published REST error body telling you
         // to send a PATCH, which is no use to anybody looking at a toast.
         'duplicate'   => 'There is already an asset called “{name}”. Names must be unique — search for it in the list, or give this one a different name.',
+        // 2.6.0. Asked on every multi-company install, and required in the All
+        // companies view: a customer found new assets silently landing in the
+        // company they had last selected. Toast strings are literal characters.
+        'company'              => 'Company',
+        'company_choose'       => 'Choose a company…',
+        'company_required'     => 'Choose which company this asset belongs to.',
+        'company_denied'       => 'You do not have access to that company.',
+        'lookup_wrong_company' => 'That type, status or location is not available in the chosen company. Pick it again.',
+        'created_elsewhere'    => 'Added to {company}. Switch to that company to open it.',
+    ],
+
+    // (settings.location_shared* live in the 'settings' section.)
+    // Moving an asset to another company (2.6.0). Toast and dialog strings are
+    // assigned as text, so literal characters, not HTML entities.
+    'move' => [
+        'confirm_title' => 'Move to {company}?',
+        'confirm_body'  => 'Anything that belongs only to the current company is cleared: its location (unless shared), and a type or status the new company does not have. The asset’s history, holders and custom fields move with it.',
+        'confirm_ok'    => 'Move',
+        'already'       => 'This asset is already in {company}.',
+        'done'          => 'Moved to {company}.',
+        'done_cleared'  => 'Moved to {company}. Cleared, because {company} does not have them: {fields}.',
+        'failed'        => 'Could not move this asset.',
     ],
 
     // Assign-user modal
+    // An asset can be given to a requester OR to a member of the desk, so three
+    // of these no longer say "user".
+    //
+    // Those three had to be EVICTED from every locale, not merely reworded here.
+    // A translation is keyed on the key, never on the English, so 24 locales
+    // would have gone on showing a faithful translation of the OLD wording -
+    // still scoring 100%, and still telling a Danish reader the dialog only
+    // assigns users.
     'assign' => [
-        'heading'                => 'Assign user to asset',
-        'search_label'           => 'Search for user',
-        'search_placeholder'     => 'Search by name or email...',
-        'type_to_search'         => 'Type to search for users',
-        'min_chars'              => 'Type at least 2 characters to search',
-        'no_users'               => 'No users found',
-        'expected_return_label'  => 'Expected return date (optional)',
+        'heading'                    => 'Assign this asset',
+        'search_label'               => 'Search',
+        'search_placeholder'         => 'Search by name or email...',
+        'search_placeholder_analyst' => 'Search analysts by name or email...',
+        'type_to_search'             => 'Type to search',
+        'min_chars'                  => 'Type at least 2 characters to search',
+        'no_users'                   => 'No users found',
+        'no_analysts'                => 'No analysts found',
+        'expected_return_label'      => 'Expected return date (optional)',
+        // The two sides of the picker. "User" is the product's word for the
+        // people the desk serves; "Analyst" is its word for the desk itself.
+        // Both already carry that meaning everywhere else in the UI, so neither
+        // introduces a noun a translator has to guess at.
+        'who_label'                  => 'Assign to',
+        'kind_user'                  => 'User',
+        'kind_analyst'               => 'Analyst',
     ],
 
     // Storage / disk cards
@@ -831,7 +883,7 @@ return [
         'cf_date_time'         => 'A time',
         'cf_date_datetime'     => 'A date and time',
 
-        'tab_warranty'         => 'Warranty alerts',
+        'tab_warranty'         => 'Expiry alerts',
         'tab_handover'         => 'Handover document',
 
         // The handover document designer (discussion #56).
@@ -919,6 +971,11 @@ return [
         'parent_location'        => 'Parent location',
         'none_top_level'         => '— None (top level) —',
         'parent_location_hint'   => 'Leave as "None" for a top-level location, or pick a parent to nest it underneath.',
+        // 2.6.0 shared locations. The hint is also the badge's tooltip, so it
+        // is plain text (no entities).
+        'location_shared'        => 'Shared with every company',
+        'location_shared_hint'   => 'Every company can pick a shared location, such as a data centre several clients use. Only someone with access to every company can change it.',
+        'location_shared_badge'  => 'Shared',
         'add_sublocation'        => 'Add sub-location',
         'no_locations'           => 'No locations yet. Click <strong>Add</strong> to create your first one.',
         'locations_load_failed'  => 'Failed to load locations',
@@ -945,7 +1002,7 @@ return [
         'supplier_added'              => 'Supplier added',
         'add_supplier_failed'         => 'Failed to add supplier',
 
-        // Warranty alerts
+        // Expiry alerts (warranty + lease)
         'warranty_heading'        => 'Warranty expiry alerts',
         'warranty_intro'          => 'Surface assets whose warranty has expired or is about to, based on each asset\'s <strong>Warranty expiry</strong> date. Choose where they show up &mdash; a card on the Watchtower dashboard, events on the Calendar (in a "Warranty" category), or both.',
         'warranty_show_in'        => 'Show alerts in',
@@ -956,6 +1013,12 @@ return [
         'warranty_days_label'     => 'Warn this many days before expiry',
         'warranty_days_hint'      => 'Assets already past their warranty date are always included.',
         'warranty_saved'          => 'Warranty alert settings saved',
+        'lease_heading'           => 'Lease expiry alerts',
+        'lease_intro'             => 'Surface assets whose lease has ended or is about to, based on each asset\'s <strong>Lease ends</strong> date. Choose where they show up &mdash; a card on the Watchtower dashboard, events on the Calendar (in a "Lease" category), or both.',
+        'lease_show_in'           => 'Show lease expiries in',
+        'lease_days_label'        => 'Warn this many days ahead',
+        'lease_days_hint'         => 'Assets already past their lease end date are always included. A longer window than the warranty one is usual: returning or renewing leased kit takes arranging.',
+        'lease_saved'             => 'Lease alert settings saved',
         'save_settings_failed'    => 'Failed to save settings',
 
         // vCenter
@@ -1021,7 +1084,130 @@ return [
     ],
 
     // Help guide
+    // ── Printable QR labels (asset-management/labels.php) ───────────────
+    'labels' => [
+        'browser_title'  => 'Asset labels',
+        'heading'        => 'Asset labels',
+        'sheet_label'    => 'Label sheet',
+        // The dimensions are numbers and stay as they are; only "per sheet"
+        // is language. Splitting them means no locale can mistype a size.
+        'sheet_option'   => '{n} per sheet — {dims}',
+        'print'          => 'Print',
+        'csv'            => 'CSV for a printer',
+        'back'           => 'Back to Assets',
+        'count_one'      => '1 label',
+        'count_many'     => '{n} labels',
+        'no_tag'         => 'no tag',
+        'localhost_warn_title' => 'These codes point at {host} — a phone scanning them will fail.',
+        'localhost_warn_body'  => 'To a phone, <code>localhost</code> means the phone itself. Set the address this install is reached on (<strong>Tickets → Settings → Messaging → Public base URL</strong>) and reprint — the codes themselves don\'t change, only the address inside them.',
+        'not_ready'      => 'Asset labels need a database update first — an administrator can run <strong>System → Database Verification</strong>.',
+        'no_ids'         => 'No assets chosen. Open this page with a list of asset ids, e.g. <code>labels.php?ids=1,2,3</code>.',
+        'none_visible'   => 'None of those assets are visible to you.',
+        'alignment_hint' => 'Check the alignment on plain paper before using label stock — printers vary by a millimetre or two. The dashed guides are on screen only and won\'t print.',
+    ],
+    // ── The page a phone lands on after scanning a label (scan.php) ─────
+    // Deliberately reuses field.* for the fact labels and common.* for the
+    // save states: the same word on the same object should not get two
+    // chances to be translated differently.
+    'scan' => [
+        'asset'            => 'Asset',
+        'signin_heading'   => 'Sign in to view this asset',
+        'signin_body'      => 'You need to be signed in to FreeITSM to see asset details. Sign in, then scan the label again — it will open straight to this asset.',
+        'signin_btn'       => 'Sign in',
+        'noaccess_heading' => 'No access to Assets',
+        'noaccess_body'    => 'Your account doesn\'t have access to the Assets module, so this label can\'t be opened. Ask an administrator if you think that\'s wrong.',
+        'notready_heading' => 'Asset labels aren\'t set up yet',
+        'notready_body'    => 'This install needs a database update before QR labels work. An administrator can run <strong>System → Database Verification</strong>.',
+        'unknown_heading'  => 'Label not recognised',
+        'unknown_body'     => 'This label doesn\'t match an asset you can see. It may belong to another company, or the asset may have been deleted.',
+        'unknown_btn'      => 'Open Assets',
+        'asset_hash'       => 'Asset #{id}',
+        'fact_held_by'     => 'Held by',
+        'fact_make'        => 'Make',
+        'fact_serial'      => 'Serial',
+        'fact_os'          => 'OS',
+        'fact_warranty'    => 'Warranty',
+        'open_record'      => 'Open the full record',
+        'not_set'          => '(not set)',
+        'load_failed'      => 'Could not load',
+        'save_failed'      => 'Save failed',
+        'save_error'       => 'Could not save — {message}',
+    ],
+
+    // ── The camera scanner (asset-management/scanner.php) ───────────────
+    // A self-contained phone screen: no shared JS bundle, so its script gets
+    // every string in one server-rendered object rather than a t() bridge.
+    'scanner' => [
+        'browser_title'    => 'Scan assets',
+        'heading'          => 'Scan assets',
+        'not_ready'        => 'Asset labels need a database update first — an administrator can run <strong>System → Database Verification</strong>. Until then there are no codes to scan.',
+        'mode_question'    => 'What should a scan do?',
+        'mode_lookup'      => 'Look up',
+        'mode_stocktake'   => 'Stocktake',
+        'hint_lookup'      => 'Scan a label and the asset opens. One at a time.',
+        'hint_stocktake'   => 'Stay on this screen and keep scanning. Each one is updated as you go.',
+        'set_status'       => 'Set status to',
+        'set_location'     => 'Set location to',
+        'leave_unchanged'  => '(leave unchanged)',
+        'stocktake_hint'   => 'Every asset you scan gets these. An asset already set this way is counted as seen and left alone, so nothing pointless lands in its history.',
+        'torch'            => 'Light',
+        'torch_off'        => 'Light off',
+        'cam_starting'     => 'Starting camera…',
+        'undo'             => 'Undo last',
+        'start_camera'     => 'Start camera',
+        'manual_label'     => 'Or type a tag, serial or hostname',
+        'manual_hint'      => 'Works when the camera is blocked, the label is damaged, or the kit only has the manufacturer\'s own barcode on it.',
+        'session_heading'  => 'Scanned in this session',
+
+        // Camera states. These two carry a <br>, which the chunk verifier
+        // checks, because the sentence really is two lines on a phone.
+        'cam_insecure'     => 'The camera needs a secure (https) address.<br>Type a tag or serial below instead, or reach this install over https.',
+        'cam_unsupported'  => 'This browser has no camera support. Type a tag or serial below.',
+        'cam_denied'       => 'Camera permission was refused.<br>Allow it in your browser settings, or type a tag or serial below.',
+        'cam_failed'       => 'Could not start the camera. Type a tag or serial below.',
+
+        // Lookup results.
+        'looking_up'       => 'Looking up…',
+        'lookup_failed'    => 'Lookup failed',
+        'not_yours'        => 'That label isn\'t an asset you can see. It may belong to another company.',
+        'no_match'         => 'Nothing matches {q}',
+        'server_error'     => 'Could not reach the server — {message}',
+
+        // Stocktake results. Every one of these was string concatenation
+        // before, which fixes English word order into every language.
+        'already_scanned'  => 'Already scanned — still {status}',
+        'unchanged'        => 'unchanged',
+        'seen_nothing_set' => 'Seen — nothing chosen to set yet',
+        'already_set'      => 'Already set — counted as seen',
+        'update_failed'    => 'Could not update {label}',
+        'updated'          => 'Updated {what}',
+        'field_status'     => 'status',
+        'field_location'   => 'location',
+        'both_fields'      => '{a} and {b}',
+        'undoing'          => 'Undoing…',
+        'put_back'         => 'Put {label} back',
+
+        // The session list's own notes.
+        'note_seen'        => 'seen',
+        'note_already_set' => 'already set',
+        'note_updated'     => 'updated {what}',
+        'note_undone'      => 'undone',
+        'counter'          => '{n} scanned',
+    ],
+
     'help' => [
+        // 2.6.0 — section 13 of the guide. These land in markup, so entities are fine.
+        'companies' => [
+            'nav'     => 'Assets and companies',
+            'heading' => 'Assets and companies',
+            'intro'   => 'On an install that looks after more than one company, every asset belongs to one of them. <em>This section does not apply if you run FreeITSM for a single company.</em>',
+            'move'    => '<strong>Moving an asset</strong> &mdash; on <strong>Key info</strong>, change the <strong>Company</strong> field beside the asset tag and confirm. You can only move an asset into a company you can reach yourself, and the move is recorded in its history.',
+            'cleared' => '<strong>What is cleared</strong> &mdash; anything that belongs only to the old company: its location (unless the location is shared), and a type or status the old company added for itself. The message after the move names what was cleared. History, custom fields, documents and an analyst holding it all move with it.',
+            'refused' => '<strong>When a move is refused</strong> &mdash; when the new company already has an asset with the same name or asset tag, or when the asset is held by a person from another company. The message says which, so you can fix it and try again.',
+            'add'     => '<strong>Adding an asset</strong> &mdash; when you can reach more than one company, <strong>Add asset</strong> asks which one it is for, and the type, status and location lists follow your choice. In the <strong>All companies</strong> view there is no default, so a new asset cannot land in whichever company you picked last.',
+            'shared'  => '<strong>Shared locations</strong> &mdash; under <strong>Settings &rarr; Locations</strong>, someone with access to every company can mark a location <strong>Shared with every company</strong>, such as a data centre several clients use. Every company can then pick it, alongside its own. A shared location cannot be unshared while other companies&rsquo; assets are still there.',
+            'note'    => 'The asset list still shows one company at a time, even in the <strong>All companies</strong> view. A moved asset leaves the list you are looking at &mdash; switch to its new company to see it.',
+        ],
         'page_title'    => 'Asset Management Guide',
         'guide'         => 'Guide',
         'hero_title'    => 'Asset management guide',

@@ -17,6 +17,17 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 requireModuleAccess('tasks');
 
+// Multi-company installs only. Wrapped in try/catch and defaulting to FALSE
+// because a help page must render even if the tenancy tables are not there
+// yet - the worst outcome is one missing section, not a broken help page.
+$showTenancyHelp = false;
+try {
+    require_once '../includes/tenancy.php';
+    $showTenancyHelp = isMultiTenant(connectToDatabase());
+} catch (Exception $e) {
+    $showTenancyHelp = false;
+}
+
 $current_page = 'help';
 $path_prefix = '../';
 $translationNamespaces = ['common', 'tasks'];
@@ -29,11 +40,11 @@ $translationNamespaces = ['common', 'tasks'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars(t('tasks.help.page_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/help.css?v=3">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
@@ -86,6 +97,11 @@ $translationNamespaces = ['common', 'tasks'];
             <a href="#tips" class="help-nav-link" data-section="tips">
                 <span class="help-nav-num">11</span> <?php echo htmlspecialchars(t('tasks.help.nav_tips')); ?>
             </a>
+            <?php if ($showTenancyHelp): ?>
+            <a href="#companies" class="help-nav-link" data-section="companies">
+                <span class="help-nav-num">12</span> <?php echo htmlspecialchars(t('tasks.help.nav_companies')); ?>
+            </a>
+            <?php endif; ?>
         </div>
 
         <!-- Main content area -->
@@ -479,6 +495,24 @@ $translationNamespaces = ['common', 'tasks'];
                         </div>
                     </div>
                 </div>
+
+                <?php if ($showTenancyHelp): ?>
+                <!-- 12. Companies (multi-company installs only) -->
+                <div class="help-section" id="companies">
+                    <div class="help-section-header">
+                        <span class="help-section-num">12</span>
+                        <div>
+                            <h3><?php echo htmlspecialchars(t('tasks.help.companies_heading')); ?></h3>
+                            <p><?php echo t('tasks.help.companies_intro'); ?></p>
+                        </div>
+                    </div>
+
+                    <p><?php echo t('tasks.help.companies_scope'); ?></p>
+                    <p><?php echo t('tasks.help.companies_move'); ?></p>
+                    <p><?php echo t('tasks.help.companies_subtasks'); ?></p>
+                    <p><?php echo t('tasks.help.companies_links'); ?></p>
+                </div>
+                <?php endif; ?>
 
             </div>
         </div>

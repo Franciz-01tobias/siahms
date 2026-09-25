@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'Назначить пользователя активу',
-        'search_label'           => 'Поиск пользователя',
         'search_placeholder'     => 'Поиск по имени или эл. почте...',
-        'type_to_search'         => 'Начните вводить для поиска пользователей',
         'min_chars'              => 'Введите не менее 2 символов для поиска',
         'no_users'               => 'Пользователи не найдены',
         'expected_return_label'  => 'Ожидаемая дата возврата (необязательно)',
@@ -366,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Статусы активов',
         'tab_locations'        => 'Расположения',
         'tab_suppliers'        => 'Поставщики',
-        'tab_warranty'         => 'Оповещения о гарантии',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

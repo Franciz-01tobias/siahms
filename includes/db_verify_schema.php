@@ -321,6 +321,22 @@ return [
         'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
+    // The same idea for SELF-SERVICE PORTAL users, who have no analyst row and
+    // so cannot use the table above. The portal's colour palette was given its
+    // own column on `users` when this gap first appeared; this is the generic
+    // twin, so the next portal preference does not become a third column.
+    //
+    // 🔴 Everything that reads it degrades when it is absent (see
+    // includes/portal_preferences.php): the code ships before an operator runs
+    // Database Verification, so on that install this table does not exist yet.
+    'portal_user_preferences' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'user_id'           => 'INT NOT NULL',
+        'preference_key'    => 'VARCHAR(100) NOT NULL',
+        'preference_value'  => 'TEXT NULL',
+        'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
     'ticket_types' => [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
         'name'              => 'VARCHAR(100) NOT NULL',
@@ -1629,6 +1645,7 @@ return [
         'supplier_id'       => 'INT NULL',
         'order_number'      => 'VARCHAR(100) NULL',
         'warranty_expiry'   => 'DATE NULL',
+        'lease_expiry'      => 'DATE NULL',
         // Multi-tenancy: the company this asset belongs to (NULL = Default).
         'tenant_id'         => 'INT NULL',
         // QR labels (#935). asset_tag is the printed human number, unique per
@@ -1675,12 +1692,26 @@ return [
         // above): a company's sites are entirely its own, so NULL = the Default
         // company's, set = that company's. Read via activeTenantFilter().
         'tenant_id'         => 'INT NULL',
+        // 2.6.0: a location every company can pick (a shared data centre or
+        // head office). Stored with tenant_id NULL. See includes/asset_locations.php.
+        'is_shared'         => 'TINYINT(1) NOT NULL DEFAULT 0',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
+    // Who is holding an asset. EITHER a requester (user_id) OR a member of the
+    // desk (analyst_id) - never both, never neither. TicketsService' sibling
+    // AssetsService enforces that; the database cannot, because a CHECK across
+    // two columns is not portable to the MySQL versions this supports.
+    //
+    // 🔴 user_id is NULLABLE, and was not. Assets could only ever be assigned to
+    // a requester, and analysts are not requesters - on a real install most of
+    // the desk had no `users` row at all, so an analyst holding a laptop could
+    // not be recorded. api/system/db_verify.php relaxes the column on existing
+    // installs, the same probe-then-MODIFY it has used five times before.
     'users_assets' => [
         'id'                        => 'INT NOT NULL AUTO_INCREMENT',
-        'user_id'                   => 'INT NOT NULL',
+        'user_id'                   => 'INT NULL',
+        'analyst_id'                => 'INT NULL',
         'asset_id'                  => 'INT NOT NULL',
         'assigned_datetime'         => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'assigned_by_analyst_id'    => 'INT NULL',
@@ -4498,6 +4529,7 @@ return [
         'category'         => "VARCHAR(100) DEFAULT 'General'",
         'suggested_role'   => 'VARCHAR(100) DEFAULT NULL',
         'scope'            => "ENUM('ticket','task','both') NOT NULL DEFAULT 'both'",
+        'closure_mode'     => "ENUM('warn','block') NOT NULL DEFAULT 'warn'",
         'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
         'created_by_id'    => 'INT DEFAULT NULL',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
@@ -4523,6 +4555,7 @@ return [
         'ticket_id'        => 'INT NOT NULL',
         'template_id'      => 'INT DEFAULT NULL',
         'title'            => 'VARCHAR(255) NOT NULL',
+        'closure_mode'     => "ENUM('warn','block') NOT NULL DEFAULT 'warn'",
         'created_by_id'    => 'INT DEFAULT NULL',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer

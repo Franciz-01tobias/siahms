@@ -34,6 +34,7 @@ $activeTabId      = settingsFirstTabId($visibleTabs);
 // actually in force, the same reason row display below is read here.
 require_once '../../includes/tenant_settings.php';
 $checklistClosureMode = ticketChecklistClosureMode($conn, null);
+$checklistEmptyClosureMode = function_exists('ticketChecklistEmptyClosureMode') ? ticketChecklistEmptyClosureMode($conn, null) : 'off';
 
 // Mandatory fields at closure — the same reason: the tab opens on what is in force.
 require_once '../../includes/service_context.php';
@@ -71,9 +72,9 @@ $translationNamespaces = ['common', 'tickets'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars(t('tickets.settings.page_title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script src="../../assets/js/ai-settings.js?v=2"></script>
     <!-- Reply templates are rich text, so this page needs the same editor the reply
          box uses. Loaded for every tab because the tab bar is server-rendered and
@@ -390,6 +391,22 @@ $translationNamespaces = ['common', 'tickets'];
             display: inline-block; padding: 2px 8px; border-radius: 10px;
             font-size: 11px; background: var(--surface-2, #f1f1f1);
             border: 1px solid var(--border, #ddd); color: var(--text-muted, #666);
+        }
+        /* WHO the email goes to, beside WHICH customers it covers. Deliberately
+           a different shape from .tpl-scope-badge - the two answer different
+           questions and sit in the same cell, so they must not read as a pair
+           of the same thing. The analyst variant is tinted because an internal
+           notification going out to a customer is the mistake worth seeing. */
+        .tpl-audience-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 3px;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
+            background: var(--surface-2, #f1f1f1);
+            border: 1px solid var(--border, #ddd); color: var(--text-muted, #666);
+        }
+        .tpl-audience-badge.analyst {
+            background: var(--accent-soft, #ede7f6);
+            border-color: var(--accent, #6a1b9a);
+            color: var(--accent, #6a1b9a);
         }
         /* Public web address panel — the setting [ticket_url] depends on (#80). */
         .tpl-baseurl {
@@ -800,17 +817,17 @@ $translationNamespaces = ['common', 'tickets'];
 
             <div style="display: flex; flex-direction: column; gap: 14px; max-width: 720px;">
                 <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
-                    <input type="radio" name="chkClosureMode" value="warn" style="margin-top: 3px;"<?php echo $checklistClosureMode === 'warn' ? ' checked' : ''; ?>>
+                    <input type="radio" name="chkClosureMode" value="per_template" style="margin-top: 3px;"<?php echo $checklistClosureMode !== 'block_all' ? ' checked' : ''; ?>>
                     <div>
-                        <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.warn_title')); ?></div>
-                        <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.warn_desc')); ?></div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.per_template_title')); ?></div>
+                        <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.per_template_desc')); ?></div>
                     </div>
                 </label>
                 <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
-                    <input type="radio" name="chkClosureMode" value="block" style="margin-top: 3px;"<?php echo $checklistClosureMode === 'block' ? ' checked' : ''; ?>>
+                    <input type="radio" name="chkClosureMode" value="block_all" style="margin-top: 3px;"<?php echo $checklistClosureMode === 'block_all' ? ' checked' : ''; ?>>
                     <div>
-                        <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.block_title')); ?></div>
-                        <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.block_desc')); ?></div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.block_all_title')); ?></div>
+                        <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.block_all_desc')); ?></div>
                     </div>
                 </label>
             </div>
@@ -818,6 +835,36 @@ $translationNamespaces = ['common', 'tickets'];
             <p style="margin-top: 18px; font-size: 12px; color: var(--text-muted, #64748b); max-width: 720px;">
                 <?php echo htmlspecialchars(t('tickets.settings.checklists.always_recorded')); ?>
             </p>
+            <div style="margin-top: 32px; border-top: 1px solid var(--border, #e2e8f0); padding-top: 24px;">
+                <div class="section-header">
+                    <h2><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_section_title')); ?></h2>
+                </div>
+                <p style="margin-bottom: 20px; color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_section_desc')); ?></p>
+
+                <div style="display: flex; flex-direction: column; gap: 14px; max-width: 720px;">
+                    <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                        <input type="radio" name="chkEmptyClosureMode" value="off" style="margin-top: 3px;"<?php echo $checklistEmptyClosureMode === 'off' ? ' checked' : ''; ?>>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_off_title')); ?></div>
+                            <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_off_desc')); ?></div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                        <input type="radio" name="chkEmptyClosureMode" value="warn" style="margin-top: 3px;"<?php echo $checklistEmptyClosureMode === 'warn' ? ' checked' : ''; ?>>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_warn_title')); ?></div>
+                            <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_warn_desc')); ?></div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                        <input type="radio" name="chkEmptyClosureMode" value="block" style="margin-top: 3px;"<?php echo $checklistEmptyClosureMode === 'block' ? ' checked' : ''; ?>>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600; color: var(--text, #0f172a);"><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_block_title')); ?></div>
+                            <div style="font-size: 12px; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars(t('tickets.settings.checklists.empty_block_desc')); ?></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
 
             <div style="margin-top: 22px;">
                 <button class="add-btn" id="chkClosureSave"><?php echo htmlspecialchars(t('common.save')); ?></button>
@@ -1412,6 +1459,7 @@ $translationNamespaces = ['common', 'tickets'];
                     <select id="tplSimEvent">
                         <option value="new_ticket_email"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_new_ticket')); ?></option>
                         <option value="ticket_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_assigned')); ?></option>
+                        <option value="analyst_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_analyst_assigned')); ?></option>
                         <option value="ticket_closed"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_closed')); ?></option>
                         <option value="note_shared"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_note_shared')); ?></option>
                         <option value="csat_request"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_csat_request')); ?></option>
@@ -2955,6 +3003,7 @@ $translationNamespaces = ['common', 'tickets'];
                             <option value=""><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_select')); ?></option>
                             <option value="new_ticket_email"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_new_ticket')); ?></option>
                             <option value="ticket_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_assigned')); ?></option>
+                            <option value="analyst_assigned"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_analyst_assigned')); ?></option>
                             <option value="ticket_closed"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_closed')); ?></option>
                             <option value="note_shared"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_note_shared')); ?></option>
                             <option value="csat_request"><?php echo htmlspecialchars(t('tickets.settings.modals.template.event_csat_request')); ?></option>
@@ -3576,7 +3625,7 @@ $translationNamespaces = ['common', 'tickets'];
         // shared defaults it inherits, each with a Hide/Show toggle.
         function renderTicketTypesScoped(tbody, scoped) {
             const groupRow = (label, hint) =>
-                `<tr class="tt-group-row"><td colspan="5" style="background:#f7f9fa;border-top:1px solid #e3e8ea;font-size:12px;font-weight:600;color:#455a64;padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:#90a4ae;">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
+                `<tr class="tt-group-row"><td colspan="5" style="background:var(--surface-2, #f7f9fa);border-top:1px solid var(--border, #e3e8ea);font-size:12px;font-weight:600;color:var(--text-muted, #455a64);padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:var(--text-faint, #90a4ae);">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
 
             let html = '';
 
@@ -3665,7 +3714,7 @@ $translationNamespaces = ['common', 'tickets'];
 
         function renderTicketOriginsScoped(tbody, scoped) {
             const groupRow = (label, hint) =>
-                `<tr class="tt-group-row"><td colspan="5" style="background:#f7f9fa;border-top:1px solid #e3e8ea;font-size:12px;font-weight:600;color:#455a64;padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:#90a4ae;">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
+                `<tr class="tt-group-row"><td colspan="5" style="background:var(--surface-2, #f7f9fa);border-top:1px solid var(--border, #e3e8ea);font-size:12px;font-weight:600;color:var(--text-muted, #455a64);padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:var(--text-faint, #90a4ae);">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
 
             let html = '';
             html += groupRow(`${scoped.company.name}’s own origins`);
@@ -6365,6 +6414,7 @@ $translationNamespaces = ['common', 'tickets'];
         const EVENT_LABELS = {
             'new_ticket_email': 'New ticket from email',
             'ticket_assigned': 'Ticket assigned',
+            'analyst_assigned': 'Assigned to an analyst',
             'ticket_closed': 'Ticket closed',
             'note_shared': 'Note shared with requester',
             'csat_request': 'CSAT survey'
@@ -6500,7 +6550,7 @@ $translationNamespaces = ['common', 'tickets'];
                 <tr>
                     <td>${escapeHtml(tpl.name)}</td>
                     <td>${EVENT_LABELS[tpl.event_trigger] || tpl.event_trigger}</td>
-                    <td>${templateScopeBadge(tpl)}</td>
+                    <td>${templateAudienceBadge(tpl)} ${templateScopeBadge(tpl)}</td>
                     <td>${escapeHtml(tpl.subject_template)}</td>
                     <td>${tpl.display_order}</td>
                     <td><span class="status-badge status-${tpl.is_active == 1 ? 'active' : 'inactive'}">${tpl.is_active == 1 ? 'Active' : 'Inactive'}</span></td>
@@ -6526,6 +6576,7 @@ $translationNamespaces = ['common', 'tickets'];
         const TPL_EVENT_LABELS = {
             new_ticket_email: t('tickets.settings.modals.template.event_new_ticket'),
             ticket_assigned:  t('tickets.settings.modals.template.event_assigned'),
+            analyst_assigned: t('tickets.settings.modals.template.event_analyst_assigned'),
             ticket_closed:    t('tickets.settings.modals.template.event_closed'),
             note_shared:      t('tickets.settings.modals.template.event_note_shared'),
             csat_request:     t('tickets.settings.modals.template.event_csat_request')
@@ -6594,6 +6645,28 @@ $translationNamespaces = ['common', 'tickets'];
         }
 
         // What the list column shows for each template.
+        /**
+         * WHO gets this email - the half of "Sends to" that was missing.
+         *
+         * The column used to show only the sender scope ("Everyone", or a list
+         * of domains), which answers "which customers does this template cover"
+         * and says nothing about whether the customer or the analyst receives
+         * it. With two assignment events that distinction is the whole point.
+         *
+         * 🔑 tpl.audience comes from the SERVER, from the same function the
+         * sender uses to choose the address. There is deliberately no map here
+         * to drift out of step with it.
+         */
+        function templateAudienceBadge(tpl) {
+            const analyst = tpl.audience === 'analyst';
+            const label = analyst
+                ? t('tickets.settings.scope.audience_analyst')
+                : t('tickets.settings.scope.audience_requester');
+            return '<span class="tpl-audience-badge' + (analyst ? ' analyst' : '') + '" title="'
+                 + escapeHtml(t('tickets.settings.scope.audience_title')) + '">'
+                 + escapeHtml(label) + '</span>';
+        }
+
         function templateScopeBadge(tpl) {
             const rules = tpl.rules || [];
             if (!rules.length) {
@@ -6768,6 +6841,10 @@ $translationNamespaces = ['common', 'tickets'];
             requester_email: 'ed.mozley@example.com',
             analyst_name: 'Sam Carter',
             analyst_email: 'sam.carter@example.com',
+            assigned_analyst_name: 'Sam Carter',
+            assigned_analyst_first_name: 'Sam',
+            assigned_analyst_email: 'sam.carter@example.com',
+            ticket_url_analyst: 'https://itsm.example.com/tickets/index.php?ticket_id=409',
             department_name: 'IT Support',
             created_date: '14 Feb 2026 09:15',
             closed_date: '14 Feb 2026 16:40',
@@ -8493,7 +8570,10 @@ $translationNamespaces = ['common', 'tickets'];
                         const r = await fetch(API_BASE + 'save_checklist_settings.php', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ mode: picked.value })
+                            body: JSON.stringify({
+                                mode: picked.value,
+                                empty_mode: (document.querySelector('input[name="chkEmptyClosureMode"]:checked') || {}).value || 'off'
+                            })
                         });
                         const d = await r.json();
                         showToast(d.success ? T.settingsSaved : (d.error || 'Failed'), d.success ? 'success' : 'error');

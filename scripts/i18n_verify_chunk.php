@@ -37,6 +37,47 @@
  *  7. IDENTICAL    >25% byte-identical to English is flagged, not failed —
  *                  "Email", "OK" and product names legitimately do not change
  *
+ * ──────────────────────────────────────────────────────────────────────────
+ * ⚠️ HTML ENTITIES: ONE NARROW CHECK, AND THE REST DELIBERATELY UNCHECKED.
+ *
+ * Both halves of this were measured, and they point opposite ways. Read the
+ * whole note before widening it.
+ *
+ * ❌ WHY A GENERAL ENTITY COMPARISON IS NOT DONE — the French run of
+ * 2026-09-22, 39 chunks. 34 lines had an entity sequence differing from the
+ * English, and every single one was CORRECT:
+ *
+ *   - 33 were typographic. English writes a possessive with `&rsquo;` —
+ *     "the service&rsquo;s impact" — and French rephrases to "le niveau
+ *     d'impact de ce service", which has no possessive apostrophe to carry.
+ *     Others swapped `&ldquo;&rdquo;` for `&laquo;&raquo;`, which is simply
+ *     what French quotation marks are. Some merely reordered entities because
+ *     the sentence reorders.
+ *   - The 1 remaining case looked structural and was not: English had
+ *     "(printers, TVs, headsets) &amp; importing" — an ampersand used as the
+ *     word "and" — and French wrote "et". A French heading says "et".
+ *
+ * 🔑 A general check would have been 34 false positives and zero findings, and
+ * a checker that cries wolf gets ignored along with the real fault it finds
+ * later. So dropped, reordered and swapped entities all still pass.
+ *
+ * ✅ WHY ONE DIRECTION IS NOW CHECKED — the Malayalam run of 2026-09-23. A
+ * translator's own byte-level check, written after this script had already
+ * passed the chunks, found 23 values where English used a literal character and
+ * the translation had substituted the ENTITY: `&mdash;` for —, `&hellip;` for
+ * …, `&times;` for ×. Six of those chunks had already merged. Those strings are
+ * not always rendered as HTML, so they show on screen as the text "&mdash;".
+ *
+ * 🔑 The two findings are reconciled by DIRECTION and by SET. Check only an
+ * entity the translation INTRODUCED and English does not have (never one it
+ * dropped), and only from a small list whose characters are trivially typeable:
+ * `&mdash; &ndash; &hellip; &times;`. Quote and ampersand entities are outside
+ * it by design — they are precisely the 34.
+ *
+ * Widen it only with the same kind of evidence: a real multi-locale run showing
+ * the entity is never legitimately introduced.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
  * 🔑 SELF-TEST IT IN BOTH DIRECTIONS BEFORE TRUSTING IT. A verifier that has
  * never been shown to fail is decoration. `--self-test` builds a deliberately
  * broken chunk, asserts this script rejects it, then fixes it and asserts it
@@ -131,6 +172,43 @@ function i18nVerifyChunk(string $enPath, string $trPath): array
             $warnings[] = "$k: HTML tags reordered (same tags, still balanced) — normal for SOV word order";
         }
 
+        // 4b. A PUNCTUATION ENTITY THE TRANSLATION INVENTED.
+        //
+        // Narrow on purpose, and the narrowness is the whole design. See the
+        // header: comparing entities generally was measured across 39 French
+        // chunks and produced 34 false positives and zero findings, because
+        // `&rsquo;`, `&ldquo;`, `&laquo;` and `&amp;` all differ legitimately —
+        // a language rephrases away a possessive, or uses its own quotation
+        // marks, or writes "and" as a word.
+        //
+        // The opposite case is real, and cost 23 defects in one Malayalam run:
+        // English writes a literal `—`, the translation writes `&mdash;`. That
+        // string is not always rendered as HTML, so it shows on screen as the
+        // text "&mdash;".
+        //
+        // 🔑 Two restrictions make it precise enough to keep:
+        //
+        //   DIRECTION — only an entity the translation has and English does
+        //               NOT. Dropping one is a punctuation choice and none of
+        //               this script's business.
+        //   SET       — only these four. Each stands for a character anyone can
+        //               type directly, so there is never a reason to introduce
+        //               the entity form. Quote and ampersand entities are
+        //               deliberately absent: those are the false positives.
+        //
+        // Add to the set only with the same evidence: check a real multi-locale
+        // run and confirm the entity is never legitimately introduced.
+        static $INVENTABLE = ['&mdash;', '&ndash;', '&hellip;', '&times;'];
+        $invented = [];
+        foreach ($INVENTABLE as $ent) {
+            if (substr_count($trV, $ent) > 0 && substr_count($enV, $ent) === 0) $invented[] = $ent;
+        }
+        if ($invented) {
+            $errors[] = "$k: the translation introduces " . implode(', ', $invented)
+                      . ' where English uses the character itself — write the character,'
+                      . ' or it renders as literal text wherever the string is escaped';
+        }
+
         // 5. newlines
         $en_nl = substr_count($enV, "\n"); $tr_nl = substr_count($trV, "\n");
         if ($en_nl !== $tr_nl) $errors[] = "$k: $en_nl line break(s) in English, $tr_nl in the translation";
@@ -176,6 +254,12 @@ function i18nVerifySelfTest(): int
         // Regression guards from the first real run, both found by using it:
         'a.percent'  => 'served at ~10% of normal cost',          // NOT a "% o" token
         'a.reorder'  => 'Click <strong>Reset</strong> to clear <em>all</em> of it',
+        // Entity vs character. English uses the CHARACTER here and the
+        // ENTITY below, deliberately - the rule is "whichever English uses".
+        'a.dashchar' => 'Leave it blank — nothing happens',
+        'a.dashent'  => 'Leave it blank &mdash; nothing happens',
+        'a.poss'     => 'the service&rsquo;s impact',
+        'a.quoted'   => 'click &ldquo;Reset&rdquo; now',
     ];
     i18nWriteTsv($enP, $en);
 
@@ -189,6 +273,10 @@ function i18nVerifySelfTest(): int
         'a.brand'   =>'IMAP',
         'a.percent' =>'servido al ~10% del coste normal',
         'a.reorder' =>'<em>Todo</em> se borra al pulsar <strong>Reset</strong>',
+        'a.dashchar'=>'Dejalo en blanco — no pasa nada',
+        'a.dashent' =>'Dejalo en blanco &mdash; no pasa nada',
+        'a.poss'    =>'el impacto del servicio&rsquo;s',
+        'a.quoted'  =>'pulsa &ldquo;Reset&rdquo; ahora',
     ];
 
     /** Each case is the good translation with exactly one thing done to it. */
@@ -220,6 +308,17 @@ function i18nVerifySelfTest(): int
         /* ...and the one real fault the relaxed rule must STILL catch: an
            emphasised phrase dropped, so the multiset no longer matches. */
         'an <em> pair dropped'      => [$with(['a.reorder' => 'Click <strong>Reset</strong> to clear all of it']), false],
+
+        /* ── entity vs character (23 real defects in one locale) ── */
+        '&mdash; where English has —'  => [$with(['a.dashchar' => 'Dejalo en blanco &mdash; no pasa nada']), false],
+        'dropping &mdash; for the char'=> [$with(['a.dashent'  => 'Dejalo en blanco — no pasa nada']), true],
+        /* the French measurement: a rephrase that loses &rsquo;, and a
+           locale using its own quotation marks, must BOTH still pass. */
+        'a rephrase losing &rsquo;'     => [$with(['a.poss'      => 'el impacto del servicio']), true],
+        '&laquo; for &ldquo;'           => [$with(['a.quoted'    => 'pulsa &laquo;Reset&raquo; ahora']), true],
+        /* ...but punctuation STYLE is the translator's: an extra character
+           dash English does not have is not a defect. */
+        'an extra literal dash'       => [$with(['a.greeting' => 'Hola {name} — tienes {n} tickets']), true],
     ];
 
     $pass = 0; $fail = 0;

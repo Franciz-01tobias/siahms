@@ -74,6 +74,16 @@ function getSystemAreas() {
             'desc'     => 'system.landing.status_portal_desc',
             'keywords' => 'system.landing.status_portal_keywords',
         ],
+        // How the portal LOOKS and what it LETS PEOPLE DO. Sits beside the
+        // status portal and the portal profile: all three decide what an end
+        // user meets, and an admin setting up a portal wants them together.
+        [
+            'icon'     => 'self_service',
+            'url'      => 'self-service/',
+            'title'    => 'system.landing.self_service_title',
+            'desc'     => 'system.landing.self_service_desc',
+            'keywords' => 'system.landing.self_service_keywords',
+        ],
         // What people may change about THEMSELVES in the portal (#133). Beside
         // the status portal: both decide what the portal lets end users do.
         [
@@ -232,6 +242,9 @@ function systemAreaIcon($key) {
     $icons = [
         'status_portal' => '<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"></path><path d="M16 9a4 4 0 0 1 0 6"></path><path d="M19 6.5a8 8 0 0 1 0 11"></path>',
         // A person with a pencil - "what they may edit about themselves".
+        // A browser window with a brush: appearance plus behaviour, which is
+        // what this screen owns.
+        'self_service' => '<rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M2 9h20"></path><path d="M13.5 14.5 16 12l2.5 2.5L16 17z"></path><path d="M6 13h4"></path><path d="M6 16h3"></path>',
         'portal_profile' => '<circle cx="9" cy="7" r="4"></circle><path d="M2 21v-2a4 4 0 0 1 4-4h5"></path><path d="M18.4 12.6a1.9 1.9 0 0 1 2.7 2.7L15 21.4l-3.6.9.9-3.6z"></path>',
         'encryption'  => '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
         'modules'     => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',

@@ -126,6 +126,15 @@ return [
         'left_panel_hover_desc'   => 'Collapse the left panel to a thin strip that expands when you hover over it, giving the calendar more room.',
     ],
 
+    // ── Strings only the script says (assets/js/itsm_calendar.js) ───────
+    // Everything else it shows comes from event.*, sidebar.* and toast.*
+    // above, and the month and weekday names from common.calendar.
+    'js' => [
+        'all_day'       => 'All day',
+        'uncategorised' => 'Uncategorized',
+        'move_failed'   => 'Failed to move',
+        'error_prefix'  => 'Error: {message}',
+    ],
     'toast' => [
         'saved'         => 'Saved',
         'deleted'       => 'Deleted',

@@ -29,7 +29,7 @@ $translationNamespaces = ['common', 'system'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('system.branding.title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <style>
         body {
             /* System is the FIRST module whose DARK accent is a LIGHT colour (#90a4ae).
@@ -620,7 +620,7 @@ $translationNamespaces = ['common', 'system'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script>
     const API_BASE = '<?php echo $path_prefix; ?>api/system/';
     const PATH_PREFIX = '<?php echo $path_prefix; ?>';

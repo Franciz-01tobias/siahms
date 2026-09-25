@@ -507,6 +507,76 @@ return [
         'embed_get_failed'   => 'Failed to get articles',
     ],
 
+    // ── Knowledge assistant (knowledge/assistant/index.php) ─────────────
+    // This page already exports the 'knowledge' namespace to JavaScript, so
+    // its script calls window.t() directly rather than carrying its own table.
+    'assistant' => [
+        'browser_title'   => 'Knowledge assistant',
+        'heading'         => 'Assistant',
+        'sub'             => 'Reads what the service desk has been answering and tells you what the knowledge base is missing. It only speaks up when the same question keeps coming back.',
+        'run'             => 'Look for gaps',
+        'checking'        => 'Checking…',
+        'tab_open'        => 'To write',
+        'tab_written'     => 'Written',
+        'tab_dismissed'   => 'Not needed',
+        'modal_title'     => 'Writing this up',
+        'modal_reading'   => 'Reading the ticket…',
+
+        // The list
+        'load_failed'     => 'Could not load',
+        'last_looked'     => 'Last looked {date}.',
+        'empty_open'      => 'Nothing to write. Either the assistant has not looked yet, or your knowledge base already covers what people keep asking.',
+        'empty_written'   => 'Nothing written from a gap yet.',
+        'empty_dismissed' => 'Nothing set aside.',
+        'draft'           => 'Draft',
+        'dismiss'         => 'Not needed',
+        'restore'         => 'Bring back',
+        'open_article'    => 'Open article',
+        // "Asked once" and "Asked 7 times" are two sentences in most languages.
+        'asked_one'       => 'Asked <strong>once</strong>',
+        'asked_many'      => 'Asked <strong>{n} times</strong>',
+        'written_up_as'   => 'written up as “{title}”',
+        'still_draft'     => '(still a draft)',
+        'show_tickets'    => 'Show the tickets',
+
+        // Running the analysis
+        'reading'         => 'Reading…',
+        'start_failed'    => 'Could not start.',
+        'no_tickets'      => 'There are no closed tickets in the last {days} days to read.',
+        'reading_n'       => 'Reading your closed tickets… {done} of {total}.',
+        'stopped_early'   => 'Stopped early.',
+        'read_failed'     => 'Could not read the tickets — check the OpenAI key in Knowledge → Settings.',
+        'clustering'      => 'Working out what is missing…',
+        'finish_failed'   => 'Could not finish.',
+        'wording_mode'    => 'Matched on wording. Add an OpenAI key in Knowledge → Settings to match on meaning instead.',
+        'update_failed'   => 'Could not update',
+
+        // The write-up
+        'reading_best'    => 'Reading the most detailed ticket…',
+        'answer_one'      => 'Answer at least one question first.',
+        'writing_up'      => 'Writing it up…',
+        'unreachable'     => 'Could not reach the assistant.',
+        'not_enough_yet'  => 'There is not enough in these tickets yet.',
+        'draft_ready'     => 'Draft ready. Read it before you publish — it was written from ticket {ref}.',
+        'draft_note'      => 'Saving puts this in your knowledge base as an unpublished draft. Nobody can read it until you publish it.',
+        'save_draft'      => 'Save draft',
+        'refused'         => 'Not enough to write from yet.',
+        'refused_why'     => 'The tickets do not say what caused this or how it was fixed.',
+        'refused_ask'     => 'Answer what you can and it will try again. You were there; it was not.',
+        'try_again'       => 'Try again',
+        'untitled'        => 'Untitled',
+        'save_failed'     => 'Could not save',
+
+        // The opening line, which depends on what the reader is allowed to do
+        'nothing_yet_readonly' => 'Nothing to show yet. Someone with permission to run the assistant needs to look for gaps first.',
+        'unread_tickets'  => 'There are {n} closed tickets from the last {days} days I have not read yet.',
+        // No leading space: it is joined with one in the script. A value
+        // whose correctness depends on invisible whitespace is the same
+        // trap as the blank-English rule, and no translator can see it.
+        'press_run'       => 'Press “Look for gaps”.',
+        'none_to_read'    => 'No closed tickets in the last {days} days to read.',
+    ],
+
     'help' => [
         'guide'          => 'Guide',
         'nav_overview'   => 'Overview',

@@ -207,6 +207,24 @@ its `CHANGELOG.local.md` row. Do not read the changelog's Unpublished/Published 
 decide what is in the release; they have drifted before and git has not. **Show Ed the
 notes and get a yes before publishing.**
 
+**3a. Check the translations kept up**, because nothing else will say so:
+
+```bash
+php scripts/i18n_gate.php --keys
+```
+
+It lists English strings added since the last tag that are missing from the locales that
+were already current at that tag. A missing key falls back to English and renders
+perfectly, so a new screen ships entirely in English in every other language and looks
+finished to everyone who does not read it.
+
+**This is a judgement, not a blocker.** Either translate the gap before tagging
+(`php scripts/i18n_chunk.php <locales>` - see [i18n Audit](https://github.com/edmozley/freeitsm/wiki/i18n-Audit-Developer-Guide)),
+or say in one line that the release ships without it and why. What is not acceptable is
+not knowing - that is how four locales drifted from 100% to 95.8% across five releases,
+all missing the same 347 keys. The `i18n drift` workflow warns on every push so this step
+is a confirmation rather than a discovery.
+
 **4. Commit** the version bump, then tag that exact commit:
 
 ```bash

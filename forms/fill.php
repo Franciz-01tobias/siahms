@@ -26,7 +26,7 @@ $translationNamespaces = ['common', 'forms'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars(t('forms.fill.page_title')); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <!-- Shared with the builder preview and the portal: field types + conditional
@@ -34,7 +34,7 @@ $translationNamespaces = ['common', 'forms'];
     <script src="../assets/js/form-logic.js?v=9"></script>
     <script src="../assets/js/form-render.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <!-- Presentation shared with the portal and the builder preview: blocks
          (notes, images) and label position. A notice panel and a picture have no
          reason to look different in the three places; an INPUT does. -->

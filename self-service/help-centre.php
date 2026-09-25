@@ -126,6 +126,56 @@ $pageStyles = <<<'CSS'
         }
         .hc-back:hover { text-decoration: underline; }
 
+        /* ── Layout toggle ─────────────────────────────────────────── */
+        .hc-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+        .hc-toolbar .hc-search { margin-bottom: 0; flex: 1 1 260px; }
+        .hc-layouts { display: flex; gap: 4px; flex-shrink: 0; }
+        .hc-layout-btn {
+            background: var(--surface, #fff); border: 1px solid var(--border, #e5e7eb);
+            color: var(--text-muted, #666); border-radius: 6px; padding: 7px 10px;
+            cursor: pointer; font: inherit; font-size: 12.5px; line-height: 1;
+        }
+        .hc-layout-btn:hover { border-color: var(--ss-accent, #0078d4); }
+        .hc-layout-btn.active {
+            background: var(--ss-accent, #0078d4); border-color: var(--ss-accent, #0078d4);
+            color: var(--ss-on-accent, #fff);
+        }
+
+        /* ── cards: a grid, for scanning many titles at once ─────────── */
+        .hc-list.hc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+
+        /* ── list: full-width rows with a preview (what this page had) ── */
+        .hc-list.hc-rows { display: grid; gap: 12px; }
+
+        /* ── tree: folders with their articles inside ─────────────────── */
+        .hc-tree-folder { margin-bottom: 18px; }
+        .hc-tree-name {
+            font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+            color: var(--text-muted, #666); padding: 0 0 6px 2px;
+            border-bottom: 1px solid var(--border-soft, #eee); margin-bottom: 8px;
+        }
+        .hc-tree-items { display: grid; gap: 6px; padding-left: 2px; }
+        .hc-tree-item {
+            background: none; border: none; text-align: left; cursor: pointer; font: inherit;
+            padding: 7px 10px; border-radius: 6px; color: var(--text, #333); font-size: 13.5px;
+        }
+        .hc-tree-item:hover { background: var(--surface-hover, #f3f4f6); color: var(--ss-accent, #0078d4); }
+
+        /* ── table: the most titles per screen, for a big library ─────── */
+        .hc-table { width: 100%; border-collapse: collapse; background: var(--surface, #fff);
+                    border: 1px solid var(--border, #e5e7eb); border-radius: 8px; overflow: hidden; }
+        .hc-table th {
+            /* Follows the administrator's table header colour when one is set. */
+            background: var(--ss-table-header-bg, var(--surface-hover, #f9fafb));
+            text-align: left; padding: 9px 14px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted, #666);
+        }
+        .hc-table td { padding: 9px 14px; border-top: 1px solid var(--border-soft, #f1f1f1); font-size: 13.5px; }
+        .hc-table tbody tr { cursor: pointer; }
+        .hc-table tbody tr:hover { background: var(--surface-hover, #f8fafc); }
+        .hc-table .hc-td-title { color: var(--text, #333); font-weight: 500; }
+        .hc-table .hc-td-folder { color: var(--text-muted, #666); white-space: nowrap; }
+
         .hc-empty {
             background: var(--surface, #fff);
             border: 1px solid var(--border, #e5e7eb);
@@ -146,6 +196,10 @@ $pageScripts = <<<'JS'
 let hcSearchTimer = null;
 
         document.addEventListener('DOMContentLoaded', function () {
+            // The layout preference first, so the list is drawn the way this
+            // person left it rather than drawn as cards and then redrawn.
+            hcLoadLayout();
+
             // Deep link straight to an article, otherwise the browsable list.
             if (window.PAGE.articleId) {
                 openArticle(window.PAGE.articleId, true);
@@ -201,15 +255,121 @@ let hcSearchTimer = null;
                 return;
             }
 
-            container.innerHTML = '<div class="hc-list">' + articles.map(a => {
-                const tags = (a.tags || []).map(t =>
-                    '<span class="hc-tag">' + escapeHtml(t) + '</span>').join('');
+            hcArticles = articles;
+            hcDrawArticles();
+        }
+
+        /* ── Layouts ────────────────────────────────────────────────────
+         *
+         * Four ways to draw the same list, remembered per person. The names
+         * match the analyst side's on purpose: a customer describing "the tree
+         * one" to an analyst should be describing the same thing.
+         *
+         *   cards  a grid - many titles at a glance
+         *   list   full-width rows with a preview (what this page always had)
+         *   tree   grouped by folder, so the shape of the library is visible
+         *   table  the most titles per screen, for a big library
+         */
+        let hcArticles = [];
+        let hcLayout   = 'cards';
+
+        function hcCardsHtml(articles) {
+            return '<div class="hc-list hc-cards">' + articles.map(a => {
+                const tags = (a.tags || []).map(t => '<span class="hc-tag">' + escapeHtml(t) + '</span>').join('');
                 return '<button type="button" class="hc-card" onclick="openArticle(' + a.id + ')">'
                      +   '<div class="hc-card-title">' + escapeHtml(a.title || '') + '</div>'
                      +   '<div class="hc-card-preview">' + escapeHtml(a.preview || '') + '</div>'
                      +   (tags ? '<div class="hc-tags">' + tags + '</div>' : '')
                      + '</button>';
             }).join('') + '</div>';
+        }
+
+        function hcRowsHtml(articles) {
+            // The same card markup in a single column: full width means a longer
+            // preview line is readable, which is the point of choosing it.
+            return '<div class="hc-list hc-rows">' + articles.map(a => {
+                const tags = (a.tags || []).map(t => '<span class="hc-tag">' + escapeHtml(t) + '</span>').join('');
+                return '<button type="button" class="hc-card" onclick="openArticle(' + a.id + ')">'
+                     +   '<div class="hc-card-title">' + escapeHtml(a.title || '') + '</div>'
+                     +   '<div class="hc-card-preview">' + escapeHtml(a.preview || '') + '</div>'
+                     +   (tags ? '<div class="hc-tags">' + tags + '</div>' : '')
+                     + '</button>';
+            }).join('') + '</div>';
+        }
+
+        function hcTreeHtml(articles) {
+            // Grouped in the order the articles arrived, so the folders follow
+            // the same sort the list already uses. An article filed nowhere gets
+            // its own heading rather than being dropped - the analyst list does
+            // the same, and silently hiding an article is the worse answer.
+            const groups = [];
+            const byName = {};
+            articles.forEach(a => {
+                const name = a.folder_name || window.t('self-service.help_centre.unfiled');
+                if (!byName[name]) { byName[name] = []; groups.push(name); }
+                byName[name].push(a);
+            });
+            return groups.map(name =>
+                '<div class="hc-tree-folder">'
+              +   '<div class="hc-tree-name">' + escapeHtml(name) + '</div>'
+              +   '<div class="hc-tree-items">' + byName[name].map(a =>
+                      '<button type="button" class="hc-tree-item" onclick="openArticle(' + a.id + ')">'
+                    + escapeHtml(a.title || '') + '</button>').join('')
+              +   '</div>'
+              + '</div>').join('');
+        }
+
+        function hcTableHtml(articles) {
+            return '<table class="hc-table"><thead><tr>'
+                 +   '<th>' + escapeHtml(window.t('self-service.help_centre.col_title')) + '</th>'
+                 +   '<th>' + escapeHtml(window.t('self-service.help_centre.col_folder')) + '</th>'
+                 + '</tr></thead><tbody>'
+                 + articles.map(a =>
+                     '<tr onclick="openArticle(' + a.id + ')">'
+                   +   '<td class="hc-td-title">' + escapeHtml(a.title || '') + '</td>'
+                   +   '<td class="hc-td-folder">' + escapeHtml(a.folder_name || window.t('self-service.help_centre.unfiled')) + '</td>'
+                   + '</tr>').join('')
+                 + '</tbody></table>';
+        }
+
+        function hcDrawArticles() {
+            const container = document.getElementById('hcContent');
+            if (!container) return;
+            const draw = { cards: hcCardsHtml, list: hcRowsHtml, tree: hcTreeHtml, table: hcTableHtml };
+            container.innerHTML = (draw[hcLayout] || hcCardsHtml)(hcArticles);
+        }
+
+        function hcRenderLayoutButtons() {
+            const box = document.getElementById('hcLayouts');
+            if (!box) return;
+            box.innerHTML = ['cards', 'list', 'tree', 'table'].map(m =>
+                '<button type="button" class="hc-layout-btn' + (m === hcLayout ? ' active' : '') + '"'
+              + ' data-layout="' + m + '" onclick="hcSetLayout(\'' + m + '\')">'
+              + escapeHtml(window.t('self-service.help_centre.layout_' + m)) + '</button>').join('');
+        }
+
+        function hcSetLayout(mode) {
+            if (['cards', 'list', 'tree', 'table'].indexOf(mode) === -1) return;
+            hcLayout = mode;
+            hcRenderLayoutButtons();
+            hcDrawArticles();
+            // Fire and forget. The layout has already changed on screen; if the
+            // save fails only the MEMORY of it is lost, and an error banner over
+            // a view toggle would be worse than quietly forgetting.
+            fetch('../api/self-service/preference.php', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: 'kb_layout', value: mode })
+            }).catch(() => {});
+        }
+
+        async function hcLoadLayout() {
+            try {
+                const r = await fetch('../api/self-service/preference.php?key=kb_layout', { credentials: 'same-origin' });
+                const d = await r.json();
+                if (d.success && ['cards', 'list', 'tree', 'table'].indexOf(d.value) > -1) hcLayout = d.value;
+            } catch (e) { /* the default is already set */ }
+            hcRenderLayoutButtons();
         }
 
         async function openArticle(id, isDeepLink) {
@@ -309,9 +469,16 @@ require_once __DIR__ . '/includes/header.php';
         <p><?php echo htmlspecialchars(t('self-service.help_centre.lede')); ?></p>
     </div>
 
-    <input type="search" class="hc-search" id="hcSearch"
-           placeholder="<?php echo htmlspecialchars(t('self-service.help_centre.search_placeholder')); ?>"
-           autocomplete="off">
+    <div class="hc-toolbar" id="hcToolbar">
+        <input type="search" class="hc-search" id="hcSearch"
+               placeholder="<?php echo htmlspecialchars(t('self-service.help_centre.search_placeholder')); ?>"
+               autocomplete="off">
+        <?php /* A toggle rather than only a setting, for the reason the analyst
+                 side records: unlike where you browse, this is something people
+                 genuinely flip during a session. It still persists. */ ?>
+        <div class="hc-layouts" id="hcLayouts" role="group"
+             aria-label="<?php echo htmlspecialchars(t('self-service.help_centre.layout_label')); ?>"></div>
+    </div>
 
     <div id="hcContent">
         <div class="hc-empty"><div class="hc-empty-hint"><?php echo htmlspecialchars(t('self-service.help_centre.loading')); ?></div></div>

@@ -112,6 +112,12 @@ return [
         'left_panel_always_desc' => 'Utrzymuj lewy panel zawsze przypięty i otwarty.',
         'left_panel_hover_desc' => 'Zwiń lewy panel do cienkiego paska, który rozwija się po najechaniu kursorem, dając kalendarzowi więcej miejsca.',
     ],
+    'js' => [
+        'all_day' => 'Cały dzień',
+        'uncategorised' => 'Bez kategorii',
+        'move_failed' => 'Nie udało się przenieść',
+        'error_prefix' => 'Błąd: {message}',
+    ],
     'toast' => [
         'saved' => 'Zapisano',
         'deleted' => 'Usunięto',

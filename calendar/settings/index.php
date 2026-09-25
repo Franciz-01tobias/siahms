@@ -38,7 +38,7 @@ $translationNamespaces = ['common', 'calendar'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('calendar.settings.title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <style>
         /* Module accent — drives toggle, focus rings, button colours.
            Modal form CSS lives entirely in inbox.css. */
@@ -190,7 +190,7 @@ $translationNamespaces = ['common', 'calendar'];
          .tab-content and becomes a card feed rather than a sideways scroll. -->
     <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>

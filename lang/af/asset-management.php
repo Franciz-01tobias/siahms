@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'Wys gebruiker aan bate toe',
-        'search_label'           => 'Soek vir gebruiker',
         'search_placeholder'     => 'Soek volgens naam of e-pos...',
-        'type_to_search'         => 'Tik om vir gebruikers te soek',
         'min_chars'              => 'Tik ten minste 2 karakters om te soek',
         'no_users'               => 'Geen gebruikers gevind nie',
         'expected_return_label'  => 'Verwagte terugkeerdatum (opsioneel)',
@@ -366,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Batestatusse',
         'tab_locations'        => 'Liggings',
         'tab_suppliers'        => 'Verskaffers',
-        'tab_warranty'         => 'Waarborgwaarskuwings',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

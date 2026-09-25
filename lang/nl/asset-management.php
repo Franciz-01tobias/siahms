@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'Gebruiker aan asset toewijzen',
-        'search_label'           => 'Zoek een gebruiker',
         'search_placeholder'     => 'Zoeken op naam of e-mail...',
-        'type_to_search'         => 'Typ om gebruikers te zoeken',
         'min_chars'              => 'Typ minstens 2 tekens om te zoeken',
         'no_users'               => 'Geen gebruikers gevonden',
         'expected_return_label'  => 'Verwachte retourdatum (optioneel)',
@@ -366,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Assetstatussen',
         'tab_locations'        => 'Locaties',
         'tab_suppliers'        => 'Leveranciers',
-        'tab_warranty'         => 'Garantiemeldingen',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

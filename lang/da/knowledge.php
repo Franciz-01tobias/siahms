@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - knowledge strings.
+ * FreeITSM — knowledge strings (da).
  *
- * Mirrors lang/en/knowledge.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/knowledge.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Viden',
     'nav' => [
@@ -448,6 +452,60 @@ Fordi de to lister betyder det modsatte, ryddes de {people}, der er angivet nu.'
         'embed_success' => 'Genererede embeddings for {count} artikler!',
         'embed_errors' => 'Afsluttet med {errors} fejl ud af {total} artikler.',
         'embed_get_failed' => 'Kunne ikke hente artikler',
+    ],
+    'assistant' => [
+        'browser_title' => 'Videnassistent',
+        'heading' => 'Assistent',
+        'sub' => 'Læser, hvad service desken har svaret på, og fortæller dig, hvad videnbasen mangler. Den siger kun til, når det samme spørgsmål bliver ved med at komme igen.',
+        'run' => 'Find huller',
+        'checking' => 'Tjekker…',
+        'tab_open' => 'Skal skrives',
+        'tab_written' => 'Skrevet',
+        'tab_dismissed' => 'Ikke nødvendigt',
+        'modal_title' => 'Skriver det op',
+        'modal_reading' => 'Læser sagen…',
+        'load_failed' => 'Kunne ikke indlæse',
+        'last_looked' => 'Sidst set efter {date}.',
+        'empty_open' => 'Intet at skrive. Enten har assistenten ikke set efter endnu, eller også dækker din videnbase allerede det, folk bliver ved med at spørge om.',
+        'empty_written' => 'Der er endnu ikke skrevet noget ud fra et hul.',
+        'empty_dismissed' => 'Intet lagt til side.',
+        'draft' => 'Skriv kladde',
+        'dismiss' => 'Ikke nødvendigt',
+        'restore' => 'Hent tilbage',
+        'open_article' => 'Åbn artikel',
+        'asked_one' => 'Spurgt om <strong>én gang</strong>',
+        'asked_many' => 'Spurgt om <strong>{n} gange</strong>',
+        'written_up_as' => 'skrevet op som “{title}”',
+        'still_draft' => '(stadig en kladde)',
+        'show_tickets' => 'Vis sagerne',
+        'reading' => 'Læser…',
+        'start_failed' => 'Kunne ikke starte.',
+        'no_tickets' => 'Der er ingen lukkede sager i de seneste {days} dage at læse.',
+        'reading_n' => 'Læser dine lukkede sager… {done} af {total}.',
+        'stopped_early' => 'Stoppet før tid.',
+        'read_failed' => 'Kunne ikke læse sagerne — tjek OpenAI-nøglen under Viden → Indstillinger.',
+        'clustering' => 'Finder ud af, hvad der mangler…',
+        'finish_failed' => 'Kunne ikke gøre det færdigt.',
+        'wording_mode' => 'Matchet på ordlyd. Tilføj en OpenAI-nøgle under Viden → Indstillinger for at matche på betydning i stedet.',
+        'update_failed' => 'Kunne ikke opdatere',
+        'reading_best' => 'Læser den mest detaljerede sag…',
+        'answer_one' => 'Besvar mindst ét spørgsmål først.',
+        'writing_up' => 'Skriver det op…',
+        'unreachable' => 'Kunne ikke nå assistenten.',
+        'not_enough_yet' => 'Der er ikke nok i disse sager endnu.',
+        'draft_ready' => 'Kladden er klar. Læs den, før du udgiver — den er skrevet ud fra sag {ref}.',
+        'draft_note' => 'Når du gemmer, lægges dette i din videnbase som en uudgivet kladde. Ingen kan læse den, før du udgiver den.',
+        'save_draft' => 'Gem kladde',
+        'refused' => 'Der er ikke nok at skrive ud fra endnu.',
+        'refused_why' => 'Sagerne siger ikke, hvad der var årsagen, eller hvordan det blev løst.',
+        'refused_ask' => 'Svar på det, du kan, så prøver den igen. Du var der; det var den ikke.',
+        'try_again' => 'Prøv igen',
+        'untitled' => 'Uden titel',
+        'save_failed' => 'Kunne ikke gemme',
+        'nothing_yet_readonly' => 'Der er ikke noget at vise endnu. En med rettigheder til at køre assistenten skal først lede efter huller.',
+        'unread_tickets' => 'Der er {n} lukkede sager fra de seneste {days} dage, jeg ikke har læst endnu.',
+        'press_run' => 'Tryk på “Find huller”.',
+        'none_to_read' => 'Ingen lukkede sager i de seneste {days} dage at læse.',
     ],
     'help' => [
         'guide' => 'Vejledning',

@@ -30,11 +30,11 @@ $translationNamespaces = ['common', 'asset-management'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('asset-management.help.page_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/help.css?v=3">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
@@ -99,8 +99,12 @@ $translationNamespaces = ['common', 'asset-management'];
             <a href="#right-click" class="help-nav-link" data-section="right-click">
                 <span class="help-nav-num">12</span> Right-click an asset
             </a>
-            <a href="#tips" class="help-nav-link" data-section="tips">
+            <a href="#companies" class="help-nav-link" data-section="companies">
                 <span class="help-nav-num">13</span>
+                <?php echo htmlspecialchars(t('asset-management.help.companies.nav')); ?>
+            </a>
+            <a href="#tips" class="help-nav-link" data-section="tips">
+                <span class="help-nav-num">14</span>
                 <?php echo htmlspecialchars(t('asset-management.help.nav_tips')); ?>
             </a>
         </div>
@@ -213,7 +217,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     <p class="help-note">Editing a view changes its name, description and who can see it &mdash; not what it shows. Renaming something should not silently change what it does. To capture the table as it looks now, use <strong>Save view</strong> again.</p>
                     <p class="help-note">The same views exist on the Tasks, Calendar and Change Management tables, because all four share one table engine. Each table has its own views, so an asset view never turns up on the tasks table.</p>
                     <p style="margin-top: 14px;"><strong>Customise the columns</strong></p>
-                    <p>The default visible set is Hostname, Type, Status, Manufacturer, Model, OS and Assigned users. Click the <strong>Columns</strong> button on the toolbar to open a drawer where you can tick to show / hide and drag the ⋮⋮ handles to reorder. You can also drag the table headers themselves to reorder columns directly. The available hidden-by-default columns include Feature release, Build, Service tag, CPU, CPU speed, Memory and BIOS.</p>
+                    <p>The default visible set is Hostname, Type, Status, Manufacturer, Model, OS and Assigned users. Click the <strong>Columns</strong> button on the toolbar to open a drawer where you can tick to show / hide and drag the ⋮⋮ handles to reorder. You can also drag the table headers themselves to reorder columns directly. The available hidden-by-default columns include Feature release, Build, Serial number, CPU, CPU speed, Memory and BIOS.</p>
                     <p><strong>Your own fields appear here too.</strong> Any <a href="help-custom-fields.php">custom field</a> marked <em>Offer as a column</em> joins the same drawer, and sorts, filters and exports exactly like a built-in one. Filtering a yes/no field keeps <em>Yes</em>, <em>No</em> and <em>not filled in</em> as three separate choices, so filtering to <em>No</em> never sweeps up assets that simply have not got the field.</p>
                     <p>Visible columns, column order and sort direction <strong>persist per analyst</strong> &mdash; saved against your account via <code>user_preferences</code> so you keep the same layout when you sign in on another machine. Search and active filters are deliberately transient session state.</p>
 
@@ -573,9 +577,28 @@ $translationNamespaces = ['common', 'asset-management'];
                     <p class="help-note">A submenu that says <strong>None configured</strong> means that lookup is empty &mdash; add statuses, types or locations under <strong>Settings</strong> and they appear here straight away.</p>
                 </div>
 
-<div class="help-section" id="tips">
+<?php /* 2.6.0. Wired to t() from the start, unlike sections 10-12 above:
+         a section written straight into the page stays English in every
+         language while the translation score still reads 100%. */ ?>
+                <div class="help-section" id="companies">
                     <div class="help-section-header">
                         <span class="help-section-num">13</span>
+                        <h3><?php echo htmlspecialchars(t('asset-management.help.companies.heading')); ?></h3>
+                    </div>
+                    <p><?php echo t('asset-management.help.companies.intro'); ?></p>
+                    <div class="help-list">
+                        <div><?php echo t('asset-management.help.companies.move'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.cleared'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.refused'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.add'); ?></div>
+                        <div><?php echo t('asset-management.help.companies.shared'); ?></div>
+                    </div>
+                    <p class="help-note"><?php echo t('asset-management.help.companies.note'); ?></p>
+                </div>
+
+<div class="help-section" id="tips">
+                    <div class="help-section-header">
+                        <span class="help-section-num">14</span>
                         <h3><?php echo htmlspecialchars(t('asset-management.help.nav_tips')); ?></h3>
                     </div>
                     <div class="help-cards">

@@ -88,7 +88,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('system.ai.title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <style>
         body {
             /* System's DARK accent is a LIGHT colour, so --on-accent must be pinned
@@ -249,7 +249,7 @@ try {
         </form>
     </div>
 
-    <script src="../../assets/js/i18n.js?v=1"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script src="../../assets/js/toast.js?v=1"></script>
     <script>
     const API_BASE = '<?php echo $path_prefix; ?>api/settings/';

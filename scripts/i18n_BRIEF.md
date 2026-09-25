@@ -25,20 +25,25 @@ so they are worth more than any stylistic judgement.
 4. **Keep line breaks.** A `\n` in the English means a real line break; keep the
    same number.
 5. **Never leave a non-empty string empty.** If English has a value, so must you.
-   If English is empty, leave it empty — but **the line still needs its tab**:
-   write the key, a tab, and nothing after it.
 
-   > 🔴 This is the most-failed rule in the whole brief. It has been broken five
-   > times across five different translators and two languages, always on a key
-   > whose English is blank, and every one of those translators had checked their
-   > own work and reported it correct. There is nothing after the tab to make the
-   > tab look necessary, which is exactly why it goes missing.
+   > ✅ **You will no longer be given a key whose English is blank.** For a long
+   > time you were, and it was the most-failed rule here: broken eleven times,
+   > across eleven translators and several languages, always on one of the seven
+   > keys in the product whose English is empty. Every translator had checked
+   > their own work and reported it correct, and two of them named the offending
+   > key and quoted the command they had run.
    >
-   > The orchestrator repairs this automatically now
-   > (`scripts/i18n_repair_chunk.php`), so it is no longer fatal — but only for
-   > keys whose English is genuinely blank. A missing tab on a key that *does*
-   > have English text is treated as a lost translation, refused, and the chunk
-   > is sent back.
+   > 🔑 They were not careless. **The Write tool strips trailing whitespace**, so
+   > a line whose correct content is `key` + TAB + nothing cannot survive being
+   > written — the tab is removed after you compose the line and before it
+   > reaches the disk. No amount of care could have fixed that, which is what
+   > eleven attempts showed.
+   >
+   > So the pipeline stopped asking. `i18n_chunk.php` withholds those keys and
+   > `i18n_merge.php` fills them, since a blank English value has exactly one
+   > correct translation in every language. If you ever *do* see a blank English
+   > value, something upstream is wrong — say so in your reply rather than
+   > guessing.
 6. **UTF-8, written directly.** Never HTML entities, never escapes for letters.
 
 ## What to leave in English
@@ -102,6 +107,32 @@ So:
   number where your language tolerates it for any count.
 - **A key with blank English** is a blank column header or spacer. Keep it blank,
   and **keep the tab** in the output line — a line with no tab is rejected.
+
+## 🔴 How to write the file — this is not style advice
+
+Two agents on this pipeline were **killed outright** by the 64,000 output-token
+limit, both before writing a single line of their file. Neither had done
+anything unusual; they simply produced the same content more than once.
+
+- **Write each output file exactly ONCE, in a single write.** Do not write it,
+  read it back, and write it again. A second full write of the same content is
+  what exhausts the budget, and you are killed without warning and without
+  output — your work is lost entirely, not truncated.
+- **Never echo translated lines in your reply.** Your final message is one line
+  per file: the filename and the number of lines. Nothing else.
+- **To correct a line after writing, edit that line.** Never rewrite the whole
+  file for a single fix.
+- **Use the Write tool, not a shell heredoc.** On the 2026-09-23 run a
+  `cat > file <<'EOF'` heredoc carrying a 171-line Malayalam chunk failed with
+  an unbalanced-quote parse error at roughly **28 KB of command text** - Git
+  Bash truncates the argument at about that size, and the failure looks like a
+  quoting mistake in your content rather than a length limit. Any chunk in a
+  script that expands (Malayalam, Hindi, Gujarati, Ukrainian) can cross 28 KB.
+
+> 🔑 These three rules are why a chunk can be as large as it is. Measured on the
+> 2026-09-22 runs: chunks of ~45 KB completed comfortably **with** these rules,
+> while ~60 KB chunks died **without** them. The size limit the orchestrator
+> uses assumes you are following this section.
 
 ## The output format
 

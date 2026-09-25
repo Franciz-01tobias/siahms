@@ -35,7 +35,19 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../includes/i18n.php';
 I18n::initFromSession();
+/**
+ * 🔑 Mark this request as a PORTAL render, before theme.php is asked anything.
+ *
+ * The portal and the app share a PHPSESSID, so "is there an analyst_id in the
+ * session?" cannot answer "whose palette is this page for?". This can, and it
+ * is set in the one file every signed-in portal page goes through.
+ */
+if (!defined('FREEITSM_SELF_SERVICE')) {
+    define('FREEITSM_SELF_SERVICE', true);
+}
+
 require_once __DIR__ . '/../../includes/theme.php';
+require_once __DIR__ . '/../../includes/self_service_settings.php';
 // The logo the header draws (GH #87). login.php and register.php require this
 // themselves; the six signed-in pages come through here, so it belongs here.
 require_once __DIR__ . '/../../includes/branding.php';
@@ -77,6 +89,12 @@ $portalNav = [
     // permanent Training tab leading to an empty page is a worse answer than no
     // tab at all. `cap` is resolved below.
     'training'    => ['href' => 'training.php',    'label' => t('self-service.nav.training'), 'cap' => 'has_training'],
+    // ⚠️ SHOWN ONLY WHEN THE ADMINISTRATOR HAS TURNED IT ON *AND* THE PERSON
+    // ACTUALLY HAS KIT — the same judgement Training makes just above, for the
+    // same reason: a permanent tab leading to "you have no equipment" is a
+    // worse answer than no tab. The page re-checks the setting itself, because
+    // a hidden link is not a permission.
+    'equipment'   => ['href' => 'my-equipment.php', 'label' => t('self-service.nav.equipment'), 'cap' => 'has_equipment'],
     'help'        => ['href' => 'help.php',        'label' => t('self-service.nav.help')],
 ];
 
@@ -94,6 +112,25 @@ $portalNav = [
  * has never opened is mid-migration.
  */
 $portalNavCap = function (string $cap) use ($ss_user_id) {
+    if ($cap === 'has_equipment') {
+        try {
+            $conn = connectToDatabase();
+            // The switch first: it is one cached array and settles most installs
+            // without touching the assets tables at all.
+            if (!selfServicePortalSettings($conn)['show_my_assets']) return false;
+            // Then whether there is anything to show. Mirrors the endpoint's own
+            // rule (an INNER JOIN, because users_assets has orphan rows on real
+            // installs) so the tab cannot appear over an empty page.
+            $st = $conn->prepare(
+                "SELECT 1 FROM users_assets ua JOIN assets a ON a.id = ua.asset_id
+                  WHERE ua.user_id = ? LIMIT 1"
+            );
+            $st->execute([(int)$ss_user_id]);
+            return (bool)$st->fetchColumn();
+        } catch (Throwable $e) {
+            return false;   // fails closed and quietly, like the training one
+        }
+    }
     if ($cap !== 'has_training') return false;
     try {
         require_once __DIR__ . '/../../includes/lms_access.php';
@@ -125,6 +162,24 @@ $pageHead   = $pageHead   ?? '';
 // Pages hand us a translation KEY, because i18n only comes up inside this file —
 // a page can't call t() before including it.
 $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal');
+
+/**
+ * Portal appearance (System → Self-service portal).
+ *
+ * 🔑 Every one of these is emitted ONLY if it has been set, so an install that
+ * has never opened that screen renders exactly the markup it rendered before.
+ * That is the whole reason the defaults are empty rather than "the current
+ * colour": an empty value means "do nothing", which cannot regress anybody.
+ */
+$ssAppearance = ['logo_path' => '', 'header_colour' => '', 'table_header_colour' => '',
+                 'background_pattern' => '', 'allow_self_close' => false, 'show_my_assets' => false];
+try {
+    if (function_exists('connectToDatabase')) {
+        $ssAppearance = selfServicePortalSettings(connectToDatabase());
+    }
+} catch (Throwable $e) {
+    // The portal must render even if the settings cannot be read.
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>"
@@ -136,8 +191,12 @@ $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal')
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($pageTitle); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/self-service.css?v=15">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../assets/css/self-service.css?v=18">
+<?php if ($ssAppearance['background_pattern'] !== ''): ?>
+    <!-- Only fetched when a pattern is actually in use. -->
+    <link rel="stylesheet" href="../assets/css/self-service-patterns.css?v=4">
+<?php endif; ?>
 <?php if (!empty($needsFormLogic)): ?>
     <!-- Form blocks (notes). In the HEAD rather than beside form-logic.js in the
          footer: a stylesheet in the body risks a flash of unstyled content, and
@@ -151,10 +210,33 @@ $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal')
     <script src="../assets/js/tz.js?v=5"></script>
     <?php echo $pageHead; ?>
 </head>
-<body class="<?php echo htmlspecialchars($bodyClass); ?>">
+<?php
+// The colours are written as CSS CUSTOM PROPERTIES on <body> rather than inline
+// on each element: one declaration, and every rule that already reads the token
+// picks it up - including rules added later, which an inline style could not.
+$ssVars = '';
+if ($ssAppearance['header_colour'] !== '')       $ssVars .= '--ss-header-bg:' . $ssAppearance['header_colour'] . ';';
+if ($ssAppearance['table_header_colour'] !== '') $ssVars .= '--ss-table-header-bg:' . $ssAppearance['table_header_colour'] . ';';
+$ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? ' ss-pat-' . $ssAppearance['background_pattern'] : ''));
+?>
+<body class="<?php echo htmlspecialchars($ssBodyClass); ?>"<?php echo $ssVars !== '' ? ' style="' . htmlspecialchars($ssVars, ENT_QUOTES) . '"' : ''; ?>>
     <div class="portal-header">
-        <div class="portal-brand">
-            <img src="<?php echo htmlspecialchars(brandingLogoUrl()); ?>" alt="">
+        <?php /* Resolved BEFORE the div: the class depends on it, and the img
+                 below is inside. */ ?>
+        <?php $ssLogoUrl = selfServicePortalLogoUrl($conn ?? connectToDatabase()); ?>
+        <?php
+        /* A custom logo shown on the PAGE is not shown here as well: repeating
+           it twice on one screen is clutter, and falling back to the bundled
+           FreeITSM mark would put our branding beside theirs. */
+        $ssLogoOnPage = ($ssLogoUrl !== '' && ($ssAppearance['logo_position'] ?? 'header') === 'page');
+        ?>
+        <div class="portal-brand<?php echo $ssLogoUrl !== '' && !$ssLogoOnPage ? ' has-custom-logo' : ''; ?>">
+            <?php /* A portal-specific logo if one is set, otherwise the shared
+                     one from System → Branding. Empty means "use the main one",
+                     so nothing changes for an install that has not set it. */ ?>
+            <?php if (!$ssLogoOnPage): ?>
+            <img src="<?php echo htmlspecialchars($ssLogoUrl !== '' ? $ssLogoUrl : brandingLogoUrl()); ?>" alt="">
+            <?php endif; ?>
             <span><?php echo htmlspecialchars(t('self-service.portal')); ?></span>
         </div>
         <nav class="portal-nav" id="portalNav">
@@ -192,5 +274,13 @@ $pageTitle  = isset($pageTitleKey) ? t($pageTitleKey) : t('self-service.portal')
         if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
     </script>
+
+    <?php if ($ssLogoOnPage): ?>
+    <?php /* Across the top of the page rather than in the bar. Its own band so
+             it lines up with the page gutter below it, whatever the page is. */ ?>
+    <div class="portal-page-logo">
+        <img src="<?php echo htmlspecialchars($ssLogoUrl); ?>" alt="">
+    </div>
+    <?php endif; ?>
 
     <div class="portal-layout">

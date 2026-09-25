@@ -8,6 +8,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once __DIR__ . "/../../config.php";
 require_once __DIR__ . "/../../includes/functions.php";
+require_once __DIR__ . "/../../includes/tenant_settings.php";
+require_once __DIR__ . "/../../includes/services/checklists.php";
 
 $conn = connectToDatabase();
 
@@ -45,7 +47,13 @@ try {
             // the author's earlier naming, MySQL raised "Unknown column 'created_at'"
             // and this endpoint returned an error for every ticket. See the wiki:
             // Checklists-Module-House-Style, "the fallback to a column that never existed".
-            $stmt = $conn->prepare("SELECT id, template_id, title, created_datetime
+
+            // The gate is resolved against the TICKET's company, not the
+            // analyst's active one - on a consolidated board those differ, and
+            // the lock a person sees has to be the lock the server will apply.
+            $ticketTenantId = ticketTenantId($conn, $ticketId);   // includes/tenant_settings.php
+
+            $stmt = $conn->prepare("SELECT id, template_id, title, closure_mode, created_datetime
                                     FROM ticket_checklists
                                     WHERE ticket_id = ?
                                     ORDER BY id ASC");
@@ -53,6 +61,14 @@ try {
             $checklists = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($checklists as &$chk) {
+                $chk["closure_mode"] = $chk["closure_mode"] ?: "warn";
+                // Resolved server-side and sent down, rather than letting the
+                // browser combine template and company settings itself: the
+                // browser would be a second implementation of the same rule.
+                $chk["effective_closure_mode"] = ChecklistsService::effectiveClosureMode(
+                    $conn, $chk["closure_mode"], $ticketTenantId
+                );
+
                 // Same fix as above: completed_by and completed_at never existed either.
                 $itemStmt = $conn->prepare("SELECT id, title, suggested_role, is_mandatory, requires_input, input_placeholder,
                                                    response_value, is_completed,
@@ -73,7 +89,13 @@ try {
                 $chk["percent"] = $total > 0 ? round(($done / $total) * 100) : 0;
             }
 
-            echo json_encode(["success" => true, "checklists" => $checklists]);
+            unset($chk);   // the loop bound it by reference
+
+            echo json_encode([
+                "success"            => true,
+                "checklists"         => $checklists,
+                "empty_closure_mode" => ticketChecklistEmptyClosureMode($conn, $ticketTenantId),
+            ]);
             exit;
 
         case "suggest_template":
@@ -150,8 +172,21 @@ try {
             exit;
 
         case "list_templates_for_ticket":
-            $stmt = $conn->query("SELECT id, title, category, description, keywords FROM checklist_templates WHERE scope IN ('ticket', 'both') AND (is_active = 1 OR is_active IS NULL) ORDER BY category ASC, title ASC");
+            $ticketId = (int)($_GET["ticket_id"] ?? $_POST["ticket_id"] ?? 0);
+            // Same company as the gate itself will use, so the padlock in the
+            // attach dialogue promises what the close will actually do.
+            $ticketTenantId = $ticketId > 0 ? ticketTenantId($conn, $ticketId) : null;
+
+            $stmt = $conn->query("SELECT id, title, category, description, keywords, closure_mode FROM checklist_templates WHERE scope IN ('ticket', 'both') AND (is_active = 1 OR is_active IS NULL) ORDER BY category ASC, title ASC");
             $templates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($templates as &$tpl) {
+                $tpl["closure_mode"] = $tpl["closure_mode"] ?: "warn";
+                $tpl["effective_closure_mode"] = ChecklistsService::effectiveClosureMode(
+                    $conn, $tpl["closure_mode"], $ticketTenantId
+                );
+            }
+            unset($tpl);   // the loop bound it by reference
+
             echo json_encode(["success" => true, "templates" => $templates]);
             exit;
 
@@ -160,13 +195,14 @@ try {
             $templateId = (int)($_POST["template_id"] ?? 0);
             if ($ticketId <= 0 || $templateId <= 0) throw new Exception("ticket_id and template_id required");
 
-            $tplStmt = $conn->prepare("SELECT title FROM checklist_templates WHERE id = ?");
+            $tplStmt = $conn->prepare("SELECT title, closure_mode FROM checklist_templates WHERE id = ?");
             $tplStmt->execute([$templateId]);
             $tpl = $tplStmt->fetch(PDO::FETCH_ASSOC);
             if (!$tpl) throw new Exception("Template not found");
 
-            $ins = $conn->prepare("INSERT INTO ticket_checklists (ticket_id, template_id, title, created_by_id, created_datetime) VALUES (?, ?, ?, ?, NOW())");
-            $ins->execute([$ticketId, $templateId, $tpl["title"], $analystId]);
+            $closureMode = (($tpl["closure_mode"] ?? "") === "block") ? "block" : "warn";
+            $ins = $conn->prepare("INSERT INTO ticket_checklists (ticket_id, template_id, title, closure_mode, created_by_id, created_datetime) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())");
+            $ins->execute([$ticketId, $templateId, $tpl["title"], $closureMode, $analystId]);
             $chkId = $conn->lastInsertId();
 
             $itemsStmt = $conn->prepare("SELECT title, suggested_role, is_mandatory, requires_input, input_placeholder, sort_order FROM checklist_template_items WHERE template_id = ? ORDER BY sort_order ASC, id ASC");

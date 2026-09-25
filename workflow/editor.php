@@ -91,14 +91,14 @@ foreach ($actionDefs as $actionKey => $def) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($id ? t('workflow.editor.edit_title') : t('workflow.editor.new_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <link rel="stylesheet" href="../assets/css/workflow.css?v=11">
     <!-- Mobile layer LAST, after workflow.css (Techniques §9). -->
     <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
 </head>
 <body data-mobile-module="workflow" data-mobile-page="wf-editor">
     <?php include 'includes/header.php'; ?>
@@ -393,7 +393,7 @@ foreach ($actionDefs as $actionKey => $def) {
         };
     </script>
     <script src="../checklists/search_scoring.js?v=1"></script>
-    <script src="../assets/js/workflow-editor.js?v=18"></script>
+    <script src="../assets/js/workflow-editor.js?v=19"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
 </body>
 </html>

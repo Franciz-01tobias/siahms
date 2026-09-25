@@ -36,7 +36,7 @@ $translationNamespaces = ['common', 'forms'];
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <!-- inbox.css carries the shared header/nav styles (.header, .nav-btn); forms.css
          the module chrome. Same set forms/index.php loads. -->
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <link rel="stylesheet" href="../assets/css/forms.css">
     <style>
         .ca-container { display: flex; height: calc(100vh - 48px); background: var(--app-bg, #f5f5f5); }
@@ -87,7 +87,7 @@ $translationNamespaces = ['common', 'forms'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <!-- The diagnostic box offers a Copy button. navigator.clipboard is undefined
          outside a secure context, which a self-hosted install often is. -->
     <script src="../assets/js/clipboard.js?v=1"></script>

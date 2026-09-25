@@ -50,6 +50,21 @@ require_once __DIR__ . '/../tenant_settings.php';   // ticketChecklistClosureMod
 class ChecklistsService
 {
     /**
+     * Check if a ticket has at least one checklist / SOP attached.
+     */
+    public static function hasAttachedChecklists(PDO $conn, int $ticketId): bool
+    {
+        if ($ticketId <= 0) return false;
+        try {
+            $stmt = $conn->prepare("SELECT 1 FROM ticket_checklists WHERE ticket_id = ? LIMIT 1");
+            $stmt->execute([$ticketId]);
+            return (bool)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
      * Mandatory steps still outstanding on a ticket.
      *
      * @return array<int, array{checklist: string, step: string, item_id: int}>
@@ -62,7 +77,7 @@ class ChecklistsService
         // Checklists module must not have its ticket closures start failing.
         try {
             $stmt = $conn->prepare(
-                "SELECT i.id AS item_id, i.title AS step, c.title AS checklist
+                "SELECT i.id AS item_id, i.title AS step, c.title AS checklist, c.closure_mode
                    FROM ticket_checklist_items i
                    JOIN ticket_checklists c ON c.id = i.ticket_checklist_id
                   WHERE c.ticket_id = ?
@@ -78,62 +93,188 @@ class ChecklistsService
     }
 
     /**
-     * Called by TicketsService when a ticket moves to a closed status.
+     * What this one checklist's gate actually is, once the company setting has
+     * had its say.
      *
-     * Records the closure against any outstanding mandatory steps rather than
-     * refusing it — see the header. Returns the steps that were outstanding so
-     * the caller can tell the analyst what was skipped; empty array = clean close.
+     * Two dials, and they only ever tighten:
      *
-     * @return array<int, array{checklist: string, step: string, item_id: int}>
+     *   the template   Standard (warn and record) or Critical (block), chosen
+     *                  by whoever wrote the procedure, because they are the one
+     *                  who knows whether skipping a step is a nuisance or a
+     *                  compliance breach.
+     *   the company    'per_template' honours that choice; 'block_all' overrides
+     *                  every template and blocks the lot.
+     *
+     * There is deliberately no company setting that loosens a Critical template
+     * to a warning. An operator who wants that should edit the template, where
+     * the change is visible to the people following the procedure.
+     *
+     * 🔑 Strictest wins, and a ticket carrying several checklists is resolved a
+     * checklist at a time by assertClosureAllowed() — so one Critical checklist
+     * blocks the close even if three Standard ones would have warned.
      */
+    public static function effectiveClosureMode(PDO $conn, string $mode, ?int $tenantId = null): string
+    {
+        if (function_exists('ticketChecklistClosureMode')
+            && ticketChecklistClosureMode($conn, $tenantId) === 'block_all') {
+            return 'block';
+        }
+
+        return $mode === 'block' ? 'block' : 'warn';
+    }
+
     /**
-     * Refuse the closure outright if the operator chose 'block'.
+     * Refuse the closure outright where the gate is a block.
      *
-     * 🔴 MUST be called BEFORE the status is written. Called after, a 'block'
-     * install would throw having already closed the ticket - the caller sees an
+     * 🔴 MUST be called BEFORE the status is written. Called after, a blocked
+     * close would throw having already closed the ticket - the caller sees an
      * error and the database disagrees with it.
      *
-     * Tickets → Settings → Checklists decides. Enforced here rather than in the
-     * browser so the REST API, bulk actions and automation obey whichever the
-     * operator chose; that is the whole reason the rule left inbox.js.
+     * Enforced here rather than in the browser so the REST API, bulk actions and
+     * automation obey whichever the operator chose; that is the whole reason the
+     * rule left inbox.js.
+     *
+     * Two separate refusals live here, and they answer different questions:
+     * whether this ticket may close with steps outstanding, and whether it may
+     * close with no checklist at all.
      */
     public static function assertClosureAllowed(PDO $conn, int $ticketId, ?int $tenantId = null): void
     {
-        if (!function_exists('ticketChecklistClosureMode')) return;
-        if (ticketChecklistClosureMode($conn, $tenantId) !== 'block') return;
+        // Nothing attached: the only question is whether this install insists
+        // on a checklist. 'warn' is not decided here - a warning is the absence
+        // of a refusal, and it is recorded by recordClosureOverride() after the
+        // close, exactly as an outstanding-steps override is.
+        if (!self::hasAttachedChecklists($conn, $ticketId)) {
+            if (function_exists('ticketChecklistEmptyClosureMode')
+                && ticketChecklistEmptyClosureMode($conn, $tenantId) === 'block') {
+                throw new ServiceError(
+                    'validation',
+                    'no_checklist_attached',
+                    'This ticket cannot be closed until a checklist is attached to it.'
+                );
+            }
+            return;
+        }
 
         $outstanding = self::outstandingMandatorySteps($conn, $ticketId);
         if (!$outstanding) return;
 
-        $names = implode(', ', array_map(fn($r) => $r['step'], $outstanding));
+        // Resolve per checklist, not per step: the mode lives on the checklist,
+        // so resolving it once per step would ask the same question repeatedly
+        // and read the company setting once per outstanding step.
+        $blocking  = [];
+        $modeCache = [];
+        foreach ($outstanding as $row) {
+            $checklist = $row['checklist'] !== '' ? $row['checklist'] : 'Checklist';
+            if (!isset($modeCache[$checklist])) {
+                $modeCache[$checklist] = self::effectiveClosureMode(
+                    $conn, (string)($row['closure_mode'] ?? 'warn'), $tenantId
+                );
+            }
+            if ($modeCache[$checklist] === 'block') {
+                $blocking[$checklist][] = $row['step'];
+            }
+        }
+        if (!$blocking) return;
+
+        $parts = [];
+        foreach ($blocking as $checklist => $steps) {
+            $parts[] = $checklist . ' (' . implode(', ', $steps) . ')';
+        }
+
         throw new ServiceError(
             'validation',
             'mandatory_steps_outstanding',
-            'This ticket cannot be closed until its mandatory SOP steps are complete: ' . $names
+            'This ticket cannot be closed until its mandatory checklist steps are complete: '
+                . implode('; ', $parts)
         );
     }
 
-    public static function recordClosureOverride(PDO $conn, ActorContext $ctx, int $ticketId): array
-    {
+    /**
+     * Called by TicketsService when a ticket moves to a closed status.
+     *
+     * Records what was skipped rather than refusing it — see the header. Returns
+     * the steps that were outstanding so the caller can tell the analyst what was
+     * skipped; empty array = a clean close, or a close this install does not care
+     * to record.
+     *
+     * @return array<int, array{checklist: string, step: string, item_id: int}>
+     */
+
+    public static function recordClosureOverride(
+        PDO $conn,
+        ActorContext $ctx,
+        int $ticketId,
+        ?int $tenantId = null
+    ): array {
+        // Closed with nothing attached. Only worth a note where the operator
+        // asked to be told about it - on an install that allows it, a note on
+        // every close is noise that hides the ones that matter.
+        //
+        // ⚠️ $tenantId, not null. assertClosureAllowed() resolves this setting
+        // per company, so reading it install-wide here would let the two halves
+        // of one rule disagree: company A blocks while the audit trail is
+        // written against the default.
+        if (!self::hasAttachedChecklists($conn, $ticketId)) {
+            if (function_exists('ticketChecklistEmptyClosureMode')
+                && ticketChecklistEmptyClosureMode($conn, $tenantId) === 'warn') {
+                self::writeClosureNote(
+                    $conn,
+                    $ctx,
+                    $ticketId,
+                    "⚠️ Ticket closed with no checklist attached.\n" . self::closedBy($ctx)
+                );
+            }
+            return [];
+        }
+
         $outstanding = self::outstandingMandatorySteps($conn, $ticketId);
         if (!$outstanding) return [];
 
-        $who  = $ctx->actorName !== '' ? $ctx->actorName : ('analyst #' . $ctx->actorId);
-        $via  = $ctx->source === 'api' ? 'the API' : 'the web interface';
-        $by   = $ctx->source === 'workflow' ? 'Closed by a workflow.' : "Closed by {$who} via {$via}.";
         $list = implode("\n", array_map(
             fn($r) => '  • ' . $r['checklist'] . ' — ' . $r['step'],
             $outstanding
         ));
-        $note = "⚠️ Ticket closed with " . count($outstanding) . " mandatory SOP step(s) outstanding.\n"
-              . "{$by}\n\n{$list}";
+        self::writeClosureNote(
+            $conn,
+            $ctx,
+            $ticketId,
+            "⚠️ Ticket closed with " . count($outstanding) . " mandatory checklist step(s) outstanding.\n"
+                . self::closedBy($ctx) . "\n\n" . $list
+        );
 
-        // An internal note, because that is where this module already writes its
-        // audit trail and where an auditor will look. UTC at rest (GH #126).
-        //
-        // A workflow has no analyst, and ticket_notes.analyst_id is NOT NULL with a
-        // foreign key, so a workflow close writes a 'Workflow Note' audit entry
-        // instead - the same place the workflow engine's own notes go.
+        return $outstanding;
+    }
+
+    /** "Closed by Jane Smith via the web interface." — one phrasing, used by both notes. */
+    private static function closedBy(ActorContext $ctx): string
+    {
+        if ($ctx->source === 'workflow') return 'Closed by a workflow.';
+
+        $who = $ctx->actorName !== '' ? $ctx->actorName : ('analyst #' . $ctx->actorId);
+        $via = $ctx->source === 'api' ? 'the API' : 'the web interface';
+        return "Closed by {$who} via {$via}.";
+    }
+
+    /**
+     * Write one closure-audit entry, wherever it belongs.
+     *
+     * 🔴 A WORKFLOW MUST NOT WRITE TO ticket_notes. `analyst_id` is NOT NULL
+     * with a foreign key to `analysts`, and a workflow has no analyst behind it.
+     * Naming any id there does one of two bad things: on an install where that
+     * analyst does not exist the insert throws and the audit entry is lost, and
+     * on an install where they do exist it puts a real person's name against an
+     * action they did not take. So an automated close is recorded in
+     * `ticket_audit` with a NULL analyst, which is where the workflow engine's
+     * own notes go and where the timeline already knows to look for them.
+     *
+     * Both notes go through here so that reasoning cannot be missed by the next
+     * person adding a third kind of closure note.
+     *
+     * UTC at rest (GH #126).
+     */
+    private static function writeClosureNote(PDO $conn, ActorContext $ctx, int $ticketId, string $note): void
+    {
         try {
             if ($ctx->actorId > 0) {
                 $conn->prepare(
@@ -152,8 +293,6 @@ class ChecklistsService
             error_log('[checklists] could not record closure override for ticket '
                 . $ticketId . ': ' . $e->getMessage());
         }
-
-        return $outstanding;
     }
 
     // ======================================================================

@@ -39,14 +39,14 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knowledge assistant</title>
+    <title><?php echo htmlspecialchars(t('knowledge.assistant.browser_title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <link rel="stylesheet" href="../../assets/css/knowledge.css?v=2">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script src="../../assets/js/safe-html.js?v=2"></script>
     <style>
         .ka-page { padding:16px 30px 24px; height:calc(100vh - 48px); display:flex; flex-direction:column; overflow:hidden; }
@@ -134,27 +134,26 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
 <div class="ka-page">
     <div class="ka-head">
         <div>
-            <h1>Assistant</h1>
+            <h1><?php echo htmlspecialchars(t('knowledge.assistant.heading')); ?></h1>
             <div class="ka-sub">
-                Reads what the service desk has been answering and tells you what the knowledge
-                base is missing. It only speaks up when the same question keeps coming back.
+                <?php echo htmlspecialchars(t('knowledge.assistant.sub')); ?>
             </div>
         </div>
         <?php if ($canAnalyse): ?>
-        <button class="ka-btn ka-btn-primary" id="kaRun" onclick="kaRun()">Look for gaps</button>
+        <button class="ka-btn ka-btn-primary" id="kaRun" onclick="kaRun()"><?php echo htmlspecialchars(t('knowledge.assistant.run')); ?></button>
         <?php endif; ?>
     </div>
 
     <div class="ka-say" id="kaSay">
-        <p id="kaSayText">Checking…</p>
+        <p id="kaSayText"><?php echo htmlspecialchars(t('knowledge.assistant.checking')); ?></p>
         <div class="ka-meta" id="kaSayMeta"></div>
         <div class="ka-progress" id="kaProgress" style="display:none;"><i id="kaProgressBar"></i></div>
     </div>
 
     <div class="ka-tabs">
-        <button class="ka-tab active" data-status="open"      onclick="kaTab('open', this)">To write</button>
-        <button class="ka-tab"        data-status="written"   onclick="kaTab('written', this)">Written</button>
-        <button class="ka-tab"        data-status="dismissed" onclick="kaTab('dismissed', this)">Not needed</button>
+        <button class="ka-tab active" data-status="open"      onclick="kaTab('open', this)"><?php echo htmlspecialchars(t('knowledge.assistant.tab_open')); ?></button>
+        <button class="ka-tab"        data-status="written"   onclick="kaTab('written', this)"><?php echo htmlspecialchars(t('knowledge.assistant.tab_written')); ?></button>
+        <button class="ka-tab"        data-status="dismissed" onclick="kaTab('dismissed', this)"><?php echo htmlspecialchars(t('knowledge.assistant.tab_dismissed')); ?></button>
     </div>
 
     <div class="ka-list" id="kaList"></div>
@@ -164,11 +163,11 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
 <div class="ka-modal" id="kaModal">
     <div class="ka-modal-box">
         <div class="ka-modal-head">
-            <h2 id="kaModalTitle">Writing this up</h2>
-            <button class="ka-btn" onclick="kaCloseModal()">Close</button>
+            <h2 id="kaModalTitle"><?php echo htmlspecialchars(t('knowledge.assistant.modal_title')); ?></h2>
+            <button class="ka-btn" onclick="kaCloseModal()"><?php echo htmlspecialchars(t('common.close')); ?></button>
         </div>
         <div class="ka-modal-body">
-            <div class="ka-status" id="kaModalStatus">Reading the ticket…</div>
+            <div class="ka-status" id="kaModalStatus"><?php echo htmlspecialchars(t('knowledge.assistant.modal_reading')); ?></div>
             <div id="kaModalContent"></div>
         </div>
         <div class="ka-modal-foot" id="kaModalFoot"></div>
@@ -177,6 +176,10 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
 
 <script>
 const API = '<?php echo BASE_URL; ?>api/knowledge/';
+
+/* Shorthand for this page's own namespace. window.t() comes from i18n.js,
+   which the head already loads with the 'knowledge' namespace exported. */
+const ka = (k, p) => t('knowledge.assistant.' + k, p);
 const CAN_ANALYSE = <?php echo $canAnalyse ? 'true' : 'false'; ?>;
 
 let kaStatus = 'open';
@@ -203,7 +206,7 @@ async function kaLoad() {
     const list = document.getElementById('kaList');
 
     if (!data.success) {
-        list.innerHTML = '<div class="ka-empty">' + esc(data.error || 'Could not load') + '</div>';
+        list.innerHTML = '<div class="ka-empty">' + esc(data.error || ka('load_failed')) + '</div>';
         return;
     }
     if (data.needs_db_verify) {
@@ -214,7 +217,7 @@ async function kaLoad() {
 
     renderClusters(data.clusters || []);
     if (data.last_run) {
-        document.getElementById('kaSayMeta').textContent = 'Last looked ' + fmtDate(data.last_run) + '.';
+        document.getElementById('kaSayMeta').textContent = ka('last_looked', { date: fmtDate(data.last_run) });
     }
 }
 
@@ -222,9 +225,9 @@ function renderClusters(clusters) {
     const list = document.getElementById('kaList');
     if (!clusters.length) {
         list.innerHTML = '<div class="ka-empty">' + (
-            kaStatus === 'open'      ? 'Nothing to write. Either the assistant has not looked yet, or your knowledge base already covers what people keep asking.' :
-            kaStatus === 'written'   ? 'Nothing written from a gap yet.' :
-                                       'Nothing set aside.'
+            kaStatus === 'open'      ? ka('empty_open') :
+            kaStatus === 'written'   ? ka('empty_written') :
+                                       ka('empty_dismissed')
         ) + '</div>';
         return;
     }
@@ -239,12 +242,12 @@ function renderClusters(clusters) {
 
         let actions = '';
         if (c.status === 'open') {
-            actions = '<button class="ka-btn ka-btn-primary" onclick="kaDraft(' + c.id + ', ' + JSON.stringify(c.label).replace(/"/g, '&quot;') + ')">Draft</button>' +
-                      '<button class="ka-btn" onclick="kaDismiss(' + c.id + ', false)">Not needed</button>';
+            actions = '<button class="ka-btn ka-btn-primary" onclick="kaDraft(' + c.id + ', ' + JSON.stringify(c.label).replace(/"/g, '&quot;') + ')">' + esc(ka('draft')) + '</button>' +
+                      '<button class="ka-btn" onclick="kaDismiss(' + c.id + ', false)">' + esc(ka('dismiss')) + '</button>';
         } else if (c.status === 'dismissed') {
-            actions = '<button class="ka-btn" onclick="kaDismiss(' + c.id + ', true)">Bring back</button>';
+            actions = '<button class="ka-btn" onclick="kaDismiss(' + c.id + ', true)">' + esc(ka('restore')) + '</button>';
         } else if (c.status === 'written' && c.article_id) {
-            actions = '<a class="ka-btn" href="<?php echo BASE_URL; ?>knowledge/?article=' + c.article_id + '">Open article</a>';
+            actions = '<a class="ka-btn" href="<?php echo BASE_URL; ?>knowledge/?article=' + c.article_id + '">' + esc(ka('open_article')) + '</a>';
         }
 
         // "asked N times" is the headline because it is the only part that is a
@@ -253,16 +256,16 @@ function renderClusters(clusters) {
             '<div class="ka-card-top">' +
               '<div>' +
                 '<h3>' + esc(c.label) + '</h3>' +
-                '<div class="ka-count">Asked <strong>' + c.ticket_count + ' times</strong>' +
+                '<div class="ka-count">' + (Number(c.ticket_count) === 1 ? ka('asked_one') : ka('asked_many', { n: c.ticket_count })) +
                   (span ? ' &middot; ' + esc(span) : '') +
                   (c.status === 'written' && c.article_title
-                     ? ' &middot; written up as “' + esc(c.article_title) + '”' +
-                       (Number(c.is_published) === 0 ? ' (still a draft)' : '') : '') +
+                     ? ' &middot; ' + ka('written_up_as', { title: esc(c.article_title) }) +
+                       (Number(c.is_published) === 0 ? ' ' + esc(ka('still_draft')) : '') : '') +
                 '</div>' +
               '</div>' +
               '<div class="ka-actions">' + actions + '</div>' +
             '</div>' +
-            (evidence ? '<details class="ka-evidence"><summary>Show the tickets</summary><ul>' + evidence + '</ul></details>' : '') +
+            (evidence ? '<details class="ka-evidence"><summary>' + esc(ka('show_tickets')) + '</summary><ul>' + evidence + '</ul></details>' : '') +
         '</div>';
     }).join('');
 }
@@ -291,14 +294,14 @@ async function kaRun() {
     const say = document.getElementById('kaSayText');
     const bar = document.getElementById('kaProgress');
     const fill = document.getElementById('kaProgressBar');
-    if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+    if (btn) { btn.disabled = true; btn.textContent = ka('reading'); }
 
     try {
         const st = await kaPost('status');
-        if (!st.success) { say.textContent = st.error || 'Could not start.'; return; }
+        if (!st.success) { say.textContent = st.error || ka('start_failed'); return; }
 
         if (!st.tickets) {
-            say.textContent = 'There are no closed tickets in the last ' + st.lookback_days + ' days to read.';
+            say.textContent = ka('no_tickets', { days: st.lookback_days });
             return;
         }
 
@@ -309,12 +312,12 @@ async function kaRun() {
             const total = st.tickets;
             let remaining = st.remaining;
             while (remaining > 0) {
-                say.textContent = 'Reading your closed tickets… ' + (total - remaining) + ' of ' + total + '.';
+                say.textContent = ka('reading_n', { done: total - remaining, total: total });
                 fill.style.width = Math.round(((total - remaining) / total) * 100) + '%';
                 const r = await kaPost('embed', { batch: 20 });
-                if (!r.success) { say.textContent = r.error || 'Stopped early.'; break; }
+                if (!r.success) { say.textContent = r.error || ka('stopped_early'); break; }
                 if (r.stalled) {
-                    say.textContent = 'Could not read the tickets — check the OpenAI key in Knowledge → Settings.';
+                    say.textContent = ka('read_failed');
                     bar.style.display = 'none';
                     return;
                 }
@@ -323,21 +326,21 @@ async function kaRun() {
             fill.style.width = '100%';
         }
 
-        say.textContent = 'Working out what is missing…';
+        say.textContent = ka('clustering');
         const c = await kaPost('cluster');
         bar.style.display = 'none';
-        if (!c.success) { say.textContent = c.error || 'Could not finish.'; return; }
+        if (!c.success) { say.textContent = c.error || ka('finish_failed'); return; }
 
         say.textContent = c.message;
         document.getElementById('kaSayMeta').textContent =
             c.mode === 'wording'
-                ? 'Matched on wording. Add an OpenAI key in Knowledge → Settings to match on meaning instead.'
+                ? ka('wording_mode')
                 : '';
         kaStatus = 'open';
         document.querySelectorAll('.ka-tab').forEach(t => t.classList.toggle('active', t.dataset.status === 'open'));
         kaLoad();
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Look for gaps'; }
+        if (btn) { btn.disabled = false; btn.textContent = ka('run'); }
     }
 }
 
@@ -351,7 +354,7 @@ async function kaDismiss(clusterId, undo) {
         body: JSON.stringify({ cluster_id: clusterId, undo: !!undo })
     });
     const data = await res.json();
-    if (!data.success) { alert(data.error || 'Could not update'); return; }
+    if (!data.success) { alert(data.error || ka('update_failed')); return; }
     kaLoad();
 }
 
@@ -366,7 +369,7 @@ function kaCloseModal() {
 function kaDraft(clusterId, label) {
     kaCtx = { clusterId, label };
     document.getElementById('kaModalTitle').textContent = label;
-    document.getElementById('kaModalStatus').textContent = 'Reading the most detailed ticket…';
+    document.getElementById('kaModalStatus').textContent = ka('reading_best');
     document.getElementById('kaModalContent').innerHTML = '';
     document.getElementById('kaModalFoot').innerHTML = '';
     document.getElementById('kaModal').classList.add('open');
@@ -380,9 +383,9 @@ function kaRetryWithAnswers() {
         return val ? ('Q: ' + label + '\nA: ' + val) : '';
     }).filter(Boolean).join('\n\n');
 
-    if (!answers) { alert('Answer at least one question first.'); return; }
+    if (!answers) { alert(ka('answer_one')); return; }
 
-    document.getElementById('kaModalStatus').textContent = 'Writing it up…';
+    document.getElementById('kaModalStatus').textContent = ka('writing_up');
     document.getElementById('kaModalContent').innerHTML = '';
     document.getElementById('kaModalFoot').innerHTML = '';
     kaStream({ cluster_id: kaCtx.clusterId, answers });
@@ -409,7 +412,7 @@ async function kaStream(payload) {
             body: JSON.stringify(payload)
         });
     } catch (e) {
-        statusEl.textContent = 'Could not reach the assistant.';
+        statusEl.textContent = ka('unreachable');
         return;
     }
 
@@ -419,14 +422,14 @@ async function kaStream(payload) {
 
     const handle = (event, data) => {
         if (event === 'error') {
-            statusEl.textContent = data.message || 'Something went wrong.';
+            statusEl.textContent = data.message || t('common.error_generic');
             return;
         }
         if (event === 'verdict') {
             verdict = data.verdict;
             statusEl.textContent = verdict === 'article'
-                ? 'Writing it up…'
-                : 'There is not enough in these tickets yet.';
+                ? ka('writing_up')
+                : ka('not_enough_yet');
             contentEl.innerHTML = verdict === 'article'
                 ? '<div class="ka-preview" id="kaPreview"></div>'
                 : '<div class="ka-refusal" id="kaRefusal"></div>';
@@ -474,45 +477,44 @@ function kaFinish(data) {
     const footEl = document.getElementById('kaModalFoot');
 
     if (data.verdict === 'article') {
-        statusEl.textContent = 'Draft ready. Read it before you publish — it was written from ticket ' + esc(data.ticket_ref) + '.';
+        statusEl.textContent = ka('draft_ready', { ref: data.ticket_ref });
         contentEl.insertAdjacentHTML('beforeend',
-            '<div class="ka-draft-note">Saving puts this in your knowledge base as an unpublished draft. ' +
-            'Nobody can read it until you publish it.</div>');
+            '<div class="ka-draft-note">' + esc(ka('draft_note')) + '</div>');
         footEl.innerHTML =
-            '<button class="ka-btn" onclick="kaCloseModal()">Cancel</button>' +
-            '<button class="ka-btn ka-btn-primary" id="kaSaveBtn" onclick="kaSaveDraft()">Save draft</button>';
+            '<button class="ka-btn" onclick="kaCloseModal()">' + esc(t('common.cancel')) + '</button>' +
+            '<button class="ka-btn ka-btn-primary" id="kaSaveBtn" onclick="kaSaveDraft()">' + esc(ka('save_draft')) + '</button>';
         return;
     }
 
     // A refusal, with the questions that would turn it into an article.
-    statusEl.textContent = 'Not enough to write from yet.';
+    statusEl.textContent = ka('refused');
     const refusal = document.getElementById('kaRefusal');
     if (refusal) {
-        refusal.innerHTML = '<p>' + esc(data.explanation || 'The tickets do not say what caused this or how it was fixed.') + '</p>';
+        refusal.innerHTML = '<p>' + esc(data.explanation || ka('refused_why')) + '</p>';
     }
     if ((data.questions || []).length) {
         contentEl.insertAdjacentHTML('beforeend',
             '<p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">' +
-            'Answer what you can and it will try again. You were there; it was not.</p>' +
+            esc(ka('refused_ask')) + '</p>' +
             data.questions.map(q =>
                 '<div class="ka-q"><label>' + esc(q) + '</label><textarea></textarea></div>').join(''));
         footEl.innerHTML =
-            '<button class="ka-btn" onclick="kaCloseModal()">Close</button>' +
-            '<button class="ka-btn ka-btn-primary" onclick="kaRetryWithAnswers()">Try again</button>';
+            '<button class="ka-btn" onclick="kaCloseModal()">' + esc(t('common.close')) + '</button>' +
+            '<button class="ka-btn ka-btn-primary" onclick="kaRetryWithAnswers()">' + esc(ka('try_again')) + '</button>';
     } else {
-        footEl.innerHTML = '<button class="ka-btn" onclick="kaCloseModal()">Close</button>';
+        footEl.innerHTML = '<button class="ka-btn" onclick="kaCloseModal()">' + esc(t('common.close')) + '</button>';
     }
 }
 
 async function kaSaveDraft() {
     const btn = document.getElementById('kaSaveBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('common.saving'); }
 
     // The <h1> the model opened with is the title; the rest is the body.
     const tmp = document.createElement('div');
     tmp.innerHTML = safeHtmlFragment(kaDraftHtml);
     const h1 = tmp.querySelector('h1');
-    const title = h1 ? h1.textContent.trim() : (kaCtx && kaCtx.label) || 'Untitled';
+    const title = h1 ? h1.textContent.trim() : (kaCtx && kaCtx.label) || ka('untitled');
     if (h1) h1.remove();
 
     const res = await fetch(API + 'writeup_save.php', {
@@ -527,8 +529,8 @@ async function kaSaveDraft() {
     });
     const data = await res.json();
     if (!data.success) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Save draft'; }
-        alert(data.error || 'Could not save');
+        if (btn) { btn.disabled = false; btn.textContent = ka('save_draft'); }
+        alert(data.error || ka('save_failed'));
         return;
     }
     kaCloseModal();
@@ -547,8 +549,7 @@ async function kaSaveDraft() {
     if (!CAN_ANALYSE) {
         const has = document.getElementById('kaList').querySelector('.ka-card');
         if (!has) {
-            document.getElementById('kaSayText').textContent =
-                'Nothing to show yet. Someone with permission to run the assistant needs to look for gaps first.';
+            document.getElementById('kaSayText').textContent = ka('nothing_yet_readonly');
         }
         return;
     }
@@ -559,9 +560,9 @@ async function kaSaveDraft() {
             const has = document.getElementById('kaList').querySelector('.ka-card');
             if (!has) {
                 el.textContent = st.tickets
-                    ? 'There are ' + st.tickets + ' closed tickets from the last ' + st.lookback_days +
-                      ' days I have not read yet.' + (CAN_ANALYSE ? ' Press “Look for gaps”.' : '')
-                    : 'No closed tickets in the last ' + st.lookback_days + ' days to read.';
+                    ? ka('unread_tickets', { n: st.tickets, days: st.lookback_days })
+                      + (CAN_ANALYSE ? ' ' + ka('press_run') : '')
+                    : ka('none_to_read', { days: st.lookback_days });
             }
         }
     } catch (e) { /* the list still works without the status line */ }

@@ -133,6 +133,7 @@ function searchScopeForAnalyst(PDO $conn, int $analystId, array $overrides = [])
         'include_default'   => true,   // may this caller see rows whose source had a NULL tenant?
         'include_internal'  => true,   // internal notes — false for anything customer-facing
         'include_deleted'   => false,  // trashed tickets stay out
+        'exclude_closed'    => false,  // true = drop tickets whose status is flagged closed (#149)
         'source_types'      => null,   // null = every kind
         'ticket_ids'        => null,   // null = no restriction
         'require_ticket'    => false,  // true = only documents attached to a ticket
@@ -269,6 +270,14 @@ function searchCorpusQuery(PDO $conn, string $rawQuery, array $scope, array $opt
     // the tickets table rather than duplicated into the corpus.
     $joinSql = " LEFT JOIN tickets t ON t.id = sd.ticket_id";
     $delSql  = empty($scope['include_deleted']) ? " AND (sd.ticket_id IS NULL OR t.deleted_datetime IS NULL)" : '';
+    // Closed tickets out (#149), on the same join and for the same reason: here,
+    // inside the WHERE, the total and the page are counted from one filtered set.
+    // Dropping them afterwards would print "12 found" above nine rows.
+    // Documents with no ticket are untouched - "closed" is not a thing they can be.
+    if (!empty($scope['exclude_closed'])) {
+        $delSql .= " AND (sd.ticket_id IS NULL OR NOT EXISTS (SELECT 1 FROM ticket_statuses vf_ts"
+                 . " WHERE vf_ts.id = t.status_id AND vf_ts.is_closed = 1))";
+    }
 
     $where = "MATCH($cols) AGAINST (? IN BOOLEAN MODE)" . $scopeSql . $delSql;
     $args  = array_merge([$parsed['expr']], $scopeParams);

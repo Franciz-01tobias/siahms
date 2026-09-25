@@ -48,7 +48,11 @@ try {
     // the rule that the Default company also owns NULL-tenant rows, so requesters
     // who have never been assigned a company stay visible from Default and do not
     // silently vanish from every queue.
-    list($uSql, $uParams) = activeTenantFilter($conn, (int)$_SESSION['analyst_id'], 'u');
+    //
+    // The READ variant, so "All companies" lists every company's requesters
+    // rather than the last one selected (2.6.0 backlog). The ticket count above
+    // already widened with it, so rows and counts now agree.
+    list($uSql, $uParams) = activeTenantReadFilter($conn, (int)$_SESSION['analyst_id'], 'u');
 
     // Build query with optional search
     $sql = "SELECT

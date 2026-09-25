@@ -45,7 +45,7 @@ $ready = assetLabelsSchemaReady($conn);
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scan assets · FreeITSM</title>
+    <title><?php echo htmlspecialchars(t('asset-management.scanner.browser_title')); ?> · FreeITSM</title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
     <style>
         /* Self-contained: shares no layout with the desktop module. Every
@@ -131,42 +131,40 @@ $ready = assetLabelsSchemaReady($conn);
 <body data-mode="lookup">
 
 <div class="bar">
-    <h1>Scan assets</h1>
+    <h1><?php echo htmlspecialchars(t('asset-management.scanner.heading')); ?></h1>
     <span class="counter" id="counter"></span>
-    <a href="./">Close</a>
+    <a href="./"><?php echo htmlspecialchars(t('common.close')); ?></a>
 </div>
 
 <div class="wrap">
 
 <?php if (!$ready): ?>
     <div class="card">
-        <p style="margin:0">Asset labels need a database update first — an administrator can run
-        <strong>System → Database Verification</strong>. Until then there are no codes to scan.</p>
+        <p style="margin:0"><?php echo t('asset-management.scanner.not_ready'); ?></p>
     </div>
 <?php else: ?>
 
     <div class="card">
-        <span class="step-label">What should a scan do?</span>
+        <span class="step-label"><?php echo htmlspecialchars(t('asset-management.scanner.mode_question')); ?></span>
         <div class="modes">
-            <button type="button" id="modeLookup" class="on" onclick="setMode('lookup')">Look up</button>
-            <button type="button" id="modeStock" onclick="setMode('stocktake')">Stocktake</button>
+            <button type="button" id="modeLookup" class="on" onclick="setMode('lookup')"><?php echo htmlspecialchars(t('asset-management.scanner.mode_lookup')); ?></button>
+            <button type="button" id="modeStock" onclick="setMode('stocktake')"><?php echo htmlspecialchars(t('asset-management.scanner.mode_stocktake')); ?></button>
         </div>
-        <p class="hint" id="modeHint">Scan a label and the asset opens. One at a time.</p>
+        <p class="hint" id="modeHint"><?php echo htmlspecialchars(t('asset-management.scanner.hint_lookup')); ?></p>
 
         <?php /* The stocktake settings are deliberately chosen BEFORE scanning
                  rather than confirmed after each one: the whole value of the mode
                  is that a scan needs no follow-up tap. */ ?>
         <div class="stocktake-only" style="margin-top:14px;">
             <div class="field">
-                <span class="step-label" for="stStatus">Set status to</span>
-                <select class="big" id="stStatus"><option value="">(leave unchanged)</option></select>
+                <span class="step-label" for="stStatus"><?php echo htmlspecialchars(t('asset-management.scanner.set_status')); ?></span>
+                <select class="big" id="stStatus"><option value=""><?php echo htmlspecialchars(t('asset-management.scanner.leave_unchanged')); ?></option></select>
             </div>
             <div class="field">
-                <span class="step-label" for="stLocation">Set location to</span>
-                <select class="big" id="stLocation"><option value="">(leave unchanged)</option></select>
+                <span class="step-label" for="stLocation"><?php echo htmlspecialchars(t('asset-management.scanner.set_location')); ?></span>
+                <select class="big" id="stLocation"><option value=""><?php echo htmlspecialchars(t('asset-management.scanner.leave_unchanged')); ?></option></select>
             </div>
-            <p class="hint">Every asset you scan gets these. An asset already set this way is
-               counted as seen and left alone, so nothing pointless lands in its history.</p>
+            <p class="hint"><?php echo htmlspecialchars(t('asset-management.scanner.stocktake_hint')); ?></p>
         </div>
     </div>
 
@@ -174,27 +172,26 @@ $ready = assetLabelsSchemaReady($conn);
         <div class="cam" id="cam">
             <video id="video" playsinline muted autoplay></video>
             <div class="reticle"></div>
-            <button type="button" class="torch" id="torch" hidden onclick="toggleTorch()">Light</button>
-            <div class="camstate" id="camstate">Starting camera…</div>
+            <button type="button" class="torch" id="torch" hidden onclick="toggleTorch()"><?php echo htmlspecialchars(t('asset-management.scanner.torch')); ?></button>
+            <div class="camstate" id="camstate"><?php echo htmlspecialchars(t('asset-management.scanner.cam_starting')); ?></div>
         </div>
         <div class="live" id="live"></div>
         <div id="result"></div>
         <div class="btn-row">
-            <button type="button" id="undoBtn" onclick="undoLast()" disabled>Undo last</button>
-            <button type="button" id="retryBtn" onclick="startCamera()" hidden>Start camera</button>
+            <button type="button" id="undoBtn" onclick="undoLast()" disabled><?php echo htmlspecialchars(t('asset-management.scanner.undo')); ?></button>
+            <button type="button" id="retryBtn" onclick="startCamera()" hidden><?php echo htmlspecialchars(t('asset-management.scanner.start_camera')); ?></button>
         </div>
     </div>
 
     <div class="card">
-        <span class="step-label" for="manual">Or type a tag, serial or hostname</span>
+        <span class="step-label" for="manual"><?php echo htmlspecialchars(t('asset-management.scanner.manual_label')); ?></span>
         <input class="big" id="manual" autocomplete="off" autocapitalize="characters" spellcheck="false"
-               placeholder="e.g. LT0001" onkeydown="if(event.key==='Enter')manualLookup()">
-        <p class="hint">Works when the camera is blocked, the label is damaged, or the kit only has
-           the manufacturer's own barcode on it.</p>
+               placeholder="<?php echo htmlspecialchars(t('asset-management.field.asset_tag_ph')); ?>" onkeydown="if(event.key==='Enter')manualLookup()">
+        <p class="hint"><?php echo htmlspecialchars(t('asset-management.scanner.manual_hint')); ?></p>
     </div>
 
     <div class="card" id="sessionCard" hidden>
-        <span class="step-label">Scanned in this session</span>
+        <span class="step-label"><?php echo htmlspecialchars(t('asset-management.scanner.session_heading')); ?></span>
         <ul class="done-list" id="doneList"></ul>
     </div>
 
@@ -203,6 +200,49 @@ $ready = assetLabelsSchemaReady($conn);
 
 <?php if ($ready): ?>
 <script>
+/* Every string this script shows, translated on the server in one go. This
+   page shares no JS bundle with the desktop module (by design - it is a phone
+   screen), so there is nothing for assets/js/i18n.js to hang off. */
+const S = <?php echo json_encode([
+    'hint_lookup'      => t('asset-management.scanner.hint_lookup'),
+    'hint_stocktake'   => t('asset-management.scanner.hint_stocktake'),
+    'cam_insecure'     => t('asset-management.scanner.cam_insecure'),
+    'cam_unsupported'  => t('asset-management.scanner.cam_unsupported'),
+    'cam_starting'     => t('asset-management.scanner.cam_starting'),
+    'cam_denied'       => t('asset-management.scanner.cam_denied'),
+    'cam_failed'       => t('asset-management.scanner.cam_failed'),
+    'torch'            => t('asset-management.scanner.torch'),
+    'torch_off'        => t('asset-management.scanner.torch_off'),
+    'looking_up'       => t('asset-management.scanner.looking_up'),
+    'lookup_failed'    => t('asset-management.scanner.lookup_failed'),
+    'not_yours'        => t('asset-management.scanner.not_yours'),
+    'no_match'         => t('asset-management.scanner.no_match'),
+    'server_error'     => t('asset-management.scanner.server_error'),
+    'asset_hash'       => t('asset-management.scan.asset_hash'),
+    'already_scanned'  => t('asset-management.scanner.already_scanned'),
+    'unchanged'        => t('asset-management.scanner.unchanged'),
+    'seen_nothing_set' => t('asset-management.scanner.seen_nothing_set'),
+    'already_set'      => t('asset-management.scanner.already_set'),
+    'saving'           => t('common.saving'),
+    'update_failed'    => t('asset-management.scanner.update_failed'),
+    'updated'          => t('asset-management.scanner.updated'),
+    'field_status'     => t('asset-management.scanner.field_status'),
+    'field_location'   => t('asset-management.scanner.field_location'),
+    'both_fields'      => t('asset-management.scanner.both_fields'),
+    'undoing'          => t('asset-management.scanner.undoing'),
+    'put_back'         => t('asset-management.scanner.put_back'),
+    'note_seen'        => t('asset-management.scanner.note_seen'),
+    'note_already_set' => t('asset-management.scanner.note_already_set'),
+    'note_updated'     => t('asset-management.scanner.note_updated'),
+    'note_undone'      => t('asset-management.scanner.note_undone'),
+    'counter'          => t('asset-management.scanner.counter'),
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+
+/** Fill {placeholders} in one of S's strings. */
+function sfmt(str, vals) {
+    return Object.keys(vals).reduce((s, k) => s.split('{' + k + '}').join(vals[k]), str);
+}
+
 const API   = <?php echo json_encode(BASE_URL . 'api/assets/'); ?>;
 const JSQR  = <?php echo json_encode(BASE_URL . 'assets/js/vendor/jsQR.js'); ?>;
 
@@ -222,9 +262,7 @@ function setMode(m) {
     document.body.dataset.mode = m;
     document.getElementById('modeLookup').classList.toggle('on', m === 'lookup');
     document.getElementById('modeStock').classList.toggle('on', m === 'stocktake');
-    document.getElementById('modeHint').textContent = (m === 'lookup')
-        ? 'Scan a label and the asset opens. One at a time.'
-        : 'Stay on this screen and keep scanning. Each one is updated as you go.';
+    document.getElementById('modeHint').textContent = (m === 'lookup') ? S.hint_lookup : S.hint_stocktake;
     if (m === 'stocktake') loadPickers();
 }
 
@@ -268,17 +306,16 @@ async function startCamera() {
     // A dead black rectangle is the worst possible answer here, so name the
     // actual cause. Outside HTTPS the browser refuses before we even ask.
     if (!window.isSecureContext) {
-        state.innerHTML = 'The camera needs a secure (https) address.<br>' +
-                          'Type a tag or serial below instead, or reach this install over https.';
+        state.innerHTML = S.cam_insecure;
         return;
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        state.textContent = 'This browser has no camera support. Type a tag or serial below.';
+        state.textContent = S.cam_unsupported;
         return;
     }
 
     try {
-        state.textContent = 'Starting camera…';
+        state.textContent = S.cam_starting;
         stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { ideal: 'environment' } },   // the back camera, on a phone
             audio: false
@@ -296,9 +333,7 @@ async function startCamera() {
 
         await startDecoding(video);
     } catch (e) {
-        state.innerHTML = (e && e.name === 'NotAllowedError')
-            ? 'Camera permission was refused.<br>Allow it in your browser settings, or type a tag or serial below.'
-            : 'Could not start the camera. Type a tag or serial below.';
+        state.innerHTML = (e && e.name === 'NotAllowedError') ? S.cam_denied : S.cam_failed;
         document.getElementById('retryBtn').hidden = false;
     }
 }
@@ -307,7 +342,7 @@ function toggleTorch() {
     if (!track) return;
     torchOn = !torchOn;
     track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(() => { torchOn = !torchOn; });
-    document.getElementById('torch').textContent = torchOn ? 'Light off' : 'Light';
+    document.getElementById('torch').textContent = torchOn ? S.torch_off : S.torch;
 }
 
 /* Chrome/Android decodes in the browser; iOS Safari has no BarcodeDetector, so
@@ -381,7 +416,7 @@ function onCode(text) {
 async function handle(text) {
     if (busy) return;
     busy = true;
-    setLive('Looking up…', '');
+    setLive(S.looking_up, '');
     try {
         const token = tokenFrom(text);
         const url = token
@@ -390,23 +425,21 @@ async function handle(text) {
         const res  = await fetch(url);
         const data = await res.json();
 
-        if (!data.success) { showMiss(data.error || 'Lookup failed'); return; }
+        if (!data.success) { showMiss(data.error || S.lookup_failed); return; }
         if (!data.asset) {
-            showMiss(token
-                ? 'That label isn\'t an asset you can see. It may belong to another company.'
-                : 'Nothing matches ' + text);
+            showMiss(token ? S.not_yours : sfmt(S.no_match, { q: text }));
             return;
         }
         await act(data.asset);
     } catch (e) {
-        showMiss('Could not reach the server — ' + e.message);
+        showMiss(sfmt(S.server_error, { message: e.message }));
     } finally {
         busy = false;
     }
 }
 
 function labelFor(a) {
-    return a.asset_tag || a.hostname || a.service_tag || ('Asset #' + a.id);
+    return a.asset_tag || a.hostname || a.service_tag || sfmt(S.asset_hash, { id: a.id });
 }
 
 /** What a found asset means depends on the mode — the one decision this page makes. */
@@ -422,7 +455,7 @@ async function act(a) {
     // 500. Counting each asset once is the only honest number here; the debounce
     // above is about network chatter, this is about the tally being true.
     if (seenIds.has(a.id)) {
-        showFound(a, 'Already scanned — still ' + (a.status_name || 'unchanged'));
+        showFound(a, sfmt(S.already_scanned, { status: a.status_name || S.unchanged }));
         return;
     }
 
@@ -430,8 +463,8 @@ async function act(a) {
     const locId    = document.getElementById('stLocation').value;
 
     if (!statusId && !locId) {
-        showFound(a, 'Seen — nothing chosen to set yet');
-        addSession(a, 'seen');
+        showFound(a, S.seen_nothing_set);
+        addSession(a, S.note_seen);
         return;
     }
 
@@ -447,15 +480,15 @@ async function act(a) {
     }
 
     if (!changes.length) {
-        showFound(a, 'Already set — counted as seen');
-        addSession(a, 'already set');
+        showFound(a, S.already_set);
+        addSession(a, S.note_already_set);
         return;
     }
 
-    setLive('Saving…', '');
+    setLive(S.saving, '');
     for (const ch of changes) {
         const ok = await save(a.id, ch.field, ch.value);
-        if (!ok) { showMiss('Could not update ' + labelFor(a)); return; }
+        if (!ok) { showMiss(sfmt(S.update_failed, { label: labelFor(a) })); return; }
     }
 
     // Only the last change is undoable, and only the single most recent asset:
@@ -464,9 +497,10 @@ async function act(a) {
     undoable = { assetId: a.id, changes: changes, label: labelFor(a) };
     document.getElementById('undoBtn').disabled = false;
 
-    const what = changes.map(c => c.field === 'asset_status_id' ? 'status' : 'location').join(' and ');
-    showFound(a, 'Updated ' + what);
-    addSession(a, 'updated ' + what);
+    const words = changes.map(c => c.field === 'asset_status_id' ? S.field_status : S.field_location);
+    const what = words.length > 1 ? sfmt(S.both_fields, { a: words[0], b: words[1] }) : words[0];
+    showFound(a, sfmt(S.updated, { what: what }));
+    addSession(a, sfmt(S.note_updated, { what: what }));
 }
 
 async function save(assetId, field, value) {
@@ -485,17 +519,17 @@ async function undoLast() {
     if (!undoable) return;
     const btn = document.getElementById('undoBtn');
     btn.disabled = true;
-    setLive('Undoing…', '');
+    setLive(S.undoing, '');
     for (const ch of undoable.changes) {
         await save(undoable.assetId, ch.field, ch.was === null || ch.was === undefined ? '' : String(ch.was));
     }
-    setLive('Put ' + undoable.label + ' back', 'ok');
+    setLive(sfmt(S.put_back, { label: undoable.label }), 'ok');
     // The session list is a record of what happened, so the undo is recorded
     // rather than the original line being quietly deleted. Forgetting the id
     // re-arms the asset: having undone it, you are very likely about to scan it
     // again with the right settings.
     const undoneId = undoable.assetId;
-    addSession({ id: undoneId, asset_tag: undoable.label }, 'undone');
+    addSession({ id: undoneId, asset_tag: undoable.label }, S.note_undone);
     seenIds.delete(undoneId);
     updateCounter();
     undoable = null;
@@ -534,7 +568,7 @@ function addSession(a, note) {
 /* Distinct assets, not lines in the list — an undone one stops counting as done,
    and a re-read of the same label was never a second asset. */
 function updateCounter() {
-    document.getElementById('counter').textContent = seenIds.size + ' scanned';
+    document.getElementById('counter').textContent = sfmt(S.counter, { n: seenIds.size });
 }
 
 function esc(s) {

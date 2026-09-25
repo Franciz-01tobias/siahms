@@ -43,6 +43,21 @@ try {
     require_once '../../includes/asset_labels.php';
     $tagsReady = assetLabelsSchemaReady($conn);
     $tagCol = $tagsReady ? "a.asset_tag," : "NULL AS asset_tag,";
+    // Which company the asset is in, so the Key info Company picker can show it
+    // and move the asset (2.6.0). Rides on $tagCol because both SELECT branches
+    // already include it. Guarded like the columns around it.
+    $tagCol .= tenancyColumnExists($conn, 'assets', 'tenant_id') ? " a.tenant_id," : " NULL AS tenant_id,";
+
+    // `lease_expiry` is newer than the rest of the procurement block and is
+    // absent until Database Verification has run, so it gets the same
+    // treatment as the tag column above: named when it is there, and a NULL
+    // of the same name when it is not, so everything downstream reads one
+    // shape and an un-verified install shows a blank date rather than an
+    // error where its asset list used to be.
+    $colCheck = $conn->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'assets' AND column_name = 'lease_expiry'");
+    $colCheck->execute([DB_NAME]);
+    $leaseReady = (int)$colCheck->fetchColumn() > 0;
+    $leaseCol = $leaseReady ? "a.lease_expiry," : "NULL AS lease_expiry,";
 
     // The search reaches into locations and contracts, both of which may be
     // absent on an install that has not run Database Verification since the
@@ -76,6 +91,7 @@ try {
                     a.supplier_id,
                     a.order_number,
                     a.warranty_expiry,
+                    {$leaseCol}
                     /* When the agent last reported. Stored UTC; the client formats it.
                        Discussion #97 — it was written on every report and shown
                        nowhere but the phone scan page. */
@@ -104,7 +120,11 @@ try {
         }
 
         $sql .= "
-                    COUNT(ua.user_id) as user_count
+                    -- 🔴 COUNT(ua.id), not COUNT(ua.user_id). A holder may be an
+                    -- analyst, whose user_id is NULL - and COUNT ignores NULLs,
+                    -- so counting that column would quietly report one fewer
+                    -- holder than the asset actually has.
+                    COUNT(ua.id) as user_count
                 FROM assets a
                 LEFT JOIN users_assets ua ON ua.asset_id = a.id";
 
@@ -135,6 +155,7 @@ try {
                     a.supplier_id,
                     a.order_number,
                     a.warranty_expiry,
+                    {$leaseCol}
                     /* When the agent last reported. Stored UTC; the client formats it.
                        Discussion #97 — it was written on every report and shown
                        nowhere but the phone scan page. */
@@ -201,7 +222,7 @@ try {
     $params = array_merge($params, $tenantParams);
 
     if ($tableExists) {
-        $groupBy = " GROUP BY a.id, a.hostname, a.manufacturer, a.model, a.memory, a.service_tag, a.operating_system, a.feature_release, a.build_number, a.cpu_name, a.speed, a.bios_version, a.location_id, a.purchase_date, a.purchase_cost, a.supplier_id, a.order_number, a.warranty_expiry, a.first_seen, a.last_seen";
+        $groupBy = " GROUP BY a.id, a.hostname, a.manufacturer, a.model, a.memory, a.service_tag, a.operating_system, a.feature_release, a.build_number, a.cpu_name, a.speed, a.bios_version, a.location_id, a.purchase_date, a.purchase_cost, a.supplier_id" . ($leaseReady ? ', a.lease_expiry' : '') . ", a.order_number, a.warranty_expiry, a.first_seen, a.last_seen";
         if ($typeTableExists) {
             $groupBy .= ", a.asset_type_id, aty.name";
         }

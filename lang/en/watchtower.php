@@ -72,11 +72,18 @@ return [
         'card_knowledge'           => 'Knowledge',
         'card_knowledge_desc'      => 'Recent articles and reviews now overdue.',
         'card_assets'              => 'Assets',
-        'card_assets_desc'         => 'Warranties expiring and assets not seen recently.',
+        'card_assets_desc'         => 'Warranties and leases expiring, and assets not seen recently.',
         'card_tasks'               => 'Tasks',
         'card_tasks_desc'          => 'Open tasks by status, overdue and due today.',
         'card_workflows'           => 'Workflows',
         'card_workflows_desc'      => 'Failed or aborted runs, and webhooks that have stopped delivering.',
+
+        // Some figures on a card are switched on in the module that owns them,
+        // because the same setting also controls the calendar - so it cannot
+        // move here without splitting one decision across two screens. These
+        // lines are the signpost: one place to look, still one place to set.
+        'configured_elsewhere_assets'   => 'Warranty and lease figures are set in Assets → Settings → Expiry alerts',
+        'configured_elsewhere_software' => 'Renewal figures are set in Software → Settings → Renewals',
     ],
 
     'nav' => [
@@ -211,8 +218,10 @@ return [
     'assets' => [
         'metric_total'    => 'Total',
         'metric_offline'  => 'Offline',
+        'metric_lease'    => 'Lease',
         'metric_warranty' => 'Warranty',
         'warranty'        => '<span class="wt-attention-bold">{count}</span> asset(s) with warranty expired or expiring within {days} days',
+        'lease'           => '<span class="wt-attention-bold">{count}</span> asset(s) with a lease ended or ending within {days} days',
         'offline'         => '<span class="wt-attention-bold">{count}</span> asset(s) not seen in 7+ days',
         'all_active'      => 'All assets recently active',
     ],

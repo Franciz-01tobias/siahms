@@ -9,6 +9,11 @@
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../includes/csat.php';
+require_once __DIR__ . '/../../includes/i18n_guarded.php';
+
+// No session here at all - the locale comes from Accept-Language, so a
+// customer reads the survey in their own language without an account.
+i18nGuardedInit('tickets.csat.survey');
 
 $token = isset($_GET['token']) ? trim($_GET['token']) : '';
 $conn  = connectToDatabase();
@@ -72,15 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
 
 // Picked when emoji scale; renders the same 1-5 score visually
 $emojis = ['', '😡', '🙁', '😐', '🙂', '😀'];
-$emojiLabels = ['', 'Very dissatisfied', 'Dissatisfied', 'Neutral', 'Satisfied', 'Very satisfied'];
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= trLocale() ?>">
 <head>
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>How did we do?</title>
+<title><?= trh('title', 'How did we do?') ?></title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -208,28 +212,31 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 <?php if ($showThanks): ?>
     <div class="thanks-icon">✅</div>
-    <h1>Thanks for your feedback!</h1>
-    <p class="intro">We&rsquo;ve recorded your response. The team will use it to keep improving the service.</p>
+    <h1><?= trh('thanks_heading', 'Thanks for your feedback!') ?></h1>
+    <p class="intro"><?= trh('thanks_body', 'We’ve recorded your response. The team will use it to keep improving the service.') ?></p>
 
 <?php elseif ($error === 'invalid'): ?>
-    <h1>This survey link isn&rsquo;t valid</h1>
-    <p class="intro">The link may have been mistyped, or it&rsquo;s already been used. If you believe this is a mistake, please reply to the original ticket email.</p>
+    <h1><?= trh('invalid_heading', 'This survey link isn’t valid') ?></h1>
+    <p class="intro"><?= trh('invalid_body', 'The link may have been mistyped, or it’s already been used. If you believe this is a mistake, please reply to the original ticket email.') ?></p>
 
 <?php elseif ($error === 'already'): ?>
-    <h1>You&rsquo;ve already responded</h1>
-    <p class="intro">Thanks &mdash; we&rsquo;ve already got your feedback for this ticket. Each survey link can only be used once.</p>
+    <h1><?= trh('already_heading', 'You’ve already responded') ?></h1>
+    <p class="intro"><?= trh('already_body', 'Thanks — we’ve already got your feedback for this ticket. Each survey link can only be used once.') ?></p>
 
 <?php elseif ($error === 'server'): ?>
-    <h1>Something went wrong</h1>
-    <p class="intro">We couldn&rsquo;t save your response just now. Please try again in a minute, or reply to the original ticket email.</p>
+    <h1><?= trh('error_heading', 'Something went wrong') ?></h1>
+    <p class="intro"><?= trh('error_body', 'We couldn’t save your response just now. Please try again in a minute, or reply to the original ticket email.') ?></p>
 
 <?php else: ?>
-    <h1>How did we do?</h1>
-    <p class="ticket">Ticket <strong><?= htmlspecialchars($ticket['number']) ?></strong> &middot; <?= htmlspecialchars($ticket['subject']) ?></p>
-    <p class="intro">Hi <?= htmlspecialchars(explode(' ', $ticket['name'])[0] ?: 'there') ?>, thanks for letting us help. How would you rate the experience?</p>
+    <h1><?= trh('title', 'How did we do?') ?></h1>
+    <p class="ticket"><?= trh('ticket_line', 'Ticket') ?> <strong><?= htmlspecialchars($ticket['number']) ?></strong> &middot; <?= htmlspecialchars($ticket['subject']) ?></p>
+    <?php $firstName = explode(' ', (string)$ticket['name'])[0]; ?>
+    <p class="intro"><?= $firstName !== ''
+        ? trh('intro', 'Hi {name}, thanks for letting us help. How would you rate the experience?', ['name' => $firstName])
+        : trh('intro_noname', 'Hi, thanks for letting us help. How would you rate the experience?') ?></p>
 
     <?php if ($error === 'invalid_rating'): ?>
-        <div class="error-box">Please pick a rating before submitting.</div>
+        <div class="error-box"><?= trh('need_rating', 'Please pick a rating before submitting.') ?></div>
     <?php endif; ?>
 
     <form method="POST">
@@ -246,17 +253,26 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
                 </div>
             <?php endfor; ?>
         </div>
-        <div class="rating-caption" id="ratingCaption">Hover and click to rate</div>
+        <div class="rating-caption" id="ratingCaption"><?= trh('hint', 'Hover and click to rate') ?></div>
 
         <input type="hidden" name="rating" id="ratingInput" value="">
-        <textarea name="comment" placeholder="Anything you'd like to add? (optional)" maxlength="2000"></textarea>
-        <button type="submit" class="submit" id="submitBtn" disabled>Submit feedback</button>
+        <textarea name="comment" placeholder="<?= trh('comment_ph', "Anything you'd like to add? (optional)") ?>" maxlength="2000"></textarea>
+        <button type="submit" class="submit" id="submitBtn" disabled><?= trh('submit', 'Submit feedback') ?></button>
     </form>
 
     <script>
     (function () {
         const scale = <?= json_encode($scaleMode) ?>;
-        const labels = ['', 'Very dissatisfied', 'Dissatisfied', 'Neutral', 'Satisfied', 'Very satisfied'];
+        const labels = ['',
+            <?= trj('rating_1', 'Very dissatisfied') ?>,
+            <?= trj('rating_2', 'Dissatisfied') ?>,
+            <?= trj('rating_3', 'Neutral') ?>,
+            <?= trj('rating_4', 'Satisfied') ?>,
+            <?= trj('rating_5', 'Very satisfied') ?>];
+        // "4 / 5 - Satisfied". A template, not concatenation: the number does
+        // not lead the sentence in every language.
+        const captionTpl = <?= trj('caption', '{n} / 5 — {label}') ?>;
+        const hintText   = <?= trj('hint', 'Hover and click to rate') ?>;
         const items = Array.from(document.querySelectorAll('.rating-item'));
         const caption = document.getElementById('ratingCaption');
         const input = document.getElementById('ratingInput');
@@ -264,7 +280,7 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         let locked = null; // the clicked rating, or null if not yet picked
 
         function captionFor(n) {
-            return n + ' / 5 — ' + labels[n];
+            return captionTpl.replace('{n}', n).replace('{label}', labels[n]);
         }
 
         // Hover preview: stars fill trailing (1..n highlight), emojis only the hovered one
@@ -277,7 +293,7 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
                 // emojis use the :hover pseudo + .active class; no extra work here
             });
             caption.classList.remove('locked');
-            caption.textContent = n !== null ? captionFor(n) : (locked !== null ? captionFor(locked) : 'Hover and click to rate');
+            caption.textContent = n !== null ? captionFor(n) : (locked !== null ? captionFor(locked) : hintText);
             if (locked !== null && n === null) caption.classList.add('locked');
         }
 

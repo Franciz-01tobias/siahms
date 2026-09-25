@@ -17,7 +17,11 @@ $activeNav    = 'training';
 $translationNamespaces = ['common', 'self-service'];
 
 $pageStyles = <<<'CSS'
-.tr-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 48px; }
+/* Full width, matching the rest of the portal. This was capped at 1100px, which
+   is a sensible measure for PROSE but wrong for a card grid: on a wide screen it
+   left two cards per row with a band of empty page either side while the grid
+   was perfectly willing to fit four. */
+.tr-wrap { width: 100%; box-sizing: border-box; margin: 0; padding: 24px 28px 48px; }
 .tr-wrap h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; color: var(--text, #333); }
 .tr-sub { color: var(--text-muted, #666); font-size: 14px; margin: 0 0 22px; }
 
@@ -191,6 +195,26 @@ async function trLoad() {
         // passed reads as though there is more to do — the honest word for
         // opening a finished course is Review.
         const done    = ['passed', 'completed'].indexOf(row.status) > -1;
+
+        // 🔑 "Completed" alone answers the wrong question. Somebody looking at
+        // their own training record is nearly always being asked WHEN they did
+        // it - by a manager, an auditor, or a renewal date - and the date was
+        // already in the payload, so the badge said less than it knew.
+        //
+        // Only on a finished course, and only when a date was actually
+        // recorded: progress written by an older SCORM package can be complete
+        // with no timestamp, and "Completed on" followed by nothing is worse
+        // than "Completed".
+        //
+        // 🔴 fmtDate, NOT fmtNaiveDate — a different KIND of date from the
+        // deadline above. A deadline is a calendar day somebody picked and must
+        // not shift between timezones. A completion is an INSTANT, written by
+        // api/lms/scorm_data.php and native_progress.php as UTC_TIMESTAMP(), so
+        // it has to be read back through the viewer's own zone or it is wrong
+        // for everybody outside UTC and a day out either side of midnight.
+        const doneOn = (done && row.completion_datetime)
+            ? ' · ' + trEsc(fmtDate(row.completion_datetime))
+            : '';
         const started = row.status && row.status !== 'not_started';
         const action  = done    ? window.t('self-service.training.review')
                       : started ? window.t('self-service.training.resume')
@@ -201,7 +225,7 @@ async function trLoad() {
             ${row.description ? `<p class="tr-desc">${trEsc(row.description)}</p>` : ''}
             <div class="tr-foot">
                 <div class="tr-meta">
-                    <span class="tr-badge ${cls}">${trEsc(label)}</span>
+                    <span class="tr-badge ${cls}">${trEsc(label)}${doneOn}</span>
                     ${due}
                 </div>
                 ${bar}

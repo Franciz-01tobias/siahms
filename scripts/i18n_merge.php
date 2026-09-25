@@ -70,11 +70,35 @@ function i18nMergeOne(string $loc, string $ns, string $tsvPath, bool $dryRun): a
     if ($problems) return ['ok'=>false,'added'=>0,'messages'=>$msgs];
 
     // Only keys English actually has, and only ones not already translated.
-    $added = 0; $skippedExisting = 0; $unknown = 0;
+    $added = 0; $skippedExisting = 0; $unknown = 0; $autoBlank = 0;
     $result = [];
-    foreach ($enFlat as $k => $_) {
+    foreach ($enFlat as $k => $enVal) {
         if (array_key_exists($k, $haveFlat)) { $result[$k] = $haveFlat[$k]; continue; }
-        if (array_key_exists($k, $newFlat))  { $result[$k] = $newFlat[$k]; $added++; }
+        if (array_key_exists($k, $newFlat))  { $result[$k] = $newFlat[$k]; $added++; continue; }
+
+        /* 🔴 A BLANK ENGLISH VALUE IS FILLED HERE, NOT BY A TRANSLATOR.
+         *
+         * There are seven such keys in the whole product — a blank column
+         * header, a hint deliberately unset. They need no translation: if the
+         * English is empty the translation is empty, necessarily and in every
+         * language. There is no judgement to make.
+         *
+         * Asking an agent for one anyway was the single most persistent fault
+         * in this pipeline. It failed ELEVEN times, and every one of those
+         * eleven was on one of these seven keys — `software.inventory.col_actions`
+         * alone failed in fr, pt-BR and nb, the last time in an agent whose
+         * prompt named that exact key as the thing to watch for. The output
+         * format is `key<TAB>value`, and a tab followed by nothing is simply
+         * not reliably producible; twice an agent reported checking that very
+         * line and was wrong.
+         *
+         * 🔑 So the pipeline stops asking. i18n_chunk.php no longer sends these
+         * keys out, and they are filled here instead. This removes the failure
+         * rather than detecting it — i18n_repair_chunk.php stays as the net for
+         * anything produced before this change, or by hand.
+         */
+        if ($enVal === '') { $result[$k] = ''; $autoBlank++; continue; }
+
         // else: left out entirely, so it falls back to English at runtime.
     }
     foreach ($newFlat as $k => $_) {
@@ -89,6 +113,7 @@ function i18nMergeOne(string $loc, string $ns, string $tsvPath, bool $dryRun): a
     if ($unknown)         $msgs[] = "$unknown key(s) in the TSV are not in English — ignored";
     if ($skippedExisting) $msgs[] = "$skippedExisting key(s) already translated — left alone";
     if ($extras)          $msgs[] = count($extras) . " key(s) English no longer has — kept (prune separately)";
+    if ($autoBlank)       $msgs[] = "$autoBlank blank-English key(s) filled automatically — never sent to a translator";
 
     /* ── the non-destructive proof, before anything is written ───────────── */
     foreach ($haveFlat as $k => $v) {
@@ -100,7 +125,9 @@ function i18nMergeOne(string $loc, string $ns, string $tsvPath, bool $dryRun): a
         }
     }
 
-    if ($added === 0) { $msgs[] = 'nothing to add'; return ['ok'=>true,'added'=>0,'messages'=>$msgs]; }
+    // $autoBlank counts too — a chunk may add nothing but still owe the locale
+    // its blank-English keys, and skipping the write would leave them missing.
+    if ($added === 0 && $autoBlank === 0) { $msgs[] = 'nothing to add'; return ['ok'=>true,'added'=>0,'messages'=>$msgs]; }
 
     $tree   = i18nUnflatten($result);
     $header = i18nMergeHeader($loc, $ns);

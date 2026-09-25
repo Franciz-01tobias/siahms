@@ -114,7 +114,11 @@ try {
     //
     // Only the parent query needs this: the subtask, tag and comment lookups below
     // all key off ids drawn from this result, so they inherit the scope.
-    [$tenantSql, $tenantParams] = activeTenantFilter($conn, (int) $analystId, 't');
+    //
+    // The READ variant: under "All companies" the board shows every company's
+    // tasks, not the last one selected (2.6.0 backlog). tenant_id is already in
+    // the SELECT, so the move-to-company menu still ticks the right one.
+    [$tenantSql, $tenantParams] = activeTenantReadFilter($conn, (int) $analystId, 't');
     $params = array_merge($params, $tenantParams);
 
     $sql = "SELECT t.id, t.title, t.description,
@@ -123,6 +127,11 @@ try {
                    t.start_date, t.due_date,
                    t.assigned_analyst_id, t.assigned_team_id,
                    t.ticket_id, t.change_id, t.contract_id, t.board_position,
+                   -- Which company the task is in, so the move-to-company menu
+                   -- can tick the one it is already in. Discloses nothing: this
+                   -- list is already scoped, so every row returned is one the
+                   -- caller may see, in a company they can already name.
+                   t.tenant_id,
                    -- Needed by any caller that opts into subtasks, to tell the two
                    -- apart and to name the parent a subtask belongs to (#90).
                    t.parent_task_id, pt.title AS parent_title,

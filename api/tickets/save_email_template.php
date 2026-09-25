@@ -27,7 +27,10 @@ $bodyTemplate = trim($data['body_template'] ?? '');
 $isActive = isset($data['is_active']) ? (int)$data['is_active'] : 1;
 $displayOrder = isset($data['display_order']) ? (int)$data['display_order'] : 0;
 
-$validEvents = ['new_ticket_email', 'ticket_assigned', 'ticket_closed', 'csat_request', 'note_shared'];
+// 'analyst_assigned' (#148) goes to the assigned analyst, not the requester.
+// includes/template_email.php's templateEventAudience() is what decides that;
+// this list only controls what the editor is allowed to save.
+$validEvents = ['new_ticket_email', 'ticket_assigned', 'analyst_assigned', 'ticket_closed', 'csat_request', 'note_shared'];
 
 if ($name === '' || $eventTrigger === '' || $subjectTemplate === '' || $bodyTemplate === '') {
     echo json_encode(['success' => false, 'error' => 'Name, event trigger, subject, and body are required']);

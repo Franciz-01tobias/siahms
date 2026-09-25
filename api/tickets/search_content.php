@@ -52,6 +52,8 @@ try {
     $scope = searchScopeForAnalyst($conn, $analystId, [
         'include_internal' => true,
         'require_ticket'   => true,
+        // "Include closed tickets" (#149) - on unless the panel switched it off.
+        'exclude_closed'   => array_key_exists('include_closed', $input ?? []) && !$input['include_closed'],
     ]);
 
     $res = searchCorpusQuery($conn, $query, $scope, ['limit' => $limit]);

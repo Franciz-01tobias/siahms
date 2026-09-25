@@ -255,6 +255,47 @@ CREATE TABLE IF NOT EXISTS `user_preferences` (
     CONSTRAINT `fk_user_pref_analyst` FOREIGN KEY (`analyst_id`) REFERENCES `analysts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- The same idea for SELF-SERVICE PORTAL users.
+--
+-- They have no analyst row, so `user_preferences` above cannot hold anything for
+-- them. That gap was first patched by giving the portal's colour palette its own
+-- column on `users`; this is the generic twin, so the next portal preference does
+-- not become a third one-off column.
+--
+-- 🔒 COMPANY SCOPE: deliberately NONE, and that is the answer to the question
+-- the Multi-Tenancy Developer Guide §1 says to ask before adding any table.
+--
+-- This is not a fourth meaning of NULL; there is no tenant_id to give one.
+-- A row here is keyed to a PERSON, and `users.tenant_id` already records
+-- which company that person belongs to - so the company is reachable through
+-- the foreign key and duplicating it here would create a second copy that
+-- could disagree with the first.
+--
+-- It is also the right shape on its own terms: how somebody likes their
+-- knowledge base laid out is a fact about them, not about the company whose
+-- tickets they are reading. `user_preferences` above, keyed by analyst_id,
+-- is unscoped for the same reason.
+--
+-- ⚠️ Nothing here is readable across people: api/self-service/preference.php
+-- only ever acts on the signed-in portal user's own id, so there is no list
+-- read to scope in the first place.
+--
+-- ⚠️ A fresh install gets the unique key and the foreign key below. An EXISTING
+-- install gains this table from Database Verification, which creates columns but
+-- not indexes - so includes/portal_preferences.php deliberately does a
+-- SELECT-then-UPDATE rather than ON DUPLICATE KEY, which would silently insert a
+-- second row where no unique key exists.
+CREATE TABLE IF NOT EXISTS `portal_user_preferences` (
+    `id`                INT NOT NULL AUTO_INCREMENT,
+    `user_id`           INT NOT NULL,
+    `preference_key`    VARCHAR(100) NOT NULL,
+    `preference_value`  TEXT NULL,
+    `updated_datetime`  DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_portal_user_pref` (`user_id`, `preference_key`),
+    CONSTRAINT `fk_portal_user_pref_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Handover document templates (discussion #56).
 --
 -- `blocks` is a JSON array describing which sections appear, in what order, and
@@ -2374,6 +2415,12 @@ CREATE TABLE IF NOT EXISTS `asset_locations` (
     -- which would hand them to Default. Assets pointing at a deleted location
     -- fall back to none via fk_assets_location (ON DELETE SET NULL).
     `tenant_id`         INT NULL,
+    -- 2.6.0: SHARED across companies, the one exception to the rule above (a
+    -- data centre or head office several clients' kit sits in). A shared row
+    -- has tenant_id NULL, so it belongs to no single company and survives any
+    -- company being deleted. Its parent must be shared too. Only an analyst who
+    -- can reach every company may change one. See includes/asset_locations.php.
+    `is_shared`         TINYINT(1) NOT NULL DEFAULT 0,
     `created_datetime`  DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_asset_locations_parent` (`parent_id`),
@@ -2411,6 +2458,13 @@ CREATE TABLE IF NOT EXISTS `assets` (
     `supplier_id`       INT NULL,
     `order_number`      VARCHAR(100) NULL,
     `warranty_expiry`   DATE NULL,
+    -- Leased kit. Ed's original lifecycle brief said "warranty/lease expiries"
+    -- and only warranty was built; this is the other half. Kept as a plain
+    -- date beside the warranty one rather than a lease RECORD (lessor, cost,
+    -- schedule) because the question actually being asked is "what do I have
+    -- to give back, and when" - and the warranty machinery already answers
+    -- that shape of question on the dashboard and in the calendar.
+    `lease_expiry`      DATE NULL,
     -- Multi-tenancy (SCOPED DATA, not config): the company this asset belongs to.
     -- NULL = the Default company (existing installs stay NULL, so a single-company
     -- install is unaffected). Agent ingest derives it from the API key's tenant_id;
@@ -2445,9 +2499,27 @@ CREATE TABLE IF NOT EXISTS `assets` (
     -- the suppliers table is defined later in this file, so the FK can't be inline here.
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Who is holding an asset.
+--
+-- EITHER a requester (`user_id`) OR a member of the desk (`analyst_id`), never
+-- both and never neither. AssetsService enforces that; the database cannot,
+-- because a CHECK across two columns is not portable to every MySQL version
+-- this product supports.
+--
+-- 🔴 `user_id` IS NULLABLE, AND WAS NOT. Assets could only be assigned to a
+-- requester, and analysts are not requesters - on a real install most of the
+-- desk had no `users` row at all, so an analyst holding a laptop simply could
+-- not be recorded. Relaxing the rule cannot invalidate an existing row, because
+-- every existing row already has a user.
+--
+-- ⚠️ TWO unique keys, one per kind of holder. MySQL permits repeated NULLs in a
+-- unique key, so `uq_user_asset` no longer constrains analyst rows at all (their
+-- user_id is NULL) and would have let the same analyst be given the same asset
+-- any number of times. `uq_analyst_asset` is what actually stops that.
 CREATE TABLE IF NOT EXISTS `users_assets` (
     `id`                        INT NOT NULL AUTO_INCREMENT,
-    `user_id`                   INT NOT NULL,
+    `user_id`                   INT NULL,
+    `analyst_id`                INT NULL,
     `asset_id`                  INT NOT NULL,
     `assigned_datetime`         DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
     `assigned_by_analyst_id`    INT NULL,
@@ -2456,7 +2528,9 @@ CREATE TABLE IF NOT EXISTS `users_assets` (
     `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,   -- set by the demo data importer (#1297)
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_user_asset` (`user_id`, `asset_id`),
+    UNIQUE KEY `uq_analyst_asset` (`analyst_id`, `asset_id`),
     CONSTRAINT `fk_users_assets_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+    CONSTRAINT `fk_users_assets_holder_analyst` FOREIGN KEY (`analyst_id`) REFERENCES `analysts` (`id`),
     CONSTRAINT `fk_users_assets_analyst` FOREIGN KEY (`assigned_by_analyst_id`) REFERENCES `analysts` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -5881,6 +5955,10 @@ CREATE TABLE IF NOT EXISTS `system_settings` (
 INSERT IGNORE INTO `system_settings` (`setting_key`, `setting_value`) VALUES
     ('tasks_calendar_span_mode', 'deadline');
 
+INSERT IGNORE INTO `system_settings` (`setting_key`, `setting_value`) VALUES
+    ('ticket_checklist_closure_mode', 'per_template'),
+    ('ticket_checklist_empty_closure_mode', 'off');
+
 -- SSO global switches: master kill switch (off until a provider is configured)
 -- and the local-login break-glass toggle (on by default).
 INSERT IGNORE INTO `system_settings` (`setting_key`, `setting_value`) VALUES
@@ -6810,6 +6888,7 @@ CREATE TABLE IF NOT EXISTS `checklist_templates` (
     `category` VARCHAR(100) NULL DEFAULT 'General',
     `suggested_role` VARCHAR(100) NULL,
     `scope` ENUM('ticket','task','both') NOT NULL DEFAULT 'both',
+    `closure_mode` ENUM('warn','block') NOT NULL DEFAULT 'warn',
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `created_by_id` INT NULL,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -6843,6 +6922,7 @@ CREATE TABLE IF NOT EXISTS `ticket_checklists` (
     `ticket_id` INT NOT NULL,
     `template_id` INT NULL,
     `title` VARCHAR(255) NOT NULL,
+    `closure_mode` ENUM('warn','block') NOT NULL DEFAULT 'warn',
     `created_by_id` INT NULL,
     `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `is_demo` tinyint(1) NOT NULL DEFAULT 0,

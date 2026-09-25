@@ -70,6 +70,7 @@ class AssetsService
             'purchase_cost'    => ['audit' => 'purchase_cost',   'kind' => 'decimal'],
             'order_number'     => ['audit' => 'order_number',    'kind' => 'string', 'max' => 100],
             'warranty_expiry'  => ['audit' => 'warranty_expiry', 'kind' => 'date'],
+            'lease_expiry'     => ['audit' => 'lease_expiry',    'kind' => 'date'],
             'hostname'         => ['audit' => 'hostname',         'kind' => 'string', 'max' => 50],
             'manufacturer'     => ['audit' => 'manufacturer',     'kind' => 'string', 'max' => 50],
             'model'            => ['audit' => 'model',            'kind' => 'string', 'max' => 50],
@@ -161,7 +162,8 @@ class AssetsService
 
         self::auditWrite($conn, $assetId, $ctx->actorId, 'asset_created', null, $creationNote);
 
-        if (array_key_exists('warranty_expiry', $in) && $in['warranty_expiry']) {
+        if ((array_key_exists('warranty_expiry', $in) && $in['warranty_expiry'])
+            || (array_key_exists('lease_expiry', $in) && $in['lease_expiry'])) {
             self::syncWarranty($conn);
         }
         return $assetId;
@@ -224,7 +226,9 @@ class AssetsService
                 self::auditDisplay($conn, $field, $oldValue, $def),
                 self::auditDisplay($conn, $field, $newValue, $def),
             ];
-            if ($field === 'warranty_expiry') {
+            // Either date drives the same calendar pass, so either one changing
+            // is a reason to run it.
+            if ($field === 'warranty_expiry' || $field === 'lease_expiry') {
                 $warrantyChanged = true;
             }
         }
@@ -243,6 +247,92 @@ class AssetsService
         if ($warrantyChanged) {
             self::syncWarranty($conn);
         }
+    }
+
+    /**
+     * Assign an ANALYST to an asset — the desk's own kit.
+     *
+     * 🔑 Why this exists at all. Assets could only be held by a REQUESTER, and
+     * analysts are not requesters: on a real install five of seven analysts had
+     * no `users` row, so most of the desk could not be recorded as holding
+     * anything. Asked for in the 2.5.0 request list.
+     *
+     * 🔴 EXACTLY ONE HOLDER COLUMN IS SET. A row names a requester or an
+     * analyst, never both. The database cannot express that (a CHECK across two
+     * columns is not portable to every MySQL version supported here), so it is
+     * enforced here and nowhere else — which is precisely why assignment must
+     * go through this service rather than an INSERT somewhere convenient.
+     *
+     * $in: analyst_id | analyst_email, plus optional notes,
+     * expected_return_date, previous_analyst_id.
+     */
+    public static function assignAnalyst(PDO $conn, ActorContext $ctx, int $assetId, array $in): array
+    {
+        self::loadRow($conn, $assetId);   // 404 if gone
+        $actorId = $ctx->actorId;
+
+        if (isset($in['analyst_id']) && $in['analyst_id'] !== '') {
+            $a = $conn->prepare("SELECT id, full_name FROM analysts WHERE id = ? AND is_active = 1");
+            $a->execute([(int)$in['analyst_id']]);
+        } elseif (isset($in['analyst_email']) && trim((string)$in['analyst_email']) !== '') {
+            $a = $conn->prepare("SELECT id, full_name FROM analysts WHERE email = ? AND is_active = 1");
+            $a->execute([strtolower(trim((string)$in['analyst_email']))]);
+        } else {
+            throw new ServiceError('validation', 'missing_field', "Provide 'analyst_id' or 'analyst_email'.");
+        }
+        $row = $a->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            // Inactive is named separately from unknown: "there is no such
+            // analyst" sends somebody looking for a typo that is not there.
+            throw new ServiceError('validation', 'invalid_field', 'Unknown or inactive analyst.');
+        }
+        $analystId   = (int)$row['id'];
+        $analystName = $row['full_name'];
+
+        $notes = trim((string)($in['notes'] ?? '')) ?: null;
+        $expectedReturn = self::parseDate($in['expected_return_date'] ?? null, 'expected_return_date');
+
+        $check = $conn->prepare("SELECT id FROM users_assets WHERE asset_id = ? AND analyst_id = ?");
+        $check->execute([$assetId, $analystId]);
+        if ($check->fetchColumn()) {
+            throw new ServiceError('conflict', 'conflict', 'This analyst is already assigned to this asset.');
+        }
+
+        // user_id is left NULL. That column was NOT NULL until this feature; see
+        // api/system/db_verify.php, which relaxes it on an existing install.
+        $conn->prepare(
+            "INSERT INTO users_assets (asset_id, analyst_id, assigned_by_analyst_id, notes, expected_return_date, assigned_datetime)
+             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
+        )->execute([$assetId, $analystId, $actorId, $notes, $expectedReturn]);
+
+        // Custody trail, best-effort as elsewhere. asset_checkout_log.user_id
+        // names a requester, so an analyst handover records the NAME and leaves
+        // the id NULL rather than writing an analyst id into a requester column.
+        try {
+            $conn->prepare(
+                "INSERT INTO asset_checkout_log (asset_id, user_id, user_name, action, expected_return_date, analyst_id, notes, action_datetime)
+                 VALUES (?, NULL, ?, 'checkout', ?, ?, ?, UTC_TIMESTAMP())"
+            )->execute([$assetId, $analystName, $expectedReturn, $actorId, $notes]);
+        } catch (Exception $clogEx) { /* custody log not critical */ }
+
+        $oldName = null;
+        if (!empty($in['previous_analyst_id'])) {
+            $prev = $conn->prepare("SELECT full_name FROM analysts WHERE id = ?");
+            $prev->execute([(int)$in['previous_analyst_id']]);
+            $prevRow = $prev->fetch(PDO::FETCH_ASSOC);
+            $oldName = $prevRow ? $prevRow['full_name'] : (string)$in['previous_analyst_id'];
+        }
+        self::auditWrite($conn, $assetId, $actorId, 'assigned_analyst', $oldName, $analystName);
+
+        self::dispatch('asset.assigned', $conn, $assetId, 0, $analystName);
+
+        return [
+            'asset_id'             => $assetId,
+            'analyst_id'           => $analystId,
+            'name'                 => $analystName,
+            'expected_return_date' => $expectedReturn,
+            'notes'                => $notes,
+        ];
     }
 
     /**
@@ -326,6 +416,8 @@ class AssetsService
         $actorId = $ctx->actorId;
 
         // Snapshot holder + due-back before removal, for the custody trail + audit.
+        // Filtered on user_id, so this only ever sees a requester assignment —
+        // an analyst one is removed by unassignAnalyst() below.
         $snap = $conn->prepare(
             "SELECT u.display_name, ua.expected_return_date
              FROM users_assets ua INNER JOIN users u ON u.id = ua.user_id
@@ -355,6 +447,50 @@ class AssetsService
         return ['asset_id' => $assetId, 'user_id' => $userId];
     }
 
+    /**
+     * Remove an analyst from an asset — the mirror of unassignUser().
+     *
+     * Separate for the same reason assignAnalyst() is: it matches on a different
+     * column, and a shared function would be an `if` at every line.
+     */
+    public static function unassignAnalyst(PDO $conn, ActorContext $ctx, int $assetId, int $analystId, bool $skipAudit = false): array
+    {
+        self::loadRow($conn, $assetId);   // 404 if gone
+        $actorId = $ctx->actorId;
+
+        $snap = $conn->prepare(
+            "SELECT a.full_name, ua.expected_return_date
+             FROM users_assets ua INNER JOIN analysts a ON a.id = ua.analyst_id
+             WHERE ua.asset_id = ? AND ua.analyst_id = ?"
+        );
+        $snap->execute([$assetId, $analystId]);
+        $row = $snap->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            throw new ServiceError('not_found', 'not_found', 'Assignment not found.');
+        }
+
+        $conn->prepare("DELETE FROM users_assets WHERE asset_id = ? AND analyst_id = ?")->execute([$assetId, $analystId]);
+
+        // As in assignAnalyst: the custody log's user_id names a REQUESTER, so an
+        // analyst handover records the name and leaves the id NULL rather than
+        // writing an analyst id into a requester column, where it would later be
+        // read back as whichever requester happened to share that number.
+        try {
+            $conn->prepare(
+                "INSERT INTO asset_checkout_log (asset_id, user_id, user_name, action, expected_return_date, analyst_id, action_datetime)
+                 VALUES (?, NULL, ?, 'checkin', ?, ?, UTC_TIMESTAMP())"
+            )->execute([$assetId, $row['full_name'], $row['expected_return_date'], $actorId]);
+        } catch (Exception $clogEx) { /* custody log not critical */ }
+
+        if (!$skipAudit) {
+            self::auditWrite($conn, $assetId, $actorId, 'assigned_analyst', $row['full_name'], null);
+        }
+
+        self::dispatch('asset.unassigned', $conn, $assetId, 0, $row['full_name']);
+
+        return ['asset_id' => $assetId, 'analyst_id' => $analystId];
+    }
+
     /** Fire an asset.* workflow event (best-effort; the engine swallows its own errors). */
     private static function dispatch(string $event, PDO $conn, int $assetId, int $userId, ?string $userName): void
     {
@@ -367,6 +503,133 @@ class AssetsService
         } catch (Exception $wfEx) {
             error_log('Workflow dispatch error in asset service (' . $event . '): ' . $wfEx->getMessage());
         }
+    }
+
+    /**
+     * Move an asset to another company (2.6.0, from a customer's request list).
+     *
+     * The asset twin of TasksService::moveTaskToCompany, gated the same way: the
+     * actor must reach the asset where it is AND the company it is going to,
+     * checked against BOTH companyScope (what this caller may touch) and
+     * analystCanAccessTenant (what the person may reach).
+     *
+     * An asset carries more company-owned things than a task, and they split
+     * into two kinds on purpose:
+     *
+     *  CLEARED, and reported: its LOCATION, TYPE and STATUS when they are the old
+     *  company's own. They simply do not exist in the new company, so keeping them
+     *  would leave the asset wearing a value its own company cannot see or pick.
+     *  A shared location, and a global type or status, move with it untouched.
+     *
+     *  REFUSED, with the reason: a HOSTNAME or ASSET TAG the new company already
+     *  uses (both are unique per company, and agent ingest matches on hostname),
+     *  and a HOLDER who is a person in another company. Those need a decision
+     *  from the person, not a guess made on their behalf.
+     *
+     * An analyst holder moves with it: analysts are not company-scoped.
+     *
+     * @return array{moved:bool, from:string, to:string, cleared:string[]}
+     *         `cleared` lists the audit keys (location/type/status) that were
+     *         emptied, so the UI can say what changed.
+     */
+    public static function moveToCompany(PDO $conn, ActorContext $ctx, int $assetId, int $targetTenantId): array
+    {
+        require_once __DIR__ . '/../asset_locations.php';
+
+        $row = self::loadRow($conn, $assetId);
+        self::assertScope($conn, $ctx, $row);                    // 404 if out of scope
+
+        if (!isMultiTenant($conn)) {
+            throw new ServiceError('validation', 'invalid_field',
+                'This install has only one company, so there is nowhere to move an asset to.');
+        }
+        // One message for "no access" and "no such company", so probing ids
+        // cannot reveal which companies exist.
+        if (($ctx->companyScope !== null && !in_array($targetTenantId, $ctx->companyScope, true))
+                || !analystCanAccessTenant($conn, $ctx->actorId, $targetTenantId)) {
+            throw new ServiceError('validation', 'invalid_field', 'You do not have access to that company.');
+        }
+        $target = getTenantById($conn, $targetTenantId);
+        if (!$target) {
+            throw new ServiceError('validation', 'invalid_field', 'You do not have access to that company.');
+        }
+
+        // NULL means the Default company, so resolve it before comparing, or a
+        // Default asset "moved" into Default would write a nonsense audit line.
+        $defaultId   = getDefaultTenantId($conn);
+        $oldTenantId = ($row['tenant_id'] === null) ? $defaultId : (int)$row['tenant_id'];
+        if ($oldTenantId === $targetTenantId) {
+            return ['moved' => false, 'from' => $target['name'], 'to' => $target['name'], 'cleared' => []];
+        }
+        $oldName     = getTenantById($conn, $oldTenantId)['name'] ?? 'Unknown';
+        $storeTenant = ($targetTenantId === $defaultId) ? null : $targetTenantId;
+
+        // --- refusals --------------------------------------------------------
+        $dup = $conn->prepare("SELECT id FROM assets WHERE hostname = ? AND id <> ? AND tenant_id <=> ?");
+        $dup->execute([$row['hostname'], $assetId, $storeTenant]);
+        if ($dup->fetchColumn() !== false) {
+            throw new ServiceError('conflict', 'conflict',
+                "{$target['name']} already has an asset called {$row['hostname']}. Rename one of them first.");
+        }
+        if (!empty($row['asset_tag'])) {
+            $tag = $conn->prepare("SELECT id FROM assets WHERE asset_tag = ? AND id <> ? AND tenant_id <=> ?");
+            $tag->execute([$row['asset_tag'], $assetId, $storeTenant]);
+            if ($tag->fetchColumn() !== false) {
+                throw new ServiceError('conflict', 'conflict',
+                    "{$target['name']} already uses the asset tag {$row['asset_tag']}. Change one of them first.");
+            }
+        }
+        // A person holding it who is not in the new company. NULL = Default.
+        $h = $conn->prepare(
+            "SELECT COALESCE(NULLIF(TRIM(u.display_name), ''), u.username) AS name
+               FROM users_assets ua JOIN users u ON u.id = ua.user_id
+              WHERE ua.asset_id = ? AND COALESCE(u.tenant_id, ?) <> ?"
+        );
+        $h->execute([$assetId, $defaultId, $targetTenantId]);
+        $holders = $h->fetchAll(PDO::FETCH_COLUMN);
+        if ($holders) {
+            throw new ServiceError('validation', 'invalid_field',
+                'This asset is held by ' . implode(', ', $holders) . ", who is not in {$target['name']}. Unassign it first.");
+        }
+
+        // --- what does not exist in the new company -------------------------
+        $clear = [];   // column => audit key
+        if (!empty($row['location_id'])) {
+            [$lSql, $lArgs] = assetLocationScope($conn, $targetTenantId, '');
+            $lc = $conn->prepare("SELECT id FROM asset_locations WHERE id = ?" . $lSql);
+            $lc->execute(array_merge([(int)$row['location_id']], $lArgs));
+            if (!$lc->fetchColumn()) { $clear['location_id'] = 'location'; }
+        }
+        foreach ([['asset_type_id', 'asset_types', 'asset_type', 'type'],
+                  ['asset_status_id', 'asset_status_types', 'asset_status_type', 'status']] as [$col, $table, $entity, $key]) {
+            if (empty($row[$col])) continue;
+            $ids = array_map(fn($r) => (int)$r['id'],
+                             getTenantConfigRows($conn, $table, $entity, $targetTenantId, 'id'));
+            if (!in_array((int)$row[$col], $ids, true)) { $clear[$col] = $key; }
+        }
+
+        $map = self::fieldMap();
+        $ownTransaction = !$conn->inTransaction();
+        if ($ownTransaction) { $conn->beginTransaction(); }
+        try {
+            $sets = ['tenant_id = ?'];
+            $args = [$storeTenant];
+            foreach (array_keys($clear) as $col) { $sets[] = "$col = NULL"; }
+            $args[] = $assetId;
+            $conn->prepare("UPDATE assets SET " . implode(', ', $sets) . " WHERE id = ?")->execute($args);
+
+            self::auditWrite($conn, $assetId, $ctx->actorId, 'company', $oldName, $target['name']);
+            foreach ($clear as $col => $key) {
+                self::auditWrite($conn, $assetId, $ctx->actorId, $key,
+                                 self::auditDisplay($conn, $col, $row[$col], $map[$col]), null);
+            }
+            if ($ownTransaction) { $conn->commit(); }
+        } catch (Throwable $t) {
+            if ($ownTransaction && $conn->inTransaction()) { $conn->rollBack(); }
+            throw $t;
+        }
+
+        return ['moved' => true, 'from' => $oldName, 'to' => $target['name'], 'cleared' => array_values($clear)];
     }
 
     // ======================================================================
@@ -469,7 +732,11 @@ class AssetsService
         return (string)$value;
     }
 
-    /** Re-sync the warranty calendar (best-effort; same hook the UI + API used). */
+    /**
+     * Re-sync the asset expiry calendar (best-effort; same hook the UI + API
+     * used). One pass writes BOTH warranty and lease entries, which is why
+     * there is no lease equivalent of this method.
+     */
     private static function syncWarranty(PDO $conn): void
     {
         require_once __DIR__ . '/../asset_warranty_calendar.php';

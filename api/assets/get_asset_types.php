@@ -42,8 +42,11 @@ try {
 
     // Consumer-safe RESOLVED list (global-not-hidden + this company's own). On a
     // single-company / part-migrated install this returns every row, as before.
+    // ?for_tenant= (2.6.0): the New asset form adding to another company needs
+    // THAT company's types. Ignored for the settings view and for a company the
+    // analyst cannot reach (requestedTenantId falls back to the active one).
     $rows = getTenantConfigRows(
-        $conn, 'asset_types', 'asset_type', $activeId,
+        $conn, 'asset_types', 'asset_type', $manage ? $activeId : requestedTenantId($conn, $analystId),
         'id, name, description, is_active, display_order, icon_id, tenant_id, created_datetime',
         '', 'display_order, name'
     );

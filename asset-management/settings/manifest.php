@@ -89,8 +89,12 @@ return [
             'id'           => 'warranty',
             'cap'          => Cap::ASSETS_WARRANTY,
             'label_key'    => 'asset-management.settings.tab_warranty',
-            'grant'        => 'Configure warranty expiry surfacing',
-            'setting_keys' => ['asset_warranty_surface', 'asset_warranty_days'],
+            'grant'        => 'Configure warranty and lease expiry surfacing',
+            // The id stays 'warranty' because it is the tab's stable address -
+            // renaming it would silently revoke the capability from anybody it
+            // is already granted to.
+            'setting_keys' => ['asset_warranty_surface', 'asset_warranty_days',
+                               'asset_lease_surface', 'asset_lease_days'],
         ],
         [
             // Designing the handover document (discussion #56). Note this gates

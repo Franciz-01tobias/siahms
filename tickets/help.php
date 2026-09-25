@@ -39,7 +39,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars(t('tickets.help.page_title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
     <link rel="stylesheet" href="../assets/css/help.css?v=3">
     <style>
         /* Tickets is the one module with no accent of its own — it uses the
@@ -188,6 +188,7 @@ try {
                     <p><?php echo t('tickets.help.inbox.switch_body'); ?></p>
 
                     <p><?php echo t('tickets.help.inbox.p_actions'); ?></p>
+                    <p><?php echo t('tickets.help.inbox.filter_body'); ?></p>
                     <!-- What the name on a row means, and where to change it (#143). -->
                     <p><?php echo t('tickets.help.inbox.row_name'); ?></p>
                     <p class="help-note"><?php echo t('tickets.help.inbox.tip'); ?></p>
@@ -1078,7 +1079,7 @@ try {
     </div>
 
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <script>
         // Scroll-spy: highlight active section in sidebar as user scrolls
         const helpMain = document.getElementById('helpMain');

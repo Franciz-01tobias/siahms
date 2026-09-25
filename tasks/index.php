@@ -73,12 +73,12 @@ $translationNamespaces = ['common', 'tasks'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('tasks.title')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=70">
-    <link rel="stylesheet" href="../assets/css/tasks.css?v=31">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../assets/css/tasks.css?v=32">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
-    <script src="../assets/js/i18n.js?v=2"></script>
+    <script src="../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/record-preview.css?v=1">
     <script src="../assets/js/record-preview.js?v=1"></script>
     <script src="../assets/js/tinymce/tinymce.min.js"></script>
@@ -252,6 +252,14 @@ $translationNamespaces = ['common', 'tasks'];
             <span class="ctx-arrow">&rsaquo;</span>
             <div class="ctx-submenu" id="ctxDue"></div>
         </div>
+        <?php /* Move to company. Hidden at N=1 and never rendered on a
+                 single-company install, so nothing changes for anyone who does
+                 not use companies. The menu module fills and unhides it. */ ?>
+        <div class="ctx-item ctx-has-sub" data-action="company" id="ctxCompanyParent" style="display:none;">
+            <span class="ctx-item-label"><?php echo htmlspecialchars(t('tasks.context.move_company')); ?></span>
+            <span class="ctx-arrow">&rsaquo;</span>
+            <div class="ctx-submenu" id="ctxCompany"></div>
+        </div>
         <div class="ctx-sep"></div>
         <!-- Label flips between Mark complete and Reopen, set per task in
              buildSubmenus() from the status's is_closed FLAG — never by comparing
@@ -289,8 +297,8 @@ $translationNamespaces = ['common', 'tasks'];
     window.TASK_VIEW = <?php echo json_encode($taskView); ?>;
     window.TASK_FILTER = <?php echo json_encode($taskFilter); ?>;</script>
     <script src="../assets/js/tasks-priority.js?v=1"></script>
-    <script src="../assets/js/tasks-ctx-menu.js?v=3"></script>
-    <script src="../assets/js/tasks.js?v=39"></script>
+    <script src="../assets/js/tasks-ctx-menu.js?v=4"></script>
+    <script src="../assets/js/tasks.js?v=40"></script>
     <script src="../assets/js/mobile.js?v=65"></script>
 </body>
 </html>

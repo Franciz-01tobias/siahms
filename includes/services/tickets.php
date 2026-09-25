@@ -617,7 +617,25 @@ class TicketsService
         try {
             require_once __DIR__ . '/../template_email.php';
             if ($analystSent && $newAnalystId !== null) {
+                // TWO AUDIENCES, TWO EVENTS (#148).
+                //
+                // 'ticket_assigned' tells the REQUESTER their ticket is moving -
+                // "assigned to Sam, we will update you soon". That is what every
+                // install's template says, because that is who it has always
+                // gone to, and it is not changing.
+                //
+                // 'analyst_assigned' tells the ANALYST they have just been given
+                // work. Both fire; each is silent unless somebody configured a
+                // template for it, so an install that wants neither gets neither.
                 sendTemplateEmail($conn, $ticketId, 'ticket_assigned');
+
+                // ⚠️ Not when you assign a ticket to YOURSELF. An email telling
+                // somebody what they did three seconds ago is the kind of noise
+                // that gets a whole notification switched off, and picking a
+                // ticket up off the queue is the commonest assignment there is.
+                if ($newAnalystId !== $actorId) {
+                    sendTemplateEmail($conn, $ticketId, 'analyst_assigned');
+                }
             }
             if ($newIsClosed && !$oldIsClosed) {
                 // A one-off note for THIS closure, typed by the analyst as they
@@ -654,7 +672,7 @@ class TicketsService
         // through updateTicket(). The rule itself lives in ChecklistsService;
         // this is only the hook, so tickets does not learn the checklist rules.
         if ($newStatusId !== null && $newIsClosed && !$oldIsClosed) {
-            ChecklistsService::recordClosureOverride($conn, $ctx, $ticketId);
+            ChecklistsService::recordClosureOverride($conn, $ctx, $ticketId, $closeTenant);
             // Same hook, same reasoning: the note and the email for a close that
             // went ahead with mandatory fields empty.
             MandatoryFieldsService::afterClosure($conn, $ctx, $ticketId, $closeTenant, $emptyOnClose);
@@ -1050,7 +1068,13 @@ class TicketsService
         $conn->prepare(
             "INSERT INTO ticket_audit (ticket_id, analyst_id, field_name, old_value, new_value, created_datetime)
              VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
-        )->execute([$ticketId, $analystId, $field, $old, $new]);
+        // 🔴 NULL, not 0, when there is no analyst. A portal user closing their
+        // own ticket acts through ActorContext::fromPortalUser(), whose actorId
+        // is 0 because a requester is not a member of staff. Storing 0 would
+        // point the trail at an analyst row that does not exist; storing NULL
+        // says plainly that nobody on the desk did this, and the field name
+        // beside it says who did.
+        )->execute([$ticketId, $analystId > 0 ? $analystId : null, $field, $old, $new]);
     }
 
     // generateTicketNumber() moved to includes/ticket_numbering.php (GH #71).

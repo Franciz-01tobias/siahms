@@ -173,9 +173,11 @@
 }
 
 /* Month view */
+/* minmax(0, 1fr) - see assets/css/calendar.css. Plain `1fr` lets one long
+   event title widen its day and collapse the empty ones. */
 .month-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     height: 100%;
 }
 
@@ -207,6 +209,11 @@
     flex-direction: column;
     cursor: pointer;
     transition: background-color 0.15s;
+    /* Both needed with minmax(0, 1fr) above: a grid ITEM still defaults to a
+       min-width of auto, and without overflow the pills spill out of the cell
+       instead of ellipsing inside it. The pills already carry the ellipsis. */
+    min-width: 0;
+    overflow: hidden;
 }
 
 .month-day:hover {

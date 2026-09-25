@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - network-mapper strings.
+ * FreeITSM — network-mapper strings (da).
  *
- * Mirrors lang/en/network-mapper.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/network-mapper.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Netværkstegner',
     'nav' => [
@@ -252,6 +256,104 @@ return [
     ],
     'connector' => [
         'label_ph' => 'Etiket (Enter for at gemme, Esc for at annullere)',
+    ],
+    'icons' => [
+        'category' => [
+            'compute' => 'Compute og servere',
+            'database' => 'Databaser',
+            'storage' => 'Lagring',
+            'network' => 'Netværk',
+            'security' => 'Sikkerhed',
+            'cloud' => 'Cloud',
+            'containers' => 'Containere',
+            'app' => 'Applikationer og data',
+            'endpoint' => 'Endepunkter',
+            'peripheral' => 'Tilbehør og skærme',
+            'ops' => 'Overvågning og drift',
+            'people' => 'Personer og organisation',
+            'files' => 'Filer og generisk',
+        ],
+        'label' => [
+            'server' => 'Server',
+            'server_rack' => 'Server (rack)',
+            'server_blade' => 'Server (blade)',
+            'server_tower' => 'Server (tower)',
+            'mainframe' => 'Mainframe',
+            'vm' => 'Virtuel maskine',
+            'function' => 'Funktion',
+            'workstation' => 'Arbejdsstation',
+            'database' => 'Database',
+            'database_cluster' => 'Databaseklynge',
+            'database_cache' => 'Database (cache)',
+            'storage' => 'Lagring',
+            'storage_san' => 'SAN',
+            'storage_tape' => 'Båndbackup',
+            'backup' => 'Backup',
+            'network' => 'Netværk',
+            'router' => 'Router',
+            'switch' => 'Switch',
+            'firewall' => 'Firewall',
+            'load_balancer' => 'Load balancer',
+            'proxy' => 'Proxy',
+            'vpn' => 'VPN',
+            'gateway' => 'Gateway',
+            'wireless_ap' => 'Trådløst AP',
+            'modem' => 'Modem',
+            'cdn' => 'CDN',
+            'dns' => 'DNS',
+            'shield' => 'Skjold',
+            'lock' => 'Lås',
+            'key' => 'Nøgle',
+            'ids' => 'IDS / IPS',
+            'siem' => 'SIEM',
+            'cloud' => 'Cloud',
+            'cloud_private' => 'Privat cloud',
+            'cloud_public' => 'Offentlig cloud',
+            'cloud_hybrid' => 'Hybrid cloud',
+            'region' => 'Region',
+            'container' => 'Container',
+            'container_pod' => 'Pod',
+            'kubernetes' => 'Kubernetes',
+            'registry' => 'Registry',
+            'application' => 'Applikation',
+            'service' => 'Tjeneste',
+            'website' => 'Websted',
+            'api' => 'API',
+            'microservice' => 'Mikrotjeneste',
+            'queue' => 'Beskedkø',
+            'cache' => 'Cache',
+            'dashboard' => 'Dashboard',
+            'laptop' => 'Bærbar',
+            'mobile' => 'Mobil',
+            'tablet' => 'Tablet',
+            'iot' => 'IoT-enhed',
+            'printer' => 'Printer',
+            'display' => 'Display / skærm',
+            'television' => 'Fjernsyn',
+            'projector' => 'Projektor',
+            'webcam' => 'Webkamera',
+            'headset' => 'Headset',
+            'keyboard' => 'Tastatur',
+            'mouse' => 'Mus',
+            'speaker' => 'Højttaler',
+            'dock' => 'Dockingstation',
+            'scanner' => 'Scanner',
+            'camera' => 'Kamera',
+            'desk_phone' => 'Bordtelefon',
+            'ups' => 'UPS',
+            'monitor' => 'Monitor / måler',
+            'alert' => 'Alarm',
+            'log' => 'Log',
+            'person' => 'Person',
+            'team' => 'Team',
+            'org' => 'Organisation',
+            'document' => 'Dokument',
+            'folder' => 'Mappe',
+            'globe' => 'Globus',
+            'mail' => 'Mail',
+            'calendar' => 'Kalender',
+            'box' => 'Generisk',
+        ],
     ],
     'help' => [
         'browser_title' => 'FreeITSM — Netværkstegner-guide',

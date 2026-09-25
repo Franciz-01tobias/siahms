@@ -34,9 +34,9 @@ $translationNamespaces = ['common', 'calendar'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('calendar.title') . ' ' . t('calendar.nav.table')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <link rel="stylesheet" href="../../assets/css/calendar-grid.css?v=1">
-    <link rel="stylesheet" href="../../assets/css/itsm_calendar.css?v=7">
+    <link rel="stylesheet" href="../../assets/css/itsm_calendar.css?v=8">
     <link rel="stylesheet" href="../../assets/css/data-table.css?v=4">
     <style>body { --accent: var(--cal-accent, #ef6c00); --accent-hover: var(--cal-accent-hover, #e65100); }</style>
     <!-- Mobile: the shared shell plus LAYER 15c, which already contains a
@@ -45,7 +45,7 @@ $translationNamespaces = ['common', 'calendar'];
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
 </head>
 <body>
     <?php include '../includes/header.php'; ?>

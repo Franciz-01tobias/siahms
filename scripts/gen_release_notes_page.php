@@ -162,7 +162,7 @@ ob_start();
     <meta property="og:url" content="https://freeitsm.co.uk/releases.html">
     <link rel="canonical" href="https://freeitsm.co.uk/releases.html">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="css/style.css?v=20260222b">
+    <link rel="stylesheet" href="css/style.css?v=20260922a">
     <script type="application/ld+json"><?php echo json_encode($ld, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?></script>
     <style>
         .rel-hero { padding: 56px 0 28px; }
@@ -258,6 +258,11 @@ ob_start();
 
     <footer class="site-footer">
         <div class="container">
+            <div class="footer-badges">
+                <a href="https://www.itechguides.com/best/it-change-management-software/freeitsm/" target="_blank" rel="noopener">
+                    <img src="images/itechguides-badge.svg" alt="Featured on iTechGuides - FreeITSM rated 9.4 out of 10" width="230" height="46">
+                </a>
+            </div>
             <div class="footer-bottom" style="border:none;">
                 <span>&copy; 2026 FreeITSM &middot; freeitsm.co.uk</span>
                 <span class="footer-tagline">"Built with care. Shared with joy. Free forever."</span>
@@ -270,7 +275,7 @@ ob_start();
          index.html, ethos.html and deep-dive/index.html) — see js/kofi.js.
          It belongs HERE and not in the built releases.html, which this script
          overwrites on every release. -->
-    <script src="js/kofi.js?v=20260920j"></script>
+    <script src="js/kofi.js?v=20260922c"></script>
 </body>
 </html>
 <?php

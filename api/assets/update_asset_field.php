@@ -53,6 +53,7 @@ try {
     // happens — it does not block, because plenty of assets never report.
     $allowedFields = ['asset_type_id', 'asset_status_id', 'location_id',
                       'purchase_date', 'purchase_cost', 'supplier_id', 'order_number', 'warranty_expiry',
+                      'lease_expiry',
                       'hostname', 'service_tag', 'manufacturer', 'model'];
     if (!in_array($field, $allowedFields, true)) {
         throw new Exception('Invalid field');

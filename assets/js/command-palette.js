@@ -22,6 +22,13 @@
     window.__cmdpInit = true;
 
     var BASE = window.CP_BASE || '';
+    // Translate, or the English written right here. The waffle menu injects
+    // this file on every in-app page and not all of them export
+    // window.translations, so the fallback is the contract, not a nicety.
+    function cp(key, english, params) {
+        return window.tf ? window.tf('common.palette.' + key, english, params) : english;
+    }
+
     var MODULES = Array.isArray(window.CP_MODULES) ? window.CP_MODULES : [];
 
     // Generic icons for the search-result types (modules carry their own).
@@ -45,16 +52,28 @@
     // documents panel uses, so the two read as the same thing.
     ICONS.document = ICONS.contract;
     ICONS.document_content = ICONS.contract;
-    var TYPE_LABEL = {
-        ticket: 'Ticket', change: 'Change', problem: 'Problem',
-        knowledge: 'Article', contract: 'Contract', ci: 'Config item', asset: 'Asset',
-        ticket_content: 'Ticket', article_content: 'Article', document: 'Document', document_content: 'Document'
-    };
+    // Built lazily: the palette is constructed on first open, by which point
+    // window.translations is certainly in place.
+    function typeLabel(type) {
+        return {
+            ticket:           cp('type_ticket', 'Ticket'),
+            change:           cp('type_change', 'Change'),
+            problem:          cp('type_problem', 'Problem'),
+            knowledge:        cp('type_article', 'Article'),
+            contract:         cp('type_contract', 'Contract'),
+            ci:               cp('type_ci', 'Config item'),
+            asset:            cp('type_asset', 'Asset'),
+            ticket_content:   cp('type_ticket', 'Ticket'),
+            article_content:  cp('type_article', 'Article'),
+            document:         cp('type_document', 'Document'),
+            document_content: cp('type_document', 'Document')
+        }[type] || '';
+    }
 
     // Static quick actions. Each has a matcher label and a run().
     var COMMANDS = [
         {
-            label: 'Toggle dark mode',
+            get label() { return cp('cmd_theme', 'Toggle dark mode'); },
             keywords: 'theme light dark appearance',
             run: function () {
                 var cur = document.documentElement.getAttribute('data-theme');
@@ -64,7 +83,7 @@
             }
         },
         {
-            label: 'Sign out',
+            get label() { return cp('cmd_signout', 'Sign out'); },
             keywords: 'logout log out leave',
             run: function () { window.location.href = BASE + 'analyst_logout.php'; }
         }
@@ -86,17 +105,17 @@
         overlay = document.createElement('div');
         overlay.className = 'cmdp-overlay';
         overlay.innerHTML =
-            '<div class="cmdp-box" role="dialog" aria-label="Command palette">' +
+            '<div class="cmdp-box" role="dialog" aria-label="' + esc(cp('aria_dialog', 'Command palette')) + '">' +
                 '<div class="cmdp-search">' +
                     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS.search + '</svg>' +
-                    '<input class="cmdp-input" type="text" autocomplete="off" spellcheck="false" placeholder="Search tickets, assets, items — or jump to a module…">' +
+                    '<input class="cmdp-input" type="text" autocomplete="off" spellcheck="false" placeholder="' + esc(cp('search_ph', 'Search tickets, assets, items — or jump to a module…')) + '">' +
                     '<div class="cmdp-spinner"></div>' +
                 '</div>' +
                 '<div class="cmdp-results"></div>' +
                 '<div class="cmdp-footer">' +
-                    '<span class="cmdp-hint"><span class="cmdp-key">↑</span><span class="cmdp-key">↓</span> navigate</span>' +
-                    '<span class="cmdp-hint"><span class="cmdp-key">↵</span> open</span>' +
-                    '<span class="cmdp-hint"><span class="cmdp-key">esc</span> close</span>' +
+                    '<span class="cmdp-hint"><span class="cmdp-key">↑</span><span class="cmdp-key">↓</span> ' + esc(cp('hint_navigate', 'navigate')) + '</span>' +
+                    '<span class="cmdp-hint"><span class="cmdp-key">↵</span> ' + esc(cp('hint_open', 'open')) + '</span>' +
+                    '<span class="cmdp-hint"><span class="cmdp-key">esc</span> ' + esc(cp('hint_close', 'close')) + '</span>' +
                 '</div>' +
             '</div>';
         document.body.appendChild(overlay);
@@ -213,11 +232,11 @@
                     // matched a phrase and have no idea what it belongs to.
                     var extra = (type === 'document' || type === 'document_content')
                         ? '<button type="button" class="cmdp-info" data-doc="' + (r.id | 0) +
-                          '" title="Document details" aria-label="Document details">i</button>'
+                          '" title="' + esc(cp('doc_details', 'Document details')) + '" aria-label="' + esc(cp('doc_details', 'Document details')) + '">i</button>'
                         : '';
                     html += row(idx,
                         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[type] || '') + '</svg>',
-                        esc(r.title), esc(r.subtitle || ''), TYPE_LABEL[type] || '', extra);
+                        esc(r.title), esc(r.subtitle || ''), esc(typeLabel(type)), extra);
                     pending.push(function () { window.location.href = BASE + r.url; });
                 });
             });
@@ -225,7 +244,7 @@
 
         if (!html) {
             html = '<div class="cmdp-empty">' +
-                (q.length >= 2 ? 'No matches for “' + esc(q) + '”' : 'Type to search') +
+                (q.length >= 2 ? esc(cp('no_matches', 'No matches for “{q}”', { q: q })) : esc(cp('type_to_search', 'Type to search'))) +
                 '</div>';
         }
 
@@ -260,16 +279,21 @@
 
     function pluralType(type) {
         return {
-            ticket: 'Tickets', change: 'Changes', problem: 'Problems',
-            knowledge: 'Knowledge', contract: 'Contracts',
-            asset: 'Assets', ci: 'Configuration items', document: 'Documents',
+            ticket: cp('group_ticket', 'Tickets'),
+            change: cp('group_change', 'Changes'),
+            problem: cp('group_problem', 'Problems'),
+            knowledge: cp('group_knowledge', 'Knowledge'),
+            contract: cp('group_contract', 'Contracts'),
+            asset: cp('group_asset', 'Assets'),
+            ci: cp('group_ci', 'Configuration items'),
+            document: cp('group_document', 'Documents'),
             // Says WHERE the match was, not what the thing is — these are the
             // same tickets as the group above, found by their text instead of
             // their name, and the label is the only thing that explains why a
             // ticket whose subject looks unrelated is in the list.
-            ticket_content: 'Found inside tickets',
-            article_content: 'Found inside articles',
-            document_content: 'Found inside documents'
+            ticket_content: cp('group_in_tickets', 'Found inside tickets'),
+            article_content: cp('group_in_articles', 'Found inside articles'),
+            document_content: cp('group_in_documents', 'Found inside documents')
         }[type] || type;
     }
 

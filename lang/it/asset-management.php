@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'Assegna utente all\'asset',
-        'search_label'           => 'Cerca utente',
         'search_placeholder'     => 'Cerca per nome o email...',
-        'type_to_search'         => 'Digita per cercare utenti',
         'min_chars'              => 'Digita almeno 2 caratteri per cercare',
         'no_users'               => 'Nessun utente trovato',
         'expected_return_label'  => 'Data di restituzione prevista (facoltativa)',
@@ -366,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'Stati asset',
         'tab_locations'        => 'Posizioni',
         'tab_suppliers'        => 'Fornitori',
-        'tab_warranty'         => 'Avvisi garanzia',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

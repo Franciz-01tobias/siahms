@@ -20,6 +20,16 @@ requireModuleAccess('assets');
 $settingsManifest = settingsManifestFor('assets');
 $visibleTabs      = settingsVisibleTabs(connectToDatabase(), (int) $_SESSION['analyst_id'], $settingsManifest);
 $activeTabId      = settingsFirstTabId($visibleTabs);
+/* Honour ?tab=, so a link from elsewhere (the Watchtower settings signpost,
+   say) lands on the tab it names rather than on whichever is first.
+   Validated against the VISIBLE tabs, not just the manifest - a tab this
+   analyst has no capability for is never rendered, and asking for it must
+   not select nothing, nor slip past the check. Same three lines as
+   forms/settings/index.php. */
+if (!empty($_GET['tab']) && settingsTabVisible($visibleTabs, (string) $_GET['tab'])) {
+    $activeTabId = (string) $_GET['tab'];
+}
+
 
 /**
  * The shared icon library, for the asset-type icon picker (#1146).
@@ -51,11 +61,11 @@ $translationNamespaces = ['common', 'asset-management'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Desk - <?php echo htmlspecialchars(t('asset-management.settings.title')); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=70">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/i18n.js?v=2"></script>
+    <script src="../../assets/js/i18n.js?v=3"></script>
     <script src="../../assets/js/chart.min.js"></script>
     <style>
         /* Module accent — drives toggle, focus rings, button colours.
@@ -247,6 +257,13 @@ $translationNamespaces = ['common', 'asset-management'];
 
         .loc-name { flex: 1; font-size: 14px; color: var(--text, #222); }
         .loc-name .loc-count { color: var(--text-faint, #999); font-size: 12px; margin-left: 6px; }
+        /* 2.6.0 shared locations */
+        .loc-shared {
+            margin-left: 8px; padding: 1px 7px; border-radius: 9px;
+            font-size: 11px; font-weight: 600;
+            background: var(--accent-soft, #e8f0f8); color: var(--accent, #0078d4);
+        }
+        .loc-actions-locked .action-btn:not(:first-child) { display: none; }
 
         .loc-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.12s; }
         .loc-row:hover .loc-actions { opacity: 1; }
@@ -934,7 +951,7 @@ $translationNamespaces = ['common', 'asset-management'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'warranty')): ?>
-        <!-- Warranty alerts Tab -->
+        <!-- Expiry alerts tab: warranty AND lease, two blocks, one tab -->
         <div class="tab-content<?php echo $activeTabId === 'warranty' ? ' active' : ''; ?>" id="warranty-tab" data-capability="<?php echo Cap::ASSETS_WARRANTY; ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
@@ -964,6 +981,35 @@ $translationNamespaces = ['common', 'asset-management'];
                         </div>
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary" id="warrantySaveBtn"><?php echo htmlspecialchars(t('asset-management.common.save')); ?></button>
+                        </div>
+                    </form>
+
+                    <?php /* Leased kit. The original lifecycle brief said
+                             "warranty/lease expiries" and only warranty was
+                             built; this is the other half, configured the same
+                             way because it is the same question. */ ?>
+                    <hr class="settings-divider" style="margin: 28px 0 22px; border: none; border-top: 1px solid var(--border-color, #e5e7eb);">
+                    <h3 style="margin: 0 0 6px; font-size: 15px;"><?php echo htmlspecialchars(t('asset-management.settings.lease_heading')); ?></h3>
+                    <p class="settings-description">
+                        <?php echo t('asset-management.settings.lease_intro'); ?>
+                    </p>
+                    <form id="leaseForm" onsubmit="saveLeaseSettings(event)">
+                        <div class="form-group">
+                            <label class="form-label" for="leaseSurface"><?php echo htmlspecialchars(t('asset-management.settings.lease_show_in')); ?></label>
+                            <select class="form-input" id="leaseSurface" style="max-width: 340px;">
+                                <option value="off"><?php echo htmlspecialchars(t('asset-management.settings.warranty_off')); ?></option>
+                                <option value="dashboard"><?php echo htmlspecialchars(t('asset-management.settings.warranty_dashboard_only')); ?></option>
+                                <option value="calendar"><?php echo htmlspecialchars(t('asset-management.settings.warranty_calendar_only')); ?></option>
+                                <option value="both"><?php echo htmlspecialchars(t('asset-management.settings.warranty_both')); ?></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leaseDays"><?php echo htmlspecialchars(t('asset-management.settings.lease_days_label')); ?></label>
+                            <input type="number" class="form-input" id="leaseDays" min="1" max="3650" value="60" style="max-width: 140px;">
+                            <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.lease_days_hint')); ?></div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary" id="leaseSaveBtn"><?php echo htmlspecialchars(t('asset-management.common.save')); ?></button>
                         </div>
                     </form>
                 </div>
@@ -1160,6 +1206,19 @@ $translationNamespaces = ['common', 'asset-management'];
                         <option value=""><?php echo htmlspecialchars(t('asset-management.settings.none_top_level')); ?></option>
                     </select>
                     <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.parent_location_hint')); ?></div>
+                </div>
+                <?php /* 2.6.0. Only for someone who can reach every company (the
+                         list endpoint says so as can_share); the save endpoint
+                         enforces the same rule whatever this shows. */ ?>
+                <div class="form-group" id="locationSharedGroup" hidden>
+                    <label class="toggle-label">
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="locationShared">
+                            <span class="toggle-slider"></span>
+                        </span>
+                        <?php echo htmlspecialchars(t('asset-management.settings.location_shared')); ?>
+                    </label>
+                    <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.location_shared_hint')); ?></div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeLocationModal()"><?php echo htmlspecialchars(t('asset-management.common.cancel')); ?></button>
@@ -1494,7 +1553,7 @@ $translationNamespaces = ['common', 'asset-management'];
         // defaults it inherits, each with a Hide/Show toggle.
         function renderItemsScoped(type, tbody, scoped) {
             const groupRow = (label, hint) =>
-                `<tr><td colspan="5" style="background:#f7f9fa;border-top:1px solid #e3e8ea;font-size:12px;font-weight:600;color:#455a64;padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:#90a4ae;">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
+                `<tr><td colspan="5" style="background:var(--surface-2, #f7f9fa);border-top:1px solid var(--border, #e3e8ea);font-size:12px;font-weight:600;color:var(--text-muted, #455a64);padding:10px;">${escapeHtml(label)}${hint ? ` <span style="font-weight:400;color:var(--text-faint, #90a4ae);">— ${escapeHtml(hint)}</span>` : ''}</td></tr>`;
 
             let html = '';
             html += groupRow(`${scoped.company.name}’s own`);
@@ -1680,12 +1739,52 @@ $translationNamespaces = ['common', 'asset-management'];
                     document.getElementById('warrantySurface').value = data.settings.asset_warranty_surface || 'dashboard';
                     const wDays = parseInt(data.settings.asset_warranty_days, 10);
                     document.getElementById('warrantyDays').value = (wDays > 0 ? wDays : 30);
+
+                    // Lease alert settings. The default window is 60 days
+                    // rather than warranty's 30: a warranty running out is
+                    // something to note, whereas a lease ending is a date you
+                    // have to have done something about beforehand.
+                    document.getElementById('leaseSurface').value = data.settings.asset_lease_surface || 'dashboard';
+                    const lDays = parseInt(data.settings.asset_lease_days, 10);
+                    document.getElementById('leaseDays').value = (lDays > 0 ? lDays : 60);
                 }
             } catch (error) {
                 console.error('Error loading settings:', error);
             }
         }
 
+        // Save the lease alert settings. A sibling of saveWarrantySettings
+        // rather than a shared function taking a prefix: two near-identical
+        // twenty-line handlers read better than one handler with a parameter
+        // deciding which of six element ids it is talking to.
+        async function saveLeaseSettings(e) {
+            e.preventDefault();
+            const btn = document.getElementById('leaseSaveBtn');
+            btn.disabled = true; btn.textContent = window.t('asset-management.settings.saving');
+            try {
+                const res = await fetch(API_SETTINGS + 'save_system_settings.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings: {
+                        asset_lease_surface: document.getElementById('leaseSurface').value,
+                        asset_lease_days: String(Math.max(1, Math.min(3650, parseInt(document.getElementById('leaseDays').value, 10) || 60)))
+                    }})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    // Resync the calendar so it immediately matches the new
+                    // choice - the same endpoint the warranty block calls,
+                    // because one pass writes both kinds of entry.
+                    try { await fetch(API_BASE + 'sync_warranty_calendar.php', { method: 'POST' }); } catch (e) {}
+                    showToast(window.t('asset-management.settings.lease_saved'), 'success');
+                } else {
+                    showToast(window.t('asset-management.toast.error', { error: data.error }), 'error');
+                }
+            } catch (e) {
+                showToast(window.t('asset-management.settings.save_settings_failed'), 'error');
+            }
+            btn.disabled = false; btn.textContent = window.t('asset-management.common.save');
+        }
         async function saveWarrantySettings(e) {
             e.preventDefault();
             const btn = document.getElementById('warrantySaveBtn');
@@ -2089,6 +2188,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         // ─── Locations (arbitrary-depth tree) ───────────────────────────────
         let allLocations = [];
+        let canShareLocations = false;   // 2.6.0 — from get_asset_locations.php
         const collapsedLocations = new Set();
 
         async function loadLocations() {
@@ -2101,6 +2201,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     return;
                 }
                 allLocations = data.locations || [];
+                canShareLocations = !!data.can_share;
                 renderLocationTree();
             } catch (e) {
                 console.error('Error loading locations:', e);
@@ -2128,11 +2229,17 @@ $translationNamespaces = ['common', 'asset-management'];
             const collapsed = collapsedLocations.has(loc.id);
             const caretClass = hasKids ? (collapsed ? 'collapsed' : '') : 'leaf';
             const count = hasKids ? `<span class="loc-count">${kids.length}</span>` : '';
+            // 2.6.0. A shared location is every company's, so someone who
+            // cannot reach them all may add inside it but not change or remove
+            // it: the buttons would only lead to a refusal.
+            const shared = loc.is_shared
+                ? `<span class="loc-shared" title="${escapeHtml(window.t('asset-management.settings.location_shared_hint'))}">${escapeHtml(window.t('asset-management.settings.location_shared_badge'))}</span>` : '';
+            const locked = loc.is_shared && !canShareLocations;
             const row = `
                 <div class="loc-row">
                     <span class="loc-caret ${caretClass}" onclick="toggleLocation(${loc.id})">&#9662;</span>
-                    <span class="loc-name">${escapeHtml(loc.name)}${count}</span>
-                    <span class="loc-actions">
+                    <span class="loc-name">${escapeHtml(loc.name)}${shared}${count}</span>
+                    <span class="loc-actions${locked ? ' loc-actions-locked' : ''}">
                         <button class="action-btn" title="${window.t('asset-management.settings.add_sublocation')}" onclick="openAddLocation(${loc.id})">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         </button>
@@ -2188,8 +2295,17 @@ $translationNamespaces = ['common', 'asset-management'];
             const sel = document.getElementById('locationParent');
             sel.innerHTML = buildParentOptions(null);
             sel.value = parentId != null ? String(parentId) : '';
+            setLocationSharedField(false);
             document.getElementById('locationModal').classList.add('active');
             setTimeout(() => document.getElementById('locationName').focus(), 50);
+        }
+
+        // The Shared tick (2.6.0): shown only to someone who may use it, and
+        // pre-set on edit — the save sends it every time, so leaving it unset on
+        // a shared location would unshare it on an unrelated rename.
+        function setLocationSharedField(isShared) {
+            document.getElementById('locationSharedGroup').hidden = !canShareLocations;
+            document.getElementById('locationShared').checked = !!isShared;
         }
 
         function editLocation(id) {
@@ -2201,6 +2317,7 @@ $translationNamespaces = ['common', 'asset-management'];
             const sel = document.getElementById('locationParent');
             sel.innerHTML = buildParentOptions(loc.id);
             sel.value = loc.parent_id != null ? String(loc.parent_id) : '';
+            setLocationSharedField(loc.is_shared);
             document.getElementById('locationModal').classList.add('active');
             setTimeout(() => document.getElementById('locationName').focus(), 50);
         }
@@ -2234,6 +2351,7 @@ $translationNamespaces = ['common', 'asset-management'];
                 name: document.getElementById('locationName').value.trim(),
                 parent_id: document.getElementById('locationParent').value || null
             };
+            if (canShareLocations) payload.is_shared = document.getElementById('locationShared').checked;
             if (!payload.name) { showToast(window.t('asset-management.settings.name_required'), 'error'); return; }
             if (id) payload.id = parseInt(id);
             try {
@@ -3599,7 +3717,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
     <?php /* Loaded last so it can wrap this page's globals; inert on desktop. */ ?>
     <script>window.assetTypeIcons = <?php echo json_encode($assetTypeIcons, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <script src="../../assets/js/network-mapper-icons.js?v=2"></script>
+    <script src="../../assets/js/network-mapper-icons.js?v=3"></script>
     <script src="../../assets/js/mobile.js?v=65"></script>
 </body>
 </html>

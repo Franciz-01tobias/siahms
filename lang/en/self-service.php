@@ -21,6 +21,17 @@ return [
     // because the pages still use it for their own headings.
     // The portal end of the LMS. The tab only appears for somebody who actually
     // has a course assigned — see self-service/includes/header.php.
+    // ── My equipment (the assets assigned to this person) ───────────────
+    'equipment' => [
+        'title'       => 'My equipment',
+        'subtitle'    => 'The equipment assigned to you. If something here is wrong, or you have kit that is not listed, raise a ticket and the service desk will sort it out.',
+        'none'        => 'No equipment is assigned to you at the moment.',
+        'load_failed' => 'Your equipment could not be loaded just now. Please try again in a minute.',
+        'unnamed'     => 'Unnamed item',
+        'asset_tag'   => 'Asset tag',
+        'serial'      => 'Serial number',
+        'make'        => 'Make and model',
+    ],
     'training' => [
         'title'    => 'Training',
         'heading'  => 'My training',
@@ -53,6 +64,7 @@ return [
         'dashboard'   => 'Dashboard',
         'tickets'     => 'My Tickets',
         'help_centre' => 'Knowledge',
+        'equipment'   => 'My equipment',
         'training'    => 'Training',
         'help'        => 'Help',
         // Screen-reader label for the phone nav drawer's toggle.
@@ -293,6 +305,15 @@ return [
     ],
 
     'ticket' => [
+        // ── Closing your own ticket (off unless an admin turns it on) ───
+        'self_close'              => 'Close ticket',
+        'self_close_hint'         => 'Close this ticket if you have sorted it yourself or no longer need help',
+        'self_close_title'        => 'Close this ticket?',
+        'self_close_confirm'      => 'The service desk will stop working on it. If you need help again you can always raise a new ticket.',
+        'self_close_reason_label' => 'Anything you would like to add?',
+        'self_close_reason'       => 'e.g. it started working again, or I sorted it myself (optional)',
+        'self_close_done'         => 'Thanks — your ticket has been closed.',
+        'self_close_failed'       => 'The ticket could not be closed just now. Please try again in a minute.',
         'title'              => 'Self-Service Portal - Ticket Detail',
         'back'               => 'Back to Dashboard',
         'loading'            => 'Loading ticket...',
@@ -329,6 +350,18 @@ return [
     ],
 
     'help_centre' => [
+        // ── How the list is drawn. The names match the analyst side's
+        //    (Cards / List / Tree) so a customer and an analyst are
+        //    describing the same thing to each other.
+        'layout_label'  => 'How to show the articles',
+        'layout_cards'  => 'Cards',
+        'layout_list'   => 'List',
+        'layout_tree'   => 'Tree',
+        'layout_table'  => 'Table',
+        'unfiled'       => 'Everything else',
+        'col_title'     => 'Article',
+        'col_folder'    => 'Section',
+
         'title'              => 'Self-Service Portal — Help Centre',
         'heading'            => 'Help Centre',
         'lede'               => 'Guides and answers from the IT team. Search before raising a ticket — the answer may already be here.',

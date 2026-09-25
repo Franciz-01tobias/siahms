@@ -87,10 +87,7 @@ return [
 
     // Assign-user modal
     'assign' => [
-        'heading'                => 'অ্যাসেটে ব্যবহারকারী বরাদ্দ করুন',
-        'search_label'           => 'ব্যবহারকারী অনুসন্ধান করুন',
         'search_placeholder'     => 'নাম বা ইমেইল দিয়ে অনুসন্ধান করুন...',
-        'type_to_search'         => 'ব্যবহারকারী অনুসন্ধান করতে টাইপ করুন',
         'min_chars'              => 'অনুসন্ধানের জন্য অন্তত ২টি অক্ষর টাইপ করুন',
         'no_users'               => 'কোনো ব্যবহারকারী পাওয়া যায়নি',
         'expected_return_label'  => 'প্রত্যাশিত ফেরতের তারিখ (ঐচ্ছিক)',
@@ -366,7 +363,6 @@ return [
         'tab_asset_statuses'   => 'অ্যাসেট স্ট্যাটাস',
         'tab_locations'        => 'অবস্থান',
         'tab_suppliers'        => 'সরবরাহকারী',
-        'tab_warranty'         => 'ওয়ারেন্টি সতর্কতা',
         'tab_vcenter'          => 'vCenter',
         'tab_intune'           => 'InTune',
 

@@ -98,7 +98,7 @@ if ($loggedIn) {
     }
 }
 
-$title = $asset ? ($asset['asset_tag'] ?: $asset['hostname'] ?: 'Asset') : 'Asset';
+$title = $asset ? ($asset['asset_tag'] ?: $asset['hostname'] ?: t('asset-management.scan.asset')) : t('asset-management.scan.asset');
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -191,50 +191,50 @@ $title = $asset ? ($asset['asset_tag'] ?: $asset['hostname'] ?: 'Asset') : 'Asse
 <body>
 <div class="scan-bar">
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-    <span>FreeITSM · Asset</span>
+    <span>FreeITSM · <?php echo htmlspecialchars(t('asset-management.scan.asset')); ?></span>
 </div>
 
 <div class="scan-wrap">
 <?php if (!$loggedIn): ?>
     <div class="card empty">
-        <h1>Sign in to view this asset</h1>
-        <p>You need to be signed in to FreeITSM to see asset details. Sign in, then scan the label again — it will open straight to this asset.</p>
-        <a class="btn-touch" href="<?php echo htmlspecialchars(BASE_URL); ?>login">Sign in</a>
+        <h1><?php echo htmlspecialchars(t('asset-management.scan.signin_heading')); ?></h1>
+        <p><?php echo htmlspecialchars(t('asset-management.scan.signin_body')); ?></p>
+        <a class="btn-touch" href="<?php echo htmlspecialchars(BASE_URL); ?>login"><?php echo htmlspecialchars(t('asset-management.scan.signin_btn')); ?></a>
     </div>
 <?php elseif ($problem === 'no_access'): ?>
     <div class="card empty">
-        <h1>No access to Assets</h1>
-        <p>Your account doesn't have access to the Assets module, so this label can't be opened. Ask an administrator if you think that's wrong.</p>
+        <h1><?php echo htmlspecialchars(t('asset-management.scan.noaccess_heading')); ?></h1>
+        <p><?php echo htmlspecialchars(t('asset-management.scan.noaccess_body')); ?></p>
     </div>
 <?php elseif ($problem === 'not_ready'): ?>
     <div class="card empty">
-        <h1>Asset labels aren't set up yet</h1>
-        <p>This install needs a database update before QR labels work. An administrator can run <strong>System → Database Verification</strong>.</p>
+        <h1><?php echo htmlspecialchars(t('asset-management.scan.notready_heading')); ?></h1>
+        <p><?php echo t('asset-management.scan.notready_body'); ?></p>
     </div>
 <?php elseif ($problem === 'unknown' || !$asset): ?>
     <div class="card empty">
-        <h1>Label not recognised</h1>
-        <p>This label doesn't match an asset you can see. It may belong to another company, or the asset may have been deleted.</p>
-        <a class="btn-touch secondary" href="<?php echo htmlspecialchars(BASE_URL); ?>asset-management/">Open Assets</a>
+        <h1><?php echo htmlspecialchars(t('asset-management.scan.unknown_heading')); ?></h1>
+        <p><?php echo htmlspecialchars(t('asset-management.scan.unknown_body')); ?></p>
+        <a class="btn-touch secondary" href="<?php echo htmlspecialchars(BASE_URL); ?>asset-management/"><?php echo htmlspecialchars(t('asset-management.scan.unknown_btn')); ?></a>
     </div>
 <?php else: ?>
     <div class="card">
         <?php if (!empty($asset['asset_tag'])): ?>
             <p class="asset-tag"><?php echo htmlspecialchars($asset['asset_tag']); ?></p>
         <?php endif; ?>
-        <h1 class="asset-name"><?php echo htmlspecialchars($asset['hostname'] ?: ('Asset #' . $asset['id'])); ?></h1>
+        <h1 class="asset-name"><?php echo htmlspecialchars($asset['hostname'] ?: t('asset-management.scan.asset_hash', ['id' => $asset['id']])); ?></h1>
         <dl class="facts">
             <?php
             $facts = [
-                'Type'      => $asset['type_name'],
-                'Status'    => $asset['status_name'],
-                'Location'  => $asset['location_name'],
-                'Held by'   => $asset['held_by'],
-                'Make'      => trim(($asset['manufacturer'] ?? '') . ' ' . ($asset['model'] ?? '')),
-                'Serial'    => $asset['service_tag'],
-                'OS'        => $asset['operating_system'],
-                'Warranty'  => $asset['warranty_expiry'],
-                'Last seen' => $asset['last_seen'] ? fmt_datetime($asset['last_seen']) : null,
+                t('asset-management.field.type')      => $asset['type_name'],
+                t('asset-management.field.status')    => $asset['status_name'],
+                t('asset-management.field.location')  => $asset['location_name'],
+                t('asset-management.scan.fact_held_by')  => $asset['held_by'],
+                t('asset-management.scan.fact_make')     => trim(($asset['manufacturer'] ?? '') . ' ' . ($asset['model'] ?? '')),
+                t('asset-management.scan.fact_serial')   => $asset['service_tag'],
+                t('asset-management.scan.fact_os')       => $asset['operating_system'],
+                t('asset-management.scan.fact_warranty') => $asset['warranty_expiry'],
+                t('asset-management.field.last_seen') => $asset['last_seen'] ? fmt_datetime($asset['last_seen']) : null,
             ];
             foreach ($facts as $label => $value):
                 if ($value === null || $value === '') continue; ?>
@@ -248,19 +248,19 @@ $title = $asset ? ($asset['asset_tag'] ?: $asset['hostname'] ?: 'Asset') : 'Asse
              saves on change — no Save button, because the failure mode of a
              forgotten Save on a phone is losing the edit entirely. */ ?>
     <div class="card">
-        <label class="field-label" for="scanStatus">Status</label>
+        <label class="field-label" for="scanStatus"><?php echo htmlspecialchars(t('asset-management.field.status')); ?></label>
         <select class="touch" id="scanStatus" disabled onchange="saveField('asset_status_id', this.value)">
-            <option>Loading…</option>
+            <option><?php echo htmlspecialchars(t('common.loading')); ?></option>
         </select>
 
-        <label class="field-label" for="scanLocation" style="margin-top:16px;">Location</label>
+        <label class="field-label" for="scanLocation" style="margin-top:16px;"><?php echo htmlspecialchars(t('asset-management.field.location')); ?></label>
         <select class="touch" id="scanLocation" disabled onchange="saveField('location_id', this.value)">
-            <option>Loading…</option>
+            <option><?php echo htmlspecialchars(t('common.loading')); ?></option>
         </select>
         <div class="saved" id="scanSaved"></div>
     </div>
 
-    <a class="btn-touch secondary" href="<?php echo htmlspecialchars(BASE_URL); ?>asset-management/?asset_id=<?php echo (int)$asset['id']; ?>">Open the full record</a>
+    <a class="btn-touch secondary" href="<?php echo htmlspecialchars(BASE_URL); ?>asset-management/?asset_id=<?php echo (int)$asset['id']; ?>"><?php echo htmlspecialchars(t('asset-management.scan.open_record')); ?></a>
 <?php endif; ?>
 </div>
 
@@ -283,12 +283,12 @@ async function fillSelect(elId, url, pick, current) {
         const res = await fetch(url);
         const data = await res.json();
         const rows = pick(data) || [];
-        el.innerHTML = '<option value="">(not set)</option>' + rows.map(r =>
+        el.innerHTML = '<option value="">' + escapeHtml(<?php echo json_encode(t('asset-management.scan.not_set')); ?>) + '</option>' + rows.map(r =>
             `<option value="${Number(r.id)}"${Number(r.id) === current ? ' selected' : ''}>${escapeHtml(r.name)}</option>`
         ).join('');
         el.disabled = false;
     } catch (e) {
-        el.innerHTML = '<option value="">Could not load</option>';
+        el.innerHTML = '<option value="">' + escapeHtml(<?php echo json_encode(t('asset-management.scan.load_failed')); ?>) + '</option>';
     }
 }
 
@@ -315,7 +315,7 @@ if (SCAN_ASSET_ID) {
 async function saveField(field, value) {
     const out = document.getElementById('scanSaved');
     out.className = 'saved';
-    out.textContent = 'Saving…';
+    out.textContent = <?php echo json_encode(t('common.saving')); ?>;
     try {
         const res = await fetch(SCAN_API, {
             method: 'POST',
@@ -323,12 +323,13 @@ async function saveField(field, value) {
             body: JSON.stringify({ asset_id: SCAN_ASSET_ID, field: field, value: value === '' ? null : value })
         });
         const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Save failed');
-        out.textContent = 'Saved';
-        setTimeout(() => { if (out.textContent === 'Saved') out.textContent = ''; }, 2500);
+        if (!data.success) throw new Error(data.error || <?php echo json_encode(t('asset-management.scan.save_failed')); ?>);
+        const savedMsg = <?php echo json_encode(t('common.saved')); ?>;
+        out.textContent = savedMsg;
+        setTimeout(() => { if (out.textContent === savedMsg) out.textContent = ''; }, 2500);
     } catch (e) {
         out.className = 'saved error';
-        out.textContent = 'Could not save — ' + e.message;
+        out.textContent = <?php echo json_encode(t('asset-management.scan.save_error')); ?>.replace('{message}', e.message);
     }
 }
 </script>

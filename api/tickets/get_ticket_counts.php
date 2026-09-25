@@ -9,6 +9,7 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/ticket_snooze.php';
+require_once '../../includes/inbox_view_filter.php';
 
 header('Content-Type: application/json');
 
@@ -56,6 +57,13 @@ try {
     // The list only excluded them by ACCIDENT: a merge moves the emails to the
     // survivor, and the list is built from emails. This says it on purpose.
     $ttSql .= " AND t.merged_into_id IS NULL";
+
+    // The view filter (#149): "My tickets" and "Hide closed", sent by the inbox
+    // when the analyst has switched them on. Joined to $ttSql so EVERY folder
+    // count below obeys it - a badge that ignored the filter would say 12 above
+    // a list of 3. Placeholder-free, so $ttParams is unchanged. Trash and
+    // Snoozed build their own predicate and so are deliberately unfiltered.
+    $ttSql .= inboxViewFilterSql(inboxViewFilterFromRequest(), $analystId, 't');
 
     if ($hasTeamFilter) {
         // User has team assignments - filter to only their departments

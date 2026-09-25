@@ -1,8 +1,15 @@
 <?php
 /**
- * Español (es) — Knowledge module strings.
- * Missing keys fall back to lang/en/knowledge.php per-key.
+ * FreeITSM — knowledge strings (es).
+ *
+ * Keys mirror lang/en/knowledge.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php es
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Conocimiento',
     'nav' => [
@@ -445,6 +452,60 @@ Como las dos listas significan lo contrario, las {people} que figuran ahora se b
         'embed_success' => '¡Se generaron embeddings correctamente para {count} artículos!',
         'embed_errors' => 'Completado con {errors} errores de {total} artículos.',
         'embed_get_failed' => 'No se pudieron obtener los artículos',
+    ],
+    'assistant' => [
+        'browser_title' => 'Asistente de conocimiento',
+        'heading' => 'Asistente',
+        'sub' => 'Lee lo que la mesa de servicio ha estado respondiendo y le dice qué le falta a la base de conocimiento. Solo habla cuando la misma pregunta vuelve una y otra vez.',
+        'run' => 'Buscar lagunas',
+        'checking' => 'Comprobando…',
+        'tab_open' => 'Por escribir',
+        'tab_written' => 'Escritos',
+        'tab_dismissed' => 'No hacen falta',
+        'modal_title' => 'Redactando esto',
+        'modal_reading' => 'Leyendo el ticket…',
+        'load_failed' => 'No se pudo cargar',
+        'last_looked' => 'Última revisión: {date}.',
+        'empty_open' => 'No hay nada que escribir. O el asistente todavía no ha mirado, o su base de conocimiento ya cubre lo que la gente sigue preguntando.',
+        'empty_written' => 'Todavía no se ha escrito nada a partir de una laguna.',
+        'empty_dismissed' => 'No hay nada apartado.',
+        'draft' => 'Redactar',
+        'dismiss' => 'No hace falta',
+        'restore' => 'Recuperar',
+        'open_article' => 'Abrir el artículo',
+        'asked_one' => 'Preguntado <strong>una vez</strong>',
+        'asked_many' => 'Preguntado <strong>{n} veces</strong>',
+        'written_up_as' => 'escrito como «{title}»',
+        'still_draft' => '(todavía es un borrador)',
+        'show_tickets' => 'Ver los tickets',
+        'reading' => 'Leyendo…',
+        'start_failed' => 'No se pudo empezar.',
+        'no_tickets' => 'No hay tickets cerrados en los últimos {days} días que leer.',
+        'reading_n' => 'Leyendo sus tickets cerrados… {done} de {total}.',
+        'stopped_early' => 'Se ha detenido antes de tiempo.',
+        'read_failed' => 'No se pudieron leer los tickets: compruebe la clave de OpenAI en Conocimiento → Ajustes.',
+        'clustering' => 'Averiguando qué falta…',
+        'finish_failed' => 'No se pudo terminar.',
+        'wording_mode' => 'Coincidencia por redacción. Añada una clave de OpenAI en Conocimiento → Ajustes para que la coincidencia sea por significado.',
+        'update_failed' => 'No se pudo actualizar',
+        'reading_best' => 'Leyendo el ticket más detallado…',
+        'answer_one' => 'Responda antes al menos a una pregunta.',
+        'writing_up' => 'Redactándolo…',
+        'unreachable' => 'No se pudo contactar con el asistente.',
+        'not_enough_yet' => 'Todavía no hay suficiente en estos tickets.',
+        'draft_ready' => 'Borrador listo. Léalo antes de publicarlo: se ha escrito a partir del ticket {ref}.',
+        'draft_note' => 'Al guardar, esto queda en su base de conocimiento como borrador sin publicar. Nadie puede leerlo hasta que lo publique.',
+        'save_draft' => 'Guardar borrador',
+        'refused' => 'Todavía no hay suficiente para escribir nada.',
+        'refused_why' => 'Los tickets no dicen qué causó esto ni cómo se resolvió.',
+        'refused_ask' => 'Responda lo que pueda y volverá a intentarlo. Usted estuvo allí; el asistente no.',
+        'try_again' => 'Reintentar',
+        'untitled' => 'Sin título',
+        'save_failed' => 'No se pudo guardar',
+        'nothing_yet_readonly' => 'Todavía no hay nada que mostrar. Primero alguien con permiso para ejecutar el asistente tiene que buscar lagunas.',
+        'unread_tickets' => 'Hay {n} tickets cerrados de los últimos {days} días que aún no he leído.',
+        'press_run' => 'Pulse «Buscar lagunas».',
+        'none_to_read' => 'No hay tickets cerrados en los últimos {days} días que leer.',
     ],
     'help' => [
         'guide' => 'Guía',
