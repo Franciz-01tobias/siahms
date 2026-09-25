@@ -81,7 +81,13 @@ function catalogueApprovalDecide(PDO $conn, int $actorId, int $submissionId, str
     // told this specific person would sign it off; letting anyone clear it would make
     // the gate meaningless.
     $isAdmin = function_exists('sessionIsAdmin') ? sessionIsAdmin() : false;
-    if ((int)$sub['approver_id'] !== $actorId && !$isAdmin) {
+    $approverIds = [];
+    if (!empty($sub['approver_ids'])) {
+        $decoded = json_decode((string)$sub['approver_ids'], true);
+        if (is_array($decoded)) $approverIds = array_map('intval', $decoded);
+    }
+    if (!$approverIds) $approverIds = [(int)$sub['approver_id']];
+    if (!in_array($actorId, $approverIds, true) && !$isAdmin) {
         throw new Exception('Only the assigned approver can decide this request');
     }
 
@@ -542,7 +548,7 @@ function catalogueGenerateTicketNumber(PDO $conn): string {
 function catalogueApprovalsList(PDO $conn, int $analystId, string $filter = 'mine'): array {
     $base =
         "SELECT s.id, s.form_id, f.title AS form_title, s.submitted_date,
-                s.approval_status, s.approver_id, s.approval_decided_datetime, s.approval_comment,
+                s.approval_status, s.approver_id, s.approver_ids, s.approval_decided_datetime, s.approval_comment,
                 s.ticket_id, t.ticket_number,
                 u.display_name AS requester_name, u.username AS requester_username,
                 ap.full_name AS approver_name
@@ -560,8 +566,10 @@ function catalogueApprovalsList(PDO $conn, int $analystId, string $filter = 'min
                   ORDER BY s.approval_decided_datetime DESC LIMIT 100";
         $params = [$analystId];
     } else { // mine
-        $where = "WHERE s.approval_status = 'pending' AND s.approver_id = ? ORDER BY s.submitted_date ASC";
-        $params = [$analystId];
+        $where = "WHERE s.approval_status = 'pending'
+                    AND (s.approver_id = ? OR JSON_CONTAINS(COALESCE(s.approver_ids, '[]'), CAST(? AS JSON)))
+                  ORDER BY s.submitted_date ASC";
+        $params = [$analystId, (string)$analystId];
     }
 
     $stmt = $conn->prepare($base . $where);
@@ -577,7 +585,7 @@ function catalogueApprovalsList(PDO $conn, int $analystId, string $filter = 'min
     unset($it);
 
     $counts = [
-        'mine'    => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions WHERE approval_status='pending' AND approver_id = ?", [$analystId]),
+        'mine'    => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions WHERE approval_status='pending' AND (approver_id = ? OR JSON_CONTAINS(COALESCE(approver_ids, '[]'), CAST(? AS JSON)))", [$analystId, (string)$analystId]),
         'all'     => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions WHERE approval_status='pending'", []),
         'decided' => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions WHERE approval_status IN ('approved','rejected') AND approval_decided_by_id = ?", [$analystId]),
     ];

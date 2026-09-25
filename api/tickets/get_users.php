@@ -23,6 +23,20 @@ $search = $_GET['search'] ?? '';
 try {
     $conn = connectToDatabase();
 
+    // CardDAV write-back is optional on upgraded databases until Database
+    // Verification has added the column. Keep the people directory readable
+    // during that window; an absent column means write-back is unavailable.
+    $writeBackExpr = '0';
+    $columnCheck = $conn->prepare(
+        "SELECT COUNT(*) FROM information_schema.columns
+          WHERE table_schema = ? AND table_name = 'auth_providers'
+            AND column_name = 'carddav_write_back'"
+    );
+    $columnCheck->execute([DB_NAME]);
+    if ((int)$columnCheck->fetchColumn() > 0) {
+        $writeBackExpr = 'ap.carddav_write_back';
+    }
+
     // Multi-tenancy: the per-user ticket count is scoped to the active company
     // (no-op at N=1), so it doesn't reveal a requester's activity in other
     // companies (§9). The placeholder sits in the SELECT subquery, so its param
@@ -87,7 +101,7 @@ try {
                 -- rather than deriving it — see the note by `managed_fields`
                 -- below and userDirectoryOwnedFields() in includes/users.php.
                 ap.protocol AS managed_protocol,
-                ap.carddav_write_back AS managed_write_back,
+                {$writeBackExpr} AS managed_write_back,
                 -- The source BY NAME, for the Details-from line and the Source
                 -- filter. Null when the person is linked to nothing.
                 ap.id AS source_id, ap.display_name AS source_name,

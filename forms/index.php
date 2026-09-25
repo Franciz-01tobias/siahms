@@ -273,6 +273,9 @@ $translationNamespaces = ['common', 'forms'];
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     <?php echo htmlspecialchars(t('forms.list.new_form')); ?>
                 </a>
+                <button type="button" class="new-form-btn" onclick="addStandardItems()">
+                    <?php echo htmlspecialchars(t('forms.list.seed_items')); ?>
+                </button>
             </div>
         </div>
 
@@ -349,7 +352,7 @@ $translationNamespaces = ['common', 'forms'];
                 </label>
                 <div class="ca-field" id="approverField" style="display:none;">
                     <label for="approverSelect"><?php echo htmlspecialchars(t('forms.approval.approver_label')); ?></label>
-                    <select id="approverSelect"></select>
+                    <select id="approverSelect" multiple size="6"></select>
                     <small class="ca-hint"><?php echo htmlspecialchars(t('forms.approval.approver_hint')); ?></small>
                 </div>
                 <p class="ca-note" id="approvalPortalNote" style="display:none;"><?php echo htmlspecialchars(t('forms.approval.not_portal_note')); ?></p>
@@ -623,6 +626,24 @@ $translationNamespaces = ['common', 'forms'];
             div.textContent = String(text);
             return div.innerHTML;
         }
+
+        async function addStandardItems() {
+            try {
+                const response = await fetch(API_BASE + 'seed_it_items.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    showToast(data.error || window.t('forms.list.seed_items_failed'), 'error');
+                    return;
+                }
+                showToast(window.t('forms.list.seed_items_done'), 'success');
+                loadForms();
+            } catch (e) {
+                showToast(window.t('forms.list.seed_items_failed'), 'error');
+            }
+        }
         function escAttr(s) {
             return String(s == null ? '' : s)
                 .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
@@ -778,7 +799,10 @@ $translationNamespaces = ['common', 'forms'];
                 + analysts.map(a => `<option value="${a.id}">${esc(a.full_name || a.username || ('#' + a.id))}</option>`).join('');
 
             document.getElementById('approvalRequired').checked = (form.requires_approval == 1);
-            sel.value = form.approver_id ? String(form.approver_id) : '';
+            const selectedApprovers = Array.isArray(form.approver_ids) && form.approver_ids.length
+                ? form.approver_ids.map(String)
+                : (form.approver_id ? [String(form.approver_id)] : []);
+            Array.from(sel.options).forEach(o => { o.selected = selectedApprovers.includes(o.value); });
             // Approval only bites on catalogue (portal) submissions — flag it if this
             // form isn't offered in the catalogue, so the setting isn't a silent no-op.
             document.getElementById('approvalPortalNote').style.display = (form.is_portal_visible == 1) ? 'none' : '';
@@ -800,8 +824,12 @@ $translationNamespaces = ['common', 'forms'];
         async function saveApproval() {
             if (!approvalFormId) return;
             const required = document.getElementById('approvalRequired').checked;
-            const approverId = document.getElementById('approverSelect').value;
-            if (required && !approverId) {
+            const approverIds = Array.from(document.getElementById('approverSelect').selectedOptions).map(o => Number(o.value));
+            if (approverIds.length > 2) {
+                showToast(window.t('forms.approval.max_approvers') || 'Select no more than two approvers.', 'error');
+                return;
+            }
+            if (required && !approverIds.length) {
                 showToast(window.t('forms.approval.need_approver'), 'error');
                 return;
             }
@@ -816,7 +844,8 @@ $translationNamespaces = ['common', 'forms'];
                     body: JSON.stringify({
                         id: approvalFormId,
                         requires_approval: required ? 1 : 0,
-                        approver_id: required ? Number(approverId) : null
+                        approver_id: required ? approverIds[0] : null,
+                        approver_ids: required ? approverIds : []
                     })
                 });
                 const data = await res.json();

@@ -3600,6 +3600,7 @@ return [
         // in freeitsm.sql. requires_approval on + approver_id NULL = unconfigured.
         'requires_approval' => 'TINYINT(1) NOT NULL DEFAULT 0',
         'approver_id'       => 'INT NULL',
+        'approver_ids'      => 'TEXT NULL',
         // What happens when this form is submitted, approved or rejected
         // (discussion #95). JSON: {"submitted":[…],"approved":[…],"rejected":[…]},
         // each a list of {type, args} in the same shape the workflow engine's
@@ -3681,6 +3682,7 @@ return [
         // snapshotted from the form at submit time. FKs live in freeitsm.sql.
         'approval_status'            => "VARCHAR(20) NOT NULL DEFAULT 'not_required'",
         'approver_id'                => 'INT NULL',
+        'approver_ids'               => 'TEXT NULL',
         'approval_decided_by_id'     => 'INT NULL',
         'approval_decided_datetime'  => 'DATETIME NULL',
         'approval_comment'           => 'TEXT NULL',

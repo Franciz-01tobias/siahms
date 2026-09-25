@@ -882,9 +882,17 @@ $translationNamespaces = ['common', 'tickets'];
                     renderUsersList();
                 } else {
                     console.error('Error loading users:', data.error);
+                    users = [];
+                    document.getElementById('usersList').innerHTML =
+                        `<div class="empty-state">${escapeHtml(data.error || t('tickets.users.no_users'))}</div>`;
+                    document.getElementById('userCount').textContent = '';
                 }
             } catch (error) {
                 console.error('Error loading users:', error);
+                users = [];
+                document.getElementById('usersList').innerHTML =
+                    `<div class="empty-state">${escapeHtml(error.message || t('tickets.users.no_users'))}</div>`;
+                document.getElementById('userCount').textContent = '';
             }
         }
 

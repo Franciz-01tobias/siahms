@@ -29,7 +29,7 @@ try {
                 f.modified_by, ma.full_name AS modified_by_name,
                 DATE_FORMAT(f.modified_date, '%Y-%m-%d %H:%i:%s') AS modified_date,
                 f.parent_form_id, f.version_number,
-                f.requires_approval, f.approver_id, f.submission_actions,
+                f.requires_approval, f.approver_id, f.approver_ids, f.submission_actions,
                 (SELECT COUNT(*) FROM forms ch WHERE ch.parent_form_id = f.id) AS child_count
          FROM forms f
          LEFT JOIN analysts ca ON f.created_by  = ca.id
@@ -50,6 +50,8 @@ try {
         // sections can actually fire on this form.
         $form['requires_approval'] = (int)($form['requires_approval'] ?? 0);
         $form['approver_id'] = $form['approver_id'] !== null ? (int)$form['approver_id'] : null;
+        $form['approver_ids'] = json_decode((string)($form['approver_ids'] ?? ''), true);
+        if (!is_array($form['approver_ids'])) $form['approver_ids'] = $form['approver_id'] ? [$form['approver_id']] : [];
 
         // #95 action lists. Decoded here so the editor never has to parse JSON
         // out of a string field. NULL stays null — the editor distinguishes

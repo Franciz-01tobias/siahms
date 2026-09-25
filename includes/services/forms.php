@@ -952,7 +952,7 @@ class FormsService
                     ? ', collection_id = ?' : '';
                 $conn->prepare(
                     "UPDATE forms SET title = ?, description = ?, is_active = ?, is_portal_visible = ?,
-                            requires_approval = ?, approver_id = ?, submission_actions = ?,
+                            requires_approval = ?, approver_id = ?, approver_ids = ?, submission_actions = ?,
                             modified_by = ?" . $collectionSet . ", modified_date = UTC_TIMESTAMP()
                      WHERE id = ?"
                 )->execute([
@@ -971,6 +971,11 @@ class FormsService
                     array_key_exists('approver_id', $in)
                         ? (($in['approver_id'] === null || $in['approver_id'] === '') ? null : (int)$in['approver_id'])
                         : ($current['approver_id'] ?? null),
+                    array_key_exists('approver_ids', $in)
+                        ? self::encodeApproverIds($in['approver_ids'])
+                        : (array_key_exists('approver_id', $in)
+                            ? self::encodeApproverIds($in['approver_id'])
+                            : ($current['approver_ids'] ?? null)),
                     // Same incremental rule again: only touched when sent, so an
                     // adapter that predates #95 (the REST API, an integration)
                     // cannot wipe a form's automation just by saving its title.
@@ -1004,8 +1009,8 @@ class FormsService
         $conn->beginTransaction();
         try {
             $conn->prepare(
-                "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval, approver_id, submission_actions, created_by, modified_by, version_number, created_date, modified_date)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+                "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval, approver_id, approver_ids, submission_actions, created_by, modified_by, version_number, created_date, modified_date)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
             )->execute([
                 $title,
                 trim((string)($in['description'] ?? '')),
@@ -1015,6 +1020,7 @@ class FormsService
                 isset($in['is_portal_visible']) ? (int)(bool)$in['is_portal_visible'] : 0,
                 isset($in['requires_approval']) ? (int)(bool)$in['requires_approval'] : 0,
                 (isset($in['approver_id']) && $in['approver_id'] !== null && $in['approver_id'] !== '') ? (int)$in['approver_id'] : null,
+                self::encodeApproverIds($in['approver_ids'] ?? null),
                 // Accepted on create as well as update: a designer that lets you
                 // build the form and say what happens to it in one sitting would
                 // otherwise lose the second half on the first Save.
@@ -1199,7 +1205,7 @@ class FormsService
 
             $conn->prepare(
                 "INSERT INTO forms (title, description, is_active, is_portal_visible, requires_approval,
-                                    approver_id, submission_actions, created_by, modified_by,
+                                    approver_id, approver_ids, submission_actions, created_by, modified_by,
                                     parent_form_id, version_number{$colSql}, created_date, modified_date)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?{$markSql}, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
             )->execute([
@@ -1223,6 +1229,7 @@ class FormsService
                 // NULL, not 0: approver_id is a real FK and "nobody assigned" is a
                 // meaningful state the gate treats as unconfigured.
                 isset($src['approver_id']) && $src['approver_id'] !== null ? (int)$src['approver_id'] : null,
+                $src['approver_ids'] ?? null,
                 // The action lists travel with the version, like the questions do.
                 // This is the trap that ate the approval gate: a per-form setting
                 // left out of this INSERT is a setting that pressing Save deletes,
@@ -1638,6 +1645,10 @@ class FormsService
         $gateApproverId = ($portalUserId !== null && !empty($form['requires_approval']) && !empty($form['approver_id']))
             ? (int) $form['approver_id']
             : null;
+        $gateApproverIds = ($portalUserId !== null && !empty($form['requires_approval']))
+            ? self::decodeApproverIds($form['approver_ids'] ?? null)
+            : [];
+        if ($gateApproverIds) $gateApproverId = $gateApproverIds[0];
         $approvalStatus = $gateApproverId !== null ? 'pending' : 'not_required';
 
         $conn->beginTransaction();
@@ -1654,14 +1665,15 @@ class FormsService
             $collectionId = $hasCollections ? ($form['collection_id'] ?? null) : null;
             $collectionId = ($collectionId !== null && $collectionId !== '') ? (int)$collectionId : null;
 
-            $cols = 'form_id, submitted_by, submitted_by_user_id, submitted_date, approval_status, approver_id';
-            $vals = '?, ?, ?, UTC_TIMESTAMP(), ?, ?';
+            $cols = 'form_id, submitted_by, submitted_by_user_id, submitted_date, approval_status, approver_id, approver_ids';
+            $vals = '?, ?, ?, UTC_TIMESTAMP(), ?, ?, ?';
             $args = [
                 $formId,
                 $portalUserId !== null ? null : $ctx->actorId,
                 $portalUserId,
                 $approvalStatus,
                 $gateApproverId,
+                $gateApproverIds ? json_encode($gateApproverIds) : null,
             ];
             if ($hasCollections) {
                 $cols .= ', collection_id';
@@ -1793,6 +1805,37 @@ class FormsService
     // ======================================================================
     //  Internals
     // ======================================================================
+
+    /** Canonical JSON representation for the optional any-one approver set. */
+    private static function encodeApproverIds($value): ?string
+    {
+        if ($value === null || $value === '') return null;
+        $values = is_array($value) ? $value : [$value];
+        $ids = [];
+        foreach ($values as $id) {
+            $id = (int)$id;
+            if ($id > 0 && !in_array($id, $ids, true)) $ids[] = $id;
+        }
+        if (count($ids) > 2) {
+            throw new InvalidArgumentException('No more than two approvers may be selected');
+        }
+        return $ids ? json_encode($ids) : null;
+    }
+
+    private static function decodeApproverIds($value): array
+    {
+        $decoded = is_string($value) ? json_decode($value, true) : $value;
+        if (!is_array($decoded)) return [];
+        $ids = [];
+        foreach ($decoded as $id) {
+            $id = (int)$id;
+            if ($id > 0 && !in_array($id, $ids, true)) $ids[] = $id;
+        }
+        if (count($ids) > 2) {
+            throw new InvalidArgumentException('No more than two approvers may be selected');
+        }
+        return $ids;
+    }
 
     /** Load a form row (with child_count for the leaf check), or throw 404. */
     private static function loadFormRow(PDO $conn, int $id): array
@@ -2106,7 +2149,10 @@ class FormsService
      */
     public static function portalAudienceSql(PDO $conn, string $formAlias = 'f'): string
     {
-        if (!self::audiencesAvailable($conn)) return '1 = 1';
+        // Keep the bind contract stable for every caller. Older installations
+        // do not have the audience tables yet, but image access and the portal
+        // catalogue still bind :audUser unconditionally.
+        if (!self::audiencesAvailable($conn)) return '(:audUser IS NOT NULL)';
         return "(NOT EXISTS (SELECT 1 FROM form_audiences fa WHERE fa.form_id = {$formAlias}.id)
                  OR EXISTS (
                      SELECT 1

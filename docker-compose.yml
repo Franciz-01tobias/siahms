@@ -75,31 +75,8 @@ services:
       timeout: 3s
       retries: 5
 
-  # IMAP/POP3 service
-  imap:
-    image: dovecot/dovecot:latest
-    ports:
-      - "993:993"   # IMAPS (implicit TLS)
-      - "143:143"   # IMAP (plain)
-      - "995:995"   # POP3S (implicit TLS)
-      - "110:110"   # POP3 (plain)
-    environment:
-      - DOVECOT_PROTOCOLS=imap pop3
-      - DOVECOT_MAIL_HOME=/var/mail
-    volumes:
-      - dovecot-data:/var/mail
-      - ./docker/dovecot.conf:/etc/dovecot/dovecot.conf:ro
-    networks:
-      - default
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "143"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
 volumes:
   db-data:
   attachments:
   cm-attachments:
   encryption-keys:
-  dovecot-data:

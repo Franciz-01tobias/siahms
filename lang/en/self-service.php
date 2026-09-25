@@ -72,8 +72,8 @@ return [
     ],
 
     'catalogue' => [
-        'title'       => 'Self-Service Portal — Request Something',
-        'heading'     => 'Request something',
+        'title'       => 'Self-Service Portal — Request IT Items',
+        'heading'     => 'Request IT items',
         'lede'        => 'Pick what you need and fill in a few details. The IT team will pick it up from there.',
         'loading'     => 'Loading...',
         'back'        => 'Back to all requests',
@@ -182,8 +182,8 @@ return [
         'welcome_sub'        => "Here's an overview of your tickets and system status",
         'action_new_ticket'     => 'New ticket',
         'action_new_ticket_sub' => 'Report a problem or ask for help',
-        'action_catalogue'      => 'Request',
-        'action_catalogue_sub'  => 'Order from the request catalogue',
+        'action_catalogue'      => 'Request IT items',
+        'action_catalogue_sub'  => 'Request equipment and software from IT',
         'recent_tickets'     => 'Recent Tickets',
         // Catalogue-request approval status (#928)
         'your_requests'      => 'Your requests',

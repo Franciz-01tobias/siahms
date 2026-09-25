@@ -4847,6 +4847,9 @@ CREATE TABLE IF NOT EXISTS `forms` (
     -- unconfigured so it can never hold requests hostage (submitForm skips the gate).
     `requires_approval` TINYINT(1) NOT NULL DEFAULT 0,
     `approver_id`       INT NULL,
+    -- Optional JSON array of analyst ids. NULL preserves legacy single-approver
+    -- behaviour; when present any one member may decide.
+    `approver_ids`      TEXT NULL,
     -- What happens when this form is submitted, approved or rejected (#95).
     -- JSON: {"submitted":[…],"approved":[…],"rejected":[…]}, each a list of
     -- {type, args} in the workflow engine's own action shape — they ARE workflow
@@ -4950,6 +4953,9 @@ CREATE TABLE IF NOT EXISTS `form_submissions` (
     -- vocabulary, not a user-configurable status, so string literals are safe.
     `approval_status`            VARCHAR(20) NOT NULL DEFAULT 'not_required',
     `approver_id`                INT NULL,
+    -- Snapshot of the configured approver set at submit time. NULL means use the
+    -- legacy single approver_id column.
+    `approver_ids`               TEXT NULL,
     `approval_decided_by_id`     INT NULL,
     `approval_decided_datetime`  DATETIME NULL,
     `approval_comment`           TEXT NULL,

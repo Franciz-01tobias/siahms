@@ -51,7 +51,7 @@ try {
         : '';
 
     $sql = "SELECT f.id, f.title, f.description, f.is_active, f.is_portal_visible,
-                   f.requires_approval, f.approver_id, apr.full_name AS approver_name,
+                   f.requires_approval, f.approver_id, f.approver_ids, apr.full_name AS approver_name,
                    f.created_by,  ca.full_name AS created_by_name,
                    DATE_FORMAT(f.created_date,  '%Y-%m-%d %H:%i:%s') AS created_date,
                    f.modified_by, ma.full_name AS modified_by_name,
@@ -69,6 +69,11 @@ try {
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     $forms = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($forms as &$form) {
+        $form['approver_ids'] = json_decode((string)($form['approver_ids'] ?? ''), true);
+        if (!is_array($form['approver_ids'])) $form['approver_ids'] = !empty($form['approver_id']) ? [(int)$form['approver_id']] : [];
+    }
+    unset($form);
 
     echo json_encode(['success' => true, 'forms' => $forms]);
 
