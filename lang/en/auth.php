@@ -47,7 +47,7 @@ return [
     'mfa_cancel'      => 'Cancel and return to login',
 
     // The way across to the requester portal (discussion #82)
-    'portal_link'   => 'Go to the Self-Service Portal',
+    'portal_link'   => 'Go to the IT Help Desk',
 
     // --- Messages -----------------------------------------------------------
     'err_missing'   => 'Please enter both username and password',
@@ -67,7 +67,7 @@ return [
 
     // Wrong door / wrong credentials for this door
     'err_sso_account'   => 'This account signs in with single sign-on. Please use the sign-in button above.',
-    'err_not_analyst'   => 'Your account does not have analyst access. Please use the self-service portal.',
+    'err_not_analyst'   => 'Your account does not have analyst access. Please use the IT Help Desk.',
     'err_no_group'      => 'Your account is not a member of a group that grants access to FreeITSM.',
 
     // Email-first lookup, in the page's JavaScript

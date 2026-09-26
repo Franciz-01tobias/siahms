@@ -14,7 +14,7 @@
  * or any server-only strings — only fixed portal chrome lives here.
  */
 return [
-    'portal' => 'Self-Service Portal',
+    'portal' => 'IT Help Desk',
 
     // Raising a ticket and requesting something are ACTIONS, not destinations, so
     // they are buttons on the dashboard rather than nav items. 'new_ticket' is kept
@@ -72,7 +72,7 @@ return [
     ],
 
     'catalogue' => [
-        'title'       => 'Self-Service Portal — Request IT Items',
+        'title'       => 'IT Help Desk — Request IT Items',
         'heading'     => 'Request IT items',
         'lede'        => 'Pick what you need and fill in a few details. The IT team will pick it up from there.',
         'loading'     => 'Loading...',
@@ -90,8 +90,8 @@ return [
     ],
 
     'login' => [
-        'title'              => 'Self-Service Portal - Login',
-        'heading'            => 'Self-Service Portal',
+        'title'              => 'IT Help Desk - Login',
+        'heading'            => 'IT Help Desk',
         'subtitle'           => 'Sign in to view your tickets',
         'subtitle_mfa'       => 'Multi-factor authentication',
         'email'              => 'Email',
@@ -125,7 +125,7 @@ return [
     // was created for them by the service desk — and being told to "reset" one
     // they never set reads as a mistake or a scam.
     'forgot' => [
-        'title'           => 'Self-Service Portal - Set your password',
+        'title'           => 'IT Help Desk - Set your password',
         'heading'         => 'Set your password',
         'subtitle'        => 'Enter your email address and we will send you a link',
         'email'           => 'Email',
@@ -136,9 +136,9 @@ return [
     ],
 
     'reset' => [
-        'title'              => 'Self-Service Portal - Choose a password',
+        'title'              => 'IT Help Desk - Choose a password',
         'heading'            => 'Choose a password',
-        'subtitle'           => 'Pick a password for your self-service account',
+        'subtitle'           => 'Pick a password for your IT Help Desk account',
         'password'           => 'New password',
         'password_hint'      => 'At least 8 characters',
         'confirm_password'   => 'Confirm password',
@@ -151,9 +151,9 @@ return [
         'request_new'        => 'Ask for a new link',
     ],
     'register' => [
-        'title'              => 'Self-Service Portal - Register',
+        'title'              => 'IT Help Desk - Register',
         'heading'            => 'Create Account',
-        'subtitle'           => 'Register to access the self-service portal',
+        'subtitle'           => 'Register to access the IT Help Desk',
         'email'              => 'Email',
         'full_name'          => 'Full Name',
         'password'           => 'Password',
@@ -177,7 +177,7 @@ return [
     ],
 
     'dashboard' => [
-        'title'              => 'Self-Service Portal',
+        'title'              => 'IT Help Desk',
         'welcome'            => 'Welcome, {name}',
         'welcome_sub'        => "Here's an overview of your tickets and system status",
         'action_new_ticket'     => 'New ticket',
@@ -252,7 +252,7 @@ return [
     ],
 
     'new_ticket' => [
-        'title'              => 'Self-Service Portal - New Ticket',
+        'title'              => 'IT Help Desk - New Ticket',
         'heading'            => 'New Ticket',
         'mailbox'            => 'Mailbox *',
         'mailbox_loading'    => 'Loading...',
@@ -291,7 +291,7 @@ return [
     ],
 
     'tickets' => [
-        'title'         => 'Self-Service Portal — My Tickets',
+        'title'         => 'IT Help Desk — My Tickets',
         'heading'       => 'My Tickets',
         'filter_open'   => 'Open',
         'filter_closed' => 'Closed',
@@ -314,7 +314,7 @@ return [
         'self_close_reason'       => 'e.g. it started working again, or I sorted it myself (optional)',
         'self_close_done'         => 'Thanks — your ticket has been closed.',
         'self_close_failed'       => 'The ticket could not be closed just now. Please try again in a minute.',
-        'title'              => 'Self-Service Portal - Ticket Detail',
+        'title'              => 'IT Help Desk - Ticket Detail',
         'back'               => 'Back to Dashboard',
         'loading'            => 'Loading ticket...',
         'load_failed'        => 'Failed to load ticket',
@@ -362,7 +362,7 @@ return [
         'col_title'     => 'Article',
         'col_folder'    => 'Section',
 
-        'title'              => 'Self-Service Portal — Help Centre',
+        'title'              => 'IT Help Desk — Help Centre',
         'heading'            => 'Help Centre',
         'lede'               => 'Guides and answers from the IT team. Search before raising a ticket — the answer may already be here.',
         'search_placeholder' => 'Search for an answer...',
@@ -379,10 +379,10 @@ return [
     ],
 
     'help' => [
-        'title'              => 'Self-Service Portal — Help',
+        'title'              => 'IT Help Desk — Help',
         'heading'            => 'Help & Guide',
         'on_this_page'       => 'On this page',
-        'lede'               => 'Everything you need to know about the Self-Service Portal — how to raise a ticket, attach a screen recording, track progress on existing tickets, and manage your account security.',
+        'lede'               => 'Everything you need to know about the IT Help Desk — how to raise a ticket, attach a screen recording, track progress on existing tickets, and manage your account security.',
 
         's1_title'           => 'Welcome',
         's1_p1'              => 'This portal is the fastest way to ask the IT team for help. You can raise a new ticket, attach files and screen recordings, view the status of your existing tickets, and read replies from the support team — all without sending an email.',
