@@ -79,9 +79,9 @@ foreach ($providers as $pk => $pmeta) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.integrations.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.integrations.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/integrations.css?v=1">
     <style>
         /* Only the card grid — the container, title and warning come from
@@ -121,7 +121,7 @@ foreach ($providers as $pk => $pmeta) {
         .provider-count.is-none { background: var(--surface-2); color: var(--text-faint); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="integrations">
     <?php include '../includes/header.php'; ?>
@@ -167,6 +167,6 @@ foreach ($providers as $pk => $pmeta) {
             <?php endforeach; ?>
         </div>
     </div>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

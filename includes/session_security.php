@@ -79,6 +79,20 @@ function requestIsHttps(): bool
 }
 
 /**
+ * 'https' or 'http' — the scheme to put on an absolute URL built from this request.
+ *
+ * ⚠️ Use this, never a bare `$_SERVER['HTTPS']` test. Behind a proxy that terminates
+ * TLS (nginx, Caddy, Traefik, an AWS ALB) Apache only ever sees plain HTTP, so the
+ * bare test says 'http' and every link built from it is wrong. For an OIDC redirect
+ * URI that is fatal rather than cosmetic: Entra and friends refuse a non-TLS redirect
+ * URI outright (GH #152).
+ */
+function requestScheme(): string
+{
+    return requestIsHttps() ? 'https' : 'http';
+}
+
+/**
  * The attributes an authenticated session cookie must carry.
  *
  * SameSite=Lax is doing the CSRF work here: it stops the cookie riding along with a
@@ -110,11 +124,20 @@ function sessionCookieOptions(): array
  * it will not fatal if output has already started — it logs instead, because
  * refusing to log somebody in over a cookie-attribute problem would be a worse
  * outcome than the one being prevented.
+ *
+ * @param bool $newIdentity  true at sign-in (the CSRF token is rotated too); false after a password change by the same person
  */
-function sessionPromoteToAuthenticated(): void
+function sessionPromoteToAuthenticated(bool $newIdentity = true): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
         return;
+    }
+    // A new CSRF token at sign-in, so a token seen before login (by whoever planted
+    // the session) is worthless after it. Not on a password change - the person is
+    // the same, and the page they changed it on must keep working.
+    if ($newIdentity) {
+        require_once __DIR__ . '/csrf.php';
+        csrfRotate();
     }
     if (headers_sent($file, $line)) {
         error_log("session_security: cannot rotate the session id, output already started at $file:$line");

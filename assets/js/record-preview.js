@@ -30,6 +30,8 @@
  *     html += FreeITSMPreview.badge('ticket', 42);
  * and, after changing a record whose preview may be cached:
  *     FreeITSMPreview.forget('ticket', 42);
+ *
+ * @wiki Record-Previews-Developer-Guide
  */
 (function () {
     'use strict';
@@ -54,6 +56,7 @@
     var pop = null;       // the one popover element
     var openFor = null;   // the badge it belongs to
 
+    /** HTML-escapes a value; null and undefined become an empty string. */
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -85,6 +88,7 @@
                ' aria-expanded="false" title="' + esc(label) + '">' + INFO_SVG + '</span>';
     }
 
+    /** Returns the page's one popover element, creating it hidden on first use. */
     function ensurePopover() {
         if (pop) return pop;
         pop = document.createElement('div');
@@ -95,6 +99,7 @@
         return pop;
     }
 
+    /** Hides the popover, drops the phone sheet mode and resets the badge it belonged to. */
     function close() {
         if (!pop) return;
         pop.hidden = true;
@@ -146,12 +151,17 @@
         pop.style.top  = Math.round(top) + 'px';
     }
 
+    /** Shows the loading message in the popover next to the badge. */
     function renderLoading(anchor) {
         pop.innerHTML = '<div class="rp-loading">' + esc(rt('loading', 'Loading…')) + '</div>';
         pop.hidden = false;
         place(anchor);
     }
 
+    /**
+     * Shows the single "cannot be shown" card - used alike for not found, not allowed and network
+     * failure.
+     */
     function renderUnavailable(anchor, message) {
         pop.innerHTML = '<div class="rp-unavailable">' +
             esc(message || rt('unavailable', 'That record cannot be shown here.')) + '</div>';
@@ -159,6 +169,10 @@
         place(anchor);
     }
 
+    /**
+     * Draws a record preview into the popover - heading, label / value rows (with a colour dot where
+     * given), lead text and an Open link.
+     */
     function render(anchor, p) {
         var rows = (p.fields || []).map(function (f) {
             // A status or priority colour comes from the record's own settings,
@@ -187,6 +201,10 @@
         place(anchor);
     }
 
+    /**
+     * Opens the popover for a badge, from the cache when possible, otherwise fetching
+     * record_preview.php and caching the answer (or "gone").
+     */
     async function show(anchor) {
         var type = anchor.getAttribute('data-rp-type');
         var id   = anchor.getAttribute('data-rp-id');

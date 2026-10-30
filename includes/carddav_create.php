@@ -46,6 +46,7 @@ require_once __DIR__ . '/directory_sync.php';     // dsyncLinkIdentity()
 /**
  * Address books this person could be added to right now, and why not if none.
  *
+ * @param array $user  the users row - auth_provider_id, email and tenant_id are read
  * @return array ['books' => [provider rows], 'reason' => '' | why nothing is offered]
  */
 function cardDavCreateTargets(PDO $conn, array $user): array
@@ -81,7 +82,12 @@ function cardDavCreateTargets(PDO $conn, array $user): array
     return $out;
 }
 
-/** What the new card would carry, for the confirm step and for the card itself. */
+/**
+ * What the new card would carry, for the confirm step and for the card itself.
+ *
+ * @param array $user  the users row the card is built from (display_name, email, job_title, department, office, phone, mobile)
+ * @param array $provider  the target auth_providers row - its carddav_scope and carddav_scope_value
+ */
 function cardDavCreatePreview(PDO $conn, array $user, array $provider): array
 {
     $scope  = (string)($provider['carddav_scope'] ?? 'all');
@@ -114,6 +120,10 @@ function cardDavNewUid(): string
 /**
  * Build the new card. vCard 3.0: what the fixture, Baikal, Nextcloud and iCloud
  * all store, and what cdsyncMapCard() reads.
+ *
+ * @param string $uid  the new card's UID from cardDavNewUid()
+ * @param array $preview  the result of cardDavCreatePreview() - fields, scope, scope_value
+ * @param ?string $organisation  the person's company name, written as the first part of ORG; null or '' leaves it empty
  */
 function cardDavBuildCard(string $uid, array $preview, ?string $organisation): string
 {
@@ -150,7 +160,12 @@ function cardDavBuildCard(string $uid, array $preview, ?string $organisation): s
     return implode("\r\n", array_map('cardDavFoldLine', $lines)) . "\r\n";
 }
 
-/** Find a card in a fetched book by UID. */
+/**
+ * Find a card in a fetched book by UID.
+ *
+ * @param array $cards  the 'cards' list from cardDavFetchCards() - each with href, etag, vcard
+ * @param string $uid  the UID to find, matched exactly
+ */
 function cardDavFindCardByUid(array $cards, string $uid): ?array
 {
     foreach ($cards as $c) {
@@ -163,6 +178,8 @@ function cardDavFindCardByUid(array $cards, string $uid): ?array
 /**
  * Add a person to an address book and link them to it.
  *
+ * @param int $userId  users.id of the person to add
+ * @param int $providerId  auth_providers.id of the address book to add them to; must be one cardDavCreateTargets() offers
  * @return array ['ok'=>bool, 'error'=>string, 'code'=>string, 'existing'=>string]
  *   code: '' | not_allowed | duplicate | failed | out_of_scope
  */

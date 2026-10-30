@@ -101,6 +101,8 @@ function cmdbHasImpactEdgesConfigured(PDO $conn): bool {
 /**
  * Resolve the company a walk is allowed to stay inside, or null when the
  * install is single-company and there is nothing to constrain.
+ *
+ * @param int $rootId  cmdb_objects.id the walk starts from; its company (NULL read as the Default) is the scope
  */
 function cmdbImpactTenantScope(PDO $conn, int $rootId): ?int {
     if (!isMultiTenant($conn)) {
@@ -118,6 +120,8 @@ function cmdbImpactTenantScope(PDO $conn, int $rootId): ?int {
 /**
  * The three one-hop buckets. Shape is a published API contract — add keys here,
  * never rename or remove them.
+ *
+ * @param int $id  cmdb_objects.id to look one hop out from
  */
 function cmdbDirectImpact(PDO $conn, int $id): array {
     // Descendants: the whole containment subtree, with hop count from the root.
@@ -197,6 +201,10 @@ function cmdbDirectImpact(PDO $conn, int $id): array {
  * either bites, 'truncated' comes back true — the caller must say so rather than
  * present a capped list as the whole answer.
  *
+ * @param int $rootId  cmdb_objects.id whose failure is being modelled
+ * @param ?int $tenantScope  company the walk stays inside (see cmdbImpactTenantScope()); null means no limit
+ * @param int $maxDepth  most hops to follow from the root
+ * @param int $maxNodes  most objects to collect before stopping and flagging truncated
  * @return array{nodes: array, truncated: bool, max_depth_reached: int}
  */
 function cmdbBlastRadius(PDO $conn, int $rootId, ?int $tenantScope = null, int $maxDepth = 20, int $maxNodes = 1000): array {
@@ -247,6 +255,9 @@ function cmdbBlastRadius(PDO $conn, int $rootId, ?int $tenantScope = null, int $
  * estate costs a handful of queries rather than hundreds. Each row carries how
  * it was reached (via_kind / via_label / from_id / from_name) so the panel can
  * explain the path instead of just listing names.
+ *
+ * @param array $fromIds  cmdb_objects ids of the current frontier; cast to int and de-duplicated here
+ * @param ?int $tenantScope  company the reached objects must belong to; null means no limit
  */
 function cmdbImpactEdgesFrom(PDO $conn, array $fromIds, ?int $tenantScope = null): array {
     $fromIds = array_values(array_unique(array_map('intval', $fromIds)));

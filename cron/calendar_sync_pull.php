@@ -34,8 +34,11 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/encryption.php';
 require_once __DIR__ . '/../includes/services/tickets.php';
 require_once __DIR__ . '/../includes/calendar_sync/pull.php';
+require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $isCli = (PHP_SAPI === 'cli');
+$trigger = JobRun::scheduledTrigger();
+$runId = null;
 
 try {
     $conn = connectToDatabase();
@@ -46,20 +49,32 @@ try {
         $expected = decryptValue($st->fetchColumn() ?: null);
         if (empty($expected)) {
             http_response_code(503);
+            JobRun::refused($conn, 'calendar_sync_pull', 'token not set');
             echo "Cron token not set. Run Database Verification to seed webhook_cron_token.\n";
             exit;
         }
         if (!hash_equals((string)$expected, (string)($_GET['token'] ?? ''))) {
             http_response_code(403);
+            JobRun::refused($conn, 'calendar_sync_pull', 'wrong token');
             echo "Forbidden\n";
             exit;
         }
     }
 
     if (!calendarSyncSchemaReady($conn)) {
+        JobRun::skipped($conn, 'calendar_sync_pull', $trigger, 'Calendar sync tables are not present.');
         echo "Calendar sync tables are not present. Run Database Verification.\n";
         exit;
     }
+
+    // Never two at once (#182): a slow pull overlapping the next one would read the
+    // same calendars twice and race to apply the same moves.
+    if ((int)$conn->query("SELECT GET_LOCK('freeitsm_calendar_pull', 0)")->fetchColumn() !== 1) {
+        JobRun::skipped($conn, 'calendar_sync_pull', $trigger, 'Another pull is still running.');
+        echo "Another calendar pull is still running. Nothing to do.\n";
+        exit;
+    }
+    $runId = JobRun::start($conn, 'calendar_sync_pull', $trigger);
 
     // ── Subscriptions first ─────────────────────────────────────────────────
     // Create for anyone newly enrolled, renew before they lapse (Graph caps
@@ -86,6 +101,7 @@ try {
 
     $reports = calendarSyncPullAll($conn);
     if (!$reports) {
+        JobRun::finish($conn, $runId, 'ok', ['calendars' => 0], 'Nobody has calendar sync switched on.');
         echo "Nobody has calendar sync switched on. Nothing to do.\n";
         exit;
     }
@@ -102,8 +118,25 @@ try {
             : "{$r['moved']} moved, {$r['unscheduled']} unscheduled, {$r['skipped']} ignored";
         if ($r['error']) $line .= ' — ' . $r['error'];
         echo $line . "\n";
+        // Each analyst's calendar is a source, so "every pull is failing" is FAILING
+        // on the health page rather than looking the same as "never run" (#182).
+        JobRun::source($conn, $runId, 'calendar_sync_pull', 'analyst:' . (int)$r['analyst_id'],
+            calendarPullAnalystName($conn, (int)$r['analyst_id']), empty($r['error']), $r['error'] ?: null);
     }
+    $bad = count(array_filter($reports, fn($r) => !empty($r['error'])));
+    JobRun::finish($conn, $runId, null, ['calendars' => count($reports), 'failed' => $bad],
+        'Polled ' . count($reports) . " calendar(s), {$bad} failed.");
+    if ($bad > 0) exit(1);
 } catch (Exception $e) {
+    if (isset($conn)) JobRun::fail($conn, $runId, $e);
     echo "Calendar pull failed: " . $e->getMessage() . "\n";
     exit(1);
+}
+
+/** An analyst's name for the health page's source list. */
+function calendarPullAnalystName(PDO $conn, int $id): string
+{
+    $s = $conn->prepare("SELECT full_name FROM analysts WHERE id = ?");
+    $s->execute([$id]);
+    return (string)($s->fetchColumn() ?: ('Analyst #' . $id));
 }

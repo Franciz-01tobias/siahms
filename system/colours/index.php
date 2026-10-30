@@ -23,9 +23,9 @@ $translationNamespaces = ['common', 'system'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.colours.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.colours.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         body {
             /* System is the FIRST module whose DARK accent is a LIGHT colour (#90a4ae).
@@ -191,7 +191,7 @@ $translationNamespaces = ['common', 'system'];
         [data-theme-mode="dark"] .btn-primary:hover { background: #b0bec5; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="colours">
     <?php include '../includes/header.php'; ?>
@@ -373,6 +373,6 @@ $translationNamespaces = ['common', 'system'];
 
     loadColours();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

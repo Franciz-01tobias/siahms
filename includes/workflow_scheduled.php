@@ -21,6 +21,7 @@
  */
 
 require_once __DIR__ . '/../workflow/includes/engine.php';
+require_once __DIR__ . '/contract_party.php';   // who a contract is with (#153)
 require_once __DIR__ . '/timezone.php';   // naive_today_sql() — expiry dates are bare dates (GH #126)
 
 /**
@@ -44,6 +45,11 @@ require_once __DIR__ . '/timezone.php';   // naive_today_sql() — expiry dates 
  * Only the insert that actually created a row dispatches. Two overlapping cron
  * runs therefore cannot double-fire — the database, not the application, is the
  * arbiter.
+ *
+ * @param string $event  the trigger event key, e.g. 'sla.breached'
+ * @param string $entityKey  what it is about, e.g. 'ticket:183:response'
+ * @param string $fingerprint  the state it is about; a new value re-arms the emission
+ * @param array $payload  the event payload handed to WorkflowEngine::dispatch()
  */
 function workflowEmitOnce(PDO $conn, string $event, string $entityKey, string $fingerprint, array $payload): bool
 {
@@ -116,6 +122,7 @@ function workflowEmitContractExpiries(PDO $conn): int
     $maxWindow = max($windows);
     $today = naive_today_sql();
 
+    [$partyCols, $partyJoins] = contractPartySql($conn, 'c');
     $rows = $conn->prepare(
         // Suppliers have no single `name`: trading_name is what people call them,
         // legal_name is what's on the contract. Prefer the former, fall back.
@@ -127,9 +134,12 @@ function workflowEmitContractExpiries(PDO $conn): int
         // the wall clock is the installation's own zone, which is right.
         "SELECT c.id, c.contract_number, c.title, c.contract_end, c.supplier_id,
                 COALESCE(NULLIF(s.trading_name, ''), s.legal_name) AS supplier_name,
+                s.legal_name AS supplier_legal_name, s.trading_name AS supplier_trading_name,
                 DATEDIFF(c.contract_end, $today) AS days_remaining
+                $partyCols
            FROM contracts c
       LEFT JOIN suppliers s ON s.id = c.supplier_id
+                $partyJoins
           WHERE c.is_active = 1
             AND c.contract_end IS NOT NULL
             AND c.contract_end >= $today
@@ -158,6 +168,11 @@ function workflowEmitContractExpiries(PDO $conn): int
                         'days_remaining'  => $days,
                         'supplier_id'     => $c['supplier_id'] !== null ? (int)$c['supplier_id'] : null,
                         'supplier_name'   => $c['supplier_name'],
+                        // Who it is WITH (#153): supplier or customer, and a name either way.
+                        'party_type'         => $c['party_type'] ?? 'supplier',
+                        'party_name'         => contractPartyLabel(['supplier_name' => $c['supplier_legal_name'], 'supplier_trading_name' => $c['supplier_trading_name']] + $c),
+                        'customer_tenant_id' => isset($c['customer_tenant_id']) ? (int)$c['customer_tenant_id'] : null,
+                        'customer_user_id'   => isset($c['customer_user_id']) ? (int)$c['customer_user_id'] : null,
                     ],
                     'window_days' => $w,
                 ]
@@ -219,11 +234,40 @@ function workflowEmitWarrantyExpiries(PDO $conn): int
  * computes its SLA state, so emitting from there costs nothing and cannot drift
  * from what the SLA emails think is true.
  */
-function workflowScheduledRun(PDO $conn): array
+function workflowScheduledRun(PDO $conn, ?array &$parts = null): array
 {
+    // #182: each part reports whether it WORKED, not just a count. A part that
+    // threw used to be logged and counted as 0, so the cron printed "OK" while
+    // planned maintenance had stopped starting - the job's three parts are now
+    // its three sources, and one failing makes the run PARTIAL, named.
+    $parts = [];
+    $part = function (string $key, callable $fn) use (&$parts) {
+        try {
+            $n = $fn();
+            $parts[$key] = ['ok' => true, 'error' => null];
+            return $n;
+        } catch (Throwable $e) {
+            error_log('[workflow_scheduled] ' . $key . ': ' . $e->getMessage());
+            $parts[$key] = ['ok' => false, 'error' => $e->getMessage()];
+            return 0;
+        }
+    };
+    $expiries = $part('expiries', fn() => [workflowEmitContractExpiries($conn), workflowEmitWarrantyExpiries($conn)]);
     return [
-        'contract_expiring'        => workflowEmitContractExpiries($conn),
-        'asset_warranty_expiring'  => workflowEmitWarrantyExpiries($conn),
+        'contract_expiring'        => is_array($expiries) ? $expiries[0] : 0,
+        'asset_warranty_expiring'  => is_array($expiries) ? $expiries[1] : 0,
+        // Service Status planned maintenance (3.2.0): start what is due, finish
+        // what has ended. Not a workflow trigger itself - the incident it makes is.
+        'planned_maintenance'      => $part('planned_maintenance', function () use ($conn) {
+            require_once __DIR__ . '/service_status_planned.php';
+            return array_sum(statusPlannedRun($conn));
+        }),
+        // Projects keep their own fire-once state (includes/projects/alerts.php):
+        // health and tolerance changes, and stages ending soon.
+        'projects'                 => $part('projects', function () use ($conn) {
+            require_once __DIR__ . '/projects/alerts.php';
+            return array_sum(projectAlertsRun($conn));   // the cron prints one number per entry
+        }),
     ];
 }
 
@@ -231,6 +275,8 @@ function workflowScheduledRun(PDO $conn): array
  * Drop ledger rows for events long past. Keeping them forever would grow without
  * bound; a year is far longer than any window we announce, so nothing can be
  * resurrected by a prune.
+ *
+ * @param int $keepDays  ledger rows older than this many days are deleted
  */
 function workflowPruneEmissions(PDO $conn, int $keepDays = 365): int
 {

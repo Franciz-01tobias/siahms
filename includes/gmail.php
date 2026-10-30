@@ -7,10 +7,15 @@
  */
 
 require_once __DIR__ . '/encryption.php';
+require_once __DIR__ . '/mime_message.php';
 
 /**
  * Refresh a Google access token using the refresh token.
  * Returns the updated token data array.
+ *
+ * @param array $mailbox    the target_mailboxes row, decrypted - id, azure_client_id and azure_client_secret
+ *                          (which hold the Google OAuth client for a Google mailbox)
+ * @param array $tokenData  the decoded token_data - array{access_token:string,refresh_token:string,expires_at:int}
  */
 function gmailRefreshAccessToken(PDO $conn, array $mailbox, array $tokenData): array {
     if (empty($tokenData['refresh_token'])) {
@@ -69,6 +74,9 @@ function gmailRefreshAccessToken(PDO $conn, array $mailbox, array $tokenData): a
 
 /**
  * Get a valid Google access token, refreshing if expired.
+ *
+ * @param array $mailbox    the target_mailboxes row, decrypted - passed on to gmailRefreshAccessToken()
+ * @param array $tokenData  the decoded token_data; refreshed when expires_at (Unix seconds) is under 5 minutes away
  */
 function gmailGetValidAccessToken(PDO $conn, array $mailbox, array $tokenData): string {
     if (isset($tokenData['expires_at']) && $tokenData['expires_at'] < (time() + 300)) {
@@ -84,19 +92,41 @@ function gmailGetValidAccessToken(PDO $conn, array $mailbox, array $tokenData): 
  * $subject  - email subject
  * $htmlBody - HTML body content
  * $from     - sender email address (the mailbox address)
+ * $cc       - CC addresses, semicolon/comma separated
+ * $parts    - attachments and inline images, Graph-shaped (includes/mime_message.php)
+ *
+ * GH #158: $cc and $parts are new. Before them an analyst's attachments, pasted
+ * images and CC list were all silently dropped on a Google mailbox.
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param string $to           recipient addresses, semicolon/comma separated; invalid ones are dropped
+ * @param string $subject      the email subject
+ * @param string $htmlBody     the HTML body
+ * @param string $from         the sender address (the mailbox address)
+ * @param string $cc           CC addresses, semicolon/comma separated; invalid ones are dropped
+ * @param array $parts         attachments and inline images, Graph-shaped (includes/mime_message.php)
  */
-function gmailSendEmail(string $accessToken, string $to, string $subject, string $htmlBody, string $from = ''): void {
-    // Build RFC 2822 message
-    $boundary = md5(uniqid(time()));
-    $headers = "MIME-Version: 1.0\r\n";
-    if ($from) {
-        $headers .= "From: $from\r\n";
+function gmailSendEmail(string $accessToken, string $to, string $subject, string $htmlBody, string $from = '', string $cc = '', array $parts = []): void {
+    // Valid addresses only - the same rule as the SMTP path, and it keeps a stray
+    // line break in the To box from ever becoming a header of its own.
+    $split = function (string $raw): array {
+        return array_values(array_filter(array_map('trim', preg_split('/[;,]/', $raw)), function ($a) {
+            return $a !== '' && filter_var($a, FILTER_VALIDATE_EMAIL);
+        }));
+    };
+    $toList = $split($to);
+    if (empty($toList)) {
+        throw new Exception('No valid recipient address to send to.');
     }
-    $headers .= "To: $to\r\n";
-    $headers .= "Subject: $subject\r\n";
-    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $headers .= "\r\n";
-    $rawMessage = $headers . $htmlBody;
+    // Gmail sends to whoever the To / Cc headers name.
+    $rawMessage = mimeBuildMessage([
+        'from'    => $from,
+        'to'      => $toList,
+        'cc'      => $split($cc),
+        'subject' => $subject,
+        'html'    => $htmlBody,
+        'parts'   => $parts,
+    ]);
 
     // Base64url encode
     $encoded = rtrim(strtr(base64_encode($rawMessage), '+/', '-_'), '=');
@@ -135,6 +165,9 @@ function gmailSendEmail(string $accessToken, string $to, string $subject, string
 /**
  * An authenticated Gmail API GET, returning ['code' => int, 'body' => array|null].
  * Every caller was writing the same twelve lines of curl.
+ *
+ * @param string $accessToken  a valid Google OAuth access token, sent as the Bearer token
+ * @param string $url          the full Gmail API URL to GET
  */
 function gmailApiGet(string $accessToken, string $url): array {
     $ch = curl_init();
@@ -152,7 +185,11 @@ function gmailApiGet(string $accessToken, string $url): array {
     return ['code' => (int) $code, 'body' => json_decode($response, true)];
 }
 
-/** Every label on the account, as Gmail returns them (id, name, type, ...). */
+/**
+ * Every label on the account, as Gmail returns them (id, name, type, ...).
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ */
 function gmailListLabels(string $accessToken): array {
     $res = gmailApiGet($accessToken, 'https://gmail.googleapis.com/gmail/v1/users/me/labels');
     if ($res['code'] !== 200) {
@@ -161,7 +198,12 @@ function gmailListLabels(string $accessToken): array {
     return $res['body']['labels'] ?? [];
 }
 
-/** Find one label by display name, case-insensitively. Null when there is no match. */
+/**
+ * Find one label by display name, case-insensitively. Null when there is no match.
+ *
+ * @param array $labels  the labels from gmailListLabels() - each array{id:string,name:string,...}
+ * @param string $name   the display name to look for; surrounding spaces are ignored
+ */
 function gmailFindLabel(array $labels, string $name): ?array {
     foreach ($labels as $label) {
         if (strcasecmp((string) ($label['name'] ?? ''), trim($name)) === 0) {
@@ -189,6 +231,8 @@ function gmailFindLabel(array $labels, string $name): ?array {
  *
  * See the Gmail mail collection developer guide on the wiki.
  *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param array $mailbox       the target_mailboxes row; email_folder is the label name, blank meaning INBOX
  * @throws Exception naming the label when the account has no such label.
  */
 function gmailResolveListLabelId(string $accessToken, array $mailbox): string {
@@ -210,6 +254,9 @@ function gmailResolveListLabelId(string $accessToken, array $mailbox): string {
 /**
  * Fetch unread emails from Gmail.
  * Returns an array of messages normalised to the same shape as Graph API results.
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param array $mailbox       the target_mailboxes row - email_folder (the label) and max_emails_per_check (default 10)
  */
 function gmailGetEmails(string $accessToken, array $mailbox): array {
     $maxResults = $mailbox['max_emails_per_check'] ?? 10;
@@ -256,6 +303,9 @@ function gmailGetEmails(string $accessToken, array $mailbox): array {
 
 /**
  * Fetch a single Gmail message and normalise to Graph-like structure.
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param string $messageId    the Gmail message id, from messages.list
  */
 function gmailGetMessage(string $accessToken, string $messageId): ?array {
     $url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . $messageId . '?format=full';
@@ -296,7 +346,13 @@ function gmailGetMessage(string $accessToken, string $messageId): ?array {
 
     // Parse date
     $dateStr = $headers['date'] ?? '';
-    $receivedDateTime = $dateStr ? date('Y-m-d\TH:i:s\Z', strtotime($dateStr)) : date('Y-m-d\TH:i:s\Z');
+    // gmdate, not date: the value is labelled Z (UTC), so it must BE UTC. date()
+    // wrote the server's local clock under that label, and the importer trusts
+    // the label - so every Gmail email was stored ahead by the server's offset
+    // (an hour in a UK summer, nothing on a UTC server, which is why it hid).
+    $receivedDateTime = $dateStr && strtotime($dateStr) !== false
+        ? gmdate('Y-m-d\TH:i:s\Z', strtotime($dateStr))
+        : gmdate('Y-m-d\TH:i:s\Z');
 
     // Pull attachments now (in Graph shape) and pass them along inline — the importer
     // stores whatever a message carries in 'attachments_inline' rather than making a
@@ -339,6 +395,10 @@ function gmailGetMessage(string $accessToken, string $messageId): ?array {
 /**
  * Fetch Gmail attachments for a message and return them in the Graph fileAttachment
  * shape the importer (saveAttachment) expects. Walks nested multiparts.
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param string $messageId    the Gmail message id the attachments belong to
+ * @param array $payload       the message's payload from messages.get?format=full (mimeType, headers, parts...)
  */
 function gmailGetAttachmentsGraphShape(string $accessToken, string $messageId, array $payload): array {
     $out = [];
@@ -404,6 +464,8 @@ function gmailGetAttachmentsGraphShape(string $accessToken, string $messageId, a
 
 /**
  * Extract body (prefer HTML, fall back to plain text).
+ *
+ * @param array $payload  a Gmail message payload or one of its multipart parts (mimeType, body.data, parts)
  */
 function gmailExtractBody(array $payload): string {
     // Direct body
@@ -436,6 +498,8 @@ function gmailExtractBody(array $payload): string {
 
 /**
  * Parse a comma-separated address list into Graph-like format.
+ *
+ * @param string $raw  a To or Cc header value, e.g. '"Smith, J" <j@example.com>, k@example.com'
  */
 function gmailParseAddressList(string $raw): array {
     if (empty($raw)) return [];
@@ -454,6 +518,9 @@ function gmailParseAddressList(string $raw): array {
 
 /**
  * Delete a Gmail message (move to trash).
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param string $messageId    the Gmail message id
  */
 function gmailTrashMessage(string $accessToken, string $messageId): void {
     $url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . $messageId . '/trash';
@@ -480,6 +547,9 @@ function gmailTrashMessage(string $accessToken, string $messageId): void {
 
 /**
  * Mark a Gmail message as read (remove UNREAD label).
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param string $messageId    the Gmail message id
  */
 function gmailMarkAsRead(string $accessToken, string $messageId): void {
     $url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' . $messageId . '/modify';
@@ -502,6 +572,10 @@ function gmailMarkAsRead(string $accessToken, string $messageId): void {
 /**
  * Get Gmail attachments for a message.
  * Returns array of [filename, mimeType, data (base64-decoded)].
+ *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param string $messageId    the Gmail message id the attachments belong to
+ * @param array $payload       the message's payload from messages.get; only its top-level parts are read
  */
 function gmailGetAttachments(string $accessToken, string $messageId, array $payload): array {
     $attachments = [];
@@ -549,6 +623,9 @@ function gmailGetAttachments(string $accessToken, string $messageId, array $payl
  * two ever diverge, Verify starts reporting a number the collection cannot see,
  * which is the GH #77 failure shape wearing a Gmail hat.
  *
+ * @param string $accessToken  a valid Google OAuth access token for the mailbox
+ * @param array $mailbox       the target_mailboxes row; only max_emails_per_check is read (for the backlog note)
+ * @param string $folderName   the label name to check, as typed in the mailbox settings
  * @return array{displayName:string, totalItemCount:int, unreadItemCount:int, note:string|null}
  * @throws Exception naming the label, or explaining the API failure.
  */

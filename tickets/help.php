@@ -37,16 +37,16 @@ try {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('tickets.help.page_title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../assets/css/help.css?v=3">
+    <title><?php echo htmlspecialchars(pageTitle('tickets', t('tickets.nav.help'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/help.css?v=6">
     <style>
         /* Tickets is the one module with no accent of its own — it uses the
            application's brand colour, which help.css already reads from
            --accent. So there is nothing for this page to say. */
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-page="tickets-help">
     <?php include 'includes/header.php'; ?>
@@ -111,7 +111,11 @@ try {
             <?php endif; ?>
             <a href="#whatsapp" class="help-nav-link" data-section="whatsapp">
                 <span class="help-nav-num"><?php echo $showTenancyHelp ? 14 : 13; ?></span>
-                WhatsApp channel
+                WhatsApp &amp; Telegram
+            </a>
+            <a href="#confidential" class="help-nav-link" data-section="confidential">
+                <span class="help-nav-num"><?php echo $showTenancyHelp ? 15 : 14; ?></span>
+                Confidential tickets
             </a>
         </div>
 
@@ -175,6 +179,7 @@ try {
                             <p><?php echo t('tickets.help.inbox.intro'); ?></p>
                         </div>
                     </div>
+                    <p><?php echo t('tickets.help.inbox.p_live'); ?></p>
                     <p><?php echo t('tickets.help.inbox.p_folders'); ?></p>
                     <div class="help-list">
                         <div><?php echo t('tickets.help.inbox.field_my'); ?></div>
@@ -300,6 +305,7 @@ try {
                         <div><?php echo t('tickets.help.working.rightclick_cmdb'); ?></div>
                         <div><?php echo t('tickets.help.working.rightclick_time'); ?></div>
                     </div>
+                    <p><?php echo t('tickets.help.working.rightclick_phone'); ?></p>
                     <p class="help-note"><?php echo t('tickets.help.working.rightclick_tip'); ?></p>
 
                     <p style="margin-top: 20px;"><?php echo t('tickets.help.working.time_heading'); ?></p>
@@ -511,8 +517,16 @@ try {
                     </div>
                     <p><?php echo t('tickets.help.csat.survey_store'); ?></p>
 
+                    <p style="margin-top: 20px;"><?php echo t('tickets.help.csat.chat_heading'); ?></p>
+                    <p><?php echo t('tickets.help.csat.chat_body'); ?></p>
+                    <p class="help-note"><?php echo t('tickets.help.csat.chat_rules'); ?></p>
+
                     <p style="margin-top: 20px;"><?php echo t('tickets.help.csat.analytics_heading'); ?></p>
                     <p><?php echo t('tickets.help.csat.analytics_body'); ?></p>
+                    <p><?php echo t('tickets.help.csat.analytics_filters'); ?></p>
+                    <?php if ($showTenancyHelp): ?>
+                        <p><?php echo t('tickets.help.csat.analytics_company'); ?></p>
+                    <?php endif; ?>
                     <div class="help-cards cols-3">
                         <div class="help-card">
                             <strong><?php echo t('tickets.help.csat.card_kpi_title'); ?></strong>
@@ -560,11 +574,18 @@ try {
 
                     <p style="margin-top: 16px;"><?php echo t('tickets.help.users.edit_heading'); ?></p>
                     <p><?php echo t('tickets.help.users.edit_body'); ?></p>
+                    <p><?php echo t('tickets.help.users.company_body'); ?></p>
+                    <p><?php echo t('tickets.help.users.signin_body'); ?></p>
 
                     <p style="margin-top: 16px;"><?php echo t('tickets.help.users.managed_heading'); ?></p>
                     <p><?php echo t('tickets.help.users.managed_body'); ?></p>
                     <p><?php echo t('tickets.help.users.source_body'); ?></p>
                     <p><?php echo t('tickets.help.users.add_book_body'); ?></p>
+
+                    <p style="margin-top: 16px;"><?php echo t('tickets.help.users.managers_heading'); ?></p>
+                    <p><?php echo t('tickets.help.users.managers_body'); ?></p>
+                    <p><?php echo t('tickets.help.users.managers_sources'); ?></p>
+                    <p><?php echo t('tickets.help.users.managers_rules'); ?></p>
 
                     <p style="margin-top: 16px;"><?php echo t('tickets.help.users.delete_heading'); ?></p>
                     <p><?php echo t('tickets.help.users.delete_body'); ?></p>
@@ -793,6 +814,10 @@ try {
                         <div class="help-card">
                             <strong><?php echo t('tickets.help.settings.card_mandatory_title'); ?></strong>
                             <span><?php echo t('tickets.help.settings.card_mandatory_body'); ?></span>
+                        </div>
+                        <div class="help-card">
+                            <strong><?php echo t('tickets.help.settings.card_custom_fields_title'); ?></strong>
+                            <span><?php echo t('tickets.help.settings.card_custom_fields_body'); ?></span>
                         </div>
                     </div>
 
@@ -1050,8 +1075,8 @@ try {
                     <div class="help-section-header">
                         <span class="help-section-num"><?php echo $showTenancyHelp ? 14 : 13; ?></span>
                         <div>
-                            <h3>WhatsApp channel</h3>
-                            <p>Let customers chat with an analyst over WhatsApp — each message becomes a ticket, just like email.</p>
+                            <h3>WhatsApp &amp; Telegram channels</h3>
+                            <p>Let customers chat with an analyst over WhatsApp or Telegram — each message becomes a ticket, just like email.</p>
                         </div>
                     </div>
                     <p>
@@ -1072,6 +1097,134 @@ try {
                         Testing on a laptop? Providers can only reach a public address, so run a tunnel
                         (e.g. <code>ngrok http 80</code>) and use the HTTPS URL it gives you as the webhook host. See the
                         <a href="https://github.com/edmozley/freeitsm/wiki/WhatsApp" target="_blank" rel="noopener">WhatsApp wiki page</a> for a full walkthrough.
+                    </p>
+
+                    <h4>Telegram</h4>
+                    <p>
+                        Create a bot by messaging <strong>@BotFather</strong> in Telegram (<code>/newbot</code>) and copy the token it gives you.
+                        In <strong>Settings &rarr; Messaging</strong>, add a channel with provider <strong>Telegram</strong>, paste the
+                        <strong>Bot token</strong>, click <strong>Generate</strong> for a secret token, and <strong>Save</strong>. Then click
+                        <strong>Connect</strong>: FreeITSM tells Telegram to deliver the bot's messages to this install. Telegram only delivers to an
+                        <strong>https://</strong> address, so the public URL on the Messaging tab must be one.
+                    </p>
+                    <p>
+                        Telegram has <strong>no 24-hour window</strong> &mdash; you can reply to a chat at any time &mdash; and the bot writes to each
+                        person in the language their Telegram app is set to.
+                    </p>
+                    <p>
+                        <strong>Who is this?</strong> Telegram does not tell us a person's phone number, so the first message from a new chat is raised
+                        under a temporary contact named after their Telegram profile, and the bot asks them to tap <strong>Share phone number</strong>.
+                        If exactly one person <em>in the bot's company</em> has that number (phone or mobile), the chat is linked to them and its
+                        tickets move to them. If nobody has it, or several people do, the temporary contact stays and nothing is guessed. Either way the
+                        ticket's <strong>Audit</strong> window says what happened. Once a chat is linked to someone, sharing a number again never
+                        changes who they are.
+                    </p>
+
+                    <h4>Microsoft Teams</h4>
+                    <p>
+                        Teams chats are one-to-one with the bot. You create the bot once in your Microsoft 365 tenant (Azure), then add a channel under
+                        <strong>Settings &rarr; Messaging</strong> with provider <strong>Microsoft Teams</strong>. The form walks you through the steps.
+                    </p>
+                    <ol>
+                        <li>In the <strong>Azure portal</strong> (portal.azure.com), open <strong>Microsoft Entra ID &rarr; App registrations &rarr; New registration</strong>.
+                            Choose <strong>Accounts in this organizational directory only (Single tenant)</strong>. No redirect URI is needed.</li>
+                        <li>Copy the <strong>Application (client) ID</strong> into <strong>Bot App ID</strong>, and the <strong>Directory (tenant) ID</strong> into <strong>Tenant ID</strong>.</li>
+                        <li><strong>Certificates &amp; secrets &rarr; New client secret</strong>. Copy the secret's <strong>Value</strong> (not its ID) into <strong>App secret</strong>. Azure shows it once.</li>
+                        <li>Create an <strong>Azure Bot</strong> resource: type of app <strong>Single Tenant</strong>, use the existing app registration (same App ID).
+                            Set its <strong>Messaging endpoint</strong> to the webhook URL shown in the channel list, and enable the <strong>Microsoft Teams</strong> channel.</li>
+                        <li>Save the channel, then click <strong>Download Teams app package</strong> on it. Upload the zip in the
+                            <strong>Teams Admin Center &rarr; Manage apps</strong>. Allow it for the users who should be able to chat with the bot.</li>
+                        <li><strong>Permissions:</strong> none. FreeITSM talks to the Bot Framework only, so do <strong>not</strong> add Microsoft Graph permissions.</li>
+                    </ol>
+                    <p class="help-note">
+                        Teams delivers only to an <strong>https://</strong> address, so the public URL on the Messaging tab must be one. The same goes for images you send:
+                        they are fetched from that address by Microsoft, so the path <code>/api/messaging/media.php</code> must be reachable from the internet.
+                        Only people in <strong>your own Microsoft 365 organisation</strong> (the Tenant ID above) can open tickets through the bot.
+                        Full walkthrough: the <a href="https://github.com/edmozley/freeitsm/wiki/Microsoft-Teams" target="_blank" rel="noopener">Microsoft Teams</a> wiki page.
+                    </p>
+
+                    <h4>Mattermost</h4>
+                    <p>
+                        Mattermost support works through a <strong>support channel</strong>. Customers post there, and each post opens a ticket.
+                        Replies go <strong>in the thread</strong> under the customer's post, the same way Slack works, so the customer simply answers in the
+                        thread and the conversation carries on. Anyone in the support channel can read the thread. Add a channel under
+                        <strong>Settings &rarr; Messaging</strong> with provider <strong>Mattermost</strong>; the form lists the steps.
+                    </p>
+                    <ol>
+                        <li>As a system admin, enable <strong>Bot Account Creation</strong> and <strong>Outgoing Webhooks</strong> in
+                            <strong>System Console &rarr; Integrations</strong>.</li>
+                        <li><strong>Integrations &rarr; Bot Accounts &rarr; Add Bot Account.</strong> Give it the <strong>Post All</strong> and <strong>Read</strong> permissions.
+                            Copy its <strong>access token</strong> into <strong>Bot access token</strong>. Add the bot to the support channel.</li>
+                        <li>Copy the support channel's <strong>ID</strong> (channel details, 26 characters) into <strong>Support channel ID</strong>, and the server address into <strong>Server address</strong>.</li>
+                        <li><strong>Integrations &rarr; Outgoing Webhooks &rarr; Add.</strong> Choose the support channel, paste the <strong>webhook URL</strong> from the channel list as the callback URL,
+                            and leave the trigger words empty so every post is sent.</li>
+                        <li>Copy the webhook's <strong>token</strong> (Mattermost creates it) into <strong>Outgoing webhook token</strong>, then save and test the connection.</li>
+                    </ol>
+                    <p class="help-note">
+                        Limits: one support channel per configuration. Files that customers post are not downloaded (the outgoing webhook does not
+                        include them). Full guide: the <a href="https://github.com/edmozley/freeitsm/wiki/Mattermost" target="_blank" rel="noopener">Mattermost</a> wiki page.
+                    </p>
+
+                    <h4>Sending files</h4>
+                    <p>
+                        On a Telegram or WhatsApp ticket, <strong>Attach</strong> in the reply box sends a picture or document to the customer; anything
+                        typed in the box goes with it as a caption. The file is checked like any other attachment and appears in the thread.
+                    </p>
+                    <p class="help-note">
+                        The full Telegram guide is on the
+                        <a href="https://github.com/edmozley/freeitsm/wiki/Telegram" target="_blank" rel="noopener">Telegram wiki page</a>.
+                    </p>
+                </div>
+
+                <!-- Confidential tickets (discussion #62) -->
+                <div class="help-section" id="confidential">
+                    <div class="help-section-header">
+                        <span class="help-section-num"><?php echo $showTenancyHelp ? 15 : 14; ?></span>
+                        <div>
+                            <h3>Confidential tickets</h3>
+                            <p>Some tickets are nobody else's business: a health matter raised with HR, or a complaint about a manager. Mark them <strong>Confidential</strong> and they are kept from the requester's managers.</p>
+                        </div>
+                    </div>
+                    <p>
+                        Every ticket has a <strong>Sensitivity</strong> of <strong>Normal</strong> or <strong>Confidential</strong>, in the ticket properties
+                        and on the new-ticket form. A confidential ticket shows a red <strong>Confidential</strong> marker in its properties bar, even with
+                        the panel collapsed, and a padlock in the ticket list. <strong>The service desk sees confidential tickets exactly as before</strong>;
+                        who on the desk can see a ticket is still decided by teams, departments and companies.
+                    </p>
+                    <p><strong>Tickets become confidential on their own</strong>, before anyone has read them, when:</p>
+                    <ul>
+                        <li>the person raising it turns on <strong>This is confidential</strong> in the self-service portal, or marks it later;</li>
+                        <li>it arrives through a mailbox set to confidential (<strong>Settings &rarr; Mailboxes</strong>): use this for an HR mailbox;</li>
+                        <li>it is in, or is moved into, a department set to confidential (<strong>Settings &rarr; Departments</strong>);</li>
+                        <li>it is split from, or merged with, a confidential ticket.</li>
+                    </ul>
+                    <p class="help-note">
+                        <strong>Nothing automatic ever makes a ticket Normal again.</strong> Moving a ticket out of a confidential department, or switching
+                        the department's setting off, leaves its tickets confidential. Only a person choosing <strong>Normal</strong> on the ticket
+                        lowers it, and the audit trail records who did. Requesters can make their ticket confidential, but never undo it.
+                    </p>
+                    <p>
+                        <strong>Who has looked.</strong> Opening a ticket is recorded: the ticket's <strong>Audit</strong> window lists
+                        who viewed it and how many times each day, service desk and portal alike (portal viewers are marked
+                        <em>(self-service portal)</em>). The person who raised the ticket is shown the portal viewers only, on
+                        the ticket itself, under <em>Who has seen this ticket</em>. Service-desk views are never shown to them.
+                    </p>
+                    <p>
+                        Each automatic change is written to the ticket's audit trail with the reason, for example
+                        <em>Confidential - arrived through the HR inbox mailbox</em>.
+                    </p>
+                    <p>
+                        <strong>It stays inside FreeITSM.</strong> A confidential ticket is not sent to AI (the summary, Read it,
+                        reply clean-up, Ask AI and the rest) unless <strong>Tickets &rarr; Settings &rarr; General &rarr; Confidential tickets and AI</strong>
+                        allows it; a webhook, Slack or Teams post carries only its number and status; and escalating it to a tracker such as
+                        Jira asks you to confirm first. A workflow never copies one into a tracker. A workflow's <strong>Send email</strong>
+                        only reaches the requester or analysts, and a ticket synced to a calendar shows as its number and
+                        <em>Confidential ticket</em>, never its subject.
+                    </p>
+                    <p>
+                        <strong>What a manager sees of a confidential ticket</strong> is set under <strong>System &rarr; Managers</strong>:
+                        nothing at all (the default), only that one exists, or everything. Managers are explained under
+                        <a href="#user-management">User management</a>.
                     </p>
                 </div>
             </div>
@@ -1122,6 +1275,6 @@ try {
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

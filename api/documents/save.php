@@ -58,7 +58,9 @@ try {
     $conn = connectToDatabase();
 
     // ---- 1. ACCESS FIRST -------------------------------------------------
-    if (!documentCanViewParent($conn, $analystId, $allowed, $parentType, $parentId)) {
+    // documentCanWriteParent: seeing the record is not enough - Read only access to its
+    // module (Change Management, Forms, Tasks) attaches and removes nothing (#181).
+    if (!documentCanWriteParent($conn, $analystId, $allowed, $parentType, $parentId)) {
         // Deliberately the same message whether it does not exist or is not
         // yours: probing this endpoint should not map out the estate.
         http_response_code(403);
@@ -135,10 +137,8 @@ try {
         ]);
         $documentId = (int) $conn->lastInsertId();
 
-        $conn->prepare(
-            "INSERT INTO document_links (document_id, parent_type, parent_id, linked_by_id)
-             VALUES (?,?,?,?)"
-        )->execute([$documentId, $parentType, $parentId, $analystId]);
+        // documentInsertLink() also sets the Help Centre flag for an article (#177).
+        documentInsertLink($conn, $documentId, $parentType, $parentId, $analystId);
 
         $conn->commit();
     } catch (Throwable $e) {

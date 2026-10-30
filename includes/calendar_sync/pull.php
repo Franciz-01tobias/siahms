@@ -207,7 +207,13 @@ function calendarSyncPullForAnalyst(PDO $conn, int $analystId): array
     return $report;
 }
 
-/** Apply a moved event to its ticket. */
+/**
+ * Apply a moved event to its ticket.
+ *
+ * @param array $row  the calendar_sync_events row joined to its ticket's work_* columns, as the poll loads it
+ * @param array $change  one 'changed' entry from pollChanges() - remote_event_id, start, end (naive), all_day
+ * @param string $address  the analyst's calendar address, quoted in the audit text only
+ */
 function calendarPullApply(PDO $conn, array $row, array $change, string $address): void
 {
     $conn->prepare(
@@ -222,7 +228,11 @@ function calendarPullApply(PDO $conn, array $row, array $change, string $address
          ->execute([(int)$row['id']]);
 }
 
-/** Clear a ticket's schedule because its event was deleted. */
+/**
+ * Clear a ticket's schedule because its event was deleted.
+ *
+ * @param string $address  the analyst's calendar address, quoted in the audit text only
+ */
 function calendarPullUnschedule(PDO $conn, int $ticketId, int $analystId, string $address): void
 {
     $before = $conn->query("SELECT work_start_datetime FROM tickets WHERE id = " . (int)$ticketId)->fetchColumn();
@@ -239,6 +249,10 @@ function calendarPullUnschedule(PDO $conn, int $ticketId, int $analystId, string
  * Written directly rather than through TicketsService, because the service's
  * update would trigger a reconcile that pushes straight back to the calendar we
  * are reading from — the loop this whole file is careful to avoid.
+ *
+ * @param string $field  the field name shown in the ticket history, e.g. 'Scheduled'
+ * @param string $old  the value before; cut to 500 characters
+ * @param string $new  the value after, with a note of where it came from; cut to 500 characters
  */
 function calendarPullAudit(PDO $conn, int $ticketId, int $analystId, string $field, string $old, string $new): void
 {
@@ -260,7 +274,13 @@ function calendarPullAudit(PDO $conn, int $ticketId, int $analystId, string $fie
 // exactly why it had to be added: a due date that moves with no record of who
 // moved it or where is worse than one that cannot move.
 
-/** A task's work window, moved in the calendar. */
+/**
+ * A task's work window, moved in the calendar.
+ *
+ * @param array $row  the calendar_sync_events row joined to its task's work_* columns, as the poll loads it
+ * @param array $change  one 'changed' entry from pollChanges() - remote_event_id, start, end (naive), all_day
+ * @param string $address  the analyst's calendar address, quoted in the audit text only
+ */
 function calendarPullApplyTaskWork(PDO $conn, array $row, array $change, string $address): void
 {
     $conn->prepare(
@@ -280,6 +300,10 @@ function calendarPullApplyTaskWork(PDO $conn, array $row, array $change, string 
  * somebody else. Ed asked for it to be editable from Outlook anyway, so it is;
  * the audit row is what makes that safe to live with, because otherwise a
  * deadline could move and nobody would ever know where it went.
+ *
+ * @param array $row  the calendar_sync_events row (kind 'due') joined to its task's due_date
+ * @param string $newDay  the new due date, 'Y-m-d', taken from the moved event's start
+ * @param string $address  the analyst's calendar address, quoted in the audit text only
  */
 function calendarPullApplyTaskDue(PDO $conn, array $row, string $newDay, string $address): void
 {
@@ -290,7 +314,12 @@ function calendarPullApplyTaskDue(PDO $conn, array $row, string $newDay, string 
         substr((string)$row['due_date'], 0, 10), $newDay . ' (moved in ' . $address . ')');
 }
 
-/** The event was deleted from the calendar: take the matching field away. */
+/**
+ * The event was deleted from the calendar: take the matching field away.
+ *
+ * @param array $row  the calendar_sync_events row joined to its task - 'kind' says whether due_date or the work window is cleared
+ * @param string $address  the analyst's calendar address, quoted in the audit text only
+ */
 function calendarPullUnscheduleTask(PDO $conn, array $row, int $analystId, string $address): void
 {
     $taskId = (int)$row['task_id'];
@@ -310,7 +339,13 @@ function calendarPullUnscheduleTask(PDO $conn, array $row, int $analystId, strin
         (string)$row['work_start_datetime'], 'cleared (deleted in ' . $address . ')');
 }
 
-/** One line of task history, marked as having come from a calendar. */
+/**
+ * One line of task history, marked as having come from a calendar.
+ *
+ * @param string $field  the field name shown in the task history - 'Scheduled' or 'Due date'
+ * @param string $old  the value before; cut to 500 characters
+ * @param string $new  the value after, with a note of where it came from; cut to 500 characters
+ */
 function calendarPullTaskAudit(PDO $conn, int $taskId, int $analystId, string $field, string $old, string $new): void
 {
     try {
@@ -457,6 +492,14 @@ function calendarSyncEnsureSubscription(PDO $conn, int $analystId): string
     }
 }
 
+/**
+ * Records an analyst's change-notification subscription (id, expiry, secret) and clears any stored error, since subscribing succeeded.
+ *
+ * @param string $id  the provider's subscription id
+ * @param string $expires  when the subscription lapses, as the provider returned it (naive local datetime)
+ * @param ?string $secret  the client state Graph echoes back on each notification; kept unchanged on a renewal
+ * @writes calendar_enrolments(subscription_id, subscription_expires, subscription_secret, last_error)
+ */
 function calendarStoreSubscription(PDO $conn, int $analystId, string $id, string $expires, ?string $secret): void
 {
     // ⚠️ CLEARING last_error IS PART OF SUCCEEDING. Subscribing writes the failure
@@ -473,6 +516,10 @@ function calendarStoreSubscription(PDO $conn, int $analystId, string $id, string
     )->execute([$id, $expires, $secret, $analystId]);
 }
 
+/**
+ * Forgets an analyst's change-notification subscription.
+ * @writes calendar_enrolments(subscription_id, subscription_expires, subscription_secret)
+ */
 function calendarClearSubscription(PDO $conn, int $analystId): void
 {
     $conn->prepare(

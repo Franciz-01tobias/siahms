@@ -17,6 +17,7 @@ require_once __DIR__ . '/lib/bootstrap.php';
 require_once __DIR__ . '/resources/tickets.php';
 require_once __DIR__ . '/resources/users.php';
 require_once __DIR__ . '/resources/reference.php';
+require_once __DIR__ . '/resources/analysts.php';
 require_once __DIR__ . '/resources/assets.php';
 require_once __DIR__ . '/resources/problems.php';
 require_once __DIR__ . '/resources/changes.php';
@@ -24,12 +25,16 @@ require_once __DIR__ . '/resources/knowledge.php';
 require_once __DIR__ . '/resources/tasks.php';
 require_once __DIR__ . '/resources/cmdb.php';
 require_once __DIR__ . '/resources/contracts.php';
+require_once __DIR__ . '/resources/domains.php';
+require_once __DIR__ . '/resources/cost_centres.php';
+require_once __DIR__ . '/resources/projects.php';
 require_once __DIR__ . '/resources/calendar.php';
 require_once __DIR__ . '/resources/software.php';
 require_once __DIR__ . '/resources/service_status.php';
 require_once __DIR__ . '/resources/morning_checks.php';
 require_once __DIR__ . '/resources/forms.php';
 require_once __DIR__ . '/resources/workflows.php';
+require_once __DIR__ . '/resources/jobs.php';           // background job health (#182)
 require_once __DIR__ . '/resources/network_mapper.php'; // needs cmdb.php (above) for apiCmdbClassDefs
 
 // --- Resolve the request path ---------------------------------------------
@@ -76,7 +81,9 @@ foreach ($routes as [$routeMethod, $pattern, $permission, $handler]) {
     }
     array_shift($matches); // drop the full-match element
     try {
-        $handler($conn, $apiKey, array_map('intval', $matches), apiJsonBody());
+        // Ids arrive as ints. A route whose pattern allows a name (the inventory source,
+        // #194) gets it as the string its pattern already validated.
+        $handler($conn, $apiKey, array_map(fn($m) => ctype_digit($m) ? (int)$m : $m, $matches), apiJsonBody());
     } catch (Exception $e) {
         error_log('API v1 handler error [' . $method . ' ' . $path . ']: ' . $e->getMessage());
         apiError(500, 'server_error', 'An unexpected server error occurred.');
@@ -108,6 +115,7 @@ function apiHandleRoot(PDO $conn, array $apiKey, array $params, array $body): vo
             'DELETE /assets/{id}/assignments/{user_id}', 'GET /assets/{id}/history',
             'GET /assets/{id}/custody', 'GET /assets/{id}/disks', 'GET /assets/{id}/network-adapters',
             'GET /assets/{id}/devices', 'GET /assets/{id}/software',
+            'GET /assets/{id}/inventory', 'POST /assets/{id}/inventory', 'DELETE /assets/{id}/inventory/{source}',
             'GET /problems', 'POST /problems', 'GET /problems/{id}', 'PATCH /problems/{id}',
             'DELETE /problems/{id}', 'GET /problems/{id}/notes', 'POST /problems/{id}/notes',
             'GET /problems/{id}/audit', 'POST /problems/{id}/tickets',
@@ -118,6 +126,8 @@ function apiHandleRoot(PDO $conn, array $apiKey, array $params, array $body): vo
             'DELETE /changes/{id}', 'GET /changes/{id}/comments', 'POST /changes/{id}/comments',
             'DELETE /changes/{id}/comments/{comment_id}', 'GET /changes/{id}/audit',
             'GET /changes/{id}/cab', 'POST /changes/{id}/cab', 'POST /changes/{id}/cab/vote',
+            'GET /changes/{id}/attachments', 'POST /changes/{id}/attachments',
+            'GET /changes/{id}/attachments/{attachment_id}/content',
             'GET /change-statuses', 'GET /change-types', 'GET /change-priorities',
             'GET /change-impacts', 'GET /change-categories',
             'GET /knowledge/articles', 'POST /knowledge/articles', 'GET /knowledge/articles/{id}',
@@ -127,6 +137,7 @@ function apiHandleRoot(PDO $conn, array $apiKey, array $params, array $body): vo
             'GET /knowledge/tags',
             'GET /tasks', 'POST /tasks', 'GET /tasks/{id}', 'PATCH /tasks/{id}', 'DELETE /tasks/{id}',
             'POST /tasks/{id}/move', 'GET /tasks/{id}/comments', 'POST /tasks/{id}/comments',
+            'GET /tasks/{id}/forms', 'POST /tasks/{id}/forms/{task_form_id}/submissions',
             'GET /task-statuses', 'GET /task-priorities', 'GET /task-tags',
             'GET /cmdb/classes', 'GET /cmdb/classes/{id}', 'GET /cmdb/objects', 'POST /cmdb/objects',
             'GET /cmdb/objects/{id}', 'PATCH /cmdb/objects/{id}', 'DELETE /cmdb/objects/{id}',
@@ -141,6 +152,11 @@ function apiHandleRoot(PDO $conn, array $apiKey, array $params, array $body): vo
             'PATCH /suppliers/{id}/contacts/{contact_id}', 'DELETE /suppliers/{id}/contacts/{contact_id}',
             'GET /contract-statuses', 'GET /payment-schedules', 'GET /supplier-types',
             'GET /supplier-statuses', 'GET /contract-term-tabs',
+            'GET /domains', 'POST /domains', 'GET /domains/{id}', 'PATCH /domains/{id}', 'DELETE /domains/{id}',
+            'POST /domains/{id}/lookup', 'POST /domains/{id}/check', 'GET /domains/{id}/findings', 'GET /domains/{id}/history',
+            'GET /domain-statuses', 'GET /domain-registrar-accounts',
+            'GET /cost-centres', 'POST /cost-centres', 'POST /cost-centres/sync', 'GET /cost-centres/{id}',
+            'PATCH /cost-centres/{id}', 'DELETE /cost-centres/{id}',
             'GET /calendar/events', 'POST /calendar/events', 'GET /calendar/events/{id}',
             'PATCH /calendar/events/{id}', 'DELETE /calendar/events/{id}', 'GET /calendar-categories',
             'GET /software/apps', 'GET /software/apps/{id}', 'GET /software/apps/{id}/machines',
@@ -161,6 +177,7 @@ function apiHandleRoot(PDO $conn, array $apiKey, array $params, array $body): vo
             'GET /forms/{id}/versions', 'POST /forms/{id}/versions',
             'GET /forms/{id}/submissions', 'POST /forms/{id}/submissions',
             'GET /forms/{id}/submissions/{submission_id}', 'DELETE /forms/{id}/submissions/{submission_id}',
+            'GET /jobs/health',
             'GET /workflows', 'POST /workflows', 'GET /workflows/{id}', 'PATCH /workflows/{id}',
             'DELETE /workflows/{id}', 'POST /workflows/{id}/fire', 'GET /workflows/{id}/executions',
             'GET /workflow-executions', 'GET /workflow-executions/{id}',

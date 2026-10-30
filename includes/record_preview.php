@@ -44,11 +44,15 @@ const RECORD_PREVIEW_MODULES = [
     'asset'             => 'assets',
     'contract'          => 'contracts',
     'knowledge_article' => 'knowledge',
+    'domain'            => 'domains',
 ];
 
 /**
  * A preview, or NULL when the type is unknown, the record does not exist, or
  * this analyst may not see it. One answer for all three, deliberately.
+ *
+ * @param string $type  the record type, a RECORD_PREVIEW_MODULES key such as 'ticket' or 'knowledge_article'
+ * @param int $id  the record's id; 0 or less gives null
  */
 function recordPreview(PDO $conn, int $analystId, string $type, int $id): ?array
 {
@@ -76,7 +80,13 @@ function recordPreview(PDO $conn, int $analystId, string $type, int $id): ?array
     return $preview;
 }
 
-/** Shorthand for one line of a preview. */
+/**
+ * Shorthand for one line of a preview.
+ *
+ * @param string $label  the field's label as shown
+ * @param mixed $value  the value to show; null or an empty string leaves the field out
+ * @param ?string $colour  a status colour for the dot (CSS colour); anything that is not a plain colour is dropped
+ */
 function rpField(string $label, $value, ?string $colour = null): ?array
 {
     $value = is_string($value) ? trim($value) : $value;
@@ -106,13 +116,18 @@ function rpField(string $label, $value, ?string $colour = null): ?array
     ], fn($v) => $v !== null);
 }
 
-/** Drop the empties, so callers can just list every field they might have. */
+/**
+ * Drop the empties, so callers can just list every field they might have.
+ *
+ * @param array $fields  the fields from rpField(), nulls included - they are dropped
+ */
 function rpFields(array $fields): array
 {
     return array_values(array_filter($fields));
 }
 
 // ── Ticket ──────────────────────────────────────────────────────────────────
+// @param int $id  the tickets id
 function recordPreviewTicket(PDO $conn, int $analystId, int $id): ?array
 {
     // ⚠️ analystCanAccessTicket() is TENANCY only — it answers "is this ticket
@@ -156,6 +171,7 @@ function recordPreviewTicket(PDO $conn, int $analystId, int $id): ?array
 }
 
 // ── Task ────────────────────────────────────────────────────────────────────
+// @param int $id  the tasks id
 function recordPreviewTask(PDO $conn, int $analystId, int $id): ?array
 {
     // 🔴 analystCanAccessTask(), NOT activeTenantFilter(). The filter answers
@@ -202,6 +218,7 @@ function recordPreviewTask(PDO $conn, int $analystId, int $id): ?array
 }
 
 // ── Change ──────────────────────────────────────────────────────────────────
+// @param int $id  the changes id
 function recordPreviewChange(PDO $conn, int $analystId, int $id): ?array
 {
     // 🔴 The module's own gate, not the active-company filter. See the note on
@@ -241,6 +258,7 @@ function recordPreviewChange(PDO $conn, int $analystId, int $id): ?array
 }
 
 // ── Problem ─────────────────────────────────────────────────────────────────
+// @param int $id  the problems id
 function recordPreviewProblem(PDO $conn, int $analystId, int $id): ?array
 {
     // 🔴 The module's own gate, not the active-company filter. See the note on
@@ -277,6 +295,7 @@ function recordPreviewProblem(PDO $conn, int $analystId, int $id): ?array
 }
 
 // ── Asset ───────────────────────────────────────────────────────────────────
+// @param int $id  the assets id
 function recordPreviewAsset(PDO $conn, int $analystId, int $id): ?array
 {
     if (!analystCanAccessAsset($conn, $analystId, $id)) {
@@ -339,21 +358,26 @@ function recordPreviewAsset(PDO $conn, int $analystId, int $id): ?array
 }
 
 // ── Contract ────────────────────────────────────────────────────────────────
+// @param int $id  the contracts id
 function recordPreviewContract(PDO $conn, int $analystId, int $id): ?array
 {
-    // ⚠️ No tenancy filter: contracts carry no tenant_id. The module gate is the
-    // whole of the check, which is true of the contracts module generally — see
-    // includes/contract_assets.php.
+    // Contracts carry no tenant_id, but a CUSTOMER contract belongs to its customer's
+    // company (#153): one this analyst may not see previews as nothing at all.
+    require_once __DIR__ . '/contract_party.php';
+    [$partyCols, $partyJoins] = contractPartySql($conn, 'c');
+    [$vis, $visParams] = contractVisibilitySql($conn, $analystId, 'c');
     $stmt = $conn->prepare(
         "SELECT c.contract_number, c.title, c.contract_end, c.notice_date,
-                s.legal_name AS supplier, s.trading_name AS supplier_trading,
+                s.legal_name AS supplier_name, s.trading_name AS supplier_trading_name,
                 st.name AS status
+                $partyCols
            FROM contracts c
       LEFT JOIN suppliers s          ON s.id = c.supplier_id
       LEFT JOIN contract_statuses st ON st.id = c.contract_status_id
-          WHERE c.id = ?"
+                $partyJoins
+          WHERE c.id = ?$vis"
     );
-    $stmt->execute([$id]);
+    $stmt->execute(array_merge([$id], $visParams));
     $r = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$r) return null;
 
@@ -361,7 +385,9 @@ function recordPreviewContract(PDO $conn, int $analystId, int $id): ?array
         'heading' => trim(($r['contract_number'] ?? '') . ' ' . ($r['title'] ?? '')),
         'fields'  => rpFields([
             rpField(t('common.preview.status'),   $r['status']),
-            rpField(t('common.preview.supplier'), $r['supplier_trading'] ?: $r['supplier']),
+            ($r['party_type'] ?? 'supplier') === 'customer'
+                ? rpField(t('common.preview.customer'), contractPartyLabel($r))
+                : rpField(t('common.preview.supplier'), contractPartyLabel($r)),
             rpField(t('common.preview.renewal'),  $r['contract_end']),
             // Not in the promised list, and included anyway: on a contract the
             // notice date is the one that costs money to miss.
@@ -370,7 +396,42 @@ function recordPreviewContract(PDO $conn, int $analystId, int $id): ?array
     ];
 }
 
+// ── Domain (#154) ───────────────────────────────────────────────────────────
+// @param int $id  the domains id
+function recordPreviewDomain(PDO $conn, int $analystId, int $id): ?array
+{
+    // The domain's own record gate — never activeTenantFilter(), which is a list
+    // filter and would answer "is it in my ACTIVE company" rather than "may I see it".
+    if (!analystCanAccessDomain($conn, $analystId, $id)) return null;
+    $stmt = $conn->prepare(
+        "SELECT d.domain_name, d.display_name, d.expiry_date, d.security_grade, d.ssl_expiry_date,
+                d.registrar_name, s.name AS status, a.full_name AS owner,
+                COALESCE(NULLIF(sup.trading_name, ''), sup.legal_name) AS registrar
+           FROM domains d
+      LEFT JOIN domain_statuses s ON s.id = d.status_id
+      LEFT JOIN analysts a        ON a.id = d.owner_analyst_id
+      LEFT JOIN suppliers sup     ON sup.id = d.registrar_supplier_id
+          WHERE d.id = ?"
+    );
+    $stmt->execute([$id]);
+    $r = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$r) return null;
+
+    return [
+        'heading' => $r['display_name'] ?: $r['domain_name'],
+        'fields'  => rpFields([
+            rpField(t('common.preview.status'),      $r['status']),
+            rpField(t('common.preview.expires'),     $r['expiry_date']),
+            rpField(t('common.preview.grade'),       $r['security_grade']),
+            rpField(t('common.preview.registrar'),   $r['registrar'] ?: $r['registrar_name']),
+            rpField(t('common.preview.owner'),       $r['owner']),
+            rpField(t('common.preview.certificate'), $r['ssl_expiry_date']),
+        ]),
+    ];
+}
+
 // ── Knowledge article ───────────────────────────────────────────────────────
+// @param int $id  the knowledge_articles id
 function recordPreviewKnowledgeArticle(PDO $conn, int $analystId, int $id): ?array
 {
     // 🔴 Knowledge has its own visibility rules — folders, audiences, lifecycle —

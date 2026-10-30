@@ -25,6 +25,7 @@ if (!isset($_SESSION['analyst_id'])) {
 
 require_once '../../includes/settings_manifest.php';
 require_once '../../includes/module-colors.php';
+require_once '../../includes/watchtower_settings.php';   // wtCardRegistry() - the one card list (GH #187)
 requireModuleAccess('watchtower');
 
 // Everything on this screen belongs to another module, which is easy to lose
@@ -50,13 +51,14 @@ $translationNamespaces = ['common', 'watchtower'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('watchtower.title') . ' ' . t('watchtower.settings.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('watchtower', t('watchtower.settings.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
+    <script src="../../assets/js/reorder-list.js?v=1"></script>
     <style>
         body { display: block; --accent: var(--wt-accent, #0f766e); }
         .container { height: calc(100vh - 48px); overflow-y: auto; max-width: none; margin: 0; padding: 30px; }
@@ -70,6 +72,11 @@ $translationNamespaces = ['common', 'watchtower'];
 
         /* Same shape as the Tasks card-field toggles, so the two screens read alike. */
         .wt-opts { display: flex; flex-direction: column; gap: 2px; max-width: 760px; }
+        /* Cards list as a reorder list (GH #187): the row is the box, so the tick-box
+           label inside it keeps only its module stripe - no second box in the first. */
+        #cardsList .rl-list { max-width: 760px; }
+        #cardsList .rl-item { padding: 2px 8px; }
+        #cardsList .wt-opt-row { padding: 9px 10px; border-radius: 0; }
         .wt-opt { display: flex; align-items: flex-start; gap: 12px; padding: 11px 14px; border-radius: 8px; cursor: pointer; transition: background 0.12s; }
         .wt-opt:hover { background: var(--surface-2, #f0fdfa); }
         .wt-opt input { margin-top: 1px; accent-color: var(--wt-accent, #0f766e); width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
@@ -114,7 +121,7 @@ $translationNamespaces = ['common', 'watchtower'];
         }
         .wt-opt-elsewhere a:hover { text-decoration: underline; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -126,8 +133,12 @@ $translationNamespaces = ['common', 'watchtower'];
         <div class="tab-content<?php echo $activeTabId === 'cards' ? ' active' : ''; ?>" id="cards-tab" data-capability="<?php echo Cap::WATCHTOWER_CARDS; ?>">
             <div class="section-header"><h2><?php echo htmlspecialchars(t('watchtower.settings.cards_heading')); ?></h2></div>
             <p class="intro"><?php echo htmlspecialchars(t('watchtower.settings.cards_intro')); ?></p>
+            <p class="intro"><?php echo htmlspecialchars(t('watchtower.settings.order_intro')); ?></p>
             <div class="wt-opts" id="cardsList"><?php echo htmlspecialchars(t('watchtower.settings.loading')); ?></div>
-            <div class="save-bar"><button class="btn btn-primary" onclick="saveSettings()"><?php echo htmlspecialchars(t('common.save')); ?></button></div>
+            <div class="save-bar">
+                <button class="btn btn-primary" onclick="saveSettings()"><?php echo htmlspecialchars(t('common.save')); ?></button>
+                <button class="btn btn-secondary" id="cardOrderReset" onclick="resetCardOrder()"><?php echo htmlspecialchars(t('watchtower.settings.order_reset')); ?></button>
+            </div>
         </div>
         <?php endif; ?>
 
@@ -165,15 +176,9 @@ let settings = null;
 // module key => accent colour, from the shared registry (System can override it).
 const MODULE_COLOURS = <?php echo json_encode(array_map(fn($c) => $c[0], $wtModuleColors), JSON_HEX_TAG | JSON_HEX_AMP); ?>;
 
-// Watchtower's card keys use underscores and one plural; the colour registry uses
-// hyphens and the singular. Mapped explicitly rather than transformed, so a key
-// that stops matching shows up here instead of silently losing its colour.
-const CARD_MODULE = {
-    morning_checks: 'morning-checks', tickets: 'tickets', changes: 'changes',
-    calendar: 'calendar', service_status: 'service-status', contracts: 'contracts',
-    software: 'software',
-    knowledge: 'knowledge', assets: 'assets', tasks: 'tasks', workflows: 'workflow',
-};
+// Card key => module colour key. From the one card list, wtCardRegistry() (GH #187):
+// this used to be a hand-kept copy that had already missed Projects.
+const CARD_MODULE = <?php echo json_encode(array_map(fn($c) => $c['module'], wtCardRegistry())); ?>;
 
 function moduleColour(cardKey) {
     return MODULE_COLOURS[CARD_MODULE[cardKey]] || 'var(--text-muted, #666)';
@@ -241,18 +246,38 @@ async function load() {
     }
 }
 
+// The Cards list: tick a card to show it, and put the cards in order by dragging,
+// the arrows or Alt+arrow (assets/js/reorder-list.js, GH #187). Order and
+// visibility are saved together by Save; Reset order puts the default order back.
+let cardList = null;
 function renderCards() {
     const box = document.getElementById('cardsList');
     if (!box || !settings) return;
-    box.innerHTML = (settings.card_keys || []).map(key => `
-        <label class="wt-opt" style="border-left-color:${moduleColour(key)};">
-            <input type="checkbox" data-card="${escapeHtml(key)}" ${settings.cards[key] !== false ? 'checked' : ''}>
-            <span>
-                <span class="wt-opt-name" style="color:${moduleColour(key)};">${escapeHtml(window.t('watchtower.settings.card_' + key))}</span>
-                <span class="wt-opt-desc">${escapeHtml(window.t('watchtower.settings.card_' + key + '_desc'))}</span>
-                ${cardSignpost(key)}
-            </span>
-        </label>`).join('');
+    const order = settings.card_order || settings.card_keys || [];
+    cardList = ReorderList.mount(box, {
+        label: window.t('watchtower.settings.order_label'),
+        items: order.map(key => ({
+            key: key,
+            label: window.t('watchtower.settings.card_' + key),
+            html: `<label class="wt-opt wt-opt-row" style="border-left-color:${moduleColour(key)};">
+                <input type="checkbox" data-card="${escapeHtml(key)}" ${settings.cards[key] !== false ? 'checked' : ''}>
+                <span>
+                    <span class="wt-opt-name" style="color:${moduleColour(key)};">${escapeHtml(window.t('watchtower.settings.card_' + key))}</span>
+                    <span class="wt-opt-desc">${escapeHtml(window.t('watchtower.settings.card_' + key + '_desc'))}</span>
+                    ${cardSignpost(key)}
+                </span>
+            </label>`,
+        })),
+    });
+    const reset = document.getElementById('cardOrderReset');
+    if (reset) reset.disabled = !settings.card_order_custom;
+}
+
+/** Puts the list back in the default order. Like everything on this screen, it takes effect on Save. */
+function resetCardOrder() {
+    if (!cardList || !settings) return;
+    cardList.setOrder(settings.card_keys);
+    showToast(window.t('watchtower.settings.order_reset_pending'));
 }
 
 /**
@@ -270,6 +295,7 @@ function cardSignpost(key) {
     const targets = {
         assets:   '../../asset-management/settings/index.php?tab=warranty',
         software: '../../software/settings/index.php?tab=renewals',
+        domains:  '../../domains/settings/index.php?tab=alerts',
     };
     const href = targets[key];
     if (!href) { return ''; }
@@ -322,6 +348,9 @@ async function saveSettings() {
     document.querySelectorAll('[data-card]').forEach(cb => {
         payload.cards[cb.dataset.card] = cb.checked;
     });
+    // Only when this analyst has the Cards tab - the server refuses a section the
+    // analyst may not change, rather than ignoring it.
+    if (cardList) payload.card_order = cardList.getOrder();
 
     COUNT_ITEMS.forEach(item => {
         const custom = document.querySelector(`[data-custom="${CSS.escape(item.key)}"]`);
@@ -350,6 +379,6 @@ async function saveSettings() {
 
 load();
 </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

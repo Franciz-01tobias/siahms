@@ -10,6 +10,10 @@
 (function () {
     'use strict';
 
+    /**
+     * Translates a key under asset-management, returning the key itself when
+     * translations are not loaded.
+     */
     const tt = (k, p) => (window.t ? window.t('asset-management.' + k, p) : k);
 
     const COLUMNS = [
@@ -31,7 +35,12 @@
         { key: 'purchase_date',     label: tt('field.purchase_date'),       type: 'date',   defaultVisible: false, defaultOrder: 15 },
         { key: 'purchase_cost',     label: tt('table.col_cost'),            type: 'number', defaultVisible: false, defaultOrder: 16 },
         { key: 'supplier_name',     label: tt('field.supplier'),            type: 'string', defaultVisible: false, defaultOrder: 17 },
+        // GH #160: "CODE Name" of the cost centre it is charged to - sortable and filterable like any text column.
+        { key: 'cost_centre_label', label: tt('field.cost_centre'),         type: 'string', defaultVisible: false, defaultOrder: 17.5 },
         { key: 'warranty_expiry',   label: tt('field.warranty_expiry'),     type: 'date',   defaultVisible: false, defaultOrder: 18 },
+        // Sort by Lease ends to see what is due back first (3.5.0).
+        { key: 'lease_start',       label: tt('field.lease_start'),         type: 'date',   defaultVisible: false, defaultOrder: 18.1 },
+        { key: 'lease_expiry',      label: tt('field.lease_expiry'),        type: 'date',   defaultVisible: false, defaultOrder: 18.2 },
         // When the inventory agent last reported (discussion #97).
         //
         // 🔑 SORTED, not filtered, is the point. The per-column filter is a list
@@ -96,6 +105,11 @@
         return Number.isFinite(n) && n > 0 && n <= 3650 ? n : null;
     }
 
+    /**
+     * When the page was opened with ?stale=N, keeps only assets last seen more than N
+     * days ago (never-seen assets excluded, matching the Watchtower count) and shows the
+     * banner with a link back to all assets.
+     */
     function applyStaleFilter(rows) {
         const days = staleDaysFromUrl();
         if (days === null) return rows;

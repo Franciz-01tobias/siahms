@@ -25,6 +25,7 @@
 
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/tenancy.php';
+require_once __DIR__ . '/ticket_numbering.php';
 
 // The workflow engine powers the outcome notifications. Load it if nothing else has;
 // dispatch is always guarded, so a missing engine degrades to "no notification", never
@@ -46,6 +47,9 @@ if (!class_exists('WorkflowEngine')) {
  * A form flagged `requires_approval` but with no approver is treated as UNCONFIGURED —
  * it must never strand a request with nobody able to clear it. Returns the approver id
  * to gate on, or null for "let it through as normal".
+ *
+ * @param array $form  the forms row being submitted - only requires_approval and approver_id are read
+ * @param ?int $portalUserId  users.id of the portal requester; null when an analyst filled the form internally
  */
 function catalogueApprovalGate(array $form, ?int $portalUserId): ?int {
     if ($portalUserId === null) return null;
@@ -57,7 +61,10 @@ function catalogueApprovalGate(array $form, ?int $portalUserId): ?int {
 /**
  * Approve or reject a pending catalogue request.
  *
+ * @param int $actorId  analysts.id of the person deciding - must be the request's approver unless an admin
+ * @param int $submissionId  form_submissions.id of the pending request
  * @param string $decision 'approved' or 'rejected'
+ * @param string $comment  the approver's optional note, trimmed; empty is stored as NULL
  * @return array { decision, ticket_id, ticket_number }
  */
 function catalogueApprovalDecide(PDO $conn, int $actorId, int $submissionId, string $decision, string $comment = ''): array {
@@ -212,6 +219,10 @@ function catalogueApprovalDecide(PDO $conn, int $actorId, int $submissionId, str
  * the submitted answers rendered as an escaped table, so a customer's field values can
  * never inject markup into the analyst's reading pane.
  *
+ * @param array $sub  the form_submissions row plus form_title, as loaded by catalogueApprovalDecide()
+ * @param array $overrides  optional ticket settings that win over the submission: subject, body_html,
+ *     status_id, priority_id, department_id, ticket_type_id, assigned_analyst_id, assigned_team_id,
+ *     from_email/from_name (requester when the submission has no account), audit_note
  * @return array [int ticketId, string ticketNumber]
  */
 function catalogueCreateTicketFromSubmission(PDO $conn, array $sub, array $overrides = []): array {
@@ -293,7 +304,9 @@ function catalogueCreateTicketFromSubmission(PDO $conn, array $sub, array $overr
     // — without naming a person. Null unless the rule set one.
     $teamId       = isset($overrides['assigned_team_id'])    && $overrides['assigned_team_id']    ? (int)$overrides['assigned_team_id']    : null;
 
-    $ticketNumber = catalogueGenerateTicketNumber($conn);
+    // TRAP: the install's numbering, never a number made here - see
+    //   messagingGenerateTicketNumber() for what went wrong when it was.
+    $ticketNumber = TicketNumbering::next($conn, $typeId, $tenantId !== null ? (int)$tenantId : null);
 
     $conn->prepare(
         "INSERT INTO tickets (ticket_number, subject, status_id, priority_id,
@@ -307,6 +320,10 @@ function catalogueCreateTicketFromSubmission(PDO $conn, array $sub, array $overr
         $userId, $tenantId,
     ]);
     $ticketId = (int)$conn->lastInsertId();
+    // Confidential defaults (discussion #62). Every path that creates a ticket
+    // calls this - see the header of includes/ticket_sensitivity.php for why.
+    require_once __DIR__ . '/ticket_sensitivity.php';
+    ticketSensitivityApplyDefaults($conn, $ticketId);
 
     $conn->prepare(
         "INSERT INTO emails (subject, from_address, from_name, to_recipients, received_datetime,
@@ -333,6 +350,11 @@ function catalogueCreateTicketFromSubmission(PDO $conn, array $sub, array $overr
  * INSERT so that both branches produce a plain integer — a column that is
  * sometimes a value and sometimes a subquery is the kind of thing that works
  * until the day somebody adds a second caller.
+ *
+ * @param array $overrides  the caller's ticket overrides, keyed by column name
+ * @param string $key  the override key to look for, e.g. 'status_id'
+ * @param string $table  the lookup table to take the default from (trusted - interpolated into the SQL),
+ *     e.g. 'ticket_statuses'; needs is_active, is_default and display_order columns
  */
 function catalogueOverrideOrDefault(PDO $conn, array $overrides, string $key, string $table): ?int {
     if (!empty($overrides[$key])) return (int)$overrides[$key];
@@ -348,6 +370,8 @@ function catalogueOverrideOrDefault(PDO $conn, array $overrides, string $key, st
  * the workflow engine's create_ticket action, and (next) a form's own action
  * list.
  *
+ * @param int $submissionId  form_submissions.id to raise the ticket from
+ * @param array $overrides  ticket settings that win over the submission - see catalogueCreateTicketFromSubmission()
  * @return array{ticket_id:int, ticket_number:string}
  */
 function catalogueRaiseTicketFromSubmissionId(PDO $conn, int $submissionId, array $overrides = []): array {
@@ -373,6 +397,10 @@ function catalogueRaiseTicketFromSubmissionId(PDO $conn, int $submissionId, arra
  * seeing "My budget holder has approved this spend: 1" has to know the storage
  * format to read their own inbox. `checkboxes` (plural) is a different field and
  * is stored as a JSON array of the chosen labels.
+ *
+ * @param ?string $raw  the stored form_submission_data.field_value; null reads as empty
+ * @param ?string $fieldType  form_fields.field_type, e.g. 'checkbox', 'checkboxes', 'grid'
+ * @param array $field  the form_fields row (label, config) - only used to label a 'grid' answer's columns
  */
 function catalogueAnswerText(?string $raw, ?string $fieldType, array $field = []): string {
     $val = (string)$raw;
@@ -436,6 +464,7 @@ function catalogueAnswerText(?string $raw, ?string $fieldType, array $field = []
  * THIS file — pulling forms.php in at the top would make that ring tighter than
  * it needs to be for one lookup.
  *
+ * @param int $formId  forms.id whose action lists to load
  * @return array{submitted: ?array, approved: ?array, rejected: ?array}
  */
 function catalogueFormActionLists(PDO $conn, int $formId): array {
@@ -471,6 +500,7 @@ function catalogueFormActionLists(PDO $conn, int $formId): array {
  * swallow the first — so the card must keep its list. Same data, two shapes,
  * both needed.
  *
+ * @param int $submissionId  form_submissions.id whose answers to read
  * @return array{fields: array<string,string>, email: string}
  */
 function catalogueSubmissionAnswerMap(PDO $conn, int $submissionId): array {
@@ -496,7 +526,12 @@ function catalogueSubmissionAnswerMap(PDO $conn, int $submissionId): array {
     return ['fields' => $fields, 'email' => $email];
 }
 
-/** The submitted answers as a safe (fully-escaped) HTML summary for the ticket body. */
+/**
+ * The submitted answers as a safe (fully-escaped) HTML summary for the ticket body.
+ *
+ * @param int $submissionId  form_submissions.id whose answers to render
+ * @param string $formTitle  the form's name for the opening line; escaped here, so raw text is fine
+ */
 function catalogueSubmissionBodyHtml(PDO $conn, int $submissionId, string $formTitle): string {
     $stmt = $conn->prepare(
         "SELECT ff.label, ff.field_type, ff.config, sd.field_value
@@ -526,17 +561,6 @@ function catalogueSubmissionBodyHtml(PDO $conn, int $submissionId, string $formT
     return $html;
 }
 
-/** A unique XXX-000-00000 ticket number. Mirrors the portal path's generator. */
-function catalogueGenerateTicketNumber(PDO $conn): string {
-    for ($i = 0; $i < 10; $i++) {
-        $number = chr(rand(65, 90)) . chr(rand(65, 90)) . chr(rand(65, 90))
-                . '-' . rand(100, 999) . '-' . str_pad((string)rand(0, 99999), 5, '0', STR_PAD_LEFT);
-        $c = $conn->prepare("SELECT COUNT(*) FROM tickets WHERE ticket_number = ?");
-        $c->execute([$number]);
-        if (!(int)$c->fetchColumn()) return $number;
-    }
-    throw new Exception('Failed to generate a ticket number');
-}
 
 /**
  * The approver's inbox list.
@@ -545,6 +569,32 @@ function catalogueGenerateTicketNumber(PDO $conn): string {
  *                       'decided' (recently decided by me)
  * @return array { items: [...], counts: { mine, all, decided } }
  */
+/**
+ * May this analyst open the catalogue approvals inbox (#180 Part 3)? Forms module
+ * access, OR being named as the approver of a form that needs approval or of a
+ * submission. An approver no longer has to be given the whole Forms module - the
+ * designer, every form's submissions, delete - to decide the requests sent to them.
+ *
+ * TRAP: entry only. Deciding is still catalogueApprovalDecide()'s approver_id check,
+ * and an approver without Forms never sees "All pending" (catalogue_approvals.php).
+ *
+ * @param int $analystId  the analyst
+ */
+function catalogueApproverCanEnter(PDO $conn, int $analystId): bool {
+    if ($analystId <= 0) return false;
+    if (analystCanAccessModule($conn, $analystId, 'forms')) return true;
+    try {
+        $st = $conn->prepare(
+            "SELECT 1 FROM forms WHERE approver_id = ? AND requires_approval = 1
+             UNION SELECT 1 FROM form_submissions WHERE approver_id = ? LIMIT 1"
+        );
+        $st->execute([$analystId, $analystId]);
+        return (bool)$st->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function catalogueApprovalsList(PDO $conn, int $analystId, string $filter = 'mine'): array {
     $base =
         "SELECT s.id, s.form_id, f.title AS form_title, s.submitted_date,
@@ -593,7 +643,11 @@ function catalogueApprovalsList(PDO $conn, int $analystId, string $filter = 'min
     return ['items' => $items, 'counts' => $counts];
 }
 
-/** label + value pairs for one submission (checkboxes flattened). */
+/**
+ * label + value pairs for one submission (checkboxes flattened).
+ *
+ * @param int $submissionId  form_submissions.id whose answers to list
+ */
 function catalogueSubmissionAnswers(PDO $conn, int $submissionId): array {
     $stmt = $conn->prepare(
         "SELECT ff.label, ff.field_type, ff.config, sd.field_value
@@ -610,6 +664,12 @@ function catalogueSubmissionAnswers(PDO $conn, int $submissionId): array {
     return $out;
 }
 
+/**
+ * Runs a prepared query and returns its first column of the first row (false when there is no row).
+ *
+ * @param string $sql  the SQL with ? placeholders (trusted - written by the caller)
+ * @param array $params  values bound to the placeholders, in order
+ */
 function catalogueScalar(PDO $conn, string $sql, array $params) {
     $stmt = $conn->prepare($sql);
     $stmt->execute($params);

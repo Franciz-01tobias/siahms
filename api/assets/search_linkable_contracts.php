@@ -12,9 +12,8 @@
  * and no contracts access must not be able to read the contract register through
  * a search box on an asset.
  *
- * No tenancy filter on the contracts themselves — contracts carry no tenant_id.
- * The ASSET is checked, which is the only half of the pair that belongs to a
- * company at all. See includes/contract_assets.php.
+ * Only the ASSET's own company's contracts are offered (3.5.0): a contract covers
+ * assets of its own company and no other. See includes/contract_assets.php.
  */
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
@@ -48,23 +47,42 @@ try {
     }
 
     $q   = trim((string)($_GET['q'] ?? ''));
+    require_once '../../includes/contract_party.php';
+    [$partyCols, $partyJoins] = contractPartySql($conn, 'c');
+    [$vis, $visParams] = contractVisibilitySql($conn, $analystId, 'c');
+    if (isMultiTenant($conn) && contractTenantReady($conn)) {
+        // The asset's company only - the one company whose contracts may cover it.
+        $at = $conn->prepare("SELECT COALESCE(tenant_id, ?) FROM assets WHERE id = ?");
+        $at->execute([getDefaultTenantId($conn), $assetId]);
+        [$own, $ownArgs] = tenantScopeSqlFor($conn, (int)$at->fetchColumn(), 'c.tenant_id');
+        $vis .= $own;
+        $visParams = array_merge($visParams, $ownArgs);
+    }
     $sql =
         "SELECT c.id AS contract_id, c.contract_number, c.title,
                 c.contract_end, c.notice_date,
                 s.legal_name AS supplier_name, s.trading_name AS supplier_trading_name
+                $partyCols
            FROM contracts c
       LEFT JOIN suppliers s ON s.id = c.supplier_id
+                $partyJoins
           WHERE c.is_active = 1
-            AND c.id NOT IN (SELECT contract_id FROM contract_assets WHERE asset_id = ?)";
-    $params = [$assetId];
+            AND c.id NOT IN (SELECT contract_id FROM contract_assets WHERE asset_id = ?)$vis";
+    $params = array_merge([$assetId], $visParams);
 
     if ($q !== '') {
-        // Supplier is searchable as well as number and title, because "the
-        // Vodafone one" is how people actually refer to a contract they have
-        // not opened in a year.
-        $sql .= " AND (c.contract_number LIKE ? OR c.title LIKE ?
-                       OR s.legal_name LIKE ? OR s.trading_name LIKE ?)";
-        $params = array_merge($params, array_fill(0, 4, '%' . $q . '%'));
+        // Supplier (or customer) is searchable as well as number and title,
+        // because "the Vodafone one" is how people actually refer to a contract
+        // they have not opened in a year.
+        if (contractPartyReady($conn)) {
+            $sql .= " AND (c.contract_number LIKE ? OR c.title LIKE ?
+                           OR s.legal_name LIKE ? OR s.trading_name LIKE ? OR cpt.name LIKE ? OR cpu.display_name LIKE ?)";
+            $params = array_merge($params, array_fill(0, 6, '%' . $q . '%'));
+        } else {
+            $sql .= " AND (c.contract_number LIKE ? OR c.title LIKE ?
+                           OR s.legal_name LIKE ? OR s.trading_name LIKE ?)";
+            $params = array_merge($params, array_fill(0, 4, '%' . $q . '%'));
+        }
     }
 
     // Soonest to end first: a contract you are about to lose is the one you are

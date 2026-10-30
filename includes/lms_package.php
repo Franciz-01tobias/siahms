@@ -59,6 +59,7 @@ const LMS_ALLOWED_EXTENSIONS = [
  * Check every entry in the archive. Returns the entries that should be written
  * (directories excluded), or throws with a message naming the offending file.
  *
+ * @param ZipArchive $zip  the uploaded SCORM package, already opened - untrusted
  * @throws Exception if the package is unsafe or oversized.
  * @return array<int,string> Entry names, safe to extract.
  */
@@ -130,6 +131,9 @@ function lmsValidatePackage(ZipArchive $zip): array
  * everything, including anything validation would have rejected. Passing the
  * vetted list means the set of files on disk is exactly the set we approved.
  *
+ * @param ZipArchive $zip  the opened SCORM package
+ * @param string $destDir  the folder to unpack into
+ * @param array $files  the entry names lmsValidatePackage() approved; nothing else is written
  * @throws Exception on any write failure.
  */
 function lmsExtractPackage(ZipArchive $zip, string $destDir, array $files): void
@@ -146,17 +150,30 @@ function lmsExtractPackage(ZipArchive $zip, string $destDir, array $files): void
  * script through, Apache still refuses to run it. Written once, next to the
  * courses. Needs AllowOverride to be on — which is why it is the SECOND line of
  * defence and not the first.
+ *
+ * @param string $contentRoot  the folder that holds every unpacked course; the .htaccess is written here
  */
 function lmsHardenContentDir(string $contentRoot): void
 {
     $htaccess = $contentRoot . '/.htaccess';
-    if (file_exists($htaccess)) return;
+    if (file_exists($htaccess)) {
+        // An install written before GH #115 has the unguarded php_flag in here.
+        require_once __DIR__ . '/uploads.php';
+        uploadRepairHtaccessFile($htaccess);
+        return;
+    }
 
     $rules = <<<'HTACCESS'
 # Course content is uploaded data, not application code. Nothing in this tree may
 # ever execute — this is defence in depth behind the extension allowlist in
 # includes/lms_package.php. Do not remove.
-php_flag engine off
+# TRAP: php_flag / php_value only ever inside <IfModule mod_php*.c>. Unguarded, Apache running PHP through PHP-FPM does not know the command and refuses EVERY file in this folder with a 500 (GH #115).
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
 
 <IfModule mod_mime.c>
     RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .cgi .pl .py .asp .aspx .jsp .sh

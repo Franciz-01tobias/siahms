@@ -51,7 +51,7 @@ return [
         'files_count' => '{n} plików',
     ],
     'search' => [
-        'page_title' => 'Service Desk - Wyszukiwanie w wiki',
+        'page_title' => 'Wyszukiwanie w wiki',
         'search_placeholder' => 'Szukaj plików, funkcji, tabel bazy danych...',
         'search_btn' => 'Szukaj',
         'tab_files' => 'Pliki',
@@ -67,7 +67,7 @@ return [
         'refs_across_files' => '{refs} odwołań w {files} plikach',
     ],
     'scan' => [
-        'page_title' => 'Service Desk - Zarządzanie skanowaniem',
+        'page_title' => 'Zarządzanie skanowaniem',
         'heading' => 'Zarządzanie skanowaniem',
         'subtitle' => 'Uruchom skaner PowerShell, aby skatalogować kod źródłowy',
         'run_now' => 'Uruchom skanowanie',
@@ -87,7 +87,7 @@ return [
         'error_prefix' => 'Błąd: ',
     ],
     'file' => [
-        'page_title' => 'Service Desk - Szczegóły pliku',
+        'page_title' => 'Szczegóły pliku',
         'loading' => 'Ładowanie szczegółów pliku...',
         'no_id' => 'Nie podano identyfikatora pliku.',
         'error_prefix' => 'Błąd: ',
@@ -120,7 +120,7 @@ return [
         'static' => 'static',
     ],
     'function' => [
-        'page_title' => 'Service Desk - Szczegóły funkcji',
+        'page_title' => 'Szczegóły funkcji',
         'loading' => 'Ładowanie szczegółów funkcji...',
         'no_id' => 'Nie podano identyfikatora funkcji.',
         'error_prefix' => 'Błąd: ',
@@ -135,7 +135,7 @@ return [
         'col_line' => 'Linia',
     ],
     'table' => [
-        'page_title' => 'Service Desk - Odwołania do tabeli',
+        'page_title' => 'Odwołania do tabeli',
         'loading' => 'Ładowanie odwołań do tabeli...',
         'no_name' => 'Nie podano nazwy tabeli.',
         'error_prefix' => 'Błąd: ',
@@ -146,7 +146,7 @@ return [
         'no_references' => 'Nie znaleziono odwołań dla tej tabeli.',
     ],
     'tables' => [
-        'page_title' => 'Service Desk - Tabele bazy danych',
+        'page_title' => 'Tabele bazy danych',
         'heading' => 'Tabele bazy danych',
         'loading' => 'Ładowanie...',
         'col_name' => 'Nazwa tabeli',

@@ -17,8 +17,22 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only.\n"); }
 class JsonSchema4 {
     private $root;
     public $errors = [];
+    /**
+     * Keeps the root schema, which $ref pointers are resolved against.
+     *
+     * @param array $root  the whole decoded schema document, e.g. the OpenAPI 3.0 meta-schema
+     */
     public function __construct(array $root) { $this->root = $root; }
 
+    /**
+     * Validates data against a schema (the root schema by default), adding any failures
+     * to $errors.
+     *
+     * @param mixed $data  the decoded JSON value to check
+     * @param ?array $schema  the schema to check against; null uses the root schema
+     * @param string $path  where $data sits in the document, as a JSON pointer, for error messages
+     * @return bool  true when this call added no errors
+     */
     public function validate($data, ?array $schema = null, string $path = '#'): bool {
         $schema = $schema ?? $this->root;
         $before = count($this->errors);
@@ -26,8 +40,21 @@ class JsonSchema4 {
         return count($this->errors) === $before;
     }
 
+    /**
+     * Records one validation failure as "path: message".
+     *
+     * @param string $path  where the failure is, as a JSON pointer
+     * @param string $msg  what is wrong
+     */
     private function err(string $path, string $msg) { $this->errors[] = "$path: $msg"; }
 
+    /**
+     * Follows a local JSON pointer ($ref starting #/) through the root schema, decoding
+     * ~1 and ~0, and returns the schema it points at - null when it is external or
+     * missing.
+     *
+     * @param string $ref  the $ref value, e.g. '#/definitions/Schema'
+     */
     private function resolveRef(string $ref): ?array {
         if ($ref[0] !== '#') return null;
         $parts = array_slice(explode('/', $ref), 1);
@@ -40,6 +67,18 @@ class JsonSchema4 {
         return is_array($node) ? $node : null;
     }
 
+    /**
+     * Checks one value against one schema and records every failure: $ref, allOf / anyOf
+     * / oneOf / not, type, enum, then the object, array, string and number keywords the
+     * OpenAPI 3.0 meta-schema uses.
+     *
+     * A type mismatch stops the remaining keyword checks for that value, since they
+     * would only repeat it.
+     *
+     * @param mixed $data  the decoded JSON value to check
+     * @param array $schema  the schema to check it against
+     * @param string $path  where $data sits in the document, as a JSON pointer, for error messages
+     */
     private function check($data, array $schema, string $path): void {
         if (isset($schema['$ref'])) {
             $target = $this->resolveRef($schema['$ref']);
@@ -137,10 +176,30 @@ class JsonSchema4 {
     }
 
     // --- type helpers (PHP array ambiguity: [] can be object or list) -------
+    /**
+     * Whether a PHP array is a JSON list - an empty array counts as both list and object.
+     *
+     * @param mixed $d  any decoded JSON value
+     */
     private function isList($d): bool { return is_array($d) && ($d === [] || array_keys($d) === range(0, count($d) - 1)); }
+    /**
+     * Whether a PHP array is a non-empty JSON object (not a list).
+     *
+     * @param mixed $d  any decoded JSON value
+     */
     private function isAssoc($d): bool { return is_array($d) && !$this->isList($d); }
+    /**
+     * Whether a value is a JSON object - an associative array, or an empty array.
+     *
+     * @param mixed $d  any decoded JSON value
+     */
     private function isObject($d): bool { return is_array($d) && ($d === [] || $this->isAssoc($d)); }
 
+    /**
+     * The JSON Schema type name of a PHP value, for error messages.
+     *
+     * @param mixed $d  any decoded JSON value
+     */
     private function typeOf($d): string {
         if (is_bool($d)) return 'boolean';
         if (is_int($d)) return 'integer';
@@ -150,10 +209,23 @@ class JsonSchema4 {
         if ($this->isList($d)) return 'array';
         return 'object';
     }
+    /**
+     * Whether a value matches at least one of the given JSON Schema types.
+     *
+     * @param mixed $d  any decoded JSON value
+     * @param array $types  JSON Schema type names, e.g. ['string', 'null']
+     */
     private function matchesAnyType($d, array $types): bool {
         foreach ($types as $t) if ($this->matchesType($d, $t)) return true;
         return false;
     }
+    /**
+     * Whether a value matches one JSON Schema type - integer is a PHP int only, number
+     * an int or float.
+     *
+     * @param mixed $d  any decoded JSON value
+     * @param string $t  one JSON Schema type name, e.g. 'integer'; an unknown name never matches
+     */
     private function matchesType($d, string $t): bool {
         switch ($t) {
             case 'object':  return $this->isObject($d);
@@ -166,6 +238,13 @@ class JsonSchema4 {
         }
         return false;
     }
+    /**
+     * Whether a value is one of an enum's values, comparing strictly and then by JSON
+     * encoding (so arrays and objects match).
+     *
+     * @param mixed $d  any decoded JSON value
+     * @param array $enum  the schema's enum values
+     */
     private function inEnum($d, array $enum): bool {
         foreach ($enum as $e) if ($e === $d || json_encode($e) === json_encode($d)) return true;
         return false;

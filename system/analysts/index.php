@@ -36,9 +36,9 @@ $translationNamespaces = ['common', 'tickets'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('tickets.settings.headings.analysts')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('tickets.settings.headings.analysts'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -95,6 +95,68 @@ $translationNamespaces = ['common', 'tickets'];
         .settings-scroll .action-btn.delete:hover { background: var(--danger-bg, #fdf3f3); border-color: var(--danger-accent, #d13438); color: var(--danger-text, #a00); }
         .settings-scroll .action-btn svg { width: 16px; height: 16px; }
 
+        /* ── Sign-in conflict (GH #41) ─────────────────────────────────────────
+           The badge in the list is a button; the modal draws the analyst, a line to
+           each of their teams, and each team's method, then what happens now and
+           the ways out. Theme variables only, so it follows light and dark. */
+        .signin-conflict-badge {
+            display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;
+            padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+            background: var(--warning-bg, #fff3e0); color: var(--warning-text, #e65100);
+            border: 1px solid var(--warning-border, #ffcc80); cursor: pointer; font-family: inherit;
+        }
+        .signin-conflict-badge:hover, .signin-conflict-badge:focus-visible { filter: brightness(0.96); outline: 2px solid var(--warning-border, #ffcc80); outline-offset: 1px; }
+        .signin-conflict-badge svg { width: 12px; height: 12px; }
+
+        #signinConflictModal .modal-content { max-width: 600px; padding-bottom: 0; }
+        .sc-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+        .sc-head-icon { flex: 0 0 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            background: var(--warning-bg, #fff3e0); color: var(--warning-text, #e65100); border: 1px solid var(--warning-border, #ffcc80); }
+        .sc-head-icon svg { width: 22px; height: 22px; }
+        .sc-head h3 { margin: 0 0 4px; font-size: 19px; color: var(--text, #333); }
+        .sc-head p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-muted, #666); }
+
+        /* The picture: analyst on top, a branch down to each team. */
+        .sc-tree { background: var(--surface-2, #f7f9fa); border: 1px solid var(--border-soft, #eee); border-radius: 10px; padding: 16px 12px 14px; margin-bottom: 16px; }
+        .sc-tree-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint, #999); text-align: center; margin-bottom: 10px; }
+        .sc-person { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .sc-avatar { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 16px; background: var(--accent, #546e7a); color: var(--on-accent, #fff); }
+        .sc-person-name { font-weight: 600; font-size: 14px; color: var(--text, #333); }
+        .sc-stem { width: 2px; height: 16px; margin: 6px auto 0; background: var(--border, #ccc); }
+        .sc-branches { display: flex; justify-content: center; }
+        .sc-branch { position: relative; flex: 1 1 0; max-width: 200px; padding: 16px 6px 0; display: flex; justify-content: center; }
+        /* Org-chart connectors: each branch draws its share of the rail plus a drop. */
+        .sc-branch::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--border, #ccc); }
+        .sc-branch:first-child::before { left: 50%; }
+        .sc-branch:last-child::before { right: 50%; }
+        .sc-branch:only-child::before { display: none; }
+        .sc-branch::after { content: ''; position: absolute; top: 0; left: calc(50% - 1px); width: 2px; height: 16px; background: var(--border, #ccc); }
+        .sc-team { width: 100%; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-top: 3px solid var(--sc-tone, var(--border, #ccc));
+            border-radius: 8px; padding: 10px 10px 12px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+        .sc-team-name { font-weight: 600; font-size: 13px; color: var(--text, #333); margin-bottom: 8px; overflow-wrap: anywhere; }
+        .sc-method { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 12px; font-size: 12px; font-weight: 600;
+            background: var(--sc-tone-bg, var(--surface-2, #f0f0f0)); color: var(--sc-tone, var(--text, #333)); }
+        .sc-method svg { width: 13px; height: 13px; flex: 0 0 13px; }
+        .sc-vs { text-align: center; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--warning-text, #e65100); }
+
+        .sc-box { border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+        .sc-box svg { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 1px; }
+        .sc-box strong { display: block; margin-bottom: 2px; }
+        .sc-box.info { background: var(--info-bg, #e3f2fd); color: var(--info-text, #0d47a1); border: 1px solid var(--info-border, #90caf9); }
+
+        .sc-fix-title { font-size: 13px; font-weight: 600; color: var(--text, #333); margin: 0 0 8px; }
+        .sc-fix { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border-soft, #eee); border-radius: 8px; margin-bottom: 8px; background: var(--surface, #fff); }
+        .sc-fix-num { flex: 0 0 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+            background: var(--success-bg, #e8f5e9); color: var(--success-text, #2e7d32); border: 1px solid var(--success-border, #a5d6a7); }
+        .sc-fix-text { flex: 1; font-size: 13px; line-height: 1.4; color: var(--text-muted, #666); }
+        .sc-fix-text strong { display: block; color: var(--text, #333); }
+        .sc-fix .btn { flex: 0 0 auto; padding: 6px 14px; font-size: 13px; }
+        @media (max-width: 520px) {
+            .sc-fix { flex-wrap: wrap; }
+            .sc-fix .btn { margin-left: 38px; }
+        }
+
         /* Canonical settings-modal overrides (match tickets/settings). */
         .modal-content { padding: 20px 20px 0; max-width: 500px; }
         .modal-header { font-size: 20px; font-weight: 600; margin-bottom: 20px; color: var(--text, #333); padding: 0; border-bottom: none; }
@@ -123,9 +185,35 @@ $translationNamespaces = ['common', 'tickets'];
         }
         .form-group input::placeholder { color: var(--text-faint, #999); }
         .form-group input[type="checkbox"] { accent-color: var(--accent, #546e7a); }
+
+        /* When someone leaves (GH #178) - Deactivate / Anonymise / Delete.
+           .btn-danger is page-local, the same rule calendar.css carries. */
+        .btn.btn-danger { background: var(--danger-accent, #d13438); color: #fff; border: none; }
+        .btn.btn-danger:hover { filter: brightness(1.08); }
+        #leaveModal .modal-content { max-width: 640px; }
+        .lv-section { margin-bottom: 20px; }
+        .lv-section h4 { font-size: 14px; font-weight: 600; color: var(--text, #333); margin: 0 0 8px; }
+        .lv-muted { font-size: 13px; color: var(--text-muted, #666); line-height: 1.5; }
+        .lv-list { list-style: none; padding: 0; margin: 0 0 10px; font-size: 13px; color: var(--text, #333); }
+        .lv-list li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border, #eee); }
+        .lv-list li span:last-child { font-weight: 600; }
+        .lv-move { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text, #333); }
+        .lv-move select { padding: 6px 8px; border: 1px solid var(--border, #ccc); border-radius: 5px; background: var(--surface, #fff); color: var(--text, #333); }
+        .lv-note { font-size: 12.5px; padding: 9px 12px; border-radius: 6px; line-height: 1.5;
+                   background: var(--warning-bg, #fef3c7); color: var(--warning-text, #92400e); border: 1px solid var(--warning-border, #f0d9a8); }
+        .lv-option { display: flex; gap: 10px; align-items: flex-start; padding: 12px; margin-bottom: 8px; cursor: pointer;
+                     border: 1px solid var(--border, #e0e0e0); border-radius: 8px; background: var(--surface, #fff); }
+        .lv-option:hover { border-color: var(--accent, #546e7a); }
+        .lv-option.is-chosen { border-color: var(--accent, #546e7a); background: var(--accent-soft, #eef2f5); }
+        .lv-option.is-disabled { cursor: not-allowed; opacity: .6; }
+        .lv-option input { margin-top: 3px; accent-color: var(--accent, #546e7a); }
+        .lv-option strong { display: block; font-size: 14px; color: var(--text, #333); margin-bottom: 3px; }
+        .lv-option .lv-muted { display: block; }
+        .lv-failed { font-size: 12.5px; color: var(--danger-text, #991b1b); background: var(--danger-bg, #fee2e2);
+                     border: 1px solid var(--danger-border, #f0c2c2); border-radius: 6px; padding: 9px 12px; margin-top: 10px; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
@@ -189,7 +277,10 @@ $translationNamespaces = ['common', 'tickets'];
 
                 <div class="form-group">
                     <label for="analystAuthProvider"><?php echo htmlspecialchars(t('tickets.settings.analyst_extra.signin_method')); ?></label>
-                    <select id="analystAuthProvider">
+                    <select id="analystAuthProvider" onchange="updateAnalystSigninNote()">
+                        <!-- Follow team (GH #41). Removed by JS on an install whose Database
+                             Verification has not added the column yet. -->
+                        <option value="team" id="analystFollowTeamOpt"><?php echo htmlspecialchars(t('tickets.settings.team_signin.follow_team')); ?></option>
                         <option value=""><?php echo t('tickets.settings.analyst_extra.signin_local'); ?></option>
                         <?php
                         // Single sign-on providers — assigning one makes this analyst an SSO user
@@ -202,7 +293,8 @@ $translationNamespaces = ['common', 'tickets'];
                         } catch (Exception $e) { /* table may not exist yet */ }
                         ?>
                     </select>
-                    <small style="color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('tickets.settings.analyst_extra.signin_help')); ?></small>
+                    <small id="analystTeamSigninNote" style="display:none; margin: 4px 0; padding: 6px 8px; border-radius: 4px; font-size: 12px;"></small>
+                    <small style="color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('tickets.settings.analyst_extra.signin_help')); ?> <?php echo htmlspecialchars(t('tickets.settings.team_signin.follow_help')); ?></small>
                 </div>
 
                 <!-- Multi-tenancy: company access. Hidden on a single-company install
@@ -228,6 +320,7 @@ $translationNamespaces = ['common', 'tickets'];
                         </span>
                         <?php echo htmlspecialchars(t('tickets.settings.modals.analyst.active')); ?>
                     </label>
+                    <small style="display:block; margin-top:6px; font-size:12px; color:var(--text-muted, #666);">Somebody leaving? Use the bin icon on their row instead - it can hand their open work to someone else first.</small>
                 </div>
 
                 <div class="form-group">
@@ -287,7 +380,70 @@ $translationNamespaces = ['common', 'tickets'];
         </div>
     </div>
 
+    <!-- When someone leaves (GH #178): what they hold, who takes it, and
+         Deactivate / Anonymise / Delete. Filled in by openLeaveModal(). -->
+    <div class="modal" id="leaveModal" role="dialog" aria-modal="true" aria-labelledby="lvTitle">
+        <div class="modal-content">
+            <div class="modal-header" id="lvTitle">When someone leaves</div>
+            <div class="modal-body" id="lvBody"><p class="lv-muted">Loading…</p></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeLeaveModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="lvGo" onclick="runLeaveAction()" disabled>Deactivate</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Team Assignment Modal (analyst → teams) -->
+    <!-- Sign-in conflict explanation (GH #41) - filled in by openSigninConflict() -->
+    <div class="modal" id="signinConflictModal" role="dialog" aria-modal="true" aria-labelledby="scTitle">
+        <div class="modal-content">
+            <div class="sc-head">
+                <div class="sc-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                <div>
+                    <h3 id="scTitle"><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_title')); ?></h3>
+                    <p id="scLead"></p>
+                </div>
+            </div>
+
+            <div class="sc-tree">
+                <div class="sc-tree-label" id="scTreeLabel"></div>
+                <div class="sc-person">
+                    <div class="sc-avatar" id="scAvatar"></div>
+                    <div class="sc-person-name" id="scName"></div>
+                </div>
+                <div class="sc-stem"></div>
+                <div class="sc-branches" id="scBranches"></div>
+                <div class="sc-vs" id="scVs"></div>
+            </div>
+
+            <div class="sc-box info">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <div><strong><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_until_title')); ?></strong><span id="scUntil"></span></div>
+            </div>
+
+            <p class="sc-fix-title"><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_fix_title')); ?></p>
+            <div class="sc-fix">
+                <div class="sc-fix-num">1</div>
+                <div class="sc-fix-text"><strong id="scFixOwn"></strong><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_fix_own_body')); ?></div>
+                <button type="button" class="btn btn-primary" id="scBtnEdit"><?php echo htmlspecialchars(t('common.edit')); ?></button>
+            </div>
+            <div class="sc-fix">
+                <div class="sc-fix-num">2</div>
+                <div class="sc-fix-text"><strong><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_fix_teams_title')); ?></strong><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_fix_teams_body')); ?></div>
+                <a class="btn btn-secondary" href="../teams/"><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_btn_teams')); ?></a>
+            </div>
+            <div class="sc-fix">
+                <div class="sc-fix-num">3</div>
+                <div class="sc-fix-text"><strong><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_fix_member_title')); ?></strong><span id="scFixMember"></span></div>
+                <button type="button" class="btn btn-secondary" id="scBtnChange"><?php echo htmlspecialchars(t('tickets.settings.team_signin.cx_btn_change')); ?></button>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 16px;">
+                <button type="button" class="btn btn-secondary" onclick="closeSigninConflict()"><?php echo htmlspecialchars(t('common.close')); ?></button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="teamAssignmentModal">
         <div class="modal-content">
             <div class="modal-header" id="teamAssignmentTitle"><?php echo htmlspecialchars(t('tickets.settings.modals.team_assignment.title')); ?></div>
@@ -341,7 +497,7 @@ $translationNamespaces = ['common', 'tickets'];
 
         async function loadAnalysts() {
             try {
-                const response = await fetch(API_BASE + 'get_analysts.php');
+                const response = await fetch(API_BASE + 'get_analysts.php?signin=1');
                 const data = await response.json();
                 if (data.success) {
                     analysts = data.analysts;
@@ -422,7 +578,7 @@ $translationNamespaces = ['common', 'tickets'];
                 return `
                     <tr>
                         <td><strong>${escapeHtml(a.username)}</strong></td>
-                        <td>${escapeHtml(a.full_name)}${accessChip}</td>
+                        <td>${escapeHtml(a.full_name)}${accessChip}${signinConflictChip(a)}</td>
                         <td>${escapeHtml(a.email || '')}</td>
                         <td>${teamsText}</td>
                         <td>${statusBadge}</td>
@@ -438,7 +594,7 @@ $translationNamespaces = ['common', 'tickets'];
                             <button class="action-btn" onclick="openPasswordResetModal(${a.id}, '${safeName}')" title="${t('tickets.settings.tooltips.reset_password')}">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
                             </button>
-                            <button class="action-btn delete" onclick="deleteAnalyst(${a.id}, '${safeUsername}')" title="${t('common.delete')}">
+                            <button class="action-btn delete" onclick="deleteAnalyst(${a.id}, '${safeUsername}')" title="Remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                             </button>
                         </td>
@@ -471,6 +627,127 @@ $translationNamespaces = ['common', 'tickets'];
                 </label>`).join('');
         }
 
+        // ── Follow team (GH #41) ──────────────────────────────────────────────
+        // get_analysts.php?signin=1 only adds auth_follow_team once Database
+        // Verification has added the column; until then the option is hidden.
+        function signinFeatureReady() {
+            return analysts.length > 0 && Object.prototype.hasOwnProperty.call(analysts[0], 'auth_follow_team');
+        }
+
+        // The name of a sign-in method, as the select shows it.
+        function signinMethodName(providerId) {
+            if (!providerId) return t('tickets.settings.team_signin.local');
+            const opt = document.querySelector(`#analystAuthProvider option[value="${Number(providerId)}"]`);
+            return opt ? opt.textContent : '#' + providerId;
+        }
+
+        function signinConflictChip(a) {
+            if (!a.auth_follow_team || !a.team_signin || a.team_signin.status !== 'conflict') return '';
+            return `<button type="button" class="signin-conflict-badge" onclick="openSigninConflict(${Number(a.id)})" title="${escapeHtml(t('tickets.settings.team_signin.badge_tooltip'))}">`
+                 + `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+                 + `${escapeHtml(t('tickets.settings.team_signin.badge_conflict'))}</button>`;
+        }
+
+        // One colour per sign-in METHOD, not per team - so when three teams split two
+        // ways, the two that agree visibly match. Module accents, so they follow the theme.
+        const SC_TONES = [
+            ['var(--kb-accent, #1565c0)',  'var(--kb-accent-soft, #e3f2fd)'],
+            ['var(--cm-accent, #6a1b9a)',  'var(--cm-accent-soft, #f3e5f5)'],
+            ['var(--tsk-accent, #00838f)', 'var(--tsk-accent-soft, #e0f7fa)'],
+            ['var(--con-accent, #ad1457)', 'var(--con-accent-soft, #fce4ec)'],
+        ];
+        const SC_ICON_KEY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+        const SC_ICON_SSO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>';
+
+        function scInitials(name) {
+            const parts = String(name || '?').trim().split(/\s+/);
+            return ((parts[0] || '')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+        }
+
+        function openSigninConflict(id) {
+            const a = analysts.find(x => Number(x.id) === Number(id));
+            if (!a || !a.team_signin) return;
+            const name = a.full_name || a.username;
+            const methods = a.team_signin.teams;
+            const methodName = m => m.key === 0 ? t('tickets.settings.team_signin.local') : m.label;
+
+            document.getElementById('scLead').textContent = t('tickets.settings.team_signin.cx_lead', { name: name });
+            document.getElementById('scTreeLabel').textContent = t('tickets.settings.team_signin.cx_teams', { name: name });
+            document.getElementById('scAvatar').textContent = scInitials(name);
+            document.getElementById('scName').textContent = name;
+
+            const toneOf = {};
+            let next = 0;
+            document.getElementById('scBranches').innerHTML = methods.map(m => {
+                if (!(m.key in toneOf)) toneOf[m.key] = SC_TONES[next++ % SC_TONES.length];
+                const [tone, bg] = toneOf[m.key];
+                return `<div class="sc-branch"><div class="sc-team" style="--sc-tone:${tone}; --sc-tone-bg:${bg};">
+                            <div class="sc-team-name">${escapeHtml(m.team_name)}</div>
+                            <span class="sc-method">${m.key === 0 ? SC_ICON_KEY : SC_ICON_SSO}${escapeHtml(methodName(m))}</span>
+                        </div></div>`;
+            }).join('');
+            // "Google ≠ Local password" under the picture, one entry per distinct method.
+            const distinct = [...new Map(methods.map(m => [m.key, methodName(m)])).values()];
+            document.getElementById('scVs').textContent = distinct.join('  ≠  ');
+
+            document.getElementById('scUntil').textContent = t('tickets.settings.team_signin.cx_until_body', { name: name, current: signinMethodName(a.auth_provider_id) });
+            document.getElementById('scFixOwn').textContent = t('tickets.settings.team_signin.cx_fix_own_title', { name: name });
+            document.getElementById('scFixMember').textContent = t('tickets.settings.team_signin.cx_fix_member_body', { name: name });
+
+            document.getElementById('scBtnEdit').onclick = () => { closeSigninConflict(); openAnalystModal(a); };
+            document.getElementById('scBtnChange').onclick = () => { closeSigninConflict(); openTeamAssignment('analyst', a.id, name); };
+            document.getElementById('signinConflictModal').classList.add('active');
+        }
+
+        function closeSigninConflict() {
+            document.getElementById('signinConflictModal').classList.remove('active');
+        }
+
+        // Under the select: where Follow team gets its answer, or why it has none.
+        let signinModalAnalyst = null;
+        function updateAnalystSigninNote() {
+            const note = document.getElementById('analystTeamSigninNote');
+            const a = signinModalAnalyst;
+            if (document.getElementById('analystAuthProvider').value !== 'team') {
+                note.style.display = 'none';
+                return;
+            }
+            let text, warn = false;
+            if (!a) {
+                text = t('tickets.settings.team_signin.new_follow');
+            } else {
+                const ts = a.team_signin || { status: 'none', teams: [] };
+                // What they sign in with now - kept whenever the teams give no single answer.
+                const current = signinMethodName(a.auth_provider_id);
+                const label = m => m.key === 0 ? t('tickets.settings.team_signin.local') : m.label;
+                if (ts.status === 'agreed') {
+                    text = t('tickets.settings.team_signin.from_team', {
+                        method: label(ts.teams[0]),
+                        teams: ts.teams.map(m => m.team_name).join(', ')
+                    });
+                } else if (ts.status === 'conflict') {
+                    warn = true;
+                    text = t('tickets.settings.team_signin.conflict', {
+                        detail: ts.teams.map(m => `${m.team_name} (${label(m)})`).join(', '),
+                        current: current
+                    });
+                } else {
+                    text = t('tickets.settings.team_signin.none', { current: current });
+                }
+            }
+            note.textContent = text;
+            note.style.background = warn ? 'var(--warning-bg, #fff3e0)' : 'var(--surface-2, #f5f7f8)';
+            note.style.color = warn ? 'var(--warning-text, #e65100)' : 'var(--text-muted, #555)';
+            note.style.display = 'block';
+        }
+
+        // After a save that can move people between sign-in methods.
+        function showSigninOutcome(signin) {
+            if (!signin) return;
+            if (signin.changed > 0) showToast(t('tickets.settings.team_signin.summary_changed', { count: signin.changed }), 'info', 6000);
+            if (signin.conflict > 0) showToast(t('tickets.settings.team_signin.summary_conflict', { count: signin.conflict }), 'warning', 9000);
+        }
+
         function openAnalystModal(analyst = null) {
             document.getElementById('analystModalTitle').textContent = analyst ? t('tickets.settings.modals.analyst.edit_title') : t('tickets.settings.modals.analyst.add_title');
             document.getElementById('analystId').value = analyst ? analyst.id : '';
@@ -481,7 +758,16 @@ $translationNamespaces = ['common', 'tickets'];
             document.getElementById('analystActive').checked = analyst ? analyst.is_active : true;
             document.getElementById('analystIsAdmin').checked = analyst ? !!analyst.is_admin : false;
             document.getElementById('analystAllModules').checked = analyst ? (analyst.can_access_all_modules === undefined ? true : !!Number(analyst.can_access_all_modules)) : true;
-            document.getElementById('analystAuthProvider').value = (analyst && analyst.auth_provider_id) ? String(analyst.auth_provider_id) : '';
+            const followOpt = document.getElementById('analystFollowTeamOpt');
+            const ready = signinFeatureReady();
+            if (followOpt) { followOpt.hidden = !ready; followOpt.disabled = !ready; }
+            signinModalAnalyst = analyst;
+            // A new analyst follows their team by default - that is the point of
+            // setting it on the team (GH #41). Existing analysts show what they have.
+            document.getElementById('analystAuthProvider').value =
+                (ready && (!analyst || analyst.auth_follow_team)) ? 'team'
+                : (analyst && analyst.auth_provider_id) ? String(analyst.auth_provider_id) : '';
+            updateAnalystSigninNote();
 
             // Password is required only for new analysts
             const passwordInput = document.getElementById('analystPassword');
@@ -540,31 +826,161 @@ $translationNamespaces = ['common', 'tickets'];
             }
         }
 
-        async function deleteAnalyst(id, username) {
-            const ok = await showConfirm({
-                title: 'Delete analyst',
-                message: `Are you sure you want to delete the analyst "${username}"?`,
-                okLabel: 'Delete',
-                okClass: 'danger'
-            });
-            if (!ok) return;
+        // The Delete button opens "When someone leaves" (GH #178). Deleting is only
+        // one of three answers, and for anybody who has done any work it is not
+        // possible at all - their name is on history. The rules are server-side
+        // (includes/analyst_lifecycle.php); this window explains them.
+        function deleteAnalyst(id, username) { openLeaveModal(id); }
 
+        let lvState = null;
+
+        async function openLeaveModal(id) {
+            lvState = { id: id, action: null, data: null };
+            const body = document.getElementById('lvBody');
+            body.innerHTML = '<p class="lv-muted">Loading…</p>';
+            document.getElementById('lvGo').disabled = true;
+            document.getElementById('leaveModal').classList.add('active');
             try {
-                const response = await fetch(API_BASE + 'delete_analyst.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: id })
+                const r = await fetch(API_BASE + 'analyst_leaving.php?id=' + encodeURIComponent(id));
+                const d = await r.json();
+                if (!d.success) { body.innerHTML = '<p class="lv-muted">' + escapeHtml(d.error || 'Something went wrong.') + '</p>'; return; }
+                lvState.data = d;
+                renderLeaveModal();
+            } catch (e) {
+                body.innerHTML = '<p class="lv-muted">Could not load what this analyst holds.</p>';
+            }
+        }
+
+        function closeLeaveModal() {
+            document.getElementById('leaveModal').classList.remove('active');
+            lvState = null;
+        }
+
+        function renderLeaveModal() {
+            const d = lvState.data;
+            const name = escapeHtml(d.analyst.name);
+            document.getElementById('lvTitle').textContent = 'When ' + d.analyst.name + ' leaves';
+            const body = document.getElementById('lvBody');
+
+            if (d.is_self) {
+                body.innerHTML = '<p class="lv-muted">This is your own account. Ask another administrator to do this.</p>';
+                return;
+            }
+            if (d.is_last_admin) {
+                body.innerHTML = '<p class="lv-muted">' + name + ' is the last active administrator. Make another analyst an administrator first, or nobody will be able to manage FreeITSM.</p>';
+                return;
+            }
+
+            const live = Object.values(d.live || {});
+            const setup = Object.entries(d.setup || {});
+            let html = '';
+
+            // 1. Their open work, and who takes it.
+            html += '<div class="lv-section"><h4>Their open work</h4>';
+            if (!live.length) {
+                html += '<p class="lv-muted">They hold no open work.</p>';
+            } else {
+                html += '<ul class="lv-list">' + live.map(g => '<li><span>' + escapeHtml(g.label) + '</span><span>' + g.count + '</span></li>').join('') + '</ul>';
+                html += '<label class="lv-move"><input type="checkbox" id="lvMove" checked> Move it to '
+                     +  '<select id="lvTo"><option value="">Nobody (leave it unassigned)</option>'
+                     +  (d.candidates || []).map(c => '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>').join('')
+                     +  '</select></label>'
+                     +  '<p class="lv-muted" style="margin-top:6px">Each item is moved the same way as doing it by hand, so its history shows the change. Closed items keep their name: that is history.</p>';
+            }
+            html += '</div>';
+
+            // 2. Things routed to them that a person has to rethink.
+            if (setup.length) {
+                html += '<div class="lv-section"><h4>Also set up for them</h4>'
+                     +  '<ul class="lv-list">' + setup.map(([l, n]) => '<li><span>' + escapeHtml(l) + '</span><span>' + n + '</span></li>').join('') + '</ul>'
+                     +  '<div class="lv-note">Change these by hand. FreeITSM does not change who approves or is notified for you: clearing an approver could let requests through unchecked.</div></div>';
+            }
+
+            // 3. What happens to them.
+            const histWords = d.history ? (d.history + ' record' + (d.history === 1 ? '' : 's') + ' carry their name') : '';
+            const delReason = !d.can_delete
+                ? (d.history ? histWords + ', such as notes, time and audit entries. Deleting would leave holes in that history, so choose Deactivate or Anonymise.'
+                             : 'Something is still set up for them (above). Change that first.')
+                : 'Removes the account, with their personal settings (dashboard, preferences, sign-in links). Cannot be undone.';
+            html += '<div class="lv-section"><h4>What happens to ' + name + '</h4>'
+                 +  leaveOption('deactivate', 'Deactivate', d.analyst.is_active
+                        ? 'They can no longer sign in, and their API keys stop working. Their name stays on everything they did. Undo it any time by ticking Active again.'
+                        : 'Already deactivated.', !d.analyst.is_active)
+                 +  leaveOption('anonymise', 'Anonymise', 'Everything Deactivate does, then their name and contact details are removed: their records stay, credited to "Former analyst #' + d.analyst.id + '". Use this for a request to be forgotten. Cannot be undone. Names typed into notes or emails are not changed.', false)
+                 +  leaveOption('delete', 'Delete', delReason, !d.can_delete)
+                 +  '</div>';
+            html += '<p class="lv-muted"><a href="../help/analysts.php#leavers" target="_blank" rel="noopener">How this works</a></p>';
+            html += '<div id="lvResult"></div>';
+            body.innerHTML = html;
+
+            // The sensible default: Deactivate, or Anonymise when that is already done.
+            pickLeaveOption(d.analyst.is_active ? 'deactivate' : 'anonymise');
+        }
+
+        function leaveOption(key, title, text, disabled) {
+            return '<label class="lv-option' + (disabled ? ' is-disabled' : '') + '" data-lv="' + key + '">'
+                 + '<input type="radio" name="lvAction" value="' + key + '"' + (disabled ? ' disabled' : '') + ' onchange="pickLeaveOption(\'' + key + '\')">'
+                 + '<span><strong>' + title + '</strong><span class="lv-muted">' + escapeHtml(text) + '</span></span></label>';
+        }
+
+        function pickLeaveOption(key) {
+            const radio = document.querySelector('#lvBody input[name="lvAction"][value="' + key + '"]');
+            if (!radio || radio.disabled) return;
+            radio.checked = true;
+            lvState.action = key;
+            document.querySelectorAll('#lvBody .lv-option').forEach(o => o.classList.toggle('is-chosen', o.dataset.lv === key));
+            const go = document.getElementById('lvGo');
+            go.disabled = false;
+            go.textContent = key === 'deactivate' ? 'Deactivate' : key === 'anonymise' ? 'Anonymise' : 'Delete';
+            go.className = 'btn ' + (key === 'deactivate' ? 'btn-primary' : 'btn-danger');
+        }
+
+        async function runLeaveAction() {
+            if (!lvState || !lvState.action) return;
+            const d = lvState.data, action = lvState.action;
+            if (action !== 'deactivate') {
+                const ok = await showConfirm({
+                    title: action === 'anonymise' ? 'Anonymise ' + d.analyst.name + '?' : 'Delete ' + d.analyst.name + '?',
+                    message: action === 'anonymise'
+                        ? 'Their name and contact details will be removed for good. This cannot be undone.'
+                        : 'The account will be removed for good. This cannot be undone.',
+                    okLabel: action === 'anonymise' ? 'Anonymise' : 'Delete',
+                    okClass: 'danger'
                 });
-                const data = await response.json();
-                if (data.success) {
-                    showToast('Analyst deleted', 'success');
-                    loadAnalysts();
-                } else {
-                    showToast('Error deleting analyst: ' + data.error, 'error');
+                if (!ok) return;
+            }
+            const move = document.getElementById('lvMove');
+            const payload = { id: d.analyst.id, action: action, reassign: !!(move && move.checked) };
+            if (payload.reassign) payload.reassign_to = document.getElementById('lvTo').value || null;
+            const go = document.getElementById('lvGo');
+            go.disabled = true;
+            try {
+                const r = await fetch(API_BASE + 'analyst_leaving.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const res = await r.json();
+                if (!res.success) {
+                    document.getElementById('lvResult').innerHTML = '<div class="lv-failed">' + escapeHtml(res.error || 'Something went wrong.') + '</div>';
+                    go.disabled = false;
+                    return;
                 }
-            } catch (error) {
-                console.error('Error:', error);
-                showToast('Failed to delete analyst', 'error');
+                const done = action === 'deactivate' ? 'deactivated' : action === 'anonymise' ? 'anonymised' : 'deleted';
+                if (res.failed && res.failed.length) {
+                    // Done, but some work would not move - say which, rather than a toast that vanishes.
+                    document.getElementById('lvResult').innerHTML = '<div class="lv-failed"><strong>' + escapeHtml(d.analyst.name) + ' was ' + done
+                        + ', but ' + res.failed.length + ' item(s) could not be moved - open each to reassign it:</strong><br>'
+                        + res.failed.map(escapeHtml).join('<br>') + '</div>';
+                    go.textContent = 'Done';
+                    go.onclick = () => { closeLeaveModal(); go.onclick = runLeaveAction; };
+                    go.disabled = false;
+                } else {
+                    showToast('Analyst ' + done, 'success');
+                    closeLeaveModal();
+                }
+                loadAnalysts();
+            } catch (e) {
+                document.getElementById('lvResult').innerHTML = '<div class="lv-failed">Something went wrong.</div>';
+                go.disabled = false;
             }
         }
 
@@ -639,6 +1055,7 @@ $translationNamespaces = ['common', 'tickets'];
                 if (data.success) {
                     closeTeamAssignmentModal();
                     showToast('Saved', 'success');
+                    showSigninOutcome(data.signin);
                     delete analystTeams[entityId];
                     loadAnalysts();
                 } else {
@@ -663,8 +1080,11 @@ $translationNamespaces = ['common', 'tickets'];
                 is_active: document.getElementById('analystActive').checked,
                 is_admin: document.getElementById('analystIsAdmin').checked,
                 can_access_all_modules: document.getElementById('analystAllModules').checked,
-                auth_provider_id: document.getElementById('analystAuthProvider').value || null
+                auth_provider_id: ['', 'team'].includes(document.getElementById('analystAuthProvider').value) ? null : document.getElementById('analystAuthProvider').value
             };
+            if (signinFeatureReady()) {
+                formData.auth_follow_team = document.getElementById('analystAuthProvider').value === 'team' ? 1 : 0;
+            }
 
             // Multi-tenancy: send company access only when the control is shown.
             const accessGroup = document.getElementById('analystAccessGroup');
@@ -685,6 +1105,7 @@ $translationNamespaces = ['common', 'tickets'];
                 if (data.success) {
                     closeAnalystModal();
                     showToast('Analyst saved', 'success');
+                    showSigninOutcome(data.signin);
                     loadAnalysts();
                 } else {
                     showToast('Error saving analyst: ' + data.error, 'error');
@@ -739,6 +1160,6 @@ $translationNamespaces = ['common', 'tickets'];
             loadAnalysts();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

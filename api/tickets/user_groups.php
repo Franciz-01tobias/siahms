@@ -128,6 +128,8 @@ function handleList(PDO $conn, int $analystId): void
  *
  * Anything withheld is COUNTED and reported, never silently dropped: an admin
  * deciding whether a group is right needs to know it has members they can't see.
+ *
+ * @param int $groupId  the knowledge_user_groups id, from ?id=; 0 or less is refused
  */
 function handleGet(PDO $conn, int $analystId, int $groupId): void
 {
@@ -214,6 +216,8 @@ function handleGet(PDO $conn, int $analystId, int $groupId): void
  * Find people to add — analysts and portal users in one list, because you know
  * the NAME of who you want, not which table they are in. Same shape as the
  * Knowledge principal picker.
+ *
+ * @param string $q  the name to look for, from ?q=; under 2 characters returns nothing
  */
 function handleSearch(PDO $conn, int $analystId, string $q): void
 {
@@ -255,6 +259,14 @@ function handleSearch(PDO $conn, int $analystId, string $q): void
     echo json_encode(['success' => true, 'results' => $out]);
 }
 
+/**
+ * Creates a user group with a name and optional description.
+ *
+ * Refused, in words, when the name is taken - including by a deleted group, which is not
+ * revived silently because its old members are still attached.
+ *
+ * @param array $input  the decoded JSON request: name and an optional description
+ */
 function handleCreate(PDO $conn, int $analystId, array $input): void
 {
     $name = trim((string)($input['name'] ?? ''));
@@ -284,6 +296,12 @@ function handleCreate(PDO $conn, int $analystId, array $input): void
     echo json_encode(['success' => true, 'id' => (int)$conn->lastInsertId()]);
 }
 
+/**
+ * Renames an active user group and updates its description, refusing a name another
+ * group already has.
+ *
+ * @param array $input  the decoded JSON request: id, name and an optional description
+ */
 function handleUpdate(PDO $conn, array $input): void
 {
     $id   = (int)($input['id'] ?? 0);
@@ -315,6 +333,8 @@ function handleUpdate(PDO $conn, array $input): void
  * joins `is_active = 1`, so deactivating is already enough to stop the group
  * granting anything. Removing the rows outright would destroy the record of who
  * had been given what, which is the one thing an access list is kept for.
+ *
+ * @param array $input  the decoded JSON request: id of the group to deactivate
  */
 function handleDelete(PDO $conn, array $input): void
 {
@@ -336,6 +356,8 @@ function handleDelete(PDO $conn, array $input): void
  * editing a group to add one person would quietly give six other people
  * permanent access. The LMS group editor does exactly that; it gets away with it
  * only because its membership carries no expiry to lose.
+ *
+ * @param array $input  the decoded JSON request: id (the group), member_type, member_id and an optional expires_on date
  */
 function handleAddMember(PDO $conn, int $analystId, array $input): void
 {
@@ -386,6 +408,11 @@ function handleAddMember(PDO $conn, int $analystId, array $input): void
     echo json_encode(['success' => true]);
 }
 
+/**
+ * Removes one analyst or portal user from a user group.
+ *
+ * @param array $input  the decoded JSON request: id (the group), member_type and member_id
+ */
 function handleRemoveMember(PDO $conn, array $input): void
 {
     $groupId = (int)($input['id'] ?? 0);
@@ -416,6 +443,7 @@ function handleRemoveMember(PDO $conn, array $input): void
  * the 14th is their last day, and expiring them at midnight would take the access
  * away a day early — on the morning of the day they were told they still had.
  *
+ * @param string $date  the last day of access as YYYY-MM-DD in the install's time zone; empty means no expiry
  * @return string|null NULL for "no expiry" (a blank box), and also for a date
  *                     that cannot be read — the caller separates the two.
  */

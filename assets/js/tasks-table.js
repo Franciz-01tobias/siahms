@@ -52,6 +52,7 @@
           display: t => (t.subtasks && t.subtasks.total > 0) ? `${t.subtasks.done}/${t.subtasks.total}` : '—' },
     ];
 
+    /** Loads the active task statuses and priorities for the table. */
     async function loadLookups() {
         try {
             const [sRes, pRes] = await Promise.all([
@@ -63,6 +64,7 @@
         } catch (e) { console.error('Failed to load lookups:', e); }
     }
 
+    /** Loads analysts and teams and fills the Analyst and Team filter drop-downs. */
     async function loadDropdowns() {
         try {
             const [aRes, tRes] = await Promise.all([
@@ -85,6 +87,10 @@
     }
 
     // --- Sidebar filters (My / Team / Analyst) ------------------------
+    /**
+     * Switches to a preset filter (my, all...), clears the team and analyst filters and reloads the
+     * table.
+     */
     window.setFilter = function (filter) {
         currentFilter = filter;
         currentFilterTeamId = null;
@@ -96,6 +102,7 @@
         document.getElementById('analystFilter').value = '';
         table.reload();
     };
+    /** Shows one team's tasks, or goes back to My tasks when cleared. */
     window.setTeamFilter = function (id) {
         if (!id) { setFilter('my'); return; }
         currentFilter = 'team';
@@ -105,6 +112,7 @@
         document.getElementById('analystFilter').value = '';
         table.reload();
     };
+    /** Shows one analyst's tasks, or goes back to My tasks when cleared. */
     window.setAnalystFilter = function (id) {
         if (!id) { setFilter('my'); return; }
         currentFilter = 'analyst';
@@ -115,6 +123,7 @@
         table.reload();
     };
 
+    /** HTML-escapes a value; null and undefined become an empty string. */
     function esc(s) {
         if (s === null || s === undefined) return '';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');

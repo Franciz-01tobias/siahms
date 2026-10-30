@@ -29,6 +29,8 @@ define('LDAP_TIMEOUT_SECONDS', 8);
 /**
  * Sensible per-flavour defaults, offered by the admin UI as presets.
  * 'ad' = Active Directory / Samba AD DC, 'openldap' = OpenLDAP / 389 / FreeIPA.
+ *
+ * @param string $flavour  'openldap' for OpenLDAP-style defaults; anything else (normally 'ad') gives Active Directory's
  */
 function ldapFlavourDefaults(string $flavour): array {
     if ($flavour === 'openldap') {
@@ -67,6 +69,8 @@ function ldapExtensionAvailable(): bool {
 /**
  * Load an auth_providers row by id with the bind password decrypted.
  * Returns null if not found or not an LDAP provider.
+ *
+ * @param int $id  the auth_providers id
  */
 function ldapGetProvider(PDO $conn, int $id): ?array {
     $stmt = $conn->prepare("SELECT * FROM auth_providers WHERE id = ?");
@@ -77,7 +81,11 @@ function ldapGetProvider(PDO $conn, int $id): ?array {
     return $row;
 }
 
-/** Build the connection URI, e.g. ldaps://dc1.example.com:636 */
+/**
+ * Build the connection URI, e.g. ldaps://dc1.example.com:636
+ *
+ * @param array $p  the provider row from ldapGetProvider() (ldap_host, ldap_port, ldap_encryption)
+ */
 function ldapBuildUri(array $p): string {
     $scheme = (($p['ldap_encryption'] ?? '') === 'ldaps') ? 'ldaps' : 'ldap';
     $port   = (int)($p['ldap_port'] ?? 0);
@@ -91,6 +99,8 @@ function ldapBuildUri(array $p): string {
  * AD's objectGUID is BINARY; OpenLDAP's entryUUID is already a readable
  * string. Hex-encode anything that is not clean printable text so the
  * `subject` column holds a stable, comparable value either way.
+ *
+ * @param string $raw  the raw GUID attribute value - binary objectGUID on AD, text entryUUID on OpenLDAP
  */
 function ldapStringifyId(string $raw): string {
     if ($raw === '') return '';
@@ -104,6 +114,8 @@ function ldapStringifyId(string $raw): string {
 /**
  * Open a connection and apply the options that matter.
  * Throws on failure. Does NOT bind.
+ *
+ * @param array $p  the provider row from ldapGetProvider() (host, port, encryption)
  */
 function ldapOpen(array $p) {
     if (!ldapExtensionAvailable()) {
@@ -133,6 +145,9 @@ function ldapOpen(array $p) {
 /**
  * Bind as the configured read-only service account.
  * Throws with a useful message on failure.
+ *
+ * @param mixed $ds  the connection from ldapOpen()
+ * @param array $p  the provider row (ldap_bind_dn, ldap_bind_password decrypted); a blank bind DN binds anonymously
  */
 function ldapBindService($ds, array $p): void {
     $dn = trim((string)($p['ldap_bind_dn'] ?? ''));
@@ -156,6 +171,10 @@ function ldapBindService($ds, array $p): void {
  * Find exactly one directory entry for $login.
  * Returns the raw entry array (from ldap_get_entries) or null when not found.
  * Throws when the search itself fails or matches more than one user.
+ *
+ * @param mixed $ds  a connection from ldapOpen(), already bound as the service account
+ * @param array $p  the provider row (ldap_base_dn, ldap_user_filter, ldap_attr_*)
+ * @param string $login  what the person typed as their username; escaped before it goes into the filter
  */
 function ldapFindUser($ds, array $p, string $login): ?array {
     $baseDn = trim((string)($p['ldap_base_dn'] ?? ''));
@@ -193,7 +212,12 @@ function ldapFindUser($ds, array $p, string $login): ?array {
     return $entries[0];
 }
 
-/** Read a single attribute out of an ldap_get_entries() row (keys are lowercased). */
+/**
+ * Read a single attribute out of an ldap_get_entries() row (keys are lowercased).
+ *
+ * @param array $entry  one row from ldap_get_entries()
+ * @param ?string $attr  the attribute name in any case; null or '' gives ''
+ */
 function ldapAttr(array $entry, ?string $attr): string {
     if ($attr === null || $attr === '') return '';
     $key = strtolower($attr);
@@ -214,6 +238,10 @@ function ldapAttr(array $entry, ?string $attr): string {
  *
  * Must be called on a connection bound as the SERVICE account: the user's own
  * bind may not be permitted to read group objects.
+ *
+ * @param mixed $ds  a connection from ldapOpen(), bound as the service account
+ * @param array $p  the provider row (ldap_group_filter, ldap_group_base_dn, ldap_base_dn)
+ * @param string $userDn  the user's full DN, substituted (escaped) for %s in the group filter
  */
 function ldapUserGroups($ds, array $p, string $userDn): array {
     $filter = trim((string)($p['ldap_group_filter'] ?? ''));
@@ -245,13 +273,18 @@ function ldapUserGroups($ds, array $p, string $userDn): array {
  * Is the user in $wanted? $wanted may be a plain group name ("NW-IT-Support")
  * or a full DN — admins reach for either, so accept both. Matching is
  * case-insensitive because directories treat these names that way.
+ *
+ * @param array $groups  the user's groups from ldapUserGroups(), each ['dn' => ..., 'cn' => ...]
+ * @param string $wanted  the group to look for, as a plain name or a full DN; '' gives false
  */
 function ldapInGroup(array $groups, string $wanted): bool {
     $wanted = trim($wanted);
     if ($wanted === '') return false;
     foreach ($groups as $g) {
-        if (strcasecmp($g['cn'], $wanted) === 0) return true;
-        if (strcasecmp($g['dn'], $wanted) === 0) return true;
+        // Ignoring case in ANY alphabet (3.5.0) - strcasecmp() only folds A-Z, so
+        // "Équipe-IT" and "équipe-it" were different groups.
+        if (mb_strtolower($g['cn'], 'UTF-8') === mb_strtolower($wanted, 'UTF-8')) return true;
+        if (mb_strtolower($g['dn'], 'UTF-8') === mb_strtolower($wanted, 'UTF-8')) return true;
     }
     return false;
 }
@@ -266,6 +299,10 @@ function ldapInGroup(array $groups, string $wanted): bool {
  * 'reason' lets the caller decide what to reveal: a login form should say
  * "wrong username or password" for everything, while the admin Test button
  * wants the detail.
+ *
+ * @param array $provider  the provider row from ldapGetProvider()
+ * @param string $login  what the person typed as their username (trimmed here)
+ * @param string $password  what the person typed as their password; empty or containing a NUL byte is refused
  */
 function ldapAuthenticate(array $provider, string $login, string $password): array {
     $login = trim($login);
@@ -375,6 +412,9 @@ function ldapAuthenticate(array $provider, string $login, string $password): arr
  * When NO groups are configured at all the gate is off and anyone the directory
  * authenticates is an analyst — that is the single-team default, and the help
  * page says so plainly.
+ *
+ * @param array $provider  the provider row (ldap_analyst_group, ldap_user_group)
+ * @param array $ldapUser  the 'user' from a successful ldapAuthenticate() - its 'groups' are read
  */
 function ldapAccessRole(array $provider, array $ldapUser): ?string {
     $analystGroup = trim((string)($provider['ldap_analyst_group'] ?? ''));
@@ -505,6 +545,12 @@ function ldapAnalystProviders(PDO $conn): array {
  * rather than sharing with it. Folding the two into one provisioning helper is
  * worthwhile, but is a refactor of working auth code and belongs in its own
  * change, not bundled with a new auth path.
+ *
+ * @param int $providerId  the auth_providers id the new analyst signs in through
+ * @param string $preferredUser  the directory username, used as the base of the new analyst's username
+ * @param string $name  the display name from the directory; '' uses the username
+ * @param string $email  the directory email address; '' is allowed
+ * @param ?string $defaultModules  comma-separated module keys to grant; null or blank grants every module
  */
 function ldapCreateAnalyst(PDO $conn, int $providerId, string $preferredUser, string $name, string $email, ?string $defaultModules): int {
     $base = strtolower(preg_replace('/[^a-zA-Z0-9._-]/', '', $preferredUser ?: explode('@', $email)[0]));
@@ -548,6 +594,10 @@ function ldapCreateAnalyst(PDO $conn, int $providerId, string $preferredUser, st
             try { $ins->execute([$analystId, $m]); } catch (Exception $e) { /* ignore dupes */ }
         }
     }
+    ssoApplyJitCompanies($conn, $providerId, $analystId);   // which companies (3.5.0)
+    // The "for new analysts" preference template (discussion #124).
+    require_once __DIR__ . '/preference_templates.php';
+    prefTemplatesApplyForNew($conn, $analystId);
     return $analystId;
 }
 
@@ -557,9 +607,13 @@ function ldapCreateAnalyst(PDO $conn, int $providerId, string $preferredUser, st
  *   1) existing link by (provider, subject),
  *   2) match an existing analyst by email — STRICTLY isolated: the analyst must
  *      already be assigned to this provider,
- *   3) just-in-time create, if auto_create_users is on.
+ *   3) just-in-time create, if auto_create_analysts is on (auto_create_users
+ *      is the PORTAL switch - see ldapResolveUser()).
  *
  * Returns ['ok' => true, 'analyst_id' => int] or ['ok' => false, 'error' => string].
+ *
+ * @param array $provider  the provider row from ldapGetProvider()
+ * @param array $ldapUser  the 'user' from a successful ldapAuthenticate() (guid, username, email, name)
  */
 function ldapResolveAnalyst(PDO $conn, array $provider, array $ldapUser): array {
     $providerId = (int)$provider['id'];
@@ -622,8 +676,13 @@ function ldapResolveAnalyst(PDO $conn, array $provider, array $ldapUser): array 
         }
     } else {
         // 3) Just-in-time create.
-        if ((int)$provider['auto_create_users'] !== 1) {
-            return ['ok' => false, 'error' => 'No FreeITSM account exists for that user. Ask an administrator to create one.'];
+        // Analyst JIT has its own switch since discussion #155. Before Database
+        // Verification adds it, the old single switch still decides.
+        $autoAnalysts = array_key_exists('auto_create_analysts', $provider)
+            ? (int)$provider['auto_create_analysts']
+            : (int)($provider['auto_create_users'] ?? 0);
+        if ($autoAnalysts !== 1) {
+            return ['ok' => false, 'error' => 'No FreeITSM analyst account exists for that user. Ask an administrator to create one.'];
         }
         // No email is allowed: plenty of directories hold staff who were never
         // given a mailbox. The bind already proved who they are, so there is
@@ -680,6 +739,9 @@ function ldapResolveAnalyst(PDO $conn, array $provider, array $ldapUser): array 
  *    company vouches for its people, which is the only thing that works for a
  *    user with no address to derive a domain from — precisely the people this
  *    exists for. Domain matching is the fallback for everyone else.
+ *
+ * @param array $provider  the provider row from ldapGetProvider()
+ * @param array $ldapUser  the 'user' from a successful ldapAuthenticate() (guid, username, email, name)
  */
 function ldapResolveUser(PDO $conn, array $provider, array $ldapUser): array {
     $providerId = (int)$provider['id'];
@@ -813,6 +875,10 @@ function ldapResolveUser(PDO $conn, array $provider, array $ldapUser): array {
  * Admin "Test" helper: prove the service account can connect, bind and search.
  * Optionally also verify one real user's credentials.
  * Returns ['ok' => bool, 'error' => ?string, 'found' => ?array].
+ *
+ * @param array $provider  the provider row from ldapGetProvider()
+ * @param string $login  a sample username to sign in as; '' only tests the service bind and base DN
+ * @param string $password  the sample user's password
  */
 function ldapTestConnection(array $provider, string $login = '', string $password = ''): array {
     try {

@@ -41,6 +41,9 @@ require_once dirname(__DIR__, 3) . '/includes/services/calendar.php';
  * Parse a NAIVE local datetime ("YYYY-MM-DD HH:MM[:SS]", T separator OK,
  * date-only OK). 422s on timezone designators — this resource is naive-local
  * by design (see header).
+ *
+ * @param mixed $value  the caller-supplied datetime (untrusted), server-local with no offset; null or '' gives null
+ * @param string $field  the field or query parameter name, quoted in the 422 message
  */
 function apiParseNaiveDatetime($value, string $field): ?string {
     if ($value === null || $value === '') {
@@ -63,6 +66,7 @@ function apiParseNaiveDatetime($value, string $field): ?string {
     return $v;
 }
 
+/** The SELECT for calendar events, with the category's name and colour and the creator's name. */
 function apiCalendarEventSelect(): string {
     return "SELECT e.*, c.name AS category_name, c.color AS category_color,
                    a.full_name AS created_by_name
@@ -71,6 +75,13 @@ function apiCalendarEventSelect(): string {
             LEFT JOIN analysts a ON a.id = e.created_by";
 }
 
+/**
+ * Shapes a calendar event row for the API - times stay naive server-local, source says
+ * whether it was generated (null = typed in), and created_by is null for generated
+ * events.
+ *
+ * @param array $r  the calendar_events row as apiCalendarEventSelect() loads it, with category and creator names
+ */
 function apiSerializeCalendarEvent(array $r): array {
     return [
         'id'          => (int)$r['id'],
@@ -95,6 +106,11 @@ function apiSerializeCalendarEvent(array $r): array {
     ];
 }
 
+/**
+ * Loads one calendar event row (apiCalendarEventSelect), or answers 404 and stops.
+ *
+ * @param int $eventId  the calendar_events id
+ */
 function apiLoadCalendarEvent(PDO $conn, int $eventId): array {
     $stmt = $conn->prepare(apiCalendarEventSelect() . " WHERE e.id = ?");
     $stmt->execute([$eventId]);
@@ -175,6 +191,7 @@ function apiCalendarEventsList(PDO $conn, array $apiKey, array $params, array $b
     ]);
 }
 
+/** GET /calendar/events/{id} - one calendar event. */
 function apiCalendarEventsGet(PDO $conn, array $apiKey, array $params, array $body): void {
     apiRespond(apiSerializeCalendarEvent(apiLoadCalendarEvent($conn, $params[0])));
 }

@@ -41,7 +41,9 @@ try {
     $vcPass = $settings['vcenter_password'] ?? '';
 
     if (empty($vcServer) || empty($vcUser) || empty($vcPass)) {
-        echo json_encode(['success' => false, 'error' => 'vCenter settings not configured. Go to Settings to configure vCenter connection.']);
+        // not_configured lets the Servers page tell "no vCenter here" (normal on a
+        // Proxmox-only install) from "vCenter failed".
+        echo json_encode(['success' => false, 'not_configured' => true, 'error' => 'vCenter settings not configured. Go to Settings to configure vCenter connection.']);
         exit;
     }
 
@@ -250,6 +252,10 @@ try {
 
 /**
  * Authenticate with vCenter REST API
+ *
+ * @param mixed $baseUrl  the vCenter address with scheme and no trailing slash, e.g. https://vc.example.com
+ * @param mixed $user  the vCenter user name, sent as HTTP Basic auth
+ * @param mixed $pass  that user's password, in plain text
  */
 function vcenterAuth($baseUrl, $user, $pass) {
     $ch = curl_init($baseUrl . '/api/session');
@@ -288,6 +294,10 @@ function vcenterAuth($baseUrl, $user, $pass) {
 
 /**
  * GET request to vCenter REST API
+ *
+ * @param mixed $baseUrl  the vCenter address with scheme and no trailing slash
+ * @param mixed $path  the API path to fetch, starting with a slash; /api/ and /rest/ paths both work
+ * @param mixed $sessionToken  the session id returned by vcenterAuth()
  */
 function vcenterGet($baseUrl, $path, $sessionToken) {
     $ch = curl_init($baseUrl . $path);
@@ -326,6 +336,9 @@ function vcenterGet($baseUrl, $path, $sessionToken) {
 
 /**
  * Logout from vCenter session
+ *
+ * @param mixed $baseUrl  the vCenter address with scheme and no trailing slash
+ * @param mixed $sessionToken  the session id returned by vcenterAuth(), ended by this call
  */
 function vcenterLogout($baseUrl, $sessionToken) {
     $ch = curl_init($baseUrl . '/api/session');

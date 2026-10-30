@@ -80,6 +80,9 @@ function tr(string $key, string $english, array $params = []): string {
 // An SSO sign-in attempt that failed bounces back here with a message.
 $sso_error = $_SESSION['sso_error'] ?? null;
 unset($_SESSION['sso_error']);
+if (isset($_GET['cancel_sso'])) {
+    unset($_SESSION['sso_pending_portal'], $_SESSION['sso_portal_csrf']);
+}
 
 /**
  * Get a security setting from system_settings (returns string or null)
@@ -534,7 +537,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(tr('browser_title', 'Service Desk Login')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle(null, tr('sign_in', 'Sign In'))); ?></title>
     <style>
         * {
             margin: 0;
@@ -609,8 +612,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* …and they must not sit on top of each other. */
         body:has(.login-strip-banner[data-at="bottom"]) .login-strip-footer { bottom: 42px; }
 
+        /* Pulled up into the header's 30px bottom margin, so the lines sit
+           under the heading rather than halfway to the form. */
+        .login-taglines { margin: -14px 0 22px; }
+        .login-taglines:not(:has(.login-tagline:not([hidden]))) { display: none; }
         .login-tagline {
-            margin: -14px 0 22px;
+            margin: 0 0 4px;
             color: #555;
             font-size: 14px;
             text-align: center;
@@ -735,6 +742,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             text-decoration: none;
         }
         .portal-link a:hover { text-decoration: underline; }
+        /* "Powered by FreeITSM" - very faint and small, the last line inside the
+           card (Ed). currentColor + opacity, so it suits a dark card too. */
+        .powered-by { margin-top: 14px; text-align: center; font-size: 10.5px; letter-spacing: .3px; opacity: .38; }
+        .powered-by a { color: inherit; text-decoration: none; }
+        .powered-by a:hover { text-decoration: underline; }
 
         /* MFA challenge styles */
         .mfa-icon {
@@ -855,8 +867,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <h1><?php echo htmlspecialchars($brand && $brand['heading'] !== '' ? $brand['heading'] : tr('heading', 'ITSM Login')); ?></h1>
             <?php endif; ?>
         </div>
-        <?php if ($brand && $brand['subheading'] !== '' && !$mfa_required): ?>
-            <p class="login-tagline"><?php echo htmlspecialchars($brand['subheading']); ?></p>
+        <?php /* Both lines are always printed, empty ones hidden, so the branding
+                 preview fills in the SAME elements the page uses rather than
+                 guessing where to put new ones (GH #150). */ ?>
+        <?php if (!$mfa_required): ?>
+            <div class="login-taglines">
+                <?php foreach (['1' => 'subheading', '2' => 'subheading2'] as $n => $f): $v = $brand[$f] ?? ''; ?>
+                    <p class="login-tagline" data-tagline="<?php echo $n; ?>"<?php echo $v === '' ? ' hidden' : ''; ?>><?php echo htmlspecialchars($v); ?></p>
+                <?php endforeach; ?>
+            </div>
         <?php endif; ?>
 
         <?php if ($mfa_required): ?>
@@ -1104,6 +1123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="portal-link">
             <a href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>self-service/login.php"><?php echo htmlspecialchars(tr('portal_link', 'Go to the Self-Service Portal')); ?></a>
         </div>
+        <div class="powered-by"><a href="https://freeitsm.co.uk" target="_blank" rel="noopener"><?php echo htmlspecialchars(tr('powered_by', 'Powered by FreeITSM')); ?></a></div>
     </div>
 <?php if ($brand && $brand['footer_text'] !== ''): ?>
     <div class="login-strip login-strip-footer"><?php echo htmlspecialchars($brand['footer_text']); ?></div>

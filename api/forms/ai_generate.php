@@ -40,6 +40,13 @@ header('Connection: keep-alive');
 
 set_time_limit(0);
 
+/**
+ * Sends one server-sent event (an event name and a JSON data line) and flushes it to the
+ * browser straight away.
+ *
+ * @param string $event  the event name the browser listens for, e.g. 'text', 'usage' or 'error'
+ * @param array $data  the payload, sent as one JSON line
+ */
 function sse_send(string $event, array $data): void
 {
     echo "event: {$event}\n";
@@ -52,6 +59,9 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('forms');
+requireModuleWriteJson('forms');   // Read only access (#180) changes nothing here
+require_once '../../includes/rbac.php';
+requireActionJson(Cap::FORMS_DESIGN);   // designing - #180; module access is enough until Forms → Settings → Access restricts it
 
 $rawBody = file_get_contents('php://input');
 $input   = json_decode($rawBody, true);

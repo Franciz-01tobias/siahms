@@ -50,7 +50,7 @@ return [
         'delete_failed' => 'हटाने में विफल: {message}',
     ],
     'editor' => [
-        'browser_title' => 'FreeITSM — नेटवर्क डायग्राम',
+        'browser_title' => 'नेटवर्क डायग्राम',
         'browser_title_named' => 'FreeITSM — {title}',
         'back' => '← सभी डायग्राम',
         'loading' => 'लोड हो रहा है…',

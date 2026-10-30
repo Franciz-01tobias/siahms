@@ -16,7 +16,9 @@ $needsRecorder = true;
 
 // The rich-text editor, loaded only here — no other portal page needs 500KB of
 // editor. Bundled locally, so no third-party CDN is involved.
-$pageHead = '<script src="../assets/js/tinymce/tinymce.min.js"></script>';
+$pageHead = '<script src="../assets/js/tinymce/tinymce.min.js"></script>'
+          . '<link rel="stylesheet" href="../assets/css/ticket-fields.css?v=2">'
+          . '<script src="../assets/js/ticket-fields.js?v=2"></script>';
 
 // Page-specific styling only — shared chrome lives in self-service.css.
 $pageStyles = <<<'CSS'
@@ -75,7 +77,7 @@ $pageStyles = <<<'CSS'
         body.portal-app .portal-layout {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 48px);   /* 48px = the portal header */
+            height: calc(100vh - var(--ss-chrome, 48px));   /* the bar, plus the logo band if shown - see self-service.css */
             padding: 20px 24px;
             box-sizing: border-box;
             overflow: hidden;
@@ -121,7 +123,10 @@ $pageStyles = <<<'CSS'
         .compose-body {
             flex: 1;
             display: grid;
-            grid-template-columns: 1fr 300px;
+            /* 340, not 300: the panel also carries 32px of padding (the gap to its
+               border, and room for its own scrollbar), and at 300 the selects and
+               the Confidential note were cramped. The editor takes what is left. */
+            grid-template-columns: 1fr 340px;
             grid-template-rows: auto 1fr;   /* label sized to content; editor takes the rest */
             gap: 18px;
             align-items: stretch;
@@ -152,6 +157,9 @@ $pageStyles = <<<'CSS'
         .compose-side {
             border-left: 1px solid var(--border, #e5e7eb);
             padding-left: 18px;
+            /* Room for the panel's own scrollbar, so the selects are not drawn
+               hard against it. */
+            padding-right: 14px;
             overflow-y: auto;
             min-height: 0;
         }
@@ -205,6 +213,7 @@ $pageStyles = <<<'CSS'
                 border-left: none;
                 border-top: 1px solid var(--border, #e5e7eb);
                 padding-left: 0;
+                padding-right: 0;   /* stacked below the editor it does not scroll on its own */
                 padding-top: 16px;
                 max-height: none;
             }
@@ -283,6 +292,25 @@ $pageStyles = <<<'CSS'
             margin-bottom: 20px;
         }
         /* Hint under a field — introduced for the equipment picker (#57). */
+        /* Discussion #62: the Confidential tick. */
+        .confidential-choice { padding: 10px 12px; border: 1px solid var(--border, #e0e0e0); border-radius: 8px; background: var(--surface-2, #f7f9fa); }
+        /* ⚠️ Scoped under .form-group.confidential-choice on purpose: the general
+           `.form-group label { display:block }` and `.form-group input { width:100%;
+           padding:10px 12px }` further down are at least as specific, and drew the
+           box as a full-width block on its own line ABOVE its label. */
+        /* The shared toggle switch (inbox.css, #453), but the other way up: its
+           standard layout puts the caption ABOVE the switch; here the switch comes
+           first and "This is confidential" sits under it. Red when on - it is the
+           one setting on this form that changes who can read the ticket. */
+        .form-group.confidential-choice .confidential-label {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+            font-weight: 600; margin: 0; cursor: pointer;
+            --toggle-accent: var(--danger-accent, #c62828);
+        }
+        .form-group.confidential-choice .confidential-label .toggle-switch { order: 0; }
+        .form-group.confidential-choice .confidential-label .toggle-switch input {
+            width: 0; height: 0; padding: 0; margin: 0; border: 0;   /* undo `.form-group input` */
+        }
         .field-hint {
             margin-top: 5px;
             font-size: 12px;
@@ -515,6 +543,7 @@ let attachments = [];
     document.addEventListener('DOMContentLoaded', function() {
         loadMailboxes();
         loadTicketCategories();
+        loadTicketFields();
         loadMyEquipment();
         initDropzone();
         initDeflection();
@@ -848,7 +877,13 @@ let attachments = [];
                     select.value = data.mailboxes[0].id;
                 }
             } else {
-                select.innerHTML = '<option value="">' + escapeHtml(window.t('self-service.new_ticket.mailbox_none')) + '</option>';
+                // Nothing to choose (GH #172: a user with no company sees only
+                // shared mailboxes, and there may be none). Hide the field rather
+                // than leave a required one that can never be filled - that would
+                // stop the person raising a ticket at all.
+                select.innerHTML = '<option value=""></option>';
+                select.required = false;
+                select.closest('.form-group').style.display = 'none';
             }
         } catch (err) {
             select.innerHTML = '<option value="">' + escapeHtml(window.t('self-service.new_ticket.mailbox_failed')) + '</option>';
@@ -879,6 +914,38 @@ let attachments = [];
             group.hidden = false;
         } catch (err) {
             /* left hidden on purpose - see above */
+        }
+    }
+
+    // Ticket type and custom fields (#179). The server decides both: which types
+    // are offered (none, and no picker, when the choice would change nothing) and
+    // which fields the requester is asked for the chosen type.
+    let ticketFieldDefs = [];
+    async function loadTicketFields() {
+        const typeSel = document.getElementById('ticketType');
+        const box = document.getElementById('ticketCustomFields');
+        if (!typeSel || !box || !window.TicketFields) return;
+        const kept = TicketFields.collect(box);
+        try {
+            const resp = await fetch('../api/self-service/get_ticket_fields.php?type_id=' + encodeURIComponent(typeSel.value || ''));
+            const data = await resp.json();
+            if (!data.success) return;
+            // The picker is filled once; later calls only redraw the fields.
+            if (data.types.length && typeSel.options.length <= 1) {
+                data.types.forEach(tp => {
+                    const opt = document.createElement('option');
+                    opt.value = tp.id;
+                    opt.textContent = tp.name;
+                    typeSel.appendChild(opt);
+                });
+                document.getElementById('ticketTypeGroup').hidden = false;
+            }
+            ticketFieldDefs = data.fields || [];
+            box.innerHTML = TicketFields.render(ticketFieldDefs, { variant: 'form', required: true });
+            // Answers already given survive a change of type, for the fields it still has.
+            box.querySelectorAll('[data-tf-key]').forEach(el => { if (kept[el.dataset.tfKey] !== undefined) el.value = kept[el.dataset.tfKey]; });
+        } catch (err) {
+            /* the form still works without them; the server checks anything required */
         }
     }
 
@@ -923,11 +990,17 @@ let attachments = [];
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mailbox_id: document.getElementById('mailbox').value || null,
+                    // Discussion #62 - raise-only, see api/self-service/create_ticket.php.
+                    confidential: document.getElementById('confidential').checked ? 1 : 0,
                     subject: document.getElementById('subject').value.trim(),
                     priority: document.getElementById('priority').value,
                     // Optional. Re-validated server-side against the portal-visible
                     // list - a narrowed dropdown is not a check.
                     category_id: (document.getElementById('ticketCategory') || {}).value || null,
+                    // #179. Re-checked server-side: a type this company offers, and
+                    // only the fields the requester is asked.
+                    ticket_type_id: (document.getElementById('ticketType') || {}).value || null,
+                    custom_fields: window.TicketFields ? TicketFields.collect(document.getElementById('ticketCustomFields')) : {},
                     // The editor holds the content, not the textarea it replaced.
                     // Falls back to the textarea if TinyMCE failed to load, so the
                     // form still works rather than silently posting nothing.
@@ -1034,6 +1107,16 @@ require __DIR__ . '/includes/header.php';
                         <option value=""><?php echo htmlspecialchars(t('self-service.new_ticket.category_none')); ?></option>
                     </select>
                 </div>
+                <?php /* Ticket type and custom fields (#179). The type picker is
+                         revealed only when choosing one changes what is asked;
+                         the fields are drawn by loadTicketFields(). */ ?>
+                <div class="form-group" id="ticketTypeGroup" hidden>
+                    <label for="ticketType"><?php echo htmlspecialchars(t('self-service.new_ticket.ticket_type')); ?></label>
+                    <select id="ticketType" onchange="loadTicketFields()">
+                        <option value=""><?php echo htmlspecialchars(t('self-service.new_ticket.ticket_type_none')); ?></option>
+                    </select>
+                </div>
+                <div id="ticketCustomFields"></div>
                 <div class="form-group">
                     <label for="priority"><?php echo htmlspecialchars(t('self-service.new_ticket.priority')); ?></label>
                     <select id="priority">
@@ -1058,6 +1141,20 @@ require __DIR__ . '/includes/header.php';
                         <option value="<?php echo htmlspecialchars($p['name']); ?>"<?php echo $sel ? ' selected' : ''; ?>><?php echo htmlspecialchars($p['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+                <?php /* Discussion #62: the requester's own Confidential tick. It can only
+                         make a ticket confidential, never the reverse - a department or
+                         mailbox set to confidential makes it so whatever is ticked here.
+                         ⚠️ Kept HIGH in this panel, above equipment and attachments: the
+                         panel scrolls, and at the bottom it sat below the fold, which is
+                         the last place for something a person in a difficult situation
+                         needs to notice. */ ?>
+                <div class="form-group confidential-choice">
+                    <label class="toggle-label confidential-label">
+                        <span class="toggle-switch"><input type="checkbox" id="confidential"><span class="toggle-slider"></span></span>
+                        <span><?php echo htmlspecialchars(t('self-service.new_ticket.confidential')); ?></span>
+                    </label>
+                    <div class="field-hint"><?php echo htmlspecialchars(t('self-service.new_ticket.confidential_hint')); ?></div>
                 </div>
                 <?php /* Equipment (discussion #57). Hidden entirely unless the user
                          actually holds something — an empty dropdown is a question the

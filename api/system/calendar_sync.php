@@ -46,6 +46,8 @@ $action = ($_SERVER['REQUEST_METHOD'] === 'POST') ? ($_POST['action'] ?? '') : '
 
 /**
  * How many events and analysts depend on one connection.
+ *
+ * @param int $connectionId  the calendar_connections id
  * @return array{mapped:int, pushing:int}
  */
 function csUsage(PDO $conn, int $connectionId): array
@@ -65,6 +67,8 @@ function csUsage(PDO $conn, int $connectionId): array
  * connection being deleted all leave them somewhere the new state cannot reach.
  * Only this connection's analysts are touched; everybody on another connection
  * carries on. Nobody's feed link is affected.
+ *
+ * @param array $existing  the calendar_connections row as it stands before the change (id and provider are read)
  */
 function csTakeBack(PDO $conn, array $existing): void
 {

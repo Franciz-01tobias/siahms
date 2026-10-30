@@ -16,6 +16,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('changes');
+requireModuleWriteJson('changes');   // Read only access (#180) changes nothing here
 
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 $changeId = (int)($input['id'] ?? 0);
@@ -29,7 +30,7 @@ try {
     ChangesService::deleteChange($conn, ActorContext::fromSession($conn), $changeId);
     echo json_encode(['success' => true, 'message' => 'Change deleted']);
 } catch (ServiceError $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage(), 'code' => $e->errorCode]);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }

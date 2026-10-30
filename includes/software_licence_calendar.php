@@ -36,6 +36,12 @@ require_once __DIR__ . '/asset_warranty_calendar.php';   // awcGetSetting/awcCol
 
 if (!function_exists('syncSoftwareLicenceCalendar')) {
     /**
+     * Rebuilds the software renewal entries in the calendar from the active licences'
+     * renewal dates.
+     *
+     * Deletes every entry from source 'software_renewal' first, and adds new ones only when
+     * the renewal surface includes the calendar.
+     *
      * @return array{success:bool, synced?:int, error?:string}
      */
     function syncSoftwareLicenceCalendar(PDO $conn): array

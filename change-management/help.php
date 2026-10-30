@@ -27,11 +27,11 @@ $translationNamespaces = ['common', 'change-management'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('change-management.page.help')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('changes', t('change-management.nav.help'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/change-management.css?v=7">
-    <link rel="stylesheet" href="../assets/css/help.css?v=3">
+    <link rel="stylesheet" href="../assets/css/help.css?v=6">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
         body {
@@ -41,7 +41,7 @@ $translationNamespaces = ['common', 'change-management'];
             --on-accent:    var(--cm-on-accent);
         }
     </style>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -85,6 +85,10 @@ $translationNamespaces = ['common', 'change-management'];
             <a href="#tips" class="help-nav-link" data-section="tips">
                 <span class="help-nav-num">8</span>
                 <?php echo htmlspecialchars(t('change-management.help.nav_tips')); ?>
+            </a>
+            <a href="#evidence" class="help-nav-link" data-section="evidence">
+                <span class="help-nav-num">9</span>
+                <?php echo htmlspecialchars(t('change-management.help.nav_evidence')); ?>
             </a>
         </div>
 
@@ -391,6 +395,22 @@ $translationNamespaces = ['common', 'change-management'];
                         </div>
                     </div>
                 </div>
+
+                <!-- Section 9: Approvals and evidence (#180) -->
+                <div class="help-section" id="evidence">
+                    <div class="help-section-header">
+                        <span class="help-section-num">9</span>
+                        <h3><?php echo htmlspecialchars(t('change-management.help.ev_heading')); ?></h3>
+                    </div>
+                    <p><?php echo htmlspecialchars(t('change-management.help.ev_intro')); ?></p>
+                    <div class="help-cards">
+                        <?php foreach (['record', 'rounds', 'history', 'export', 'templates', 'access'] as $ev): ?>
+                        <div class="help-card row">
+                            <div><strong><?php echo htmlspecialchars(t('change-management.help.ev_' . $ev)); ?></strong><br><?php echo htmlspecialchars(t('change-management.help.ev_' . $ev . '_desc')); ?></div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -438,6 +458,6 @@ $translationNamespaces = ['common', 'change-management'];
             });
         });
     </script>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -36,9 +36,9 @@ $translationNamespaces = ['common', 'change-management'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('change-management.page.settings')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('changes', t('change-management.nav.settings'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         .container {
             height: calc(100vh - 48px);
@@ -242,6 +242,26 @@ $translationNamespaces = ['common', 'change-management'];
         .lookup-table { width: 100%; border-collapse: collapse; }
         .lookup-table th, .lookup-table td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border-soft, #f0f0f0); font-size: 14px; }
         .lookup-table th { font-weight: 600; color: var(--text-muted, #666); background: var(--surface-2, #fafafa); }
+        .approval-rules { max-width: 760px; }
+        .ar-group { border: 1px solid var(--border, #e0e0e0); border-radius: 8px; padding: 14px 16px; margin: 0 0 14px 0; }
+        .ar-group legend { font-weight: 600; padding: 0 6px; color: var(--text, #333); }
+        .ar-choice { display: block; padding: 8px 10px; border: 1px solid var(--border-soft, #eee); border-radius: 6px; margin-bottom: 8px; cursor: pointer; }
+        .ar-help { display: block; font-size: 12px; color: var(--text-muted, #777); margin-top: 4px; }
+        .ar-choice .ar-help { margin-left: 22px; }
+        .ar-sub { font-size: 13px; font-weight: 500; margin: 12px 0 6px; color: var(--text, #333); }
+        .ar-ticks { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+        .ar-ticks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 8px; }
+        .ar-warning { margin-top: 8px; padding: 10px 12px; border-radius: 6px; background: var(--warning-bg, #fff8e1); border: 1px solid var(--warning-border, #ffcc80); color: var(--warning-text, #8a5a00); font-size: 13px; }
+        .ar-enforced { display: none; font-size: 12px; color: var(--warning-text, #8a5a00); margin-top: 6px; }
+        .approval-rules.is-enforce .ar-record-only select { opacity: .5; pointer-events: none; }
+        .approval-rules.is-enforce .ar-record-only .ar-enforced { display: block; }
+        .ar-actions { margin-top: 6px; }
+        .tpl-body { padding: 16px 20px; max-height: 70vh; overflow-y: auto; }
+        .tpl-body textarea, .tpl-body input[type=text] { width: 100%; box-sizing: border-box; }
+        .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 12px; }
+        .tpl-version { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border-soft, #eee); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .tpl-version input { flex: 1; min-width: 200px; }
+        .stage-unset { display: inline-block; padding: 2px 8px; border-radius: 10px; background: var(--warning-bg, #fff8e1); border: 1px solid var(--warning-border, #ffcc80); color: var(--warning-text, #8a5a00); font-size: 11px; font-weight: 600; cursor: help; }
         .badge-yes { display: inline-block; padding: 2px 8px; border-radius: 10px; background: var(--cm-accent-soft, #e0f2f1); color: var(--cm-accent-hover, #00695c); font-size: 11px; font-weight: 600; }
         .badge-no  { color: var(--text-faint, #999); }
         /* Active/Inactive uses the shared .status-badge / .status-active / .status-inactive classes from inbox.css (canonical green/red). */
@@ -267,7 +287,7 @@ $translationNamespaces = ['common', 'change-management'];
         .modal-header { padding: 0; border-bottom: none; margin-bottom: 20px; font-size: 20px; font-weight: 600; color: var(--text, #333); }
         .modal-actions { margin-top: 20px; }
     </style>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -306,8 +326,8 @@ $translationNamespaces = ['common', 'change-management'];
             </div>
             <p style="color: var(--text-muted, #666); margin-bottom: 16px;"><?php echo t('change-management.settings.statuses_intro'); ?></p>
             <table class="lookup-table">
-                <thead><tr><th><?php echo htmlspecialchars(t('change-management.settings.col_name')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_colour')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_closed')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_default')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_order')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_status')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_actions')); ?></th></tr></thead>
-                <tbody id="statuses-list"><tr><td colspan="7" style="text-align:center;"><?php echo htmlspecialchars(t('change-management.settings.loading')); ?></td></tr></tbody>
+                <thead><tr><th><?php echo htmlspecialchars(t('change-management.settings.col_name')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_stage')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_colour')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_closed')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_default')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_order')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_status')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_actions')); ?></th></tr></thead>
+                <tbody id="statuses-list"><tr><td colspan="8" style="text-align:center;"><?php echo htmlspecialchars(t('change-management.settings.loading')); ?></td></tr></tbody>
             </table>
         </div>
 
@@ -338,8 +358,8 @@ $translationNamespaces = ['common', 'change-management'];
             </div>
             <p style="color: var(--text-muted, #666); margin-bottom: 16px;"><?php echo htmlspecialchars(t('change-management.settings.types_intro')); ?></p>
             <table class="lookup-table">
-                <thead><tr><th><?php echo htmlspecialchars(t('change-management.settings.col_name')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_colour')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_default')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_order')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_status')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_actions')); ?></th></tr></thead>
-                <tbody id="types-list"><tr><td colspan="6" style="text-align:center;"><?php echo htmlspecialchars(t('change-management.settings.loading')); ?></td></tr></tbody>
+                <thead><tr><th><?php echo htmlspecialchars(t('change-management.settings.col_name')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_route')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_colour')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_default')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_order')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_status')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_actions')); ?></th></tr></thead>
+                <tbody id="types-list"><tr><td colspan="7" style="text-align:center;"><?php echo htmlspecialchars(t('change-management.settings.loading')); ?></td></tr></tbody>
             </table>
         </div>
 
@@ -360,6 +380,143 @@ $translationNamespaces = ['common', 'change-management'];
         </div>
 
         <!-- Left panel tab — per-analyst preference -->
+        <?php endif; ?>
+
+        <?php if (settingsTabVisible($visibleTabs, 'templates')): ?>
+        <!-- Standard-change templates (#180 §8) - get_templates / save_template / template_action. -->
+        <div class="tab-content<?php echo $activeTabId === 'templates' ? ' active' : ''; ?>" id="templates-tab" data-capability="<?php echo Cap::CHANGES_TEMPLATES; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('change-management.templates.heading')); ?></h2>
+                <button class="add-btn" onclick="openTemplateEditor(null)"><?php echo htmlspecialchars(t('change-management.templates.new')); ?></button>
+            </div>
+            <p style="color: var(--text-muted, #666); margin-bottom: 12px;"><?php echo htmlspecialchars(t('change-management.templates.intro')); ?></p>
+            <div id="tplOffNote" class="ar-warning" style="display:none; margin-bottom: 12px;"><?php echo htmlspecialchars(t('change-management.templates.off_note')); ?></div>
+            <table class="lookup-table">
+                <thead><tr><th><?php echo htmlspecialchars(t('change-management.templates.col_name')); ?></th><th><?php echo htmlspecialchars(t('change-management.templates.col_state')); ?></th><th><?php echo htmlspecialchars(t('change-management.settings.col_actions')); ?></th></tr></thead>
+                <tbody id="templates-list"><tr><td colspan="3" style="text-align:center;"><?php echo htmlspecialchars(t('change-management.settings.loading')); ?></td></tr></tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+        <?php if (settingsTabVisible($visibleTabs, 'approvals')): ?>
+        <!-- Approval rules (#180) - api/change-management/get|save_approval_settings.php.
+             Every choice here is a dropdown or a tick; the defaults are today's behaviour. -->
+        <div class="tab-content<?php echo $activeTabId === 'approvals' ? ' active' : ''; ?>" id="approvals-tab" data-capability="<?php echo Cap::CHANGES_APPROVALS; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('change-management.approval_settings.heading')); ?></h2>
+            </div>
+            <p style="color: var(--text-muted, #666); margin-bottom: 16px;"><?php echo htmlspecialchars(t('change-management.approval_settings.intro')); ?></p>
+
+            <form id="approvalRulesForm" class="approval-rules" autocomplete="off" onsubmit="event.preventDefault(); saveApprovalRules();">
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.mode')); ?></legend>
+                    <label class="ar-choice"><input type="radio" name="arMode" value="record" onchange="syncApprovalRules()">
+                        <strong><?php echo htmlspecialchars(t('change-management.approval_settings.mode_record')); ?></strong>
+                        <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.mode_record_help')); ?></span></label>
+                    <label class="ar-choice"><input type="radio" name="arMode" value="enforce" onchange="syncApprovalRules()">
+                        <strong><?php echo htmlspecialchars(t('change-management.approval_settings.mode_enforce')); ?></strong>
+                        <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.mode_enforce_help')); ?></span></label>
+                    <div id="arEnforceBlockers" class="ar-warning" style="display:none;"></div>
+                </fieldset>
+
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.own')); ?></legend>
+                    <select id="arOwnAllowed">
+                        <option value="0"><?php echo htmlspecialchars(t('change-management.approval_settings.own_not_allowed')); ?></option>
+                        <option value="1"><?php echo htmlspecialchars(t('change-management.approval_settings.own_allowed')); ?></option>
+                    </select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.own_help')); ?></span>
+                    <div class="ar-sub"><?php echo htmlspecialchars(t('change-management.approval_settings.own_people')); ?></div>
+                    <div class="ar-ticks">
+                        <?php foreach (['requester', 'assignee', 'creator'] as $who): ?>
+                        <label><input type="checkbox" name="arOwnPeople" value="<?php echo $who; ?>"> <?php echo htmlspecialchars(t('change-management.approval_settings.own_' . $who)); ?></label>
+                        <?php endforeach; ?>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.override')); ?></legend>
+                    <select id="arOverride">
+                        <option value="0"><?php echo htmlspecialchars(t('change-management.approval_settings.override_off')); ?></option>
+                        <option value="1"><?php echo htmlspecialchars(t('change-management.approval_settings.override_on')); ?></option>
+                    </select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.override_help')); ?></span>
+                </fieldset>
+
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.material')); ?></legend>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.material_help')); ?></span>
+                    <div class="ar-ticks ar-ticks-grid">
+                        <?php require_once __DIR__ . '/../../includes/changes/approvals.php'; foreach (array_keys(CHANGE_MATERIAL_CHOICES) as $mk): ?>
+                        <label><input type="checkbox" name="arMaterial" value="<?php echo $mk; ?>"> <?php echo htmlspecialchars(t('change-management.approval_settings.field_' . $mk)); ?></label>
+                        <?php endforeach; ?>
+                    </div>
+                </fieldset>
+
+                <fieldset class="ar-group ar-record-only">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.edit_after')); ?></legend>
+                    <select id="arEditAfter">
+                        <option value="keep"><?php echo htmlspecialchars(t('change-management.approval_settings.edit_after_keep')); ?></option>
+                        <option value="withdraw"><?php echo htmlspecialchars(t('change-management.approval_settings.edit_after_withdraw')); ?></option>
+                    </select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.edit_after_help')); ?></span>
+                    <span class="ar-enforced"><?php echo htmlspecialchars(t('change-management.approval_settings.enforce_fixes_this')); ?></span>
+                </fieldset>
+
+                <fieldset class="ar-group ar-record-only">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.stale')); ?></legend>
+                    <select id="arStaleVote">
+                        <option value="record"><?php echo htmlspecialchars(t('change-management.approval_settings.stale_record')); ?></option>
+                        <option value="refuse"><?php echo htmlspecialchars(t('change-management.approval_settings.stale_refuse')); ?></option>
+                    </select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.stale_help')); ?></span>
+                    <span class="ar-enforced"><?php echo htmlspecialchars(t('change-management.approval_settings.enforce_fixes_this')); ?></span>
+                </fieldset>
+
+                <fieldset class="ar-group ar-record-only">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.delete')); ?></legend>
+                    <select id="arDeleteSubmitted">
+                        <option value="allowed"><?php echo htmlspecialchars(t('change-management.approval_settings.delete_allowed')); ?></option>
+                        <option value="refuse"><?php echo htmlspecialchars(t('change-management.approval_settings.delete_refuse')); ?></option>
+                    </select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.delete_help')); ?></span>
+                    <span class="ar-enforced"><?php echo htmlspecialchars(t('change-management.approval_settings.enforce_fixes_this')); ?></span>
+                </fieldset>
+
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.reject')); ?></legend>
+                    <select id="arRejectStatus"></select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.reject_help')); ?></span>
+                </fieldset>
+
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.cancel')); ?></legend>
+                    <select id="arCancelStatus"></select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.cancel_help')); ?></span>
+                </fieldset>
+
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.templates')); ?></legend>
+                    <select id="arTemplates">
+                        <option value="0"><?php echo htmlspecialchars(t('change-management.approval_settings.templates_off')); ?></option>
+                        <option value="1"><?php echo htmlspecialchars(t('change-management.approval_settings.templates_on')); ?></option>
+                    </select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.templates_help')); ?></span>
+                </fieldset>
+
+                <fieldset class="ar-group">
+                    <legend><?php echo htmlspecialchars(t('change-management.approval_settings.choose')); ?></legend>
+                    <select id="arChooseApprovers">
+                        <option value="anyone"><?php echo htmlspecialchars(t('change-management.approval_settings.choose_anyone')); ?></option>
+                        <option value="permission"><?php echo htmlspecialchars(t('change-management.approval_settings.choose_permission')); ?></option>
+                    </select>
+                    <span class="ar-help"><?php echo htmlspecialchars(t('change-management.approval_settings.choose_help')); ?></span>
+                </fieldset>
+
+                <div class="ar-actions">
+                    <button type="submit" class="btn btn-primary"><?php echo htmlspecialchars(t('change-management.settings.modal_save')); ?></button>
+                </div>
+            </form>
+        </div>
         <?php endif; ?>
 
         <!-- Left panel — a per-analyst display preference, so it declares no capability. -->
@@ -410,6 +567,26 @@ $translationNamespaces = ['common', 'change-management'];
                     <span class="help"><?php echo htmlspecialchars(t('change-management.settings.modal_colour_help')); ?></span>
                 </div>
 
+                <div class="form-group" id="lookupItemStageGroup" style="display: none;">
+                    <label for="lookupItemStage"><?php echo htmlspecialchars(t('change-management.settings.modal_stage')); ?></label>
+                    <select id="lookupItemStage" onchange="syncClosedToStage()">
+                        <option value=""><?php echo htmlspecialchars(t('change-management.stage.none')); ?></option>
+                        <?php require_once __DIR__ . '/../../includes/changes/approvals.php'; foreach (CHANGE_STAGES as $st): ?>
+                        <option value="<?php echo $st; ?>"><?php echo htmlspecialchars(t('change-management.stage.' . $st)); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <span class="help"><?php echo htmlspecialchars(t('change-management.settings.modal_stage_help')); ?></span>
+                </div>
+
+                <div class="form-group" id="lookupItemRouteGroup" style="display: none;">
+                    <label for="lookupItemRoute"><?php echo htmlspecialchars(t('change-management.settings.modal_route')); ?></label>
+                    <select id="lookupItemRoute">
+                        <option value="review"><?php echo htmlspecialchars(t('change-management.settings.route_review')); ?></option>
+                        <option value="emergency"><?php echo htmlspecialchars(t('change-management.settings.route_emergency')); ?></option>
+                    </select>
+                    <span class="help"><?php echo htmlspecialchars(t('change-management.settings.modal_route_help')); ?></span>
+                </div>
+
                 <div class="form-group" id="lookupItemClosedGroup" style="display: none;">
                     <label><input type="checkbox" id="lookupItemClosed"> <?php echo htmlspecialchars(t('change-management.settings.modal_closed')); ?></label>
                     <span class="help"><?php echo htmlspecialchars(t('change-management.settings.modal_closed_help')); ?></span>
@@ -440,6 +617,49 @@ $translationNamespaces = ['common', 'change-management'];
                     <button type="submit" class="btn btn-primary"><?php echo htmlspecialchars(t('change-management.settings.modal_save')); ?></button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Template editor (#180 §8). A .modal-content, so mobile.css LAYER 3 makes it a sheet. -->
+    <div class="modal" id="templateModal">
+        <div class="modal-content" style="max-width: 820px;">
+            <div class="modal-header" id="tplTitle"></div>
+            <div class="tpl-body">
+                <input type="hidden" id="tplId">
+                <div class="form-group"><label for="tplName"><?php echo htmlspecialchars(t('change-management.templates.name')); ?></label><input type="text" id="tplName"></div>
+                <div class="form-group"><label for="tplScopeUse"><?php echo htmlspecialchars(t('change-management.templates.scope_use')); ?></label><textarea id="tplScopeUse" rows="2"></textarea></div>
+                <div class="form-group"><label for="tplScopeNot"><?php echo htmlspecialchars(t('change-management.templates.scope_not')); ?></label><textarea id="tplScopeNot" rows="2"></textarea></div>
+                <div class="tpl-grid">
+                    <div class="form-group"><label for="tplType"><?php echo htmlspecialchars(t('change-management.approval_settings.field_change_type_id')); ?></label><select id="tplType"></select></div>
+                    <div class="form-group"><label for="tplPriority"><?php echo htmlspecialchars(t('change-management.approval_settings.field_priority_id')); ?></label><select id="tplPriority"></select></div>
+                    <div class="form-group"><label for="tplImpact"><?php echo htmlspecialchars(t('change-management.approval_settings.field_impact_id')); ?></label><select id="tplImpact"></select></div>
+                    <div class="form-group"><label for="tplRiskL"><?php echo htmlspecialchars(t('change-management.approval_settings.field_risk_likelihood')); ?></label><select id="tplRiskL"><option value=""></option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+                    <div class="form-group"><label for="tplRiskI"><?php echo htmlspecialchars(t('change-management.approval_settings.field_risk_impact_score')); ?></label><select id="tplRiskI"><option value=""></option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+                </div>
+                <?php foreach (['description', 'reason_for_change', 'risk_evaluation', 'test_plan', 'rollback_plan'] as $lf): ?>
+                <div class="form-group"><label for="tpl_<?php echo $lf; ?>"><?php echo htmlspecialchars(t('change-management.revisions.field.' . $lf)); ?></label><textarea id="tpl_<?php echo $lf; ?>" rows="3"></textarea></div>
+                <?php endforeach; ?>
+                <div class="form-group">
+                    <label><?php echo htmlspecialchars(t('change-management.templates.open_fields')); ?></label>
+                    <span class="help"><?php echo htmlspecialchars(t('change-management.templates.open_help')); ?></span>
+                    <div class="ar-ticks ar-ticks-grid" id="tplOpen"></div>
+                </div>
+                <div class="form-group">
+                    <label><?php echo htmlspecialchars(t('change-management.templates.teams')); ?></label>
+                    <span class="help"><?php echo htmlspecialchars(t('change-management.templates.teams_help')); ?></span>
+                    <div class="ar-ticks" id="tplTeams"></div>
+                </div>
+                <div class="form-group" id="tplVersionsGroup">
+                    <label><?php echo htmlspecialchars(t('change-management.templates.versions')); ?></label>
+                    <div id="tplVersions"></div>
+                </div>
+                <span class="help"><?php echo htmlspecialchars(t('change-management.templates.submit_help')); ?></span>
+            </div>
+            <div class="modal-actions" style="padding: 12px 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeTemplateEditor()"><?php echo htmlspecialchars(t('change-management.templates.close')); ?></button>
+                <button type="button" class="btn btn-secondary" id="tplSaveBtn" onclick="saveTemplate(false)"><?php echo htmlspecialchars(t('change-management.templates.save')); ?></button>
+                <button type="button" class="btn btn-primary" id="tplSubmitBtn" onclick="saveTemplate(true)"><?php echo htmlspecialchars(t('change-management.templates.submit')); ?></button>
+            </div>
         </div>
     </div>
 
@@ -506,7 +726,202 @@ $translationNamespaces = ['common', 'change-management'];
         document.addEventListener('DOMContentLoaded', function() {
             loadSettings();
             loadLookups();
+            if (document.getElementById('approvalRulesForm')) loadApprovalRules();
+            if (document.getElementById('templates-list')) loadTemplates();
         });
+
+        // ============================================================
+        // Approval rules (#180) - get|save_approval_settings.php
+        // ============================================================
+        async function loadApprovalRules() {
+            try {
+                const res = await fetch(API_BASE + 'get_approval_settings.php');
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || window.t('change-management.toast.save_failed'), 'error'); return; }
+                const s = data.settings;
+                document.querySelectorAll('input[name="arMode"]').forEach(i => { i.checked = (i.value === s.mode); });
+                document.getElementById('arOwnAllowed').value = s.own_allowed ? '1' : '0';
+                document.querySelectorAll('input[name="arOwnPeople"]').forEach(i => { i.checked = s.own_people.includes(i.value); });
+                document.getElementById('arOverride').value = s.override ? '1' : '0';
+                document.querySelectorAll('input[name="arMaterial"]').forEach(i => { i.checked = s.material.includes(i.value); });
+                document.getElementById('arEditAfter').value = s.edit_after;
+                document.getElementById('arStaleVote').value = s.stale_vote;
+                document.getElementById('arDeleteSubmitted').value = s.delete_submitted;
+                document.getElementById('arChooseApprovers').value = s.choose_approvers;
+                document.getElementById('arTemplates').value = s.templates_enabled ? '1' : '0';
+                const rej = document.getElementById('arRejectStatus');
+                rej.innerHTML = `<option value="">${escapeHtml(window.t('change-management.approval_settings.reject_default'))}</option>`
+                    + data.statuses.filter(st => st.is_active && (st.stage === 'draft' || st.stage === 'stopped'))
+                        .map(st => `<option value="${st.id}">${escapeHtml(st.name)}</option>`).join('');
+                rej.value = s.reject_status_id ? String(s.reject_status_id) : '';
+                const can = document.getElementById('arCancelStatus');
+                can.innerHTML = `<option value="">${escapeHtml(window.t('change-management.approval_settings.cancel_default'))}</option>`
+                    + data.statuses.filter(st => st.is_active && st.stage === 'stopped')
+                        .map(st => `<option value="${st.id}">${escapeHtml(st.name)}</option>`).join('');
+                can.value = s.cancel_status_id ? String(s.cancel_status_id) : '';
+                const blockers = data.enforce_blockers || [];
+                const box = document.getElementById('arEnforceBlockers');
+                box.style.display = blockers.length ? '' : 'none';
+                box.textContent = blockers.length ? window.t('change-management.approval_settings.enforce_blocked', { statuses: blockers.join(', ') }) : '';
+                syncApprovalRules();
+            } catch (e) { console.error(e); }
+        }
+
+        // ============================================================
+        // Standard-change templates (#180 §8)
+        // ============================================================
+        let TPL = { templates: [], teams: [], fields: [], can_write: false, can_approve: false, me: 0 };
+        const TT = (k, p) => window.t('change-management.templates.' + k, p);
+
+        async function loadTemplates() {
+            try {
+                const res = await fetch(API_BASE + 'get_templates.php');
+                const data = await res.json();
+                if (!data.success) return;
+                TPL = data;
+                document.getElementById('tplOffNote').style.display = data.enabled ? 'none' : '';
+                const tbody = document.getElementById('templates-list');
+                if (!data.templates.length) {
+                    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;">${escapeHtml(TT('none'))}</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = data.templates.map(t => {
+                    const approved = t.versions.find(v => v.state === 'approved');
+                    const waiting = t.versions.find(v => v.state === 'draft');
+                    let state = t.retired ? TT('state_retired')
+                        : approved ? TT('state_approved', { n: approved.version_no, name: approved.approved_by_name || '' })
+                        : TT('state_draft_only');
+                    if (waiting && !t.retired) state += ' · ' + TT('state_awaiting', { n: waiting.version_no });
+                    return `<tr>
+                        <td><strong>${escapeHtml(t.name)}</strong>${t.scope_use ? `<div style="font-size:12px;color:var(--text-muted,#777);">${escapeHtml(t.scope_use)}</div>` : ''}</td>
+                        <td>${escapeHtml(state)}</td>
+                        <td><button class="action-btn" onclick="openTemplateEditor(${t.id})" title="${escapeHtml(window.t('change-management.settings.edit'))}">&#9998;</button>
+                            ${data.can_write && !t.retired ? `<button class="action-btn delete" onclick="retireTemplate(${t.id})" title="${escapeHtml(TT('retire'))}">&#10005;</button>` : ''}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        function fillSelect(id, rows, value) {
+            const sel = document.getElementById(id);
+            sel.innerHTML = '<option value=""></option>' + rows.filter(r => r.is_active).map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+            sel.value = value == null ? '' : String(value);
+        }
+
+        function openTemplateEditor(id) {
+            const t = id ? TPL.templates.find(x => x.id === id) : null;
+            const v = t ? t.values : {};
+            document.getElementById('tplTitle').textContent = t ? t.name : TT('new');
+            document.getElementById('tplId').value = t ? t.id : '';
+            document.getElementById('tplName').value = t ? t.name : '';
+            document.getElementById('tplScopeUse').value = t ? (t.scope_use || '') : '';
+            document.getElementById('tplScopeNot').value = t ? (t.scope_not || '') : '';
+            fillSelect('tplType', lookupCache.type, v.change_type_id);
+            fillSelect('tplPriority', lookupCache.priority, v.priority_id);
+            fillSelect('tplImpact', lookupCache.impact, v.impact_id);
+            document.getElementById('tplRiskL').value = v.risk_likelihood || '';
+            document.getElementById('tplRiskI').value = v.risk_impact_score || '';
+            ['description', 'reason_for_change', 'risk_evaluation', 'test_plan', 'rollback_plan'].forEach(f => {
+                document.getElementById('tpl_' + f).value = v[f] || '';
+            });
+            const open = t ? t.open_fields : ['description'];
+            document.getElementById('tplOpen').innerHTML = TPL.fields.map(f =>
+                `<label><input type="checkbox" name="tplOpen" value="${f}" ${open.includes(f) ? 'checked' : ''}> ${escapeHtml(window.t('change-management.approval_settings.field_' + f) !== 'change-management.approval_settings.field_' + f ? window.t('change-management.approval_settings.field_' + f) : f)}</label>`).join('');
+            const teams = t ? t.team_ids : [];
+            document.getElementById('tplTeams').innerHTML = TPL.teams.map(tm =>
+                `<label><input type="checkbox" name="tplTeam" value="${tm.id}" ${teams.includes(parseInt(tm.id)) ? 'checked' : ''}> ${escapeHtml(tm.name)}</label>`).join('');
+            const vers = t ? t.versions : [];
+            document.getElementById('tplVersionsGroup').style.display = vers.length ? '' : 'none';
+            document.getElementById('tplVersions').innerHTML = vers.map(ver => {
+                const mayApprove = ver.state === 'draft' && TPL.can_approve;
+                return `<div class="tpl-version"><strong>v${ver.version_no}</strong> ${escapeHtml(ver.state)}
+                    ${ver.approved_by_name ? ' · ' + escapeHtml(ver.approved_by_name) + (ver.approval_note ? ': ' + escapeHtml(ver.approval_note) : '') : ''}
+                    ${ver.created_by_name ? ' · ' + escapeHtml(ver.created_by_name) : ''}
+                    ${mayApprove ? `<input type="text" id="tplNote${ver.id}" placeholder="${escapeHtml(TT('approve_note'))}"><button type="button" class="btn btn-primary btn-sm" onclick="approveTemplateVersion(${ver.id})">${escapeHtml(TT('approve'))}</button>` : ''}
+                </div>`;
+            }).join('');
+            const ro = !TPL.can_write;
+            document.getElementById('tplSaveBtn').style.display = ro ? 'none' : '';
+            document.getElementById('tplSubmitBtn').style.display = ro ? 'none' : '';
+            document.getElementById('templateModal').classList.add('active');
+        }
+
+        function closeTemplateEditor() { document.getElementById('templateModal').classList.remove('active'); }
+
+        async function saveTemplate(submit) {
+            const values = {
+                change_type_id: document.getElementById('tplType').value, priority_id: document.getElementById('tplPriority').value,
+                impact_id: document.getElementById('tplImpact').value, risk_likelihood: document.getElementById('tplRiskL').value,
+                risk_impact_score: document.getElementById('tplRiskI').value
+            };
+            ['description', 'reason_for_change', 'risk_evaluation', 'test_plan', 'rollback_plan'].forEach(f => { values[f] = document.getElementById('tpl_' + f).value; });
+            const payload = {
+                id: document.getElementById('tplId').value || null,
+                name: document.getElementById('tplName').value,
+                scope_use: document.getElementById('tplScopeUse').value,
+                scope_not: document.getElementById('tplScopeNot').value,
+                values,
+                open_fields: [...document.querySelectorAll('input[name="tplOpen"]:checked')].map(i => i.value),
+                team_ids: [...document.querySelectorAll('input[name="tplTeam"]:checked')].map(i => parseInt(i.value)),
+                submit
+            };
+            try {
+                const res = await fetch(API_BASE + 'save_template.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (data.success) { closeTemplateEditor(); showToast(TT(submit ? 'submitted' : 'saved'), 'success'); loadTemplates(); }
+                else showToast(data.error || window.t('change-management.toast.save_failed'), 'error');
+            } catch (e) { showToast(window.t('change-management.toast.save_failed'), 'error'); }
+        }
+
+        async function approveTemplateVersion(versionId) {
+            const note = (document.getElementById('tplNote' + versionId) || {}).value || '';
+            const res = await fetch(API_BASE + 'template_action.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve', version_id: versionId, note }) });
+            const data = await res.json();
+            if (data.success) { closeTemplateEditor(); showToast(TT('approved'), 'success'); loadTemplates(); }
+            else showToast(data.error || window.t('change-management.toast.save_failed'), 'error');
+        }
+
+        async function retireTemplate(id) {
+            const t = TPL.templates.find(x => x.id === id);
+            if (!(await showConfirm({ title: TT('retire'), message: TT('retire_confirm', { name: t ? t.name : '' }), okLabel: TT('retire'), okClass: 'danger' }))) return;
+            const res = await fetch(API_BASE + 'template_action.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'retire', template_id: id }) });
+            const data = await res.json();
+            if (data.success) { showToast(TT('retired'), 'success'); loadTemplates(); }
+            else showToast(data.error || window.t('change-management.toast.save_failed'), 'error');
+        }
+
+        // In Enforce mode the three Record-only choices are fixed (each one, the other
+        // way, would be a way round the approval), so they are shown but not offered.
+        function syncApprovalRules() {
+            const mode = (document.querySelector('input[name="arMode"]:checked') || {}).value || 'record';
+            document.getElementById('approvalRulesForm').classList.toggle('is-enforce', mode === 'enforce');
+        }
+
+        async function saveApprovalRules() {
+            const ticks = name => [...document.querySelectorAll('input[name="' + name + '"]:checked')].map(i => i.value);
+            const payload = {
+                mode: (document.querySelector('input[name="arMode"]:checked') || {}).value || 'record',
+                own_allowed: document.getElementById('arOwnAllowed').value === '1',
+                own_people: ticks('arOwnPeople'),
+                override: document.getElementById('arOverride').value === '1',
+                material: ticks('arMaterial'),
+                edit_after: document.getElementById('arEditAfter').value,
+                stale_vote: document.getElementById('arStaleVote').value,
+                delete_submitted: document.getElementById('arDeleteSubmitted').value,
+                reject_status_id: document.getElementById('arRejectStatus').value,
+                cancel_status_id: document.getElementById('arCancelStatus').value,
+                choose_approvers: document.getElementById('arChooseApprovers').value,
+                templates_enabled: document.getElementById('arTemplates').value === '1'
+            };
+            try {
+                const res = await fetch(API_BASE + 'save_approval_settings.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success) { showToast(window.t('change-management.toast.saved'), 'success'); loadApprovalRules(); }
+                else showToast(data.error || window.t('change-management.toast.save_failed'), 'error');
+            } catch (e) { showToast(window.t('change-management.toast.save_failed'), 'error'); }
+        }
 
         // ============================================================
         // Lookup tabs (Statuses / Priorities / Types / Impacts)
@@ -514,9 +929,9 @@ $translationNamespaces = ['common', 'change-management'];
 
         // Per-kind metadata: API filenames, response key, table id, column count, fields shown.
         const LOOKUP_KINDS = {
-            'status':   { get: 'get_change_statuses.php',   save: 'save_change_status.php',   del: 'delete_change_status.php',   listKey: 'statuses',   tableId: 'statuses-list',   colspan: 7, hasClosed: true,  label: window.t('change-management.settings.kind_status')   },
+            'status':   { get: 'get_change_statuses.php',   save: 'save_change_status.php',   del: 'delete_change_status.php',   listKey: 'statuses',   tableId: 'statuses-list',   colspan: 8, hasClosed: true,  hasStage: true, label: window.t('change-management.settings.kind_status')   },
             'priority': { get: 'get_change_priorities.php', save: 'save_change_priority.php', del: 'delete_change_priority.php', listKey: 'priorities', tableId: 'priorities-list', colspan: 6, hasClosed: false, label: window.t('change-management.settings.kind_priority') },
-            'type':     { get: 'get_change_types.php',      save: 'save_change_type.php',     del: 'delete_change_type.php',     listKey: 'types',      tableId: 'types-list',      colspan: 6, hasClosed: false, label: window.t('change-management.settings.kind_type')     },
+            'type':     { get: 'get_change_types.php',      save: 'save_change_type.php',     del: 'delete_change_type.php',     listKey: 'types',      tableId: 'types-list',      colspan: 7, hasClosed: false, hasRoute: true, label: window.t('change-management.settings.kind_type')     },
             'impact':   { get: 'get_change_impacts.php',    save: 'save_change_impact.php',   del: 'delete_change_impact.php',   listKey: 'impacts',    tableId: 'impacts-list',    colspan: 6, hasClosed: false, label: window.t('change-management.settings.kind_impact')   }
         };
 
@@ -555,12 +970,24 @@ $translationNamespaces = ['common', 'change-management'];
                 const swatch = r.colour
                     ? `<span class="swatch" style="background:${escapeHtml(r.colour)};"></span><code style="font-size:12px;">${escapeHtml(r.colour)}</code>`
                     : '<span class="badge-no">—</span>';
+                // A status with no stage is shown loudly: approvals cannot be enforced
+                // until every active status has one (includes/changes/approvals.php).
+                const stageCol = cfg.hasStage
+                    ? (r.stage
+                        ? `<td>${escapeHtml(window.t('change-management.stage.' + r.stage))}</td>`
+                        : `<td><span class="stage-unset" title="${escapeHtml(window.t('change-management.settings.stage_unset_marker'))}">${escapeHtml(window.t('change-management.stage.none'))}</span></td>`)
+                    : '';
+                const routeCol = cfg.hasRoute
+                    ? `<td>${escapeHtml(window.t('change-management.settings.route_' + (r.approval_route || 'review')))}</td>`
+                    : '';
                 const closedCol = cfg.hasClosed
                     ? `<td>${r.is_closed ? `<span class="badge-yes">${window.t('change-management.settings.yes')}</span>` : `<span class="badge-no">${window.t('change-management.settings.no')}</span>`}</td>`
                     : '';
                 return `
                 <tr>
                     <td><strong>${escapeHtml(r.name)}</strong></td>
+                    ${stageCol}
+                    ${routeCol}
                     <td>${swatch}</td>
                     ${closedCol}
                     <td>${r.is_default ? `<span class="badge-yes">${window.t('change-management.settings.yes')}</span>` : `<span class="badge-no">${window.t('change-management.settings.no')}</span>`}</td>
@@ -596,7 +1023,12 @@ $translationNamespaces = ['common', 'change-management'];
             document.getElementById('lookupItemDefault').checked = false;
             document.getElementById('lookupItemOrder').value = '0';
             document.getElementById('lookupItemActive').checked = true;
+            document.getElementById('lookupItemStage').value = '';
+            document.getElementById('lookupItemStageGroup').style.display = cfg.hasStage ? '' : 'none';
+            document.getElementById('lookupItemRoute').value = 'review';
+            document.getElementById('lookupItemRouteGroup').style.display = cfg.hasRoute ? '' : 'none';
             document.getElementById('lookupItemClosedGroup').style.display = cfg.hasClosed ? '' : 'none';
+            syncClosedToStage();
             document.getElementById('lookupModal').classList.add('active');
         }
 
@@ -613,8 +1045,25 @@ $translationNamespaces = ['common', 'change-management'];
             document.getElementById('lookupItemDefault').checked = !!item.is_default;
             document.getElementById('lookupItemOrder').value = item.display_order;
             document.getElementById('lookupItemActive').checked = !!item.is_active;
+            document.getElementById('lookupItemStage').value = item.stage || '';
+            document.getElementById('lookupItemStageGroup').style.display = cfg.hasStage ? '' : 'none';
+            document.getElementById('lookupItemRoute').value = item.approval_route || 'review';
+            document.getElementById('lookupItemRouteGroup').style.display = cfg.hasRoute ? '' : 'none';
             document.getElementById('lookupItemClosedGroup').style.display = cfg.hasClosed ? '' : 'none';
+            syncClosedToStage();
             document.getElementById('lookupModal').classList.add('active');
+        }
+
+        // Closed follows the stage (Done and Stopped are closed, the rest open), so the
+        // tick box is only offered for a status that has no stage yet. The server
+        // applies the same rule, so this is comfort, not the control.
+        function syncClosedToStage() {
+            const kind = document.getElementById('lookupItemKind').value;
+            if (!LOOKUP_KINDS[kind] || !LOOKUP_KINDS[kind].hasStage) return;
+            const stage = document.getElementById('lookupItemStage').value;
+            const closed = document.getElementById('lookupItemClosed');
+            if (stage) closed.checked = (stage === 'done' || stage === 'stopped');
+            document.getElementById('lookupItemClosedGroup').style.display = stage ? 'none' : '';
         }
 
         function closeLookupModal() {
@@ -654,6 +1103,8 @@ $translationNamespaces = ['common', 'change-management'];
                 is_active: document.getElementById('lookupItemActive').checked ? 1 : 0
             };
             if (cfg.hasClosed) payload.is_closed = document.getElementById('lookupItemClosed').checked ? 1 : 0;
+            if (cfg.hasStage) payload.stage = document.getElementById('lookupItemStage').value;
+            if (cfg.hasRoute) payload.approval_route = document.getElementById('lookupItemRoute').value;
 
             try {
                 const res = await fetch(API_BASE + cfg.save, {
@@ -1058,6 +1509,6 @@ $translationNamespaces = ['common', 'change-management'];
         }
 
     </script>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
 </body>
 </html>

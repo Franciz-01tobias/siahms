@@ -69,7 +69,7 @@ try {
     // folder_name comes from a LEFT JOIN so an article filed nowhere still comes
     // back - the tree groups those under its own heading rather than dropping
     // them, which is what the analyst list does too.
-    $sql = "SELECT a.id, a.title, a.modified_datetime, a.view_count, LEFT(a.body, 400) AS preview,
+    $sql = "SELECT a.id, a.title, a.modified_datetime, a.view_count, LEFT(a.body, 400) AS preview, CHAR_LENGTH(a.body) > 400 AS preview_cut,
                    a.folder_id, f.name AS folder_name
             FROM knowledge_articles a
        LEFT JOIN knowledge_folders f ON f.id = a.folder_id
@@ -101,12 +101,23 @@ try {
         } catch (Exception $e) { /* tag tables absent → no tags, not an error */ }
     }
 
+    // Documents shown in the Help Centre, per article (GH #177) - the list says
+    // "3 documents" so somebody looking for a form knows which article has it.
+    // Best-effort, like the tags: a count must never cost the list.
+    $docCounts = [];
+    try {
+        require_once '../../includes/knowledge/help_centre_documents.php';
+        $docCounts = helpCentreDocumentCounts($conn, array_column($articles, 'id'));
+    } catch (Exception $e) { /* no counts, not an error */ }
+
     foreach ($articles as &$a) {
         // The preview is plain text: the body is TinyMCE HTML and a truncated
         // fragment would be unbalanced markup.
         //
-        $a['preview'] = portalArticlePreview($a['preview']);
-        $a['tags']    = $tagsById[(int)$a['id']] ?? [];
+        $a['preview']   = portalArticlePreview($a['preview'], 400, (bool)$a['preview_cut']);
+        unset($a['preview_cut']);
+        $a['tags']      = $tagsById[(int)$a['id']] ?? [];
+        $a['doc_count'] = $docCounts[(int)$a['id']] ?? 0;
     }
     unset($a);
 

@@ -128,6 +128,29 @@ foreach ([
         && strpos($u, '.com/openai/deployments/gpt-4o/') !== false, $u);
 }
 
+// GH #171: the portal's whole "Target URI", or a Foundry project address, pasted
+// into the endpoint box. Everything after the resource is ours to build.
+$u = aiAzureChatUrl(['azure_endpoint' => 'https://x.cognitiveservices.azure.com/openai/deployments/gpt-5-nano/chat/completions?api-version=2025-01-01-preview',
+                     'azure_deployment' => 'gpt-5-nano', 'azure_api_version' => '2025-04-01-preview']);
+ok('a pasted Target URI is cut back to the resource',
+    $u === 'https://x.cognitiveservices.azure.com/openai/deployments/gpt-5-nano/chat/completions?api-version=2025-04-01-preview', $u);
+$u = aiAzureChatUrl(['azure_endpoint' => 'https://x.services.ai.azure.com/api/projects/myproj',
+                     'azure_deployment' => 'd', 'azure_api_version' => '2024-10-21']);
+ok('a pasted Foundry project address is cut back to the resource',
+    $u === 'https://x.services.ai.azure.com/openai/deployments/d/chat/completions?api-version=2024-10-21', $u);
+$u = aiAzureChatUrl(['azure_endpoint' => 'https://x.openai.azure.com/', 'azure_deployment' => 'd', 'azure_api_version' => 'v1']);
+ok('API version "v1" uses the v1 route, with no query string',
+    $u === 'https://x.openai.azure.com/openai/v1/chat/completions', $u);
+
+// The explanation the Test button gives for #171's exact failure.
+$why = aiExplainFailure(['provider' => 'azure', 'azure_api_version' => '2025-08-07'], 'Resource not found (HTTP 404)');
+ok('a model version date in the API version box is named as the cause of a 404',
+    stripos($why, 'MODEL\'s version') !== false, $why);
+$why = aiExplainFailure(['provider' => 'azure', 'azure_api_version' => '2024-10-21', 'azure_deployment' => 'd'],
+    'The API deployment for this resource does not exist. (HTTP 404)');
+ok('CONTROL - a missing deployment is named as the deployment, not the API version',
+    stripos($why, 'no deployment called "d"') !== false, $why);
+
 ok('falls back to a default api-version when none is given',
     strpos(aiAzureChatUrl(['azure_endpoint' => 'https://x.openai.azure.com', 'azure_deployment' => 'd']),
            'api-version=' . AI_AZURE_DEFAULT_API_VERSION) !== false);
@@ -225,17 +248,61 @@ ok('🔴 the retry swapped in max_completion_tokens',
 
 // 🔴 CONTROL — the retry must fire ONLY on that specific refusal. An unrelated
 // 400 (a bad key, a content filter) has to surface, not be silently retried.
+// (This used to grep the source for the old retry line, which proved nothing
+// about behaviour and broke when the retry moved into aiOpenAICompatPost.)
 reset_log();
-$threw = false;
+$threw = '';
 try {
-    aiProviderChat(array_merge($cfg, ['azure_endpoint' => $MOCK . '?fail=1&p=']), [
+    aiProviderChat(array_merge($cfg, ['azure_deployment' => 'content-filtered']), [
         'system' => 'sys', 'user' => 'hello', 'max_tokens' => 16,
     ]);
-} catch (RuntimeException $e) { $threw = true; }
-// (the mock only 400s for the needs-max-completion deployment, so this succeeds —
-//  the meaningful control is the message test below)
-ok('CONTROL — the retry is keyed on Azure\'s own words, not on any 400',
-    strpos(file_get_contents('includes/ai_provider.php'), "strpos(\$e->getMessage(), 'max_completion_tokens') === false") !== false);
+} catch (RuntimeException $e) { $threw = $e->getMessage(); }
+ok('CONTROL — an unrelated 400 surfaces as an error', stripos($threw, 'content management policy') !== false, $threw);
+ok('CONTROL — …after exactly ONE attempt, not a retry', count(sent()) === 1, 'attempts: ' . count(sent()));
+
+// GH #171: gpt-5-class models refuse any temperature but their default.
+section('4b. Newer models: temperature left at the model\'s default');
+
+reset_log();
+$result = aiProviderChat(array_merge($cfg, ['azure_deployment' => 'needs-default-temperature']),
+    ['system' => 'sys', 'user' => 'hello', 'max_tokens' => 16]);
+$log = sent();
+ok('the call still succeeds', ($result['content'] ?? '') === 'OK');
+ok('two attempts: the first sent temperature, the second did not',
+    count($log) === 2 && !empty($log[0]['has_temperature']) && empty($log[1]['has_temperature']), 'attempts: ' . count($log));
+
+reset_log();
+$result = aiProviderChat(array_merge($cfg, ['azure_deployment' => 'gpt5-like']),
+    ['system' => 'sys', 'user' => 'hello', 'max_tokens' => 16]);
+$log = sent();
+ok('🔴 a model refusing BOTH is put right in three attempts', ($result['content'] ?? '') === 'OK' && count($log) === 3, 'attempts: ' . count($log));
+ok('…ending with max_completion_tokens and no temperature',
+    ($log[2]['max_completion_tokens'] ?? null) === 16 && empty($log[2]['has_temperature']));
+
+// Tool calling shares the fix: one round, so the same three attempts.
+reset_log();
+$result = aiProviderChatTools(array_merge($cfg, ['azure_deployment' => 'gpt5-like']),
+    ['system' => 'sys', 'user' => 'hello', 'max_tokens' => 16], [], function () { return ''; });
+ok('tool calling gets the same fixes', ($result['content'] ?? '') === 'OK' && count(sent()) === 3, 'attempts: ' . count(sent()));
+
+// GH #171 end to end: the 404, then the reading the Test button shows for it.
+reset_log();
+$threw = '';
+$bad = array_merge($cfg, ['azure_deployment' => 'gpt5-like', 'azure_api_version' => '2025-08-07']);
+try { aiProviderChat($bad, ['system' => 'sys', 'user' => 'hello', 'max_tokens' => 16]); }
+catch (RuntimeException $e) { $threw = $e->getMessage(); }
+ok('#171: a model version as the API version fails with Azure\'s 404', $threw === 'Resource not found (HTTP 404)', $threw);
+ok('#171: …and the reading names the API version box', stripos(aiExplainFailure($bad, $threw), 'API version') !== false);
+ok('#171: …after ONE attempt (a 404 is not retried)', count(sent()) === 1, 'attempts: ' . count(sent()));
+
+// The v1 route: no deployment in the address, so it travels as `model`.
+reset_log();
+$result = aiProviderChat(array_merge($cfg, ['azure_api_version' => 'v1', 'azure_deployment' => 'my-deploy']),
+    ['system' => 'sys', 'user' => 'hello', 'max_tokens' => 16]);
+$log = sent();
+ok('v1: the call succeeds', ($result['content'] ?? '') === 'OK');
+ok('v1: the deployment is sent as the model', ($log[0]['model'] ?? '') === 'my-deploy', (string)($log[0]['model'] ?? 'none'));
+ok('v1: still the api-key header', !empty($log[0]['has_api_key_header']) && empty($log[0]['has_authorization']));
 
 // ── 5. The registry ─────────────────────────────────────────────────────────
 section('5. Wiring');

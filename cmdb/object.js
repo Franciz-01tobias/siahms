@@ -49,6 +49,7 @@ const STALE_DAYS = 183; // the audit's six months, in days
 
 /* ---------------- helpers ---------------- */
 
+/** Escapes text for safe use in HTML. */
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
@@ -60,10 +61,12 @@ function esc(s) {
 function toast(msg, isError) {
     showToast(msg, isError ? 'error' : 'success');
 }
+/** Asks for confirmation through the shared showConfirm dialogue; resolves true when confirmed. */
 function confirmAction(opts) {
     return showConfirm(opts);
 }
 
+/** Posts a JSON body and returns the parsed JSON reply. */
 async function postJson(url, body) {
     const res = await fetch(url, {
         method: 'POST',
@@ -75,9 +78,12 @@ async function postJson(url, body) {
 
 /* created/updated are UTC and get converted; a `date` PROPERTY is naive and
    must never go through the timezone path or it shifts by a day. */
-function fmtDateTime(s) {
+/* Was a top-level `function fmtDateTime` that called itself - it shadowed
+   tz.js's global (#1195) - until the stack overflowed, and then showed the raw
+   UTC string. A different name, so the shared formatter is the one called. */
+function fmtWhen(s) {
     if (!s) return '';
-    try { return fmtDateTime(s); } catch (e) { return s; }
+    try { return window.fmtDateTime(s) || s; } catch (e) { return s; }
 }
 
 /* "2026-04-15 00:00:00" -> "2026-04-15". Never parsed as a Date: a date
@@ -87,6 +93,7 @@ function dateOnly(v) {
     return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s;
 }
 
+/** Whole days since a UTC timestamp, or null when there is none or it cannot be read. */
 function daysSince(sqlUtc) {
     if (!sqlUtc) return null;
     try {
@@ -95,12 +102,15 @@ function daysSince(sqlUtc) {
     } catch (e) { return null; }
 }
 
+/** Returns the SVG for an icon key from the Network Mapper icon set ('box' when none), or '' when that set is not loaded. */
 function icon(key, size) {
     return window.nmRenderIcon ? window.nmRenderIcon(key || 'box', size || 20) : '';
 }
+/** Returns the icon for a class by name, for related objects that only carry the class name. */
 function iconForClassName(name, size) {
     return icon(classesByName[name] || 'box', size);
 }
+/** Returns the icon for a class by id. */
 function iconForClassId(id, size) {
     const c = classesById[id];
     return icon(c ? c.icon_key : 'box', size);
@@ -121,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initPropDefModalDrag();
 });
 
+/** Loads the active relationship verbs for the add-relationship modal. */
 async function loadRelationshipTypes() {
     try {
         const data = await (await fetch(API + 'get_relationship_types.php')).json();
@@ -136,6 +147,7 @@ async function reloadAndRender() {
     render();
 }
 
+/** Loads the object (properties, relationships, parent) from get_object.php; on failure the page shows the error instead. */
 async function loadObject() {
     try {
         const res = await fetch(API + 'get_object.php?id=' + OBJECT_ID);
@@ -147,18 +159,21 @@ async function loadObject() {
             '<div style="padding:60px;text-align:center;color:var(--danger-text,#b91c1c);">' + esc(err.message) + '</div>';
     }
 }
+/** Loads the impact data (descendants, references) and the blast radius from get_object_impact.php. */
 async function loadImpact() {
     try {
         const data = await (await fetch(API + 'get_object_impact.php?id=' + OBJECT_ID)).json();
         if (data.success) { impact = data.impact; blastRadius = data.blast_radius || null; }
     } catch (e) { /* panel degrades to its empty state */ }
 }
+/** Loads the object's open and recently closed tickets from get_object_tickets.php. */
 async function loadActivity() {
     try {
         const data = await (await fetch(API + 'get_object_tickets.php?id=' + OBJECT_ID)).json();
         if (data.success) activity = data;
     } catch (e) { /* panel degrades to its empty state */ }
 }
+/** Loads the classes for icons by id and by name, and the active ones for the target-class picker. */
 async function loadClasses() {
     try {
         const data = await (await fetch(API + 'get_classes.php')).json();
@@ -220,6 +235,9 @@ function connectionTally() {
 
 /* ---------------- render ---------------- */
 
+/**
+ * Rebuilds the whole page - breadcrumb, hero, stats, AI summary, blast radius, connections, properties, documents, domains, projects, activity and delete - then wires editing and runs the animations.
+ */
 function render() {
     const signal = detectSignal();
     const wrap = document.querySelector('#o2Page .o2-wrap');
@@ -237,6 +255,9 @@ function render() {
             // Attached documents (discussion #76) — the diagram, the licence, the
             // rack photo. Before activity and danger, which both read as endings.
             '<div class="o2-sec"><div id="cmdbDocuments"></div></div>' +
+            // The domains this CI depends on (3.0.0): what breaks if one lapses.
+            (window.SHOW_DOMAINS ? '<div class="o2-sec"><div id="cmdbDomains"></div></div>' : '') +
+            (window.SHOW_PROJECTS ? '<div class="o2-sec"><div id="cmdbProjects"></div></div>' : '') +
             '<div class="o2-sec">' + activityHtml() + '</div>' +
             '<div class="o2-sec">' + dangerHtml() + '</div>' +
         '</div>';
@@ -251,6 +272,20 @@ function render() {
         });
     }
 
+    if (window.SHOW_DOMAINS && window.DomainLinks && obj && obj.id) {
+        DomainLinks.mount(document.getElementById('cmdbDomains'), {
+            kind: 'cmdb', id: obj.id, base: window.APP_BASE,
+            cardClass: 'o2-card', headClass: 'o2-card-head', titleClass: 'o2-card-title'
+        });
+    }
+
+    if (window.SHOW_PROJECTS && window.ProjectLinks && obj && obj.id) {
+        ProjectLinks.mount(document.getElementById('cmdbProjects'), {
+            kind: 'cmdb', id: obj.id, base: window.APP_BASE,
+            cardClass: 'o2-card', headClass: 'o2-card-head', titleClass: 'o2-card-title'
+        });
+    }
+
     if (signal) wrap.style.setProperty('--o2-signal', signal.colour);
     else wrap.style.removeProperty('--o2-signal');
 
@@ -260,6 +295,7 @@ function render() {
     animateMeter();
 }
 
+/** Returns the breadcrumb - Browse, the class, the parent if any, then this object. */
 function breadcrumbHtml() {
     return '<div class="o2-breadcrumb">' +
         '<a href="./">Browse</a><span class="sep">›</span>' +
@@ -269,6 +305,9 @@ function breadcrumbHtml() {
         '</div>';
 }
 
+/**
+ * Returns the hero - icon, editable name, chips for class, signal, planned state, parent and staleness, and the summary and diagram buttons.
+ */
 function heroHtml(signal) {
     const stale = daysSince(obj.updated_datetime);
     const chips = [];
@@ -314,12 +353,16 @@ function heroHtml(signal) {
     '</div>';
 }
 
+/**
+ * Returns the four stat tiles - what breaks, open tickets, connections and days since last touched - each jumping to its section.
+ */
 function statsHtml() {
     const blast = (blastRadius && blastRadius.nodes) ? blastRadius.nodes.length : 0;
     const open = (activity && activity.open) ? activity.open.length : 0;
     const conns = connectionTally().total;
     const days = daysSince(obj.updated_datetime);
 
+    /** Returns one stat tile; with a target it scrolls to that section when clicked. */
     function tile(val, unit, label, cls, target) {
         const jump = target
             ? ' onclick="document.getElementById(\'' + target + '\').scrollIntoView({behavior:\'smooth\',block:\'start\'})"'
@@ -339,13 +382,14 @@ function statsHtml() {
     '</div>';
 }
 
+/** Returns the AI summary box - the saved summary with when it was written, or a prompt to generate one. */
 function aiHtml() {
     if (obj.ai_summary) {
         return '<div class="o2-ai">' +
             '<div class="o2-ai-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg></div>' +
             '<div><div class="o2-ai-txt" id="o2AiTxt">' + esc(obj.ai_summary) + '</div>' +
             (obj.ai_summary_generated_at
-                ? '<div class="o2-ai-when">' + esc(window.t('cmdb.summary.generated', { datetime: fmtDateTime(obj.ai_summary_generated_at) })) + '</div>'
+                ? '<div class="o2-ai-when">' + esc(window.t('cmdb.summary.generated', { datetime: fmtWhen(obj.ai_summary_generated_at) })) + '</div>'
                 : '') +
             '</div></div>';
     }
@@ -477,6 +521,7 @@ function connectionsHtml() {
        printed on every row. */
     const nRel = tally.incoming.length + tally.outgoing.length;
     const nRef = tally.refsIn.length + tally.refsOut.length;
+    /** Picks the singular or plural tally label for a count. */
     const tk = (base, n) => window.t('cmdb.conn.' + base + (n === 1 ? '_one' : '_other'), { count: n });
     const counts = [
         {
@@ -538,6 +583,7 @@ function connectionsHtml() {
     '</div>';
 }
 
+/** Returns one linked object row with its verb, and an unlink button when it is a relationship row. */
 function nodeRow(id, name, className, verb, relId) {
     return '<div class="o2-noderow">' +
         (verb ? '<div class="o2-rel-verb">' + esc(verb) + '</div>' : '') +
@@ -551,9 +597,11 @@ function nodeRow(id, name, className, verb, relId) {
                 esc(window.t('cmdb.conn.unlink_title')) + '">×</button>' : '') +
         '</div></div>';
 }
+/** Returns the up-arrow SVG drawn between the parent and this object. */
 function upArrow() {
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-faint,#d1d5db)"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>';
 }
+/** Returns the down-arrow SVG drawn between this object and its descendants. */
 function downArrow() {
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-faint,#d1d5db)"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>';
 }
@@ -599,12 +647,15 @@ function propsHtml() {
         // for the normal case leaves the reader to assume it.
         '<div style="margin-top:14px;"><span class="o2-stat-lbl">' +
         esc(window.t(obj.is_planned ? 'cmdb.object.state_planned' : 'cmdb.object.state_real')) +
-        ' · ' + esc(window.t('cmdb.details.added_on', { datetime: fmtDateTime(obj.created_datetime) })) +
-        ' · ' + esc(window.t('cmdb.details.last_change', { datetime: fmtDateTime(obj.updated_datetime) })) +
+        ' · ' + esc(window.t('cmdb.details.added_on', { datetime: fmtWhen(obj.created_datetime) })) +
+        ' · ' + esc(window.t('cmdb.details.last_change', { datetime: fmtWhen(obj.updated_datetime) })) +
         '</span></div>' +
     '</div>';
 }
 
+/**
+ * Returns one property card - label, required mark, the cog that edits the property definition, and the value (click to edit).
+ */
 function propCard(p) {
     const empty = !(p.value !== null && p.value !== '' && p.value !== undefined);
     // The cog edits the property DEFINITION (label, type, options, required),
@@ -623,6 +674,9 @@ function propCard(p) {
     '</div>';
 }
 
+/**
+ * Returns a property value for display - a linked object, Yes/No, a coloured drop-down pill, a number, a date without time, or text.
+ */
 function propValueHtml(p) {
     if (p.property_type === 'object_ref') {
         if (!p.value_object) return esc(p.value);
@@ -645,11 +699,13 @@ function propValueHtml(p) {
     return esc(p.value);
 }
 
+/** Shows or hides the empty properties, then re-renders. */
 function toggleBlanks() {
     showBlanks = !showBlanks;
     render();
 }
 
+/** Returns the Activity card - open tickets against this object, then the recently closed ones. */
 function activityHtml() {
     const head = '<div class="o2-card-head"><span class="o2-card-title">' + esc(window.t('cmdb.activity.heading')) + '</span></div>';
     if (!activity) return '<div class="o2-card" id="o2Activity">' + head + '<div class="o2-empty">' + esc(window.t('cmdb.object.working_it_out')) + '</div></div>';
@@ -661,12 +717,13 @@ function activityHtml() {
             '<div class="o2-empty">' + esc(window.t('cmdb.activity.empty')) + '</div></div>';
     }
 
+    /** Returns one ticket link with its number, subject, status and priority. */
     const row = (t, isOpen) =>
         '<a class="o2-tik" href="../tickets/?ticket_id=' + t.id + '">' +
-            '<span class="o2-tik-ref">' + esc(t.reference || ('#' + t.id)) + '</span>' +
+            '<span class="o2-tik-ref">' + esc(t.ticket_number || ('#' + t.id)) + '</span>' +
             '<span class="o2-tik-sub">' + esc(t.subject || window.t('cmdb.activity.no_subject')) + '</span>' +
-            '<span class="o2-tik-meta">' + esc(t.status_name || window.t('cmdb.activity.unknown_status')) +
-            (t.priority_name ? ' · ' + esc(t.priority_name) : '') + '</span>' +
+            '<span class="o2-tik-meta">' + esc(t.status || window.t('cmdb.activity.unknown_status')) +
+            (t.priority ? ' · ' + esc(t.priority) : '') + '</span>' +
         '</a>';
 
     return '<div class="o2-card" id="o2Activity">' + head +
@@ -679,6 +736,7 @@ function activityHtml() {
     '</div>';
 }
 
+/** Returns the delete strip, warning when the object has children. */
 function dangerHtml() {
     const kids = (obj.children || []).length;
     return '<div class="o2-danger">' +
@@ -701,6 +759,7 @@ function animateStats() {
         const target = parseInt(el.dataset.count, 10) || 0;
         if (target === 0) { el.textContent = '0'; return; }
         const dur = 460, start = performance.now();
+        /** Advances one stat's count-up for this animation frame (ease-out cubic over 460ms). */
         function step(now) {
             const t = Math.min(1, (now - start) / dur);
             const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
@@ -711,6 +770,7 @@ function animateStats() {
     });
 }
 
+/** Animates the details meter to the share of properties that are filled. */
 function animateMeter() {
     const el = document.getElementById('o2Meter');
     if (!el) return;
@@ -722,6 +782,7 @@ function animateMeter() {
 
 /* ---------------- editing ---------------- */
 
+/** Makes the hero name editable - Enter saves, Escape reverts, blur saves when changed. */
 function wireName() {
     const el = document.getElementById('o2Name');
     if (!el) return;
@@ -737,6 +798,7 @@ function wireName() {
     });
 }
 
+/** Makes each property value open its inline editor on click (links inside it still navigate). */
 function wireProps() {
     document.querySelectorAll('.o2-prop-val').forEach(cell => {
         cell.addEventListener('click', e => {
@@ -747,6 +809,9 @@ function wireProps() {
     });
 }
 
+/**
+ * Swaps a property value for an inline editor by type (object references use their own search) and saves it on blur or Enter; Escape cancels.
+ */
 function beginEdit(cell) {
     const pid = parseInt(cell.dataset.pid, 10);
     const p = (obj.properties || []).find(x => x.property_id === pid);
@@ -778,6 +843,7 @@ function beginEdit(cell) {
     if (editor.select) editor.select();
 
     let done = false;
+    /** Saves the edited value unless it is unchanged, then restores or re-renders the cell. */
     const commit = async () => {
         if (done) return;
         done = true;
@@ -794,6 +860,7 @@ function beginEdit(cell) {
     if (editor.tagName === 'SELECT') editor.addEventListener('change', () => editor.blur());
 }
 
+/** Saves one property value through save_object.php and reloads the page data; puts the old value back on failure. */
 async function saveProperty(p, raw, cell, before) {
     try {
         const data = await postJson(API + 'save_object.php', {
@@ -811,6 +878,7 @@ async function saveProperty(p, raw, cell, before) {
     }
 }
 
+/** Saves the name, parent or planned flag through save_object.php (no property values) and reloads the page data. */
 async function savePartial(patch) {
     try {
         const payload = {
@@ -833,6 +901,7 @@ async function savePartial(patch) {
 
 /* ---------------- actions ---------------- */
 
+/** Asks generate_object_summary.php to write the object's AI summary, then reloads and re-renders. */
 async function generateSummary(btn) {
     if (summaryGenerating) return;
     summaryGenerating = true;
@@ -854,6 +923,7 @@ async function generateSummary(btn) {
     }
 }
 
+/** Builds a Network Mapper diagram of the blast radius through create_impact_diagram.php and opens it. */
 async function createImpactDiagram(btn) {
     if (btn) { btn.disabled = true; }
     try {
@@ -892,7 +962,9 @@ function beginEditObjectRef(cell, p) {
     input.select();
 
     let done = false;
+    /** Saves the chosen reference (or null to clear it), once. */
     const finish = async raw => { if (done) return; done = true; await saveProperty(p, raw, cell, before); };
+    /** Puts the old value back without saving, once. */
     const cancel = () => { if (done) return; done = true; cell.innerHTML = before; wireProps(); };
 
     wireAutocomplete(input, results, { class_id: p.target_class_id, exclude_id: obj.id }, picked => {
@@ -914,6 +986,9 @@ function beginEditObjectRef(cell, p) {
 
 /* ---------------- shared autocomplete ---------------- */
 
+/**
+ * Wires an input to search_objects.php (optionally limited to a class and excluding an object) with a keyboard-navigable result list; onPick gets the chosen object.
+ */
 function wireAutocomplete(inputEl, resultsEl, params, onPick) {
     let lastQuery = '';
     let current = [];
@@ -947,6 +1022,7 @@ function wireAutocomplete(inputEl, resultsEl, params, onPick) {
         else if (e.key === 'Escape') { resultsEl.classList.remove('active'); }
     });
 
+    /** Draws the look-up results (or "no matches") with the highlighted row marked. */
     function draw() {
         if (!current.length) {
             resultsEl.innerHTML = '<div class="ac-empty">' + esc(window.t('cmdb.new_object.no_matches')) + '</div>';
@@ -967,12 +1043,14 @@ function wireAutocomplete(inputEl, resultsEl, params, onPick) {
 
 /* ---------------- planned / in service ---------------- */
 
+/** Flips the object between planned and in service. */
 async function togglePlanned() {
     await savePartial({ is_planned: !obj.is_planned });
 }
 
 /* ---------------- parent picker ---------------- */
 
+/** Opens the parent picker with the current parent filled in and an object search that excludes this object. */
 function openParentModal() {
     document.getElementById('o2ParentInput').value = obj.parent_name || '';
     document.getElementById('o2ParentId').value = obj.parent_id || '';
@@ -991,8 +1069,10 @@ function openParentModal() {
         }
     );
 }
+/** Closes the parent picker. */
 function closeParentModal() { document.getElementById('o2ParentModal').classList.remove('active'); }
 
+/** Saves the picked parent (an emptied box clears it); the server rejects a parent that would make a cycle. */
 async function saveParent() {
     const newId = document.getElementById('o2ParentId').value;
     const text = document.getElementById('o2ParentInput').value.trim();
@@ -1004,6 +1084,7 @@ async function saveParent() {
     await savePartial({ parent_id: parseInt(newId, 10) });
 }
 
+/** Closes the parent picker and removes the parent, if there is one. */
 async function clearParent() {
     closeParentModal();
     if (!obj.parent_id) return;
@@ -1021,6 +1102,9 @@ async function clearParent() {
 let relDirection = 'out';
 let relTargetName = '';
 
+/**
+ * Opens the add-relationship modal with the verb list, outgoing direction and an object search; warns when no verbs are defined.
+ */
 function openRelModal() {
     if (!relationshipTypes.length) {
         toast(window.t('cmdb.rel_modal.none_defined'), true);
@@ -1051,8 +1135,10 @@ function openRelModal() {
         }
     );
 }
+/** Closes the add-relationship modal. */
 function closeRelModal() { document.getElementById('o2RelModal').classList.remove('active'); }
 
+/** Sets whether this object is the subject ('out') or the other object is ('in'), and refreshes the sentence preview. */
 function setRelDirection(dir) {
     relDirection = dir;
     document.getElementById('o2RelDirOut').classList.toggle('on', dir === 'out');
@@ -1074,6 +1160,9 @@ function updateRelPreview() {
         '<br>' + esc(window.t('cmdb.rel_modal.preview_other_end')) + ' <b>' + esc(object) + '</b> ' + esc(rt.inverse_verb) + ' <b>' + esc(subject) + '</b>';
 }
 
+/**
+ * Saves the relationship through save_object_relationship.php, swapping from and to for the 'in' direction, then reloads.
+ */
 async function saveRelationship() {
     const typeId = parseInt(document.getElementById('o2RelType').value, 10);
     const targetId = parseInt(document.getElementById('o2RelTargetId').value, 10);
@@ -1091,11 +1180,13 @@ async function saveRelationship() {
     } catch (err) { toast(err.message, true); }
 }
 
+/** Scrolls to the Details card, where property links are edited. */
 function jumpToDetails() {
     const el = document.getElementById('o2Details');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/** Asks for confirmation, then deletes a relationship through delete_object_relationship.php and reloads. */
 async function deleteRelationship(id) {
     const ok = await confirmAction({
         title: window.t('cmdb.rel_modal.delete_title'),
@@ -1116,6 +1207,7 @@ async function deleteRelationship(id) {
 
 let pdDrag = { active: false, dx: 0, dy: 0 };
 
+/** Makes the property definition modal draggable by its header. */
 function initPropDefModalDrag() {
     const head = document.getElementById('o2PdHeader');
     const modal = document.getElementById('o2PdModal');
@@ -1140,6 +1232,9 @@ function initPropDefModalDrag() {
     document.addEventListener('mouseup', () => { pdDrag.active = false; });
 }
 
+/**
+ * Opens the property definition modal for one of this class's properties, filled with its label, key, type, order, flags, target class and options.
+ */
 function openPropDefModal(propertyId) {
     const p = (obj.properties || []).find(x => x.property_id === propertyId);
     if (!p) return;
@@ -1165,8 +1260,12 @@ function openPropDefModal(propertyId) {
     modal.classList.add('active');
     setTimeout(() => document.getElementById('o2PdLabel').focus(), 0);
 }
+/** Closes the property definition modal. */
 function closePropDefModal() { document.getElementById('o2PdModal').classList.remove('active'); }
 
+/**
+ * Shows the target-class and spreads-impact fields only for object references, and the options editor only for drop-downs.
+ */
 function onPropDefTypeChange() {
     const t = document.getElementById('o2PdType').value;
     document.getElementById('o2PdTargetGroup').style.display = t === 'object_ref' ? 'block' : 'none';
@@ -1174,6 +1273,9 @@ function onPropDefTypeChange() {
     document.getElementById('o2PdOptionsGroup').style.display = t === 'dropdown' ? 'block' : 'none';
 }
 
+/**
+ * Validates and saves the property definition through save_class_property.php, then reloads, since it changes every object of the class.
+ */
 async function savePropDef() {
     const type = document.getElementById('o2PdType').value;
     const options = (type === 'dropdown' && typeof collectOptionsFromEditor === 'function')
@@ -1206,6 +1308,9 @@ async function savePropDef() {
     } catch (err) { toast(err.message, true); }
 }
 
+/**
+ * Confirms (counting the whole subtree that will go with it), deletes the object through delete_object.php, and returns to Browse.
+ */
 async function deleteObject() {
     // Count the WHOLE subtree, not just direct children — the delete cascades
     // all the way down, so a warning that says "2 objects" when it will remove

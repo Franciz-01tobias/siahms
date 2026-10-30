@@ -24,7 +24,12 @@ class ServiceStatusService
     //  Services
     // ======================================================================
 
-    /** Create (no id) or update (id present) a service. Returns the id. */
+    /**
+     * Create (no id) or update (id present) a service. Returns the id.
+     *
+     * @param array $in  id (a service to change; absent creates one), name, description, display_order, is_active -
+     *     on update, keys left out keep their value
+     */
     public static function saveService(PDO $conn, ActorContext $ctx, array $in): int
     {
         if (!empty($in['id'])) {
@@ -66,7 +71,11 @@ class ServiceStatusService
         return $newId;
     }
 
-    /** Delete a service + its incident links, atomically. */
+    /**
+     * Delete a service + its incident links, atomically.
+     *
+     * @param int $id  the service (status_services.id) to delete
+     */
     public static function deleteService(PDO $conn, ActorContext $ctx, int $id): void
     {
         $row = self::loadServiceRow($conn, $id);                   // 404 if gone
@@ -82,6 +91,11 @@ class ServiceStatusService
         WorkflowEngine::emitCrud('status_service', 'deleted', $id, $row['name'] ?? null);
     }
 
+    /**
+     * Loads one service; throws not found when it does not exist.
+     *
+     * @param int $id  the service (status_services.id) to load
+     */
     private static function loadServiceRow(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare("SELECT * FROM status_services WHERE id = ?");
@@ -95,7 +109,12 @@ class ServiceStatusService
     //  Incidents
     // ======================================================================
 
-    /** Create (no id) or update (id present) an incident. Returns the id. */
+    /**
+     * Create (no id) or update (id present) an incident. Returns the id.
+     *
+     * @param array $in  id (an incident to change; absent creates one), title, status_id or status (a name; default
+     *     Investigating), comment, is_internal (default true), services - a list of {service_id, impact_level_id or impact_level}
+     */
     public static function saveIncident(PDO $conn, ActorContext $ctx, array $in): int
     {
         if (!empty($in['id'])) {
@@ -139,6 +158,16 @@ class ServiceStatusService
         return $incidentId;
     }
 
+    /**
+     * Changes an incident's title, status, comment and affected services, logging an update
+     * when the status, comment or services changed, and fires
+     * service_status.incident_updated (and incident_resolved).
+     *
+     * An update is internal unless is_internal is sent as false.
+     *
+     * @param int $id  the incident (status_incidents.id) to change
+     * @param array $in  only the fields to change: title, status_id or status, comment, is_internal (default true), services
+     */
     private static function updateIncident(PDO $conn, ActorContext $ctx, int $id, array $in): int
     {
         $current = self::loadIncidentRow($conn, $id);              // 404 if gone (checked before empty-body, as the API did)
@@ -229,7 +258,11 @@ class ServiceStatusService
         return $id;
     }
 
-    /** Delete an incident + its service links, atomically. */
+    /**
+     * Delete an incident + its service links, atomically.
+     *
+     * @param int $id  the incident (status_incidents.id) to delete
+     */
     public static function deleteIncident(PDO $conn, ActorContext $ctx, int $id): void
     {
         $row = self::loadIncidentRow($conn, $id);                  // 404 if gone
@@ -245,6 +278,12 @@ class ServiceStatusService
         WorkflowEngine::dispatch('service_status.incident_deleted', ['incident' => ['id' => $id, 'title' => $row['title'] ?? null]]);
     }
 
+    /**
+     * Loads one incident with whether its status counts as resolved; throws not found when
+     * it does not exist.
+     *
+     * @param int $id  the incident (status_incidents.id) to load
+     */
     private static function loadIncidentRow(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare(
@@ -259,7 +298,11 @@ class ServiceStatusService
         return $row;
     }
 
-    /** Resolve an incident status by id or name — strict on unknown/inactive. */
+    /**
+     * Resolve an incident status by id or name — strict on unknown/inactive.
+     *
+     * @param array $in  the request: status_id wins over status (a name); neither gives null, unknown or inactive throws
+     */
     private static function resolveIncidentStatus(PDO $conn, array $in): ?array
     {
         if (isset($in['status_id']) && $in['status_id'] !== '' && $in['status_id'] !== null) {
@@ -281,8 +324,11 @@ class ServiceStatusService
     /**
      * Validate [{service_id, impact_level|impact_level_id}] → [[service_id, impact_id]].
      * Strict: 422 on unknown service or impact (the old UI silently skipped these).
+     *
+     * @param array $services  the affected services as sent: a list of {service_id, impact_level_id or impact_level (a name)};
+     *     no impact means the default impact level
      */
-    private static function validateIncidentServices(PDO $conn, array $services): array
+    public static function validateIncidentServices(PDO $conn, array $services): array
     {
         $out = [];
         foreach ($services as $s) {
@@ -325,6 +371,9 @@ class ServiceStatusService
      * the same two services can arrive in a different order without anything
      * having actually changed — and appending on that would be the same bug in
      * a different coat.
+     *
+     * @param int $incidentId  the incident (status_incidents.id) whose stored links to compare
+     * @param array $links  the validated links about to be written, as [[serviceId, impactId], ...]
      */
     private static function incidentServicesDiffer(PDO $conn, int $incidentId, array $links): bool
     {
@@ -356,6 +405,8 @@ class ServiceStatusService
      * rewriting them would make the timeline a record of what somebody wishes
      * had happened.
      *
+     * @param int $updateId  the timeline entry (status_incident_updates.id) to correct
+     * @param array $in  comment and/or is_internal; a key left out keeps its value
      * @throws ServiceError when there is no such update.
      */
     public static function editIncidentUpdate(PDO $conn, ActorContext $ctx, int $updateId, array $in): void
@@ -394,6 +445,7 @@ class ServiceStatusService
      * The incident and every other update survive it. As with editing, the
      * incident's own comment follows if the one removed was the latest.
      *
+     * @param int $updateId  the timeline entry (status_incident_updates.id) to remove
      * @throws ServiceError when there is no such update.
      */
     public static function deleteIncidentUpdate(PDO $conn, ActorContext $ctx, int $updateId): void
@@ -418,6 +470,12 @@ class ServiceStatusService
              ->execute([$comment === false ? null : $comment, $incidentId]);
     }
 
+    /**
+     * Replaces the services an incident affects, each with its impact level.
+     *
+     * @param int $incidentId  the incident (status_incidents.id)
+     * @param array $links  the validated links, as [[serviceId, impactId], ...]; empty removes them all
+     */
     private static function replaceIncidentServices(PDO $conn, int $incidentId, array $links): void
     {
         $conn->prepare("DELETE FROM status_incident_services WHERE incident_id = ?")->execute([$incidentId]);
@@ -451,8 +509,12 @@ class ServiceStatusService
      * incident because its audit trail could not be appended would be a worse
      * outcome than the missing trail. The reader falls back for such incidents.
      *
+     * @param int $incidentId  the incident (status_incidents.id) the entry belongs to
+     * @param ?int $statusId  the incident's status at this moment, or null
+     * @param ?string $comment  what was said; null when only the status or services changed
      * @param array|null $links [[serviceId, impactId], …] — null means "unchanged",
      *                          in which case the current links are snapshotted.
+     * @param bool $isInternal  true keeps the entry off the self-service portal (the default)
      */
     private static function recordIncidentUpdate(PDO $conn, ActorContext $ctx, int $incidentId, ?int $statusId, ?string $comment, ?array $links, bool $isInternal = true): void
     {
@@ -488,6 +550,11 @@ class ServiceStatusService
     //  Incident statuses (UI-only — no API twin)
     // ======================================================================
 
+    /**
+     * Adds or updates an incident status; making one the default clears the flag on the others.
+     *
+     * @param array $in  id (to change one), name (required), colour (#rrggbb), is_resolved, is_default, display_order, is_active
+     */
     public static function saveIncidentStatus(PDO $conn, ActorContext $ctx, array $in): int
     {
         $name          = trim((string)($in['name'] ?? ''));
@@ -533,6 +600,11 @@ class ServiceStatusService
         return (int)$id;
     }
 
+    /**
+     * Deletes an incident status; refuses the default status and any status still used by an incident.
+     *
+     * @param int $id  the incident status (service_incident_statuses.id) to delete
+     */
     public static function deleteIncidentStatus(PDO $conn, ActorContext $ctx, int $id): void
     {
         if (!$id) throw new ServiceError('validation', 'missing_field', 'Status ID is required');
@@ -556,6 +628,13 @@ class ServiceStatusService
     //  Impact levels (UI-only — no API twin)
     // ======================================================================
 
+    /**
+     * Adds or updates an impact level, including whether it counts as downtime; making one
+     * the default clears the flag on the others.
+     *
+     * @param array $in  id (to change one), name (required), colour (#rrggbb), is_default, severity_order (default 99),
+     *     display_order, is_active, counts_as_downtime (absent means 1)
+     */
     public static function saveImpactLevel(PDO $conn, ActorContext $ctx, array $in): int
     {
         $name           = trim((string)($in['name'] ?? ''));
@@ -608,6 +687,11 @@ class ServiceStatusService
         return (int)$id;
     }
 
+    /**
+     * Deletes an impact level; refuses the default level and any level still used on an incident.
+     *
+     * @param int $id  the impact level (service_impact_levels.id) to delete
+     */
     public static function deleteImpactLevel(PDO $conn, ActorContext $ctx, int $id): void
     {
         if (!$id) throw new ServiceError('validation', 'missing_field', 'Impact level ID is required');

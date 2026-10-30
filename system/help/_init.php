@@ -68,6 +68,8 @@ require_once __DIR__ . '/../includes/page_gate.php';
  * An id with no registry entry returns nothing rather than a wrong number. A
  * missing badge is a visible, honest signal that the entry needs adding — see
  * Help Page House Style §5.
+ *
+ * @param string $id  the help section's id, as listed in the page's $helpNav
  */
 function helpSectionNum(string $id): string
 {

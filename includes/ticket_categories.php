@@ -158,7 +158,7 @@ function ticketCategoriesResolved(PDO $conn, ?int $tenantId, array $opts = []): 
  * Order a resolved set depth-first: each root, then its descendants, by
  * display_order then name at every level.
  *
- * @param array<int,array> $rows
+ * @param array<int,array> $rows  ticket_categories rows keyed by id (id, parent_id, name, display_order)
  * @return array<int,array>
  */
 function ticketCategorySortTree(array $rows): array
@@ -194,6 +194,7 @@ function ticketCategorySortTree(array $rows): array
  * ignores is_active — a closed ticket must still render the label it was closed
  * with, even after that category has been retired or hidden from a company.
  *
+ * @param ?int $categoryId  the ticket category (ticket_categories.id); null or 0 gives null
  * @return ?string null when the id is unknown
  */
 function ticketCategoryPathLabel(PDO $conn, ?int $categoryId): ?string
@@ -226,6 +227,8 @@ function ticketCategoryPathLabel(PDO $conn, ?int $categoryId): ?string
  *
  * Used by the save endpoint to refuse a fourth level before it is written,
  * rather than discovering it when a report cannot render.
+ *
+ * @param ?int $parentId  the would-be parent category; null or 0 for a root
  */
 function ticketCategoryDepthUnder(PDO $conn, ?int $parentId): int
 {
@@ -252,6 +255,9 @@ function ticketCategoryDepthUnder(PDO $conn, ?int $parentId): int
  *
  * Only needed when RE-PARENTING: the category itself may fit under its new
  * parent while its own children fall off the end of the depth cap.
+ *
+ * @param int $id  the category whose subtree to measure
+ * @param int $guard  the recursion depth so far - callers leave it at 0
  */
 function ticketCategorySubtreeDepth(PDO $conn, int $id, int $guard = 0): int
 {
@@ -276,6 +282,9 @@ function ticketCategorySubtreeDepth(PDO $conn, int $id, int $guard = 0): int
  *
  * A cycle makes every path unresolvable and every roll-up infinite, and the
  * schema cannot express "not a descendant of itself", so it is checked here.
+ *
+ * @param int $id  the category being re-parented
+ * @param ?int $parentId  the proposed parent; null or 0 (a root) never loops
  */
 function ticketCategoryWouldCycle(PDO $conn, int $id, ?int $parentId): bool
 {
@@ -339,6 +348,8 @@ function ticketResolutionCodesResolved(PDO $conn, ?int $tenantId, array $opts = 
  *
  * Same reasoning as ticketCategoryPathLabel: a closed ticket keeps the label it
  * was closed with, whatever has happened to the list since.
+ *
+ * @param ?int $codeId  the resolution code (ticket_resolution_codes.id); null or 0 gives null
  */
 function ticketResolutionCodeName(PDO $conn, ?int $codeId): ?string
 {

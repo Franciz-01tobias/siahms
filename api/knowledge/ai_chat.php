@@ -32,8 +32,29 @@ if (empty($question)) {
     exit;
 }
 
+// Asked from a TICKET ("Ask AI" in the inbox), the question carries that
+// ticket's text - so the ticket comes too, and a confidential one is refused
+// here, on the server (discussion #62). Asked from Knowledge, there is none.
+if (!empty($input['ticket_id'])) {
+    require_once '../../includes/tenancy.php';
+    require_once '../../includes/ticket_sensitivity.php';
+    $aiConn = connectToDatabase();
+    $aiTicket = (int)$input['ticket_id'];
+    if (!analystCanAccessTicket($aiConn, (int)$_SESSION['analyst_id'], $aiTicket)) {
+        echo json_encode(['success' => false, 'error' => 'Ticket not found']);
+        exit;
+    }
+    if (!ticketAiAllowed($aiConn, $aiTicket)) {
+        echo json_encode(['success' => false, 'confidential' => true, 'error' => TICKET_AI_CONFIDENTIAL_ERROR]);
+        exit;
+    }
+}
+
 /**
  * Calculate cosine similarity between two vectors
+ *
+ * @param mixed $vec1  an embedding, as a list of floats
+ * @param mixed $vec2  another embedding; only the length both share is compared
  */
 function cosineSimilarity($vec1, $vec2) {
     $dotProduct = 0;
@@ -53,6 +74,9 @@ function cosineSimilarity($vec1, $vec2) {
 
 /**
  * Generate embedding for text using OpenAI API
+ *
+ * @param mixed $text  the text to embed; cut to 30,000 bytes
+ * @param mixed $apiKey  the OpenAI API key, in plain text
  */
 function generateEmbedding($text, $apiKey) {
     // Truncate if too long
@@ -94,7 +118,7 @@ try {
     // Load the configured chat provider/model/key (Anthropic / OpenAI / OpenRouter)
     // via the shared AI settings building block.
     $aiCfg = aiSettingsLoad($conn, 'knowledge_ai');
-    if (($aiCfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($aiCfg)) {
         echo json_encode(['success' => false, 'error' => 'AI API key not configured. Please add it in Knowledge Settings.']);
         exit;
     }

@@ -15,6 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireAnyModuleAccessJson(['tasks', 'contracts']);
 
 try {
     $conn = connectToDatabase();
@@ -154,6 +155,40 @@ try {
     $stmt->execute($params);
     $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Projects (3.2.0): which project, and which stage of it, each task belongs
+    // to - for the chip on the card and the Project filter. A separate read, not
+    // a join in the query above, so an install that has not yet run Database
+    // Verification (no tasks.project_id) keeps a working board and just shows no
+    // projects. The project is named even to analysts without the Projects
+    // module: it is a fact about a task they can already see.
+    require_once '../../includes/projects/methodologies.php';
+    if ($tasks && projectsSchemaReady($conn)) {
+        $pIds = array_column($tasks, 'id');
+        $ph = implode(',', array_fill(0, count($pIds), '?'));
+        $pst = $conn->prepare(
+            "SELECT t.id, t.project_id, t.project_stage_id, p.name AS project_name, p.colour AS project_colour, s.name AS project_stage_name
+               FROM tasks t
+               JOIN projects p ON p.id = t.project_id
+          LEFT JOIN project_stages s ON s.id = t.project_stage_id
+              WHERE t.id IN ($ph)");
+        $pst->execute($pIds);
+        $byTask = [];
+        foreach ($pst->fetchAll(PDO::FETCH_ASSOC) as $pr) $byTask[(int)$pr['id']] = $pr;
+        foreach ($tasks as &$tk) {
+            $pr = $byTask[(int)$tk['id']] ?? null;
+            $tk['project_id']         = $pr ? (int)$pr['project_id'] : null;
+            $tk['project_name']       = $pr['project_name'] ?? null;
+            $tk['project_colour']     = $pr ? projectColourHex($pr['project_colour']) : null;
+            $tk['project_stage_name'] = $pr['project_stage_name'] ?? null;
+        }
+        unset($tk);
+    }
+
+    // Contractors (3.3.0): the supplier (and person there) doing each task - a
+    // separate read for the same reason as the projects above.
+    require_once '../../includes/task_contractors.php';
+    if ($tasks) $tasks = tasksWithContractors($conn, $tasks);
+
     // Get subtask counts for all parent tasks
     $taskIds = array_column($tasks, 'id');
     $subtaskCounts = [];
@@ -174,6 +209,33 @@ try {
                 'total' => (int)$row['total'],
                 'done'  => (int)$row['done']
             ];
+        }
+    }
+
+    // The subtasks themselves, so the board can list them indented under their
+    // card. Kept apart from the counts above (which feed the "2/5" bar) so the
+    // shape of `subtasks` stays what every existing caller expects. Same order as
+    // the task's own window: the position set by dragging there, then oldest.
+    $subtaskRows = [];
+    if (!empty($taskIds)) {
+        $placeholders = implode(',', array_fill(0, count($taskIds), '?'));
+        $stmt = $conn->prepare(
+            "SELECT t.id, t.parent_task_id, t.title, t.start_date, t.due_date,
+                    ts.is_closed AS status_is_closed,
+                    tp.name AS priority, tp.colour AS priority_colour,
+                    a.full_name AS analyst_name
+             FROM tasks t
+             LEFT JOIN task_statuses   ts ON ts.id = t.status_id
+             LEFT JOIN task_priorities tp ON tp.id = t.priority_id
+             LEFT JOIN analysts a ON a.id = t.assigned_analyst_id
+             WHERE t.parent_task_id IN ({$placeholders})
+             ORDER BY t.board_position ASC, t.created_datetime ASC"
+        );
+        $stmt->execute($taskIds);
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row['id'] = (int)$row['id'];
+            $row['status_is_closed'] = (int)$row['status_is_closed'];
+            $subtaskRows[$row['parent_task_id']][] = $row;
         }
     }
 
@@ -205,7 +267,10 @@ try {
 
     // Attach subtask counts, tags and collaborators
     foreach ($tasks as &$task) {
+        // A number, as for subtasks: some drivers return "0", which JavaScript reads as true (GH #184).
+        $task['status_is_closed'] = $task['status_is_closed'] === null ? null : (int)$task['status_is_closed'];
         $task['subtasks']      = $subtaskCounts[$task['id']] ?? ['total' => 0, 'done' => 0];
+        $task['subtask_items'] = $subtaskRows[$task['id']] ?? [];
         $task['tags']          = $tagsByTask[$task['id']] ?? [];
         $task['collaborators'] = $collaboratorsByTask[$task['id']] ?? [];
         // ⭐ Ed's call: one list, with the ones you don't own marked. Worked out

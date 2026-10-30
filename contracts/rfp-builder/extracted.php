@@ -25,13 +25,13 @@ $translationNamespaces = ['common', 'contracts'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('contracts.rfp.extracted.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('contracts', t('contracts.nav.rfp_builder'), t('contracts.rfp.extracted.page_title'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         body { --accent: var(--con-accent, #f59e0b); }
         .page-wrap { padding: 30px 40px; background: var(--app-bg, #f5f5f5); height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; }
@@ -203,7 +203,7 @@ $translationNamespaces = ['common', 'contracts'];
         .form-row .meta-row .meta-item span:first-child { color: var(--text-dim, #888); }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="contracts" data-mobile-page="rfp-extracted">
     <?php include '../includes/header.php'; ?>
@@ -344,7 +344,7 @@ $translationNamespaces = ['common', 'contracts'];
                 if (!data.success) throw new Error(data.error);
                 document.getElementById('rfpName').textContent = data.rfp.name;
                 document.getElementById('bcRfp').textContent = data.rfp.name;
-                document.title = window.t('contracts.rfp.extracted.title_with_name', { name: data.rfp.name });
+                document.title = (document.titleBase = document.titleBase || document.title) + ' - ' + data.rfp.name;   // GH #173
             } catch (err) {
                 document.getElementById('rfpName').textContent = window.t('contracts.rfp.extracted.could_not_load');
             }
@@ -527,6 +527,6 @@ $translationNamespaces = ['common', 'contracts'];
             if (e.target.id === 'editModal') closeEditModal();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -183,6 +183,8 @@ try {
 } finally {
     try {
         $conn->exec("DELETE FROM task_audit WHERE task_id IN (SELECT id FROM tasks WHERE title LIKE 'ZZCAL%')");
+        // #181's history outlives its tasks on purpose (no foreign keys) - remove it explicitly.
+        $conn->exec("DELETE FROM task_events WHERE task_id IN (SELECT id FROM tasks WHERE title LIKE 'ZZCAL%')");
         $n = $conn->exec("DELETE FROM tasks WHERE title LIKE 'ZZCAL%'");
         echo "\n  cleanup: removed {$n} ZZCAL task(s)\n";
     } catch (Exception $e) {

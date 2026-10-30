@@ -34,8 +34,11 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/encryption.php';   // decryptValue() for the cron token
 require_once __DIR__ . '/../includes/workflow_scheduled.php';
+require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $isCli = (PHP_SAPI === 'cli');
+$trigger = JobRun::scheduledTrigger();
+$runId = null;
 
 try {
     $conn = connectToDatabase();
@@ -57,11 +60,13 @@ try {
         $expected = decryptValue($settings['workflow_cron_token'] ?? null);
         if (empty($expected)) {
             http_response_code(503);
+            JobRun::refused($conn, 'workflow_scheduled', 'token not set');
             echo "Cron token not set. Run Database Verification to seed workflow_cron_token.\n";
             exit;
         }
         if (!hash_equals((string)$expected, (string)($_GET['token'] ?? ''))) {
             http_response_code(403);
+            JobRun::refused($conn, 'workflow_scheduled', 'wrong token');
             echo "Forbidden\n";
             exit;
         }
@@ -74,6 +79,7 @@ try {
         $age = (int)$ageStmt->fetchColumn();
         if ($age >= 0 && $age < $minInterval) {
             http_response_code(429);
+            JobRun::skipped($conn, 'workflow_scheduled', $trigger, "Minimum interval: last run {$age}s ago, minimum {$minInterval}s.");
             echo "Rate limited. Last run {$age}s ago; minimum interval is {$minInterval}s.\n";
             exit;
         }
@@ -85,14 +91,30 @@ try {
     )->execute();
 
     // ---- Emit ----
-    $counts = workflowScheduledRun($conn);
+    // #182: its three parts are its three sources, so one failing part makes the
+    // run PARTIAL and is named, instead of the old "OK" over a swallowed error.
+    $runId = JobRun::start($conn, 'workflow_scheduled', $trigger);
+    $partResults = [];
+    $counts = workflowScheduledRun($conn, $partResults);
     $pruned = workflowPruneEmissions($conn);
+    $labels = ['expiries' => 'Contract and warranty expiry', 'planned_maintenance' => 'Planned maintenance', 'projects' => 'Project alerts'];
+    foreach ($partResults as $key => $r) {
+        JobRun::source($conn, $runId, 'workflow_scheduled', 'part:' . $key, $labels[$key] ?? $key, $r['ok'], $r['error']);
+    }
+    $failedParts = array_keys(array_filter($partResults, fn($r) => !$r['ok']));
 
     $parts = [];
     foreach ($counts as $event => $n) $parts[] = "$event: $n";
-    echo "OK — " . implode(', ', $parts) . ", pruned {$pruned} old emission(s).\n";
+    JobRun::finish($conn, $runId, null, $counts, implode(', ', $parts) . '.');
+    echo ($failedParts ? 'PARTIAL — ' : 'OK — ') . implode(', ', $parts) . ", pruned {$pruned} old emission(s).\n";
+    if ($failedParts) {
+        echo "Failed: " . implode(', ', $failedParts) . " - see Reporting > System logs > Background jobs.\n";
+        exit(1);
+    }
 } catch (Throwable $e) {
-    http_response_code(500);
+    if (isset($conn)) JobRun::fail($conn, $runId, $e);
+    if (!$isCli) http_response_code(500);
     error_log('workflow_scheduled cron failed: ' . $e->getMessage());
     echo "Error: " . $e->getMessage() . "\n";
+    exit(1);
 }

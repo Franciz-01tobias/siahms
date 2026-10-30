@@ -42,6 +42,8 @@
  *                   textarea: { placeholder: 'Have a nice day', label: 'Message' }
  *                 The typed value arrives TRIMMED on onConfirm's `text`, so a
  *                 box holding only spaces reads as empty for every caller.
+ *                 Add `focus: true` to start typing straight away (Tasks' New);
+ *                 otherwise OK has the focus, as it always had.
  *
  * Returns: Promise<boolean> — resolves true on confirm, false on cancel.
  *
@@ -119,6 +121,9 @@
     var currentResolve = null;
     var keyHandler = null;
 
+    /**
+     * Creates the shared dialog's markup (title, message, optional tickbox and text box, Cancel and OK) the first time it is needed.
+     */
     function build() {
         if (overlay) return;
         overlay = document.createElement('div');
@@ -182,6 +187,9 @@
         document.body.appendChild(overlay);
     }
 
+    /**
+     * OK: closes the dialog, calls onConfirm with the tickbox and text box state, and resolves the promise with true.
+     */
     function handleConfirm() {
         var cb = currentOnConfirm;
         var resolve = currentResolve;
@@ -198,6 +206,9 @@
         if (typeof resolve === 'function') resolve(true);
     }
 
+    /**
+     * Cancel, Escape or a backdrop click: closes the dialog, calls onCancel and resolves the promise with false.
+     */
     function handleCancel() {
         var cb = currentOnCancel;
         var resolve = currentResolve;
@@ -206,6 +217,7 @@
         if (typeof resolve === 'function') resolve(false);
     }
 
+    /** Hides the dialog, removes its key handler and forgets the current callbacks. */
     function close() {
         if (!overlay) return;
         overlay.classList.remove('active');
@@ -218,6 +230,11 @@
         currentResolve = null;
     }
 
+    /**
+     * Shows the shared OK/Cancel dialog with the given options and returns a promise of true (OK) or false (Cancel).
+     *
+     * See the file header for the options.
+     */
     window.showConfirm = function(opts) {
         opts = opts || {};
         build();
@@ -261,15 +278,19 @@
         return new Promise(function(resolve) {
             currentResolve = resolve;
 
+            /** Escape cancels; Enter confirms unless Cancel has the focus. */
             keyHandler = function(e) {
                 if (e.key === 'Escape') handleCancel();
                 else if (e.key === 'Enter' && document.activeElement !== cancelBtn) handleConfirm();
             };
             document.addEventListener('keydown', keyHandler);
 
+            /** Shows the dialog on the next frame so its transition runs, then focuses OK on the frame after. */
             requestAnimationFrame(function() {
                 overlay.classList.add('active');
-                requestAnimationFrame(function() { okBtn.focus(); });
+                requestAnimationFrame(function() {
+                    (opts.textarea && opts.textarea.focus ? textInput : okBtn).focus();
+                });
             });
         });
     };

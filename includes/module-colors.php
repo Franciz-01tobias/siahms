@@ -20,12 +20,23 @@ $defaultModuleColors = [
     'software'       => ['#5c6bc0', '#3f51b5'],
     'forms'          => ['#00897b', '#00695c'],
     'contracts'      => ['#f59e0b', '#d97706'],
+    // Domains: a deep lime-olive, distinct from Assets' green and Service
+    // Status' emerald, and dark enough to carry white text in the header.
+    'domains'        => ['#4d7c0f', '#3f6212'],
+    // People (#153): a plum, apart from CMDB's pink and Tasks' violet.
+    'people'         => ['#a21caf', '#86198f'],
+    // Files: a deep navy, the colour of a desktop at night - apart from Tickets'
+    // bright blue and LMS's royal blue.
+    'files'          => ['#1e3a8a', '#172554'],
     'service-status' => ['#10b981', '#059669'],
     'war-room'       => ['#ea580c', '#c2410c'],
     'wiki'           => ['#c62828', '#b71c1c'],
     'lms'            => ['#2563eb', '#1d4ed8'],
     'process-mapper' => ['#6366f1', '#4f46e5'],
     'tasks'          => ['#7c3aed', '#6d28d9'],
+    // Projects (3.2.0): coral to violet, Ed's pick - a two-colour identity for the
+    // most visual module, ending near Tasks' violet because projects sit on tasks.
+    'projects'       => ['#f43f5e', '#7c3aed'],
     'cmdb'           => ['#be185d', '#9d174d'],
     'network-mapper' => ['#06b6d4', '#0891b2'],
     // Workflows uses an orange distinct from contracts' amber so the two
@@ -37,6 +48,12 @@ $defaultModuleColors = [
     'checklists'    => ['#0d9488', '#0f766e'],
 ];
 
+/**
+ * Every module's colour pair, the built-in defaults overridden by any module_color_* system
+ * setting.
+ *
+ * Cached per request; if the database cannot be read the defaults are returned.
+ */
 function getModuleColors() {
     static $cached = null;
     if ($cached !== null) {

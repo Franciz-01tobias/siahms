@@ -130,7 +130,12 @@ try {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 
-/** How many clusters sit in each state, for the view's tabs. */
+/**
+ * How many clusters sit in each state, for the view's tabs.
+ *
+ * @param string $tSql  the company filter SQL from activeTenantFilter() on alias c, starting with AND (or empty)
+ * @param array $tArgs  the values bound to the placeholders in $tSql
+ */
 function gapStatusCounts(PDO $conn, string $tSql, array $tArgs): array
 {
     $out = ['open' => 0, 'dismissed' => 0, 'written' => 0];

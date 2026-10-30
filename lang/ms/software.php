@@ -25,7 +25,7 @@ return [
     ],
     'inventory' => [
         'page_title' => 'Meja Perkhidmatan - Perisian',
-        'heading' => 'Inventori Perisian',
+        'heading' => 'Inventori perisian',
         'search' => 'Cari mengikut nama aplikasi atau penerbit...',
         'tab_apps' => 'Aplikasi',
         'tab_components' => 'Komponen',
@@ -36,6 +36,7 @@ return [
         'col_seats' => 'Slot',
         'col_actions' => '',
         'add_app' => 'Tambah aplikasi',
+        'new_app' => 'Aplikasi baharu',
         'edit_app' => 'Sunting aplikasi',
         'added_by_hand' => 'Ditambah secara manual',
         'f_name' => 'Nama',
@@ -116,7 +117,7 @@ return [
         'widget_removed' => 'Widget dibuang',
     ],
     'library' => [
-        'page_title' => 'Meja Perkhidmatan - Pustaka Widget Perisian',
+        'page_title' => 'Pustaka Widget Perisian',
         'back' => 'Papan Pemuka',
         'heading' => 'Pustaka Widget',
         'search' => 'Cari widget...',

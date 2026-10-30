@@ -8,6 +8,7 @@ require_once '../../includes/functions.php';
 require_once '../../includes/theme.php';
 require_once '../../includes/i18n.php';
 require_once '../../includes/timezone.php';
+require_once '../../includes/money.php';
 I18n::initFromSession();
 Tz::init();
 
@@ -45,6 +46,14 @@ $prefDefaults = [
     // Read on every analyst page by renderWaffleMenuJS(); played by
     // assets/js/notification-sound.js.
     'notification_sound'         => 'off',
+    // Desktop notifications (2.10.0): a Windows/macOS notification from the
+    // browser - in Edge, a Windows notification - for each new item in the bell,
+    // while FreeITSM is open in a tab. 'on' or ''. The browser's own permission
+    // is asked for when it is switched on. Read by renderWaffleMenuJS().
+    'desktop_notifications'      => '',
+    // Email me when a task is assigned to me (2.10.0). 'on' or ''. Read by
+    // notificationsTaskAssignedEmail() in includes/notifications_router.php.
+    'task_assigned_email'        => '',
     // How a task opens: 'panel' is the right-hand drawer, 'modal' is a large
     // near-full-screen window that lays the same content out in two columns.
     // Per analyst rather than per install, because it is a working-style
@@ -62,6 +71,12 @@ $prefDefaults = [
     // from two places that must agree: here, and the calendar's own Show
     // control. '' is parent tasks only, which is what the calendar always did.
     'tasks_calendar_subtasks'    => '',
+    // Whether the board stops listing a task's subtasks under its card once
+    // every one of them is complete. '' shows them regardless; 'on' tidies them
+    // away. Read by tasks/index.php into window.TASK_HIDE_DONE_SUBTASKS.
+    'tasks_hide_done_subtasks'   => '',
+    // GH #184: all | open | none. Unset falls back to the old key above.
+    'tasks_board_subtasks'       => '',
     // Left-panel visibility — one key per module that has a left panel.
     // Each module's header reads its key; module settings pages (where one
     // exists) edit the same key. Surfaced together below.
@@ -141,9 +156,9 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.preferences.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.preferences.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/subscribe.css?v=1">
     <style>
         body {
@@ -182,10 +197,48 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
 
         /* My details + signatures (#80). */
         .sig-details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }
-        .sig-details-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+        .sig-details-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text, #333); }
         .sig-details-grid input, .sig-field input[type="text"] {
             padding: 9px 10px; border: 1px solid var(--border, #ddd); border-radius: 4px;
             font-size: 14px; font-family: inherit;
+            background: var(--surface, #fff);
+            color: var(--text, #333);
+            box-sizing: border-box;
+            transition: border-color 0.15s, background-color 0.15s;
+        }
+        .sig-details-grid input:focus, .sig-field input[type="text"]:focus {
+            outline: none;
+            border-color: var(--sys-accent, #546e7a);
+        }
+        .sig-details-grid input:disabled, .sig-field input[type="text"]:disabled {
+            background: var(--surface-2, #f5f5f5);
+            color: var(--text-muted, #888);
+            cursor: not-allowed;
+            border-color: var(--border, #e0e0e0);
+            opacity: 0.8;
+        }
+        .sig-details-grid label.is-disabled {
+            cursor: not-allowed;
+            opacity: 0.85;
+        }
+        .pref-managed-note {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            line-height: 1.4;
+            background: var(--surface-2, rgba(84, 110, 122, 0.1));
+            color: var(--text, #333);
+            border-left: 3px solid var(--sys-accent, #546e7a);
+        }
+        .pref-managed-note svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            stroke: var(--sys-accent, #546e7a);
         }
         .sig-btn { padding: 8px 16px; border-radius: 4px; border: 1px solid var(--border, #ddd); cursor: pointer; font-size: 13px; font-family: inherit; }
         .sig-btn-primary { background: var(--accent, #2d6a4f); color: #fff; border-color: transparent; }
@@ -319,6 +372,33 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
         }
         .pref-saving-hint.show { opacity: 1; }
 
+        /* The sidebar's module ticks (#124): the same coloured tiles as the waffle. */
+        .app-sidebar-pick { margin-top: 14px; }
+        .app-sidebar-pick[hidden] { display: none; }
+        .app-sidebar-pick-hint { margin: 0 0 8px; color: var(--text-muted, #666); font-size: 13px; }
+        .app-sidebar-pick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
+        .app-sidebar-pick-item { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+        .app-sidebar-pick-item:hover { background: var(--surface-hover, #f0f0f0); }
+        .app-sidebar-pick-item .waffle-module-icon { width: 26px; height: 26px; margin: 0; border-radius: 6px; flex-shrink: 0; }
+        .app-sidebar-pick-item .waffle-module-icon svg { width: 16px; height: 16px; }
+
+        /* Module order (GH #187) - the list itself is assets/js/reorder-list.js. */
+        .module-order-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+        .module-order-note { font-size: 12px; color: var(--text-dim, #888); margin-top: 8px; }
+
+        /* Money (GH #189) - the three format dropdowns, and one row per currency exception. */
+        .money-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .money-picker .pref-language-select { min-width: 160px; flex: 1; }
+        .money-sub { font-size: 13px; font-weight: 600; color: var(--text, #333); margin: 18px 0 2px; }
+        .money-exc { border: 1px solid var(--border, #ddd); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+        .money-exc-head { display: flex; align-items: center; gap: 10px; }
+        .money-exc-head .nm { flex: 1; font-size: 14px; color: var(--text, #333); }
+        .money-exc-head code { font-weight: 600; margin-right: 6px; }
+        .money-exc-head .eg { font-size: 13px; color: var(--text-muted, #666); font-variant-numeric: tabular-nums; }
+        .money-exc-head button { border: none; background: none; cursor: pointer; color: var(--text-dim, #888); font-size: 18px; line-height: 1; padding: 2px 6px; }
+        .money-exc-head button:hover { color: var(--danger, #c62828); }
+        .money-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+
         .sidebar-panels-list {
             display: flex;
             flex-direction: column;
@@ -349,7 +429,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
         [data-theme-mode="dark"] .anim-option:not(.active):hover { background: var(--surface-hover, #39414f); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
@@ -380,7 +460,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
 
         <div class="tab-content active" id="general-tab">
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.language_heading')); ?></h3>
+                <h3 id="language"><?php echo htmlspecialchars(t('system.preferences.language_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.language_desc')); ?></p>
                 <select id="languageSelect" class="pref-language-select">
                     <?php foreach ($locales as $code => $native): ?>
@@ -393,7 +473,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             </div>
 
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.timezone_heading')); ?></h3>
+                <h3 id="timezone"><?php echo htmlspecialchars(t('system.preferences.timezone_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.timezone_desc')); ?></p>
                 <?php
                     // Group IANA zones by region for the dropdown (Europe/London → "Europe").
@@ -425,7 +505,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                      picks WHICH INSTANT, this picks HOW IT IS WRITTEN. Neither changes
                      what is stored. Each option is labelled with its rendered example. */ ?>
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.dateformat_heading')); ?></h3>
+                <h3 id="date-format"><?php echo htmlspecialchars(t('system.preferences.dateformat_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.dateformat_desc')); ?></p>
                 <select id="dateFormatSelect" class="pref-language-select">
                     <option value="" <?php echo $prefs['date_format'] === '' ? 'selected' : ''; ?>>
@@ -443,7 +523,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             </div>
 
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.timeformat_heading')); ?></h3>
+                <h3 id="time-format"><?php echo htmlspecialchars(t('system.preferences.timeformat_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.timeformat_desc')); ?></p>
                 <select id="timeFormatSelect" class="pref-language-select">
                     <option value="" <?php echo $prefs['time_format'] === '' ? 'selected' : ''; ?>>
@@ -458,6 +538,31 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     <?php endforeach; ?>
                 </select>
                 <span class="pref-saving-hint" id="timeFormatSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+            </div>
+
+            <?php /* Money (GH #189): how amounts are written for THIS analyst. The
+                     currency of a record is never theirs to change here - only its
+                     look. '' follows System > Currencies; the per-currency map wins
+                     over both (see includes/money.php for the order). */
+                $moneyInstall  = Money::installSettings();
+                $moneyFollowEg = Money::format(1234567.891, $moneyInstall['default'], $moneyInstall['format']);
+            ?>
+            <div class="pref-section">
+                <h3 id="money"><?php echo htmlspecialchars(t('system.preferences.money_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.money_desc')); ?></p>
+                <select id="moneyMode" class="pref-language-select">
+                    <option value=""><?php echo htmlspecialchars(t('system.preferences.money_follow', ['example' => $moneyFollowEg])); ?></option>
+                    <option value="own"><?php echo htmlspecialchars(t('system.preferences.money_own')); ?></option>
+                </select>
+                <span class="pref-saving-hint" id="moneySavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+                <div class="money-picker" id="moneyAll" hidden></div>
+                <h4 class="money-sub"><?php echo htmlspecialchars(t('system.preferences.money_exc_heading')); ?></h4>
+                <p><?php echo htmlspecialchars(t('system.preferences.money_exc_desc')); ?></p>
+                <div id="moneyExc"></div>
+                <div class="money-add">
+                    <select class="pref-language-select" id="moneyExcAdd" aria-label="<?php echo htmlspecialchars(t('system.preferences.money_add')); ?>"></select>
+                    <button type="button" class="btn btn-secondary" id="moneyExcAddBtn"><?php echo htmlspecialchars(t('system.preferences.money_add')); ?></button>
+                </div>
             </div>
 
             <?php
@@ -478,7 +583,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                  per analyst: the drawer keeps the board visible behind it, the
                  modal gives the description and comments room. -->
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.task_view_heading')); ?></h3>
+                <h3 id="task-view"><?php echo htmlspecialchars(t('system.preferences.task_view_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.task_view_desc')); ?></p>
                 <select id="taskViewSelect" class="pref-language-select">
                     <option value="panel" <?php echo $prefs['tasks_detail_view'] !== 'modal' ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.task_view_panel')); ?></option>
@@ -491,7 +596,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                  because it is the same kind of choice: how a shared UI surface
                  behaves for YOU. Off by default — see the note by the default. -->
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.search_dismiss_heading')); ?></h3>
+                <h3 id="search-panel"><?php echo htmlspecialchars(t('system.preferences.search_dismiss_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.search_dismiss_desc')); ?></p>
                 <label class="toggle-group">
                     <span class="toggle-switch">
@@ -508,7 +613,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                  because that is where somebody looks for a setting they half
                  remember changing, and its neighbour above already is. -->
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.cal_subtasks_heading')); ?></h3>
+                <h3 id="cal-subtasks"><?php echo htmlspecialchars(t('system.preferences.cal_subtasks_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.cal_subtasks_desc')); ?></p>
                 <select id="calSubtaskSelect" class="pref-language-select">
                     <option value=""     <?php echo $prefs['tasks_calendar_subtasks'] === ''     ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('tasks.filter.parents_only')); ?></option>
@@ -518,8 +623,23 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 <span class="pref-saving-hint" id="calSubtaskSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
             </div>
 
+            <!-- Subtasks listed under their card on the board. -->
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.landing_heading')); ?></h3>
+                <h3 id="board-subtasks"><?php echo htmlspecialchars(t('system.preferences.board_subtasks_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.board_subtasks_desc')); ?></p>
+                <?php // The same choice as the Tasks sidebar's "Subtasks on cards" (GH #184);
+                      // the old on/off "hide once all are complete" starts as Open.
+                      $__bs = in_array($prefs['tasks_board_subtasks'], ['all', 'open', 'none'], true) ? $prefs['tasks_board_subtasks'] : ($prefs['tasks_hide_done_subtasks'] === 'on' ? 'open' : 'all'); ?>
+                <select id="boardSubtasksSelect" class="pref-language-select">
+                    <?php foreach (['all', 'open', 'none'] as $__m): ?>
+                        <option value="<?php echo $__m; ?>"<?php echo $__bs === $__m ? ' selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.board_subtasks_' . $__m)); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="pref-saving-hint" id="boardSubtasksSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+            </div>
+
+            <div class="pref-section">
+                <h3 id="start-page"><?php echo htmlspecialchars(t('system.preferences.landing_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.landing_desc')); ?></p>
                 <select id="landingSelect" class="pref-language-select">
                     <option value=""><?php echo htmlspecialchars(t('system.preferences.landing_default', ['name' => $landingDefaultName])); ?></option>
@@ -535,7 +655,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                      genuine judgement call rather than something to decide for
                      everybody — so it is a choice. Default is to keep them. */ ?>
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('watchtower.scope.impersonal_heading')); ?></h3>
+                <h3 id="watchtower"><?php echo htmlspecialchars(t('watchtower.scope.impersonal_heading')); ?></h3>
                 <div class="anim-toggle" id="wtImpersonalToggle">
                     <button class="anim-option" data-wtimp="show"><?php echo htmlspecialchars(t('watchtower.scope.impersonal_show')); ?></button>
                     <button class="anim-option" data-wtimp="hide"><?php echo htmlspecialchars(t('watchtower.scope.impersonal_hide')); ?></button>
@@ -555,7 +675,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 try { $feedAllowed = scheduleFeedAllowed(connectToDatabase()); } catch (Exception $e) {}
             ?>
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.workcal_heading')); ?></h3>
+                <h3 id="working-hours"><?php echo htmlspecialchars(t('system.preferences.workcal_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.workcal_desc')); ?></p>
 
                 <?php if (!$feedAllowed): ?>
@@ -689,7 +809,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             ?>
             <?php if ($notifPrefs): ?>
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.notif_heading')); ?></h3>
+                <h3 id="notifications"><?php echo htmlspecialchars(t('system.preferences.notif_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.notif_desc')); ?></p>
                 <div id="notifTypes" style="display:flex;flex-direction:column;gap:10px;margin-top:12px;max-width:520px;">
                     <?php foreach ($notifPrefs as $key => $on): ?>
@@ -714,7 +834,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                  not about WHICH notifications you get, it is about how you are
                  told about the ones you already chose. -->
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.sound_heading')); ?></h3>
+                <h3 id="sound"><?php echo htmlspecialchars(t('system.preferences.sound_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.sound_desc')); ?></p>
                 <select id="notifSoundSelect" class="pref-language-select">
                     <?php foreach (['off', 'chime', 'ping', 'knock'] as $soundKey): ?>
@@ -731,14 +851,45 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 <p class="pref-hint" style="margin-top:8px;color:var(--text-muted,#666);font-size:12px;"><?php echo htmlspecialchars(t('system.preferences.sound_note')); ?></p>
             </div>
 
+            <!-- Desktop notifications. Beside the chime because it is the same
+                 kind of choice: how you are told about what reaches the bell. -->
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.position_heading')); ?></h3>
+                <h3 id="desktop"><?php echo htmlspecialchars(t('system.preferences.desktop_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.desktop_desc')); ?></p>
+                <label class="toggle-group">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="desktopNotifToggle" <?php echo $prefs['desktop_notifications'] === 'on' ? 'checked' : ''; ?>>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label"><?php echo htmlspecialchars(t('system.preferences.desktop_label')); ?></span>
+                </label>
+                <button type="button" class="sig-btn sig-btn-secondary" id="desktopNotifTest" style="margin-top:10px;"><?php echo htmlspecialchars(t('system.preferences.desktop_test')); ?></button>
+                <span class="pref-saving-hint" id="desktopNotifHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+                <p class="pref-hint" id="desktopNotifState" style="margin-top:8px;color:var(--text-muted,#666);font-size:12px;"></p>
+            </div>
+
+            <!-- Task assignment by email. -->
+            <div class="pref-section">
+                <h3 id="task-email"><?php echo htmlspecialchars(t('system.preferences.task_email_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.task_email_desc')); ?></p>
+                <label class="toggle-group">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="taskEmailToggle" <?php echo $prefs['task_assigned_email'] === 'on' ? 'checked' : ''; ?>>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label"><?php echo htmlspecialchars(t('system.preferences.task_email_label')); ?></span>
+                </label>
+                <span class="pref-saving-hint" id="taskEmailHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+            </div>
+
+            <div class="pref-section">
+                <h3 id="position"><?php echo htmlspecialchars(t('system.preferences.position_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.position_desc')); ?></p>
                 <div class="position-grid" id="toastPositionGrid"></div>
             </div>
 
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.animation_heading')); ?></h3>
+                <h3 id="animation"><?php echo htmlspecialchars(t('system.preferences.animation_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.animation_desc')); ?></p>
                 <div class="anim-toggle" id="animToggle">
                     <button class="anim-option" data-anim="slide"><?php echo htmlspecialchars(t('system.preferences.anim_slide')); ?></button>
@@ -748,8 +899,80 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
         </div><!-- /#notifications-tab -->
 
         <div class="tab-content" id="display-tab">
+            <?php
+                // Module order (GH #187). $modules is the waffle's list (the header has
+                // just included it). The list shows the modules this analyst can open;
+                // the FULL order travels too, so a module they cannot open today keeps
+                // its place for when they can (see includes/display_order.php).
+                $moDefault = array_keys($modules);
+                $moSaved   = analystModuleOrderSaved();
+                $moItems   = [];
+                foreach (analystVisibleModules($modules) as $moKey => $moMod) {
+                    // The waffle stores only the drawing; the <svg> around it is added where it is drawn.
+                    $moIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' . $moMod['icon'] . '</svg>';
+                    $moItems[] = ['key' => $moKey, 'label' => $moMod['name'], 'icon' => $moIcon, 'iconClass' => 'waffle-module-icon ' . $moKey];
+                }
+                $moPayload = [
+                    'all'      => displayOrderMerge($moSaved, $moDefault),
+                    'defaults' => $moDefault,
+                    'items'    => $moItems,
+                    'custom'   => !empty($moSaved),
+                ];
+            ?>
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.panels_heading')); ?></h3>
+                <h3 id="module-order"><?php echo htmlspecialchars(t('system.preferences.modorder_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.modorder_desc')); ?></p>
+                <div id="moduleOrderList"></div>
+                <div class="module-order-actions">
+                    <button type="button" class="btn btn-secondary" id="moduleOrderReset"><?php echo htmlspecialchars(t('system.preferences.modorder_reset')); ?></button>
+                    <span class="pref-saving-hint" id="moduleOrderHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+                </div>
+                <p class="module-order-note"><?php echo htmlspecialchars(t('system.preferences.modorder_note')); ?></p>
+                <script>window.MODULE_ORDER = <?php echo json_encode($moPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+            </div>
+
+            <?php
+                // The optional sidebar (#124): on or off, and which of the modules
+                // this analyst can open it holds - listed in their module order,
+                // which is also the order the sidebar uses.
+                $sbPrefs = appSidebarPrefs();
+            ?>
+            <div class="pref-section">
+                <h3 id="app-sidebar"><?php echo htmlspecialchars(t('system.preferences.sidebar_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.sidebar_desc')); ?></p>
+                <label class="toggle-group">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="appSidebarToggle" <?php echo $sbPrefs['on'] ? 'checked' : ''; ?>>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label"><?php echo htmlspecialchars(t('system.preferences.sidebar_label')); ?></span>
+                </label>
+                <div id="appSidebarModules" class="app-sidebar-pick"<?php echo $sbPrefs['on'] ? '' : ' hidden'; ?>>
+                    <?php /* How names show (#124). Icons only is the default - what
+                             the sidebar has always done. */ ?>
+                    <label class="app-sidebar-pick-hint" for="appSidebarNames"><?php echo htmlspecialchars(t('system.preferences.sidebar_names')); ?></label>
+                    <select id="appSidebarNames" class="pref-language-select">
+                        <?php foreach (['icons', 'hover', 'pinned'] as $sbMode): ?>
+                        <option value="<?php echo $sbMode; ?>"<?php echo $sbPrefs['names'] === $sbMode ? ' selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.sidebar_names_' . $sbMode)); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="app-sidebar-pick-hint"><?php echo htmlspecialchars(t('system.preferences.sidebar_pick')); ?></p>
+                    <div class="app-sidebar-pick-list">
+                        <?php foreach ($moItems as $sbItem): ?>
+                        <label class="app-sidebar-pick-item">
+                            <input type="checkbox" value="<?php echo htmlspecialchars($sbItem['key']); ?>"
+                                <?php echo ($sbPrefs['modules'] === null || in_array($sbItem['key'], $sbPrefs['modules'], true)) ? 'checked' : ''; ?>>
+                            <span class="<?php echo htmlspecialchars($sbItem['iconClass']); ?>"><?php echo $sbItem['icon']; ?></span>
+                            <span><?php echo htmlspecialchars($sbItem['label']); ?></span>
+                        </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <span class="pref-saving-hint" id="appSidebarHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+            </div>
+
+            <div class="pref-section">
+                <h3 id="left-panels"><?php echo htmlspecialchars(t('system.preferences.panels_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.panels_desc')); ?></p>
                 <!-- One row per module that has a left panel. Rows are built
                      in JS from SIDEBAR_PANELS so adding a module is a one-line
@@ -758,7 +981,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             </div>
 
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.multiselect_heading')); ?></h3>
+                <h3 id="multi-select"><?php echo htmlspecialchars(t('system.preferences.multiselect_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.multiselect_desc')); ?></p>
                 <div class="anim-toggle" id="multiSelectPaneToggle">
                     <button class="anim-option" data-msmode="summary"><?php echo htmlspecialchars(t('system.preferences.multiselect_summary')); ?></button>
@@ -769,7 +992,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             </div>
 
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.mc_heading')); ?></h3>
+                <h3 id="morning-checks"><?php echo htmlspecialchars(t('system.preferences.mc_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.mc_desc')); ?></p>
                 <div class="anim-toggle" id="mcFillToggle">
                     <button class="anim-option" data-fill="plain"><?php echo htmlspecialchars(t('system.preferences.fill_plain')); ?></button>
@@ -784,8 +1007,12 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                  person signing their own name — there is deliberately no shared
                  or install-wide signature to administer. -->
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.details_heading')); ?></h3>
+                <h3 id="my-details"><?php echo htmlspecialchars(t('system.preferences.details_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.details_desc')); ?></p>
+                <div id="detailsManagedNote" class="pref-managed-note" style="display:none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span><?php echo htmlspecialchars(t('system.preferences.details_managed_note')); ?></span>
+                </div>
                 <div class="sig-details-grid">
                     <label><span><?php echo htmlspecialchars(t('system.preferences.details_job_title')); ?></span>
                         <input type="text" id="myJobTitle" autocomplete="off" maxlength="100"></label>
@@ -796,12 +1023,12 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     <label><span><?php echo htmlspecialchars(t('system.preferences.details_mobile')); ?></span>
                         <input type="text" id="myMobile" autocomplete="off" maxlength="50"></label>
                 </div>
-                <button type="button" class="sig-btn sig-btn-primary" onclick="saveMyDetails()"><?php echo htmlspecialchars(t('common.save')); ?></button>
+                <button type="button" class="sig-btn sig-btn-primary" id="saveDetailsBtn" onclick="saveMyDetails()"><?php echo htmlspecialchars(t('common.save')); ?></button>
                 <span class="pref-saving-hint" id="detailsSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
             </div>
 
             <div class="pref-section">
-                <h3><?php echo htmlspecialchars(t('system.preferences.sig_heading')); ?></h3>
+                <h3 id="signature"><?php echo htmlspecialchars(t('system.preferences.sig_heading')); ?></h3>
                 <p><?php echo htmlspecialchars(t('system.preferences.sig_desc')); ?></p>
 
                 <div id="sigList" class="sig-list"></div>
@@ -867,6 +1094,16 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
     <script>window.__MY_NAME = <?php echo json_encode($_SESSION['analyst_name'] ?? ''); ?>; window.__MY_EMAIL = <?php echo json_encode($_SESSION['analyst_email'] ?? ''); ?>;</script>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
+    <?php echo Money::scriptTag(); ?>
+    <?php
+        // The analyst's own money format, and the install's for "follow" (GH #189).
+        $moneyMine = Money::personalSettings();
+        $moneyMine['formats'] = (object)$moneyMine['formats'];
+        $moneyMine['install'] = Money::installSettings()['format'];
+    ?>
+    <script>window.MONEY_MINE = <?php echo json_encode($moneyMine, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;</script>
+    <script src="../../assets/js/money.js?v=1"></script>
+    <script src="../../assets/js/reorder-list.js?v=1"></script>
     <script src="../../assets/js/qrcode.min.js"></script>
     <script src="../../assets/js/subscribe.js?v=1"></script>
     <script src="../../assets/js/tinymce/tinymce.min.js"></script>
@@ -887,8 +1124,20 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             panel.classList.add('active');
             history.replaceState(null, '', '#' + tab);
         }
-        if (location.hash.length > 1) switchTab(location.hash.slice(1));
-
+        if (location.hash.length > 1) {
+            const want = location.hash.slice(1);
+            const section = !document.getElementById(want + '-tab') && document.getElementById(want);
+            const tab = section && section.closest('.tab-content');
+            if (tab) {
+                // A section rather than a tab (e.g. #app-sidebar, linked from the
+                // sidebar itself): open its tab and bring it into view.
+                switchTab(tab.id.replace(/-tab$/, ''));
+                history.replaceState(null, '', '#' + want);
+                section.scrollIntoView({ block: 'start' });
+            } else {
+                switchTab(want);
+            }
+        }
         // Generic save helper — fire-and-forget POST to the per-analyst
         // preference store. Returns a Promise resolving to the API's
         // success flag so call sites can chain UI feedback off it.
@@ -1023,6 +1272,83 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             });
         }
 
+        // ===== Desktop notifications (desktop_notifications) =====
+        // Switching it on asks the BROWSER for permission - that has to happen
+        // inside the click, which is why it lives here and not in the bell. If the
+        // browser says no, the switch goes back off: a setting that is on but can
+        // never show anything would be a promise the page cannot keep.
+        const desktopToggle = document.getElementById('desktopNotifToggle');
+        const desktopHint   = document.getElementById('desktopNotifHint');
+        const desktopState  = document.getElementById('desktopNotifState');
+        const desktopTest   = document.getElementById('desktopNotifTest');
+        function paintDesktopState() {
+            if (!desktopState) return;
+            let key;
+            if (!('Notification' in window)) key = 'desktop_unsupported';
+            else if (!window.isSecureContext) key = 'desktop_insecure';
+            else if (Notification.permission === 'denied') key = 'desktop_blocked';
+            else if (Notification.permission === 'granted') key = 'desktop_allowed';
+            else key = 'desktop_ask';
+            desktopState.textContent = window.t('system.preferences.' + key);
+            if (desktopTest) desktopTest.hidden = !(desktopToggle.checked && 'Notification' in window && Notification.permission === 'granted');
+        }
+        if (desktopToggle) {
+            paintDesktopState();
+            desktopToggle.addEventListener('change', async function () {
+                if (desktopToggle.checked) {
+                    if (!('Notification' in window) || !window.isSecureContext) {
+                        desktopToggle.checked = false; paintDesktopState(); return;
+                    }
+                    let perm = Notification.permission;
+                    if (perm === 'default') {
+                        try { perm = await Notification.requestPermission(); } catch (e) { perm = 'denied'; }
+                    }
+                    if (perm !== 'granted') {
+                        desktopToggle.checked = false; paintDesktopState(); return;
+                    }
+                }
+                desktopHint.classList.add('show');
+                await savePref('desktop_notifications', desktopToggle.checked ? 'on' : '');
+                window.DESKTOP_NOTIFICATIONS = desktopToggle.checked;
+                paintDesktopState();
+                setTimeout(() => desktopHint.classList.remove('show'), 1200);
+            });
+        }
+        if (desktopTest) {
+            desktopTest.addEventListener('click', function () {
+                try {
+                    const n = new Notification(window.t('system.preferences.desktop_test_title'), {
+                        body: window.t('system.preferences.desktop_test_body'),
+                        icon: (document.querySelector('link[rel="icon"]') || {}).href,
+                        tag: 'freeitsm-test'
+                    });
+                    n.onclick = () => { window.focus(); n.close(); };
+                } catch (e) { paintDesktopState(); }
+            });
+        }
+
+        // ===== Email me when a task is assigned to me (task_assigned_email) =====
+        const taskEmailToggle = document.getElementById('taskEmailToggle');
+        const taskEmailHint   = document.getElementById('taskEmailHint');
+        if (taskEmailToggle) {
+            taskEmailToggle.addEventListener('change', async function () {
+                taskEmailHint.classList.add('show');
+                await savePref('task_assigned_email', taskEmailToggle.checked ? 'on' : '');
+                setTimeout(() => taskEmailHint.classList.remove('show'), 1200);
+            });
+        }
+
+        // ===== Subtasks under their card on the board (tasks_hide_done_subtasks) =====
+        const boardSubtasksSelect = document.getElementById('boardSubtasksSelect');
+        const boardSubtasksHint   = document.getElementById('boardSubtasksSavingHint');
+        if (boardSubtasksSelect) {
+            boardSubtasksSelect.addEventListener('change', async function() {
+                boardSubtasksHint.classList.add('show');
+                await savePref('tasks_board_subtasks', boardSubtasksSelect.value);
+                setTimeout(() => boardSubtasksHint.classList.remove('show'), 1200);
+            });
+        }
+
         // ===== Closing the search panel (search_panel_close_outside) =====
         // Stored as 'on' / '' so the value reads the same way as the other
         // opt-in keys, and so an un-migrated or empty row means "off".
@@ -1093,6 +1419,165 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 if (ok) showToast(window.t('system.preferences.format_saved'), 'success');
             });
         });
+
+        // ===== Sidebar (app_sidebar / app_sidebar_modules, #124) =====
+        // Saved as soon as anything changes and drawn from the next page opened.
+        // The ticked modules are saved as a list; ticking every one saves the
+        // whole list too, so the choice is explicit either way.
+        (function () {
+            const toggle = document.getElementById('appSidebarToggle');
+            const box = document.getElementById('appSidebarModules');
+            const hint = document.getElementById('appSidebarHint');
+            if (!toggle || !box) return;
+            const P = k => window.t('system.preferences.' + k);
+            toggle.addEventListener('change', async () => {
+                box.hidden = !toggle.checked;
+                hint.classList.add('show');
+                const ok = await savePref('app_sidebar', toggle.checked ? '1' : '');
+                hint.classList.remove('show');
+                if (ok) showToast(P(toggle.checked ? 'sidebar_on' : 'sidebar_off'), 'success');
+                else toggle.checked = !toggle.checked;
+            });
+            const names = document.getElementById('appSidebarNames');
+            if (names) names.addEventListener('change', async () => {
+                hint.classList.add('show');
+                const ok = await savePref('app_sidebar_names', names.value);
+                hint.classList.remove('show');
+                if (ok) showToast(P('sidebar_saved'), 'success');
+            });
+            box.addEventListener('change', async e => {
+                if (!e.target.matches('input[type="checkbox"]')) return;
+                const keys = [...box.querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value);
+                hint.classList.add('show');
+                const ok = await savePref('app_sidebar_modules', JSON.stringify(keys));
+                hint.classList.remove('show');
+                if (ok) showToast(P('sidebar_saved'), 'success');
+                else e.target.checked = !e.target.checked;
+            });
+        })();
+
+        // ===== Module order (module_order, GH #187) =====
+        // Every move saves the FULL order (all modules, including any this analyst
+        // cannot open today, in the slots they already had). A failed save puts the
+        // list back to what was last saved; Reset deletes the preference, so the
+        // default order - including modules added later - applies again.
+        (function () {
+            const box = document.getElementById('moduleOrderList');
+            const D = window.MODULE_ORDER;
+            if (!box || !D || !window.ReorderList) return;
+            const P = k => window.t('system.preferences.' + k);
+            const hint = document.getElementById('moduleOrderHint');
+            const resetBtn = document.getElementById('moduleOrderReset');
+            const visible = new Set(D.items.map(i => i.key));
+            const shown = full => full.filter(k => visible.has(k));
+            let saved = D.all.slice();
+            let custom = D.custom;
+            resetBtn.disabled = !custom;
+
+            /** The visible order written back into the slots the visible modules hold, so hidden ones never move. */
+            function withHidden(visOrder) {
+                let i = 0;
+                return saved.map(k => (visible.has(k) ? visOrder[i++] : k));
+            }
+
+            let queue = Promise.resolve();
+            /** One save at a time; on failure (savePref shows the error) the list returns to the last saved order. */
+            function save(value, next, onOk) {
+                queue = queue.then(async () => {
+                    hint.classList.add('show');
+                    const ok = await savePref('module_order', value);
+                    hint.classList.remove('show');
+                    if (ok) { saved = next; onOk(); }
+                    else rl.setOrder(shown(saved));
+                });
+            }
+
+            const rl = ReorderList.mount(box, {
+                items: shown(saved).map(k => D.items.find(i => i.key === k)),
+                label: P('modorder_label'),
+                onChange: keys => {
+                    const next = withHidden(keys);
+                    save(JSON.stringify(next), next, () => { custom = true; resetBtn.disabled = false; });
+                },
+            });
+
+            resetBtn.addEventListener('click', () => {
+                save('', D.defaults.slice(), () => {
+                    custom = false;
+                    resetBtn.disabled = true;
+                    rl.setOrder(shown(D.defaults));
+                    showToast(P('modorder_reset_done'), 'success');
+                });
+            });
+        })();
+
+        // ===== Money (currency_format / currency_formats, GH #189) =====
+        // Saved as soon as anything changes, like the formats above. '' for
+        // currency_format means "follow System > Currencies".
+        (function () {
+            const mode = document.getElementById('moneyMode');
+            if (!mode || !window.Money) return;
+            const hint   = document.getElementById('moneySavingHint');
+            const allBox = document.getElementById('moneyAll');
+            const excBox = document.getElementById('moneyExc');
+            const addSel = document.getElementById('moneyExcAdd');
+            const P = k => window.t('system.preferences.' + k);
+            const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const mine = window.MONEY_MINE || { format: '', formats: {}, install: '' };
+            const state = { all: mine.format || '', per: Object.assign({}, mine.formats) };
+            const SAMPLE = 1234567.891;
+            const base = () => state.all || mine.install;
+
+            function draw() {
+                mode.value = state.all ? 'own' : '';
+                allBox.hidden = !state.all;
+                if (state.all) allBox.innerHTML = Money.formatPickerHtml(Money.def(), state.all, 'pref-language-select');
+                const codes = Object.keys(state.per).sort();
+                excBox.innerHTML = codes.length ? codes.map(c => '<div class="money-exc" data-exc="' + esc(c) + '">'
+                    + '<div class="money-exc-head"><span class="nm"><code>' + esc(c) + '</code>' + esc(Money.name(c)) + '</span>'
+                    + '<span class="eg">' + esc(Money.format(SAMPLE, c, state.per[c])) + '</span>'
+                    + '<button type="button" data-exc-remove="' + esc(c) + '" title="' + esc(P('money_remove')) + '" aria-label="' + esc(P('money_remove')) + '">&times;</button></div>'
+                    + '<div class="money-picker">' + Money.formatPickerHtml(c, state.per[c], 'pref-language-select') + '</div></div>').join('')
+                    : '<p>' + esc(P('money_exc_none')) + '</p>';
+                // Favourites first, as everywhere; minus the currencies that already have a row.
+                addSel.innerHTML = Money.optionsHtml(Money.favourites()[0]);
+                codes.forEach(c => { const o = addSel.querySelector('option[value="' + c + '"]'); if (o) o.remove(); });
+            }
+
+            // One save at a time, each sending the value as it is WHEN it goes: two
+            // quick changes otherwise race, and the older request can land last.
+            let queue = Promise.resolve();
+            function save(key) {
+                queue = queue.then(async () => {
+                    hint.classList.add('show');
+                    const ok = await savePref(key, key === 'currency_format' ? state.all : JSON.stringify(state.per));
+                    hint.classList.remove('show');
+                    if (ok) showToast(window.t('system.preferences.format_saved'), 'success');
+                });
+            }
+
+            mode.addEventListener('change', () => { state.all = mode.value ? base() : ''; draw(); save('currency_format'); });
+            allBox.addEventListener('change', () => { state.all = Money.readPicker(allBox); draw(); save('currency_format'); });
+            excBox.addEventListener('change', e => {
+                const row = e.target.closest('[data-exc]');
+                if (!row) return;
+                state.per[row.dataset.exc] = Money.readPicker(row.querySelector('.money-picker'));
+                draw(); save('currency_formats');
+            });
+            excBox.addEventListener('click', e => {
+                const b = e.target.closest('[data-exc-remove]');
+                if (!b) return;
+                delete state.per[b.dataset.excRemove];
+                draw(); save('currency_formats');
+            });
+            document.getElementById('moneyExcAddBtn').addEventListener('click', () => {
+                const c = addSel.value;
+                if (!c || state.per[c]) return;
+                state.per[c] = base();
+                draw(); save('currency_formats');
+            });
+            draw();
+        })();
 
         // ===== Generic two-button toggle wiring =====
         // Used for animation style, sidebar modes, MC fill — anything
@@ -1234,6 +1719,27 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 document.getElementById('myDepartment').value = p.department || '';
                 document.getElementById('myPhone').value      = p.phone      || '';
                 document.getElementById('myMobile').value     = p.mobile     || '';
+                // An OIDC provider set to sync 'always' rewrites these on every
+                // sign-in (#155), so they are read-only here. The server refuses
+                // the save too - this only stops anyone typing into them.
+                const isManaged = !!p.sso_synced;
+                ['myJobTitle', 'myDepartment', 'myPhone', 'myMobile'].forEach(function (id) {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.disabled = isManaged;
+                        if (isManaged) {
+                            el.title = window.t ? window.t('system.preferences.details_managed_note') : 'Managed by identity provider';
+                            if (el.parentElement) el.parentElement.classList.add('is-disabled');
+                        } else {
+                            el.removeAttribute('title');
+                            if (el.parentElement) el.parentElement.classList.remove('is-disabled');
+                        }
+                    }
+                });
+                const saveBtn = document.getElementById('saveDetailsBtn');
+                if (saveBtn) saveBtn.style.display = isManaged ? 'none' : '';
+                const managedNote = document.getElementById('detailsManagedNote');
+                if (managedNote) managedNote.style.display = isManaged ? 'flex' : 'none';
 
                 renderSignatureList();
                 renderSignatureCodes();
@@ -1855,6 +2361,6 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
 
         document.addEventListener('DOMContentLoaded', loadSignatures);
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -22,6 +22,7 @@
 const WFE = (() => {
     // ---- Grid / sizing ----
     const GRID = 20;
+    /** Rounds a canvas coordinate to the nearest grid line (GRID pixels). */
     const snap = v => Math.round(v / GRID) * GRID;
     const SIZE = {
         trigger:   { w: 200, h: 70  },
@@ -106,6 +107,7 @@ const WFE = (() => {
         } catch (e) { return; }
         if (!items.length) return;
 
+        /** Escapes text for safe use in HTML. */
         const escHtml = s => {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
@@ -118,6 +120,9 @@ const WFE = (() => {
         host.style.display = 'block';
     }
 
+    /**
+     * Loads a saved workflow from get.php and rebuilds the canvas - trigger, conditions and actions at their stored positions (or stacked when they have none) - plus the detail panel and the run history.
+     */
     async function loadWorkflow(id) {
         try {
             const r = await fetch(window.WF_API + 'get.php?id=' + id, { credentials: 'same-origin' });
@@ -188,6 +193,7 @@ const WFE = (() => {
             el: null,
         });
     }
+    /** Adds a condition node at a grid-snapped position and returns it (not rendered until renderAll). */
     function addConditionNode(x, y, field, op, value) {
         const n = {
             id: nextLocalId--,
@@ -199,6 +205,7 @@ const WFE = (() => {
         nodes.push(n);
         return n;
     }
+    /** Adds an action node at a grid-snapped position and returns it (not rendered until renderAll). */
     function addActionNode(x, y, type, args) {
         const n = {
             id: nextLocalId--,
@@ -219,6 +226,9 @@ const WFE = (() => {
         renderAll();
         selectNode(n.id);
     }
+    /**
+     * Toolbar: adds an action below the stack, of the first action type, seeded with that type's default args, and selects it.
+     */
     function addAction() {
         const firstType = Object.keys(window.WF_ACTION_DEFS)[0];
         // Seed args from the action's spec — picks up `default` values
@@ -249,6 +259,7 @@ const WFE = (() => {
         return lowest;
     }
 
+    /** Removes the selected condition or action node (the trigger cannot be deleted) and marks the workflow unsaved. */
     function deleteSelected() {
         if (selectedNodeId == null) return;
         const n = nodes.find(x => x.id === selectedNodeId);
@@ -276,6 +287,7 @@ const WFE = (() => {
         updateCanvasSize();
     }
 
+    /** Builds the positioned DOM element for one node and wires its mousedown for drag and select. */
     function createNodeEl(n) {
         const el = document.createElement('div');
         el.className = 'wf-node wf-node-' + n.kind;
@@ -290,7 +302,11 @@ const WFE = (() => {
         return el;
     }
 
+    /**
+     * Returns the inner HTML of a node - the trigger's event, a condition's field, operator and value (lookup ids shown as labels), or an action's label with a one-line summary of its args.
+     */
     function renderNodeContent(n) {
+        /** Escapes text for safe use in HTML. */
         const escHtml = s => {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
@@ -312,6 +328,7 @@ const WFE = (() => {
             // id to label; otherwise use the raw value as-is. Keeps the node
             // glanceable rather than showing opaque ids.
             const lookup = window.WF_LOOKUP_VALUES[n.field] || null;
+            /** Turns a lookup id into its label for the condition preview, or returns the id when there is no lookup. */
             const labelFor = id => {
                 if (!lookup) return String(id);
                 const row = lookup.find(v => String(v.id) === String(id));
@@ -341,6 +358,7 @@ const WFE = (() => {
             // priority / analyst / subject — falling back to the first
             // non-empty arg's value otherwise.
             const args = n.args || {};
+            /** Turns an action arg's id into its label from WF_ACTION_LOOKUPS, or returns the id. */
             const lookupLabel = (lookupKey, idVal) => {
                 const list = (window.WF_ACTION_LOOKUPS && window.WF_ACTION_LOOKUPS[lookupKey]) || [];
                 const hit = list.find(v => String(v.id) === String(idVal));
@@ -391,6 +409,7 @@ const WFE = (() => {
         ensureArrowheadDef();
     }
 
+    /** Adds the SVG arrowhead marker used by the connectors, once. */
     function ensureArrowheadDef() {
         if (svg.querySelector('#wfArrow')) return;
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -398,6 +417,7 @@ const WFE = (() => {
         svg.appendChild(defs);
     }
 
+    /** Draws a straight arrow between two nodes, leaving from the edge of each box that faces the other. */
     function drawConnector(a, b) {
         // Pick the closest edge between the two boxes — same routing as
         // Process Mapper's calcConnectorPoints. Defaults to short straight
@@ -440,6 +460,7 @@ const WFE = (() => {
         svg.setAttribute('height', String(maxBottom));
     }
 
+    /** Toggles the 'selected' outline so only the selected node has it. */
     function updateSelectionVisuals() {
         Array.from(canvas.querySelectorAll('.wf-node')).forEach(el => {
             const isSel = (+el.dataset.nodeId === selectedNodeId);
@@ -462,6 +483,7 @@ const WFE = (() => {
         });
     }
 
+    /** A click on bare canvas deselects and shows the workflow's own detail panel. */
     function onCanvasMouseDown(e) {
         // Click on bare canvas = deselect → show workflow detail.
         if (e.target === canvas || e.target === svg) {
@@ -469,6 +491,7 @@ const WFE = (() => {
         }
     }
 
+    /** Starts dragging a node; the detail panel opens on mouseup only if the node was not moved. */
     function onNodeMouseDown(e, n) {
         if (e.button !== 0) return;
         e.stopPropagation();
@@ -490,6 +513,9 @@ const WFE = (() => {
         if (selectedNodeId !== n.id) selectNode(n.id, /*deferDetail*/ true);
     }
 
+    /**
+     * Moves the dragged node to the grid-snapped cursor position and redraws the connectors; the trigger node stays pinned.
+     */
     function onDocMouseMove(e) {
         if (!dragging) return;
         const n = nodes.find(x => x.id === dragging.id);
@@ -514,6 +540,7 @@ const WFE = (() => {
         }
     }
 
+    /** Ends a drag - a moved node marks the workflow unsaved, a click without movement opens that node's detail panel. */
     function onDocMouseUp(e) {
         if (!dragging) return;
         if (dragging.moved) markDirty();
@@ -536,12 +563,14 @@ const WFE = (() => {
         }
     }
 
+    /** Clears the node selection and shows the workflow's name, description and active switch in the detail panel. */
     function selectWorkflow() {
         selectedNodeId = null;
         updateSelectionVisuals();
         showBody('Workflow', 'wfBodyWorkflow');
     }
 
+    /** Sets the detail panel title and shows only the named body section. */
     function showBody(title, id) {
         document.getElementById('wfDetailTitle').textContent = title;
         ['wfBodyWorkflow', 'wfBodyTrigger', 'wfBodyCondition', 'wfBodyAction'].forEach(b => {
@@ -549,11 +578,15 @@ const WFE = (() => {
         });
     }
 
+    /** Shows the trigger detail with the current trigger event selected. */
     function showDetailForTrigger() {
         showBody('Trigger', 'wfBodyTrigger');
         document.getElementById('wfTrigger').value = triggerEvent;
     }
 
+    /**
+     * Shows the condition detail - the fields this trigger offers (keeping a stored field from another trigger as "custom"), the operators and the value control.
+     */
     function showDetailForCondition(n) {
         showBody('Condition', 'wfBodyCondition');
         // Field dropdown is repopulated whenever the trigger event changes,
@@ -715,6 +748,7 @@ const WFE = (() => {
         markDirty();
     }
 
+    /** Shows the action detail - its type, description and the per-arg form. */
     function showDetailForAction(n) {
         showBody('Action', 'wfBodyAction');
         const typeSel = document.getElementById('wfActType');
@@ -804,6 +838,9 @@ const WFE = (() => {
                 const listHost = document.createElement('div');
                 listHost.style.cssText = 'border: 1px solid var(--border, #ddd); border-radius: 4px; padding: 6px 8px; max-height: 160px; overflow-y: auto; background: var(--surface-2, #fafafa); display: flex; flex-direction: column; gap: 4px;';
 
+                /**
+                 * Lists the checklist templates matching the search (scored by scoreChecklistTemplate when loaded), best match then ticked then A-Z; ticking updates the node's template_ids.
+                 */
                 function renderList(query = '') {
                     listHost.innerHTML = '';
                     const q = (query || '').trim();
@@ -915,6 +952,7 @@ const WFE = (() => {
                 bar.appendChild(warn);
                 fg.appendChild(bar);
 
+                /** Updates the unknown merge-code warning under this field. */
                 const refreshWarn = () => renderVarWarning(warn, ctrl.value);
                 ctrl.addEventListener('input', refreshWarn);
                 refreshWarn();
@@ -970,6 +1008,9 @@ const WFE = (() => {
         const urlFg   = urlCtrl?.closest('[data-arg-fg]');
         if (!urlCtrl || !urlFg) return;
 
+        /**
+         * Warns under the webhook URL when it does not match the chosen format's url_pattern, naming the platform it does look like when one matches.
+         */
         const check = () => {
             urlFg.querySelector('.wf-fmt-mismatch')?.remove();
             const url = String(urlCtrl.value || '');
@@ -1021,6 +1062,9 @@ const WFE = (() => {
         btn.addEventListener('click', () => runWebhookTest(n, btn, out));
     }
 
+    /**
+     * Sends the action's current webhook config to webhook_test.php with sample data and shows what the endpoint returned; nothing is saved.
+     */
     async function runWebhookTest(n, btn, out) {
         const a = n.args || {};
         if (!a.url) { out.innerHTML = webhookTestError('Enter a URL first.'); return; }
@@ -1066,6 +1110,7 @@ const WFE = (() => {
 
     const VAR_RE = /\{\{\s*([^}]+?)\s*\}\}/g;
 
+    /** Returns the merge codes ({path, label}) the current trigger can resolve. */
     function currentVars() {
         return (window.WF_VARS_BY_TRIG && window.WF_VARS_BY_TRIG[triggerEvent]) || [];
     }
@@ -1075,11 +1120,13 @@ const WFE = (() => {
         return (window.WF_VAR_PREFIXES && window.WF_VAR_PREFIXES[triggerEvent]) || [];
     }
 
+    /** Returns the human label for a merge-code path, or null when the trigger does not know it. */
     function varLabel(path) {
         const hit = currentVars().find(v => v.path === path);
         return hit ? hit.label : null;
     }
 
+    /** True when the current trigger can resolve a merge-code path, exactly or under one of its open-ended prefixes. */
     function isKnownVar(path) {
         if (currentVars().some(v => v.path === path)) return true;
         return currentVarPrefixes().some(p => path.startsWith(p) && path.length > p.length);
@@ -1096,6 +1143,7 @@ const WFE = (() => {
         return out;
     }
 
+    /** Shows (or hides) the warning listing the {{codes}} in the text that the current trigger cannot resolve. */
     function renderVarWarning(el, text) {
         const bad = unknownVarsIn(text);
         if (!bad.length) { el.style.display = 'none'; el.textContent = ''; return; }
@@ -1111,6 +1159,7 @@ const WFE = (() => {
 
     let varTarget = null;   // { argName, spec, ctrl }
 
+    /** Opens the large merge-code editor for one action arg, with the codes this trigger offers and a live preview. */
     function openVarModal(argName, spec, ctrl) {
         varTarget = { argName, spec, ctrl };
         document.getElementById('wfVarTitle').textContent = spec.label || argName;
@@ -1128,11 +1177,15 @@ const WFE = (() => {
         setTimeout(() => ta.focus(), 80);
     }
 
+    /** Closes the merge-code editor without applying it. */
     function closeVarModal() {
         document.getElementById('wfVarModal').classList.remove('active');
         varTarget = null;
     }
 
+    /**
+     * Copies the merge-code editor's text back into the arg's control (newlines collapsed for a single-line arg) and closes it.
+     */
     function applyVarModal() {
         if (!varTarget) return;
         let val = document.getElementById('wfVarText').value;
@@ -1145,6 +1198,7 @@ const WFE = (() => {
         closeVarModal();
     }
 
+    /** Lists the current trigger's merge codes matching the search, each button inserting its code at the cursor. */
     function renderVarList(query) {
         const host = document.getElementById('wfVarList');
         const q = String(query || '').toLowerCase().trim();
@@ -1211,6 +1265,7 @@ const WFE = (() => {
         preview.innerHTML = html.replace(/\n/g, '<br>');
     }
 
+    /** Returns the red error box HTML for a failed webhook test. */
     function webhookTestError(msg, heading) {
         const esc = wfEsc;
         return '<div style="border-left:3px solid var(--danger-accent, #c0392b); background:var(--danger-bg, #fdf0f0); padding:10px 12px; border-radius:4px; font-size:12.5px; color:var(--danger-text, #8a2020);">'
@@ -1234,6 +1289,9 @@ const WFE = (() => {
         return h + '</div>';
     }
 
+    /**
+     * Returns the HTML for a webhook test result - delivered or not, HTTP status and timing, any diagnosis, and the request and response bodies.
+     */
     function renderWebhookTestResult(d) {
         const esc = wfEsc;
         const ok = d.delivered;
@@ -1281,6 +1339,9 @@ const WFE = (() => {
         });
     }
 
+    /**
+     * Writes one arg control's value into the selected action node (an empty text value removes the arg), then refreshes the node, conditional fields and webhook hints.
+     */
     function updateActionArgFromControl(argName, type, ctrl) {
         const n = nodes.find(x => x.id === selectedNodeId);
         if (!n || n.kind !== 'action') return;
@@ -1301,6 +1362,7 @@ const WFE = (() => {
         markDirty();
     }
 
+    /** Wires the workflow name, description and active switch so edits update the workflow and mark it unsaved. */
     function bindWorkflowDetailEvents() {
         ['wfName', 'wfDescription'].forEach(id => {
             document.getElementById(id).addEventListener('input', () => {
@@ -1323,6 +1385,9 @@ const WFE = (() => {
         nodes.forEach(n => { if (n.el) n.el.innerHTML = renderNodeContent(n); });
         markDirty();
     }
+    /**
+     * Applies the condition detail panel to the selected node - a new field rebuilds the operators, and a new field or operator reshapes the value to suit.
+     */
     function updateConditionFromDetail() {
         const n = nodes.find(x => x.id === selectedNodeId);
         if (!n || n.kind !== 'condition') return;
@@ -1357,6 +1422,7 @@ const WFE = (() => {
         if (n.el) n.el.innerHTML = renderNodeContent(n);
         markDirty();
     }
+    /** Changes the selected action's type, replacing its args with the new type's defaults and redrawing the form. */
     function updateActionTypeFromDetail() {
         const n = nodes.find(x => x.id === selectedNodeId);
         if (!n || n.kind !== 'action') return;
@@ -1383,6 +1449,7 @@ const WFE = (() => {
         dirty = true;
         setStatus('unsaved');
     }
+    /** Shows the save status pip - idle, unsaved, saving or saved. */
     function setStatus(state) {
         const el = document.getElementById('wfStatus');
         if (!el) return;
@@ -1471,6 +1538,7 @@ const WFE = (() => {
     function buildTestFirePayload() {
         const payload = {};
         const conditions = nodes.filter(n => n.kind === 'condition');
+        /** Sets a dotted path (ticket.priority_id) inside the test payload, creating the objects on the way. */
         const setPath = (path, value) => {
             const parts = String(path).split('.');
             let cur = payload;
@@ -1523,6 +1591,9 @@ const WFE = (() => {
         return testFire(true);
     }
 
+    /**
+     * Runs the saved workflow through fire.php with a test payload - for real, or as a dry run that only describes the actions - then reloads the run history.
+     */
     async function testFire(isDryRun) {
         if (!workflow.id) { window.showToast('Save the workflow first.', 'error'); return; }
         if (dirty) {
@@ -1552,6 +1623,7 @@ const WFE = (() => {
         } catch (e) { window.showToast('Test fire failed', 'error'); }
     }
 
+    /** Lists recent runs with their status pill, start time, any error, and a dry run's would-have-done steps. */
     function renderExecutions(execs) {
         const host = document.getElementById('execList');
         if (!host) return;
@@ -1559,11 +1631,13 @@ const WFE = (() => {
             host.innerHTML = '<em>No runs yet. Test-fire the workflow to see one here.</em>';
             return;
         }
+        /** Escapes text for safe use in HTML. */
         const escHtml = s => {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
             return d.innerHTML;
         };
+        /** Formats a run's UTC start time in the analyst's zone, or returns it unchanged if formatting fails. */
         const fmtDate = s => {
             if (!s) return '';
             // started_datetime is a server-stamped UTC instant → show in the analyst's zone.
@@ -1628,6 +1702,9 @@ const WFE = (() => {
     // =========================================================
     let aiProposal = null;   // last successful proposal from the API
 
+    /**
+     * Opens the AI co-author modal reset to an empty prompt; the "iterate" hint shows only when the canvas already has conditions or actions.
+     */
     function openAiModal() {
         const modal = document.getElementById('wfAiModal');
         if (!modal) return;
@@ -1644,11 +1721,13 @@ const WFE = (() => {
         modal.classList.add('active');
         setTimeout(() => document.getElementById('wfAiPrompt').focus(), 80);
     }
+    /** Closes the AI co-author modal. */
     function closeAiModal() {
         const modal = document.getElementById('wfAiModal');
         if (modal) modal.classList.remove('active');
     }
 
+    /** Sends the prompt and the current workflow (without positions) to ai_compose.php and shows the proposal. */
     async function aiGenerate() {
         const prompt = document.getElementById('wfAiPrompt').value.trim();
         if (!prompt) return;
@@ -1707,7 +1786,11 @@ const WFE = (() => {
         };
     }
 
+    /**
+     * Shows the AI proposal - explanation, a compact trigger/condition/action preview and any validation warnings - with Apply and Discard.
+     */
     function renderAiResult(d) {
+        /** Escapes text for safe use in HTML. */
         const escHtml = s => {
             const el = document.createElement('div');
             el.textContent = s == null ? '' : String(s);
@@ -1751,6 +1834,7 @@ const WFE = (() => {
         }
     }
 
+    /** Throws away the AI proposal and returns the modal to the prompt. */
     function aiDiscard() {
         aiProposal = null;
         // Reset back to the prompt view so the user can try again.
@@ -1761,6 +1845,9 @@ const WFE = (() => {
         document.getElementById('wfAiPrompt').focus();
     }
 
+    /**
+     * Replaces the canvas with the AI proposal, keeping the workflow's id and active flag, stacks the nodes and marks it unsaved.
+     */
     function aiApply() {
         if (!aiProposal) return;
         const w = aiProposal.workflow;

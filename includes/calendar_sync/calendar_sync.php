@@ -28,6 +28,8 @@ const CALENDAR_MODE_FEED = 'feed';   // a subscribe (.ics) link they add themsel
  * TWICE in the same calendar — once as a real event and once from the
  * subscription. Independent switches make that trivially easy to do by accident
  * and baffling to diagnose. A single choice makes it unrepresentable.
+ *
+ * @param string $mode  a stored or submitted calendar_enrolments.mode value - valid ones are off, push and feed
  */
 function calendarModeIsValid(string $mode): bool
 {
@@ -52,24 +54,41 @@ const TASK_CAL_WORK = 'work';   // the scheduled work window, as a timed appoint
 const TASK_CAL_DUE  = 'due';    // the due date, as an all-day event
 const TASK_CAL_BOTH = 'both';
 
+/**
+ * True when $mode is one of the task calendar modes - off, work, due or both.
+ *
+ * @param string $mode  a stored or submitted calendar_enrolments.task_mode value
+ */
 function taskCalendarModeIsValid(string $mode): bool
 {
     return in_array($mode, [TASK_CAL_OFF, TASK_CAL_WORK, TASK_CAL_DUE, TASK_CAL_BOTH], true);
 }
 
-/** Does this analyst want a task's work window in their calendar? */
+/**
+ * Does this analyst want a task's work window in their calendar?
+ *
+ * @param string $mode  the analyst's task mode (TASK_CAL_*), already checked by taskCalendarModeIsValid()
+ */
 function taskCalendarWantsWork(string $mode): bool
 {
     return $mode === TASK_CAL_WORK || $mode === TASK_CAL_BOTH;
 }
 
-/** Does this analyst want a task's due date in their calendar? */
+/**
+ * Does this analyst want a task's due date in their calendar?
+ *
+ * @param string $mode  the analyst's task mode (TASK_CAL_*), already checked by taskCalendarModeIsValid()
+ */
 function taskCalendarWantsDue(string $mode): bool
 {
     return $mode === TASK_CAL_DUE || $mode === TASK_CAL_BOTH;
 }
 
-/** Decrypt + JSON-decode a stored credentials blob (never throws). */
+/**
+ * Decrypt + JSON-decode a stored credentials blob (never throws).
+ *
+ * @param mixed $stored  the encrypted credentials column as read from the database; null or '' gives []
+ */
 function calendarSyncDecodeCredentials($stored): array
 {
     if ($stored === null || $stored === '') return [];
@@ -82,7 +101,11 @@ function calendarSyncDecodeCredentials($stored): array
     return is_array($decoded) ? $decoded : [];
 }
 
-/** Encrypt a credentials array for storage. */
+/**
+ * Encrypt a credentials array for storage.
+ *
+ * @param array $credentials  the secrets to store, e.g. ['username' => ..., 'password' => ...]
+ */
 function calendarSyncEncodeCredentials(array $credentials): string
 {
     return encryptValue(json_encode($credentials));
@@ -117,6 +140,8 @@ function calendarSyncSchemaReady(PDO $conn): bool
  * most installs have already done that setup for mail, and adding one Graph
  * permission to an existing app is far less work than registering a second one.
  * Resolving that here means providers never have to know about it.
+ *
+ * @param int $connectionId  calendar_connections.id; an inactive or missing one gives null
  */
 function calendarSyncLoadConnection(PDO $conn, int $connectionId): ?array
 {
@@ -180,7 +205,11 @@ function calendarSyncOnlyConnection(PDO $conn): ?array
     return count($ids) === 1 ? calendarSyncLoadConnection($conn, $ids[0]) : null;
 }
 
-/** The connection this analyst's calendar work goes through, or null. */
+/**
+ * The connection this analyst's calendar work goes through, or null.
+ *
+ * @param array $enrolment  the analyst's calendar_enrolments row as calendarSyncEnrolment() returns it
+ */
 function calendarSyncConnectionFor(PDO $conn, array $enrolment): ?array
 {
     if (!empty($enrolment['connection_id'])) {
@@ -192,6 +221,8 @@ function calendarSyncConnectionFor(PDO $conn, array $enrolment): ?array
 /**
  * A connection's provider name, or '' when it does not exist. Cached per
  * request, because it is asked for every enrolment that is read.
+ *
+ * @param ?int $connectionId  calendar_connections.id; null or 0 gives ''
  */
 function calendarSyncConnectionProvider(PDO $conn, ?int $connectionId): string
 {
@@ -216,6 +247,7 @@ function calendarSyncConnectionProvider(PDO $conn, ?int $connectionId): string
  * naming a provider this build does not have is a misconfiguration, and pushing
  * silently to nowhere is the worst possible response to it.
  *
+ * @param array $connection  a calendar_connections row with credentials decrypted, from calendarSyncLoadConnection()
  * @param array|null $enrolment the enrolment of the analyst whose calendar is
  *        being touched. Microsoft ignores it; CalDAV signs in with the
  *        credentials on it (see CalendarSyncProvider::$account). Pass it
@@ -243,6 +275,8 @@ const CALENDAR_PROVIDERS = ['microsoft', 'caldav'];
 /**
  * An analyst's own calendar sign-in, decrypted: ['username' => …, 'password' => …].
  * Empty when they have not saved one. Never returned to a browser.
+ *
+ * @param array $enrolment  a calendar_enrolments row - its encrypted 'credentials' column is read
  */
 function calendarSyncAccount(array $enrolment): array
 {

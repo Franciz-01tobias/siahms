@@ -50,7 +50,7 @@ return [
         'delete_failed' => 'Löschen fehlgeschlagen: {message}',
     ],
     'editor' => [
-        'browser_title' => 'FreeITSM — Netzwerkdiagramm',
+        'browser_title' => 'Netzwerkdiagramm',
         'browser_title_named' => 'FreeITSM — {title}',
         'back' => '← Alle Diagramme',
         'loading' => 'Wird geladen…',

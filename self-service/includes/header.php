@@ -82,6 +82,10 @@ $portalNav = [
     // prominent thing on the page they land on.
     'dashboard'   => ['href' => 'index.php',       'label' => t('self-service.nav.dashboard')],
     'tickets'     => ['href' => 'tickets.php',     'label' => t('self-service.nav.tickets')],
+    // ⚠️ SHOWN ONLY TO A MANAGER - someone who manages at least one person
+    // (discussion #62). The page and every endpoint behind it re-check through
+    // portalTicketAccess(); a hidden tab is not a permission.
+    'team_tickets' => ['href' => 'tickets.php?view=team', 'label' => t('self-service.nav.team_tickets'), 'cap' => 'is_manager'],
     // Named after the module it surfaces, so customers and analysts use one word.
     'help_centre' => ['href' => 'help-centre.php', 'label' => t('self-service.nav.help_centre')],
     // ⚠️ SHOWN ONLY TO SOMEBODY WHO ACTUALLY HAS TRAINING. On an install that
@@ -112,6 +116,14 @@ $portalNav = [
  * has never opened is mid-migration.
  */
 $portalNavCap = function (string $cap) use ($ss_user_id) {
+    if ($cap === 'is_manager') {
+        try {
+            require_once __DIR__ . '/../../includes/managers.php';
+            return managerHasTeam(connectToDatabase(), (int)$ss_user_id);
+        } catch (Throwable $e) {
+            return false;   // fails closed and quietly, like the others
+        }
+    }
     if ($cap === 'has_equipment') {
         try {
             $conn = connectToDatabase();
@@ -190,9 +202,9 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($pageTitle); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../assets/css/self-service.css?v=18">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/self-service.css?v=22">
 <?php if ($ssAppearance['background_pattern'] !== ''): ?>
     <!-- Only fetched when a pattern is actually in use. -->
     <link rel="stylesheet" href="../assets/css/self-service-patterns.css?v=4">
@@ -218,18 +230,25 @@ $ssVars = '';
 if ($ssAppearance['header_colour'] !== '')       $ssVars .= '--ss-header-bg:' . $ssAppearance['header_colour'] . ';';
 if ($ssAppearance['table_header_colour'] !== '') $ssVars .= '--ss-table-header-bg:' . $ssAppearance['table_header_colour'] . ';';
 $ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? ' ss-pat-' . $ssAppearance['background_pattern'] : ''));
+
+// Resolved BEFORE <body>: the header's class depends on it, the img is inside
+// it, and <body> needs to know too.
+$ssLogoUrl = selfServicePortalLogoUrl($conn ?? connectToDatabase());
+// A custom logo shown on the PAGE is not shown in the bar as well: repeating
+// it twice on one screen is clutter, and falling back to the bundled FreeITSM
+// mark would put our branding beside theirs.
+$ssLogoOnPage = ($ssLogoUrl !== '' && ($ssAppearance['logo_position'] ?? 'header') === 'page');
+// ⚠️ The logo band sits ABOVE .portal-layout, and the app-shell pages (New
+// Ticket, My Tickets, a course) size themselves as "the window minus the
+// chrome". Without this class they subtracted the 48px bar only, came out
+// taller than the window by the band, and - the shell being scroll-locked -
+// their bottom could not be reached at all. See --ss-chrome in self-service.css.
+if ($ssLogoOnPage) {
+    $ssBodyClass = trim($ssBodyClass . ' ss-page-logo');
+}
 ?>
 <body class="<?php echo htmlspecialchars($ssBodyClass); ?>"<?php echo $ssVars !== '' ? ' style="' . htmlspecialchars($ssVars, ENT_QUOTES) . '"' : ''; ?>>
     <div class="portal-header">
-        <?php /* Resolved BEFORE the div: the class depends on it, and the img
-                 below is inside. */ ?>
-        <?php $ssLogoUrl = selfServicePortalLogoUrl($conn ?? connectToDatabase()); ?>
-        <?php
-        /* A custom logo shown on the PAGE is not shown here as well: repeating
-           it twice on one screen is clutter, and falling back to the bundled
-           FreeITSM mark would put our branding beside theirs. */
-        $ssLogoOnPage = ($ssLogoUrl !== '' && ($ssAppearance['logo_position'] ?? 'header') === 'page');
-        ?>
         <div class="portal-brand<?php echo $ssLogoUrl !== '' && !$ssLogoOnPage ? ' has-custom-logo' : ''; ?>">
             <?php /* A portal-specific logo if one is set, otherwise the shared
                      one from System → Branding. Empty means "use the main one",
@@ -260,10 +279,53 @@ $ssBodyClass = trim($bodyClass . ($ssAppearance['background_pattern'] !== '' ? '
          * there is no moment where the drawer exists but cannot be opened.
          */
         ?>
+        <?php /* ONE right-hand group - bell, phone menu button, account - so the
+                 bar keeps its three parts (brand | nav | this) and
+                 `space-between` still centres the nav. The bell as a fourth item
+                 either floated mid-gap or, pushed right with an auto margin,
+                 dragged the nav to the left. */ ?>
+        <div class="portal-right">
+        <?php
+        /*
+         * The bell (discussion #62) - the SAME bell as the analyst app
+         * (includes/notification_bell.php), pointed at the portal's endpoint.
+         *
+         * Every MANAGER has it, whatever System -> Managers says about new
+         * tickets: the bell belongs to being a manager, and the settings only
+         * decide what is sent to it - new team tickets today, other things later
+         * (Ed). Anyone else only once they have a notification. A permanently
+         * empty bell in front of every requester would be clutter that invites a
+         * question.
+         */
+        // The "Back to ..." link (3.5.0) - System -> Branding. Nothing unless set up.
+        try { require_once __DIR__ . '/../../includes/back_link.php'; echo backLinkHtml(connectToDatabase(), 'portal'); } catch (Throwable $e) {}
+
+        $ssShowBell = false;
+        try {
+            require_once __DIR__ . '/../../includes/managers.php';
+            $ssConnBell = connectToDatabase();
+            $hasAny = $ssConnBell->prepare("SELECT 1 FROM portal_notifications WHERE user_id = ? LIMIT 1");
+            $hasAny->execute([(int)$ss_user_id]);
+            $ssShowBell = (bool)$hasAny->fetchColumn() || $portalNavCap('is_manager');
+        } catch (Throwable $e) {
+            $ssShowBell = false;   // before Database Verification: no table, no bell
+        }
+        if ($ssShowBell) {
+            require_once __DIR__ . '/../../includes/notification_bell.php';
+            notificationBellRender('../', [
+                'list'       => '../api/self-service/notifications.php?action=list',
+                'markRead'   => '../api/self-service/notifications.php?action=mark_read',
+                'clear'      => '../api/self-service/notifications.php?action=clear',
+                'linkPrefix' => '../',
+                'seenKey'    => 'ssNbSeenUnread',
+            ]);
+        }
+        ?>
         <button type="button" class="ss-nav-btn" onclick="ssToggleNav()"
                 aria-label="<?php echo htmlspecialchars(t('self-service.nav.menu')); ?>"
                 aria-expanded="false" aria-controls="portalNav">&#9776;</button>
         <?php include __DIR__ . '/user-menu.php'; ?>
+        </div>
     </div>
     <div class="ss-nav-overlay" onclick="ssToggleNav()"></div>
     <script>

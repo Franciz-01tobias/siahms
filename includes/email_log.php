@@ -46,6 +46,18 @@ const EMAIL_LOG_ROUTES = [
     // somebody brings to this log — and it is unanswerable if the rows are mixed
     // in with password resets and account verifications.
     'training'       => 'Training reminder',
+    // An inbound email over the attachment limits (GH #170): the alert to the
+    // addresses in the settings, and the reply to the sender.
+    'oversize_alert' => 'Oversized email alert',
+    'oversize_reply' => 'Oversized email reply',
+    // Domains (#154): expiry/certificate digests and change-detection warnings.
+    'domain_alert'   => 'Domain alert',
+    // A task assigned to an analyst who asked to be emailed about it (2.10.0).
+    'task'           => 'Task assigned',
+    // A contractor's contact told about a task, or reminded (3.3.0, includes/task_contractors.php).
+    'task_contractor' => 'Task for a contractor',
+    // An approved project report emailed from its Reports tab (3.3.0).
+    'project_report' => 'Project report',
 ];
 
 /**
@@ -55,6 +67,12 @@ const EMAIL_LOG_ROUTES = [
  *
  * $mailbox may be null — a send can fail before any mailbox is resolved, and that is
  * one of the more useful things to have recorded.
+ *
+ * @param ?array $mailbox  the target_mailboxes row used (id, provider, auth_mode read), or null if none
+ * @param string $route  a key of EMAIL_LOG_ROUTES saying which path sent it (cut to 30 characters)
+ * @param string $to  the recipient address(es) as sent (cut to 255 characters)
+ * @param string $subject  the email's subject line (cut to 500 characters)
+ * @param ?string $error  the provider's error or the skip reason, null for a successful send (cut to 2000)
  */
 function emailLogRecord(
     ?PDO $conn,
@@ -97,17 +115,36 @@ function emailLogRecord(
     }
 }
 
-/** Convenience: a send that succeeded. */
+/**
+ * Convenience: a send that succeeded.
+ *
+ * @param ?array $mailbox  the target_mailboxes row that sent it, or null if none was resolved
+ * @param string $route  a key of EMAIL_LOG_ROUTES saying which path sent it
+ * @param string $to  the recipient address(es) as sent
+ * @param string $subject  the email's subject line
+ */
 function emailLogSent(?PDO $conn, ?array $mailbox, string $route, string $to, string $subject, ?int $ticketId = null): void {
     emailLogRecord($conn, $mailbox, $route, $to, $subject, true, null, $ticketId);
 }
 
-/** Convenience: a send that failed, with whatever the provider said about it. */
+/**
+ * Convenience: a send that failed, with whatever the provider said about it.
+ *
+ * @param ?array $mailbox  the target_mailboxes row it was sent through, or null if none was resolved
+ * @param string $route  a key of EMAIL_LOG_ROUTES saying which path sent it
+ * @param string $to  the recipient address(es) it was meant for
+ * @param string $subject  the email's subject line
+ * @param string $error  the provider's error message, stored as the failure reason
+ */
 function emailLogFailed(?PDO $conn, ?array $mailbox, string $route, string $to, string $subject, string $error, ?int $ticketId = null): void {
     emailLogRecord($conn, $mailbox, $route, $to, $subject, false, $error, $ticketId);
 }
 
-/** Human label for a route key, falling back to the key itself for unknown ones. */
+/**
+ * Human label for a route key, falling back to the key itself for unknown ones.
+ *
+ * @param string $route  a route key as stored in email_send_log.route, e.g. 'reply' or 'sla'
+ */
 function emailLogRouteLabel(string $route): string {
     return EMAIL_LOG_ROUTES[$route] ?? $route;
 }
@@ -125,6 +162,12 @@ function emailLogRouteLabel(string $route): string {
  *
  * The mailbox may legitimately be null: not sending happens before a mailbox is
  * looked up, and the row is still worth having.
+ *
+ * @param ?array $mailbox  the target_mailboxes row it would have gone through, or null if none was looked up
+ * @param string $route  a key of EMAIL_LOG_ROUTES saying which path decided not to send
+ * @param string $to  the address that would have received it
+ * @param string $subject  the subject the email would have had
+ * @param string $reason  why it was not sent, in plain words - stored as the row's message
  */
 function emailLogSkipped(?PDO $conn, ?array $mailbox, string $route, string $to, string $subject, string $reason, ?int $ticketId = null): void {
     emailLogRecord($conn, $mailbox, $route, $to, $subject, 'skipped', $reason, $ticketId);

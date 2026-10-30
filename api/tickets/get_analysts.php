@@ -13,6 +13,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireAnyModuleAccessJson(['tickets', 'contracts', 'forms', 'morning-checks', 'problems', 'system']);
 
 try {
     $conn = connectToDatabase();
@@ -66,8 +67,47 @@ try {
         $analyst['team_tenant_ids'] = $viaTeam;                             // granted via a team (read-only here)
         $analyst['team_all_access'] = !empty($teamAllAccess[$analyst['id']]); // in an all-access team
     }
+    unset($analyst);
 
-    echo json_encode(['success' => true, 'analysts' => $analysts]);
+    // Follow team (GH #41): whether each analyst takes their sign-in method from
+    // their teams, and what those teams say. Only for System -> Analysts, which asks
+    // with ?signin=1 - every assignee list in the app calls this endpoint too, and
+    // none of them needs it.
+    if (!empty($_GET['signin'])) {
+        require_once '../../includes/analyst_signin.php';
+        if (analystSignInReady($conn)) {
+            $follow = [];
+            foreach ($conn->query("SELECT id FROM analysts WHERE auth_follow_team = 1") as $row) {
+                $follow[(int)$row['id']] = true;
+            }
+            $byAnalyst = analystSignInTeamMethods($conn);
+            foreach ($analysts as &$analyst) {
+                $analyst['auth_follow_team'] = !empty($follow[$analyst['id']]);
+                $analyst['team_signin'] = analystSignInVerdict($byAnalyst[$analyst['id']] ?? []);
+            }
+            unset($analyst);
+        }
+    }
+
+    // GH #176. ?with_access=1 (the ticket inbox) adds the companies each active
+    // analyst can work in, so the assign lists offer only people who can open the
+    // ticket's company. TRAP: decided by getAccessibleTenantIds(), never a copy of
+    // its rule here or in the JS - it unions the analyst's grants with every team's.
+    $multiCompany = false;
+    if (!empty($_GET['with_access'])) {
+        require_once '../../includes/tenancy.php';
+        $multiCompany = isMultiTenant($conn);
+        if ($multiCompany) {
+            foreach ($analysts as &$analyst) {
+                $analyst['accessible_tenant_ids'] = $analyst['is_active']
+                    ? array_values(array_map('intval', getAccessibleTenantIds($conn, $analyst['id'])))
+                    : [];
+            }
+            unset($analyst);
+        }
+    }
+
+    echo json_encode(['success' => true, 'analysts' => $analysts, 'multi_company' => $multiCompany]);
 
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);

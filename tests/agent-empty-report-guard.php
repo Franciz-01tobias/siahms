@@ -151,6 +151,17 @@ try {
     ok('a real report still REPLACES rather than accumulating',
        $count('asset_disks', 'asset_id') === 2, 'rows: ' . $count('asset_disks', 'asset_id'));
 
+    // ---- Whose volumes the agent replaces (#194, PR #197 review) ----------
+    // Intune's volume is a stand-in until the agent reports, so the agent replaces it
+    // as it always has; a REST source's volumes are another tool's view and stay.
+    $conn->prepare("INSERT INTO asset_disks (asset_id, drive, size_bytes, source) VALUES (?, 'C:', 1, 'intune')")->execute([$assetId]);
+    $conn->prepare("INSERT INTO asset_disks (asset_id, drive, external_id, source) VALUES (?, 'Z:', 'zzeg', 'rest:zzeg')")->execute([$assetId]);
+    post($sysUrl, $apikey, $changed);
+    $bySource = fn(string $s) => (int)$conn->query("SELECT COUNT(*) FROM asset_disks WHERE asset_id = $assetId AND source = " . $conn->quote($s))->fetchColumn();
+    ok('an agent report still replaces Intune\'s stand-in volumes', $bySource('intune') === 0 && $bySource('agent') === 2,
+       'intune ' . $bySource('intune') . ', agent ' . $bySource('agent'));
+    ok('...and leaves a REST source\'s volumes alone', $bySource('rest:zzeg') === 1);
+
     post($devUrl, $apikey, ['hostname' => $host, 'devices' => [
         ['device_class' => 'Display adapters', 'device_name' => 'ZZEG GPU v2', 'status' => 'OK'],
     ]]);

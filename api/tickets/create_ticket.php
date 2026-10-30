@@ -87,6 +87,8 @@ try {
         'department_id'       => $input['department_id'] ?? null,
         'ticket_type_id'      => $input['ticket_type_id'] ?? null,
         'mailbox_id'          => $input['mailbox_id'] ?? null,
+        // Normal / Confidential, chosen on the new-ticket form (discussion #62).
+        'sensitivity'         => $input['sensitivity'] ?? null,
     ];
     // Only pass a priority if the form actually sent one. This used to default to
     // the literal 'Normal', which the service resolves BY NAME and rejects with
@@ -95,6 +97,12 @@ try {
     // service picks the configured default.
     if (isset($input['priority']) && trim((string)$input['priority']) !== '') {
         $in['priority'] = $input['priority'];
+    }
+    // Custom fields (#179). Passed only when the form sent them: the New ticket
+    // form always does, so the fields required when logging are enforced there;
+    // Morning checks' "raise a ticket" does not ask for them and is not refused.
+    if (array_key_exists('custom_fields', $input)) {
+        $in['custom_fields'] = is_array($input['custom_fields']) ? $input['custom_fields'] : [];
     }
     if (!empty($input['assigned_analyst_id'])) {
         $in['assigned_analyst_id'] = (int)$input['assigned_analyst_id'];

@@ -96,10 +96,10 @@ $translationNamespaces = ['common', 'morning-checks'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('morning-checks.title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="style.css?v=3">
+    <title><?php echo htmlspecialchars(pageTitle('morning-checks')); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="style.css?v=4">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -265,7 +265,7 @@ $translationNamespaces = ['common', 'morning-checks'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -1462,6 +1462,6 @@ $translationNamespaces = ['common', 'morning-checks'];
     <!-- The mobile layer's JS: gives this page the views hamburger (top right)
          and moves the page controls into that drawer on a phone. Loaded last so
          it can wrap the page's own globals rather than edit them. -->
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

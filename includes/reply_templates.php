@@ -66,6 +66,8 @@ function replyTemplateMergeCodes(): array {
  * Returns the body unchanged when the ticket can't be read — a template full of
  * literal [requester_first_name] is obviously wrong to the analyst about to send it,
  * whereas silently blanking the codes looks like a finished sentence and gets sent.
+ *
+ * @param string $body  the template text with [merge_code] placeholders (trusted HTML; the values put in are escaped)
  */
 function renderReplyTemplate(PDO $conn, string $body, int $ticketId): string {
     $merge = buildTicketMergeData($conn, $ticketId);
@@ -95,6 +97,7 @@ function renderReplyTemplate(PDO $conn, string $body, int $ticketId): string {
  * An administrator gets no special sight of other people's private templates. There is
  * deliberately no branch here that could give them any.
  *
+ * @param bool $activeOnly  true for active templates only (inserting); false for every one (managing them)
  * @return array rows with an extra 'scope' => 'shared'|'mine'
  */
 function replyTemplatesVisibleTo(PDO $conn, int $analystId, bool $activeOnly = true): array {
@@ -138,6 +141,8 @@ function replyTemplatesVisibleTo(PDO $conn, int $analystId, bool $activeOnly = t
  * privilege-escalation case has a single home: a template you own is yours to edit,
  * but turning it INTO a shared one is a settings action and re-checks the capability
  * at the call site.
+ *
+ * @param int $templateId  the ticket_reply_templates id
  */
 function replyTemplateWriteScope(PDO $conn, int $analystId, int $templateId): ?string {
     try {

@@ -13,10 +13,18 @@ I18n::initFromSession();
 Tz::init();
 
 requireModuleAccess('forms');
+// Filling in a form creates a submission - a write (#180 Part 3). Read only goes back.
+if (analystModuleLevel(connectToDatabase(), (int)$_SESSION['analyst_id'], 'forms') === 'read') {
+    header('Location: ' . BASE_URL . 'forms/');
+    exit;
+}
 
 $current_page = 'forms';
+// GH #190 phase 2: ?embed=1 is this page inside a task's Work view - no header, no
+// navigation, only for a task's form. The same page, so filling is never copied.
+$embed = !empty($_GET['embed']) && !empty($_GET['task_form']);
 $path_prefix = '../';
-$translationNamespaces = ['common', 'forms'];
+$translationNamespaces = ['common', 'forms', 'tasks'];   // tasks: filling a task's form (GH #190)
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -24,7 +32,7 @@ $translationNamespaces = ['common', 'forms'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('forms.fill.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('forms', t('forms.fill.page_title'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../assets/js/i18n.js?v=3"></script>
     <?php echo Tz::scriptTag(); ?>
@@ -33,8 +41,8 @@ $translationNamespaces = ['common', 'forms'];
          visibility. Mirrors includes/form_logic.php, which decides on submit. -->
     <script src="../assets/js/form-logic.js?v=9"></script>
     <script src="../assets/js/form-render.js?v=3"></script>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <!-- Presentation shared with the portal and the builder preview: blocks
          (notes, images) and label position. A notice panel and a picture have no
          reason to look different in the three places; an INPUT does. -->
@@ -350,10 +358,21 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <style>
+        /* Inside a task's Work view (GH #190): no page chrome. Keep native
+           scrolling available if the parent cannot resize the frame. */
+        body.fill-embed { background: transparent; height: auto; overflow: visible; }
+        body.fill-embed .fill-container { padding: 0; margin: 0; max-width: none; height: auto; }
+        body.fill-embed .fill-content { padding: 0; max-width: none; }
+        body.fill-embed .fill-card { box-shadow: none; margin: 0; border: 0; padding: 4px 2px; }
+        body.fill-embed .fill-title, body.fill-embed .fill-task-banner, body.fill-embed .form-logo { display: none; }
+        .fill-task-banner { margin: -4px 0 14px; padding: 8px 12px; border-radius: 6px; font-size: 13px;
+            background: var(--accent-soft, #eef4ff); color: var(--text, #333); border: 1px solid var(--border, #ddd); }
+    </style>
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
-<body>
-    <?php include 'includes/header.php'; ?>
+<body<?php echo $embed ? ' class="fill-embed"' : ''; ?>>
+    <?php if (!$embed) include 'includes/header.php'; ?>
 
     <div class="main-container fill-container">
         <div class="fill-content">
@@ -368,6 +387,79 @@ $translationNamespaces = ['common', 'forms'];
         let formData = null;
         let logoAlignment = 'center';
 
+        /* ══ Filling a task's form (GH #190) ════════════════════════════════
+           ?task_form=N fills the form a task occurrence needs. Three things change,
+           and nothing about the form itself does:
+           - the draft is the OCCURRENCE's, shared by everyone who works it, and every
+             save carries the revision it started from - a stale one is a conflict
+             that keeps this analyst's answers on screen;
+           - submitting links the submission to the occurrence (TaskForms::submit());
+           - a client reference generated here makes a retried submit return the
+             submission it already made rather than a second one. */
+        const TASK_FORM_ID = new URLSearchParams(window.location.search).get('task_form');
+        let taskFill = null;
+        let taskRevision = 0;
+        const taskClientRef = 'tf-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        let taskLastAction = null;
+
+        /** Tells the task window (another tab) that this occurrence's form changed. */
+        function announceTaskForm(submitted) {
+            try { new BroadcastChannel('freeitsm-task-forms').postMessage({ task_id: taskFill && taskFill.task.id, task_form_id: taskFill && taskFill.task_form_id, submitted: !!submitted }); } catch (e) {}
+            // Embedded, the Work view is the parent window - tell it directly as well.
+            if (window.parent !== window) {
+                try { window.parent.postMessage({ type: 'tf-saved', task_id: taskFill && taskFill.task.id, task_form_id: taskFill && taskFill.task_form_id, submitted: !!submitted }, location.origin); } catch (e) {}
+            }
+        }
+
+        // Embedded: say how tall the form is, whenever it changes, so the Work view sizes the frame to fit.
+        if (window.parent !== window && TASK_FORM_ID) {
+            // TRAP: body inherits the iframe's viewport height. Observing it misses
+            // async/conditional fields; scrollHeight on html also prevents shrinking.
+            const content = document.querySelector('.fill-content');
+            const sendHeight = () => {
+                try { window.parent.postMessage({ type: 'tf-height', task_form_id: Number(TASK_FORM_ID), height: Math.ceil(content.getBoundingClientRect().height) }, location.origin); } catch (e) {}
+            };
+            window.addEventListener('load', sendHeight);
+            try { new ResizeObserver(sendHeight).observe(content); } catch (e) { setInterval(sendHeight, 1000); }
+        }
+
+        /** Posts a task form action. */
+        async function postTaskFormAction(payload) {
+            const res = await fetch('../api/tasks/forms.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            return res.json();
+        }
+
+        /**
+         * Somebody else saved this occurrence's form while it was open here. Nothing of
+         * ours was written. Say who and when, and let this analyst choose: their version
+         * on screen, or ours saved on top (deliberately, from the revision just shown).
+         */
+        function showTaskConflict(c) {
+            const el = document.getElementById('submitMessage');
+            const T = (k, p) => window.t('tasks.forms.' + k, p);
+            el.className = 'submit-message error';
+            el.innerHTML = `<strong>${esc(T('conflict_title', { name: c.by || '?' }))}</strong>`
+                + (c.at_utc ? ' (' + esc(typeof formatDateTime === 'function' ? formatDateTime(c.at_utc) : c.at_utc + ' UTC') + ')' : '')
+                + `<div style="margin:6px 0">${esc(T('conflict_body'))}</div>`
+                + `<div class="success-actions"><button type="button" class="btn btn-secondary" id="tfTheirs">${esc(T('conflict_theirs'))}</button>`
+                + `<button type="button" class="btn btn-primary" id="tfMine">${esc(T('conflict_mine'))}</button></div>`;
+            taskRevision = Number(c.revision) || 0;
+            document.getElementById('tfMine').onclick = () => { el.className = 'submit-message'; el.textContent = ''; if (taskLastAction) taskLastAction(); };
+            document.getElementById('tfTheirs').onclick = async () => {
+                const d = await fetch('../api/tasks/forms.php?task_form_id=' + TASK_FORM_ID).then(r => r.json());
+                if (d.success) {
+                    taskFill = d.fill;
+                    taskRevision = d.fill.revision;
+                    document.getElementById('fillForm').reset();
+                    applyDraftValues(d.fill.draft || d.fill.prefill || {});
+                    applyVisibility();
+                }
+                el.className = 'submit-message'; el.textContent = '';
+            };
+        }
+
         document.addEventListener('DOMContentLoaded', async function() {
             // Load settings first, then form
             try {
@@ -379,7 +471,17 @@ $translationNamespaces = ['common', 'forms'];
             } catch (e) {}
 
             const params = new URLSearchParams(window.location.search);
-            const id = params.get('id');
+            let id = params.get('id');
+            if (TASK_FORM_ID) {
+                const d = await fetch('../api/tasks/forms.php?task_form_id=' + encodeURIComponent(TASK_FORM_ID)).then(r => r.json()).catch(() => null);
+                if (!d || !d.success) {
+                    document.getElementById('formCard').innerHTML = '<p style="color:var(--danger-text, #c00);text-align:center">' + esc((d && d.error) || window.t('forms.fill.no_id')) + '</p>';
+                    return;
+                }
+                taskFill = d.fill;
+                taskRevision = d.fill.revision;
+                id = String(d.fill.form_id);
+            }
             if (id) {
                 loadForm(id);
             } else {
@@ -421,6 +523,18 @@ $translationNamespaces = ['common', 'forms'];
          * answers, because it is recording what the person was actually asked.
          */
         async function saveDraft() {
+            if (taskFill) {
+                taskLastAction = saveDraft;
+                try {
+                    const d = await postTaskFormAction({ action: 'draft', task_form_id: taskFill.task_form_id, revision: taskRevision, answers: collectValues() });
+                    if (d.conflict) { showTaskConflict(d.conflict); return; }
+                    if (!d.success) { showMsg(d.error || window.t('forms.draft.failed'), 'error'); return; }
+                    taskRevision = d.revision;
+                    showMsg(window.t('forms.draft.saved'), 'success');
+                    announceTaskForm();
+                } catch (e) { showMsg(window.t('forms.draft.failed'), 'error'); }
+                return;
+            }
             try {
                 const res = await fetch(API_BASE + 'draft.php', {
                     method: 'POST',
@@ -446,6 +560,15 @@ $translationNamespaces = ['common', 'forms'];
          * silently filling in the wrong boxes is the worst one.
          */
         async function restoreDraft() {
+            if (taskFill) {
+                // The occurrence's shared draft - or, correcting a submission, what was submitted.
+                const answers = taskFill.draft || taskFill.prefill;
+                if (answers) { applyDraftValues(answers); applyVisibility(); }
+                if (taskFill.draft && taskFill.draft_by) {
+                    showMsg(window.t('tasks.forms.fill_draft_by', { name: taskFill.draft_by, when: taskFill.draft_utc ? taskFill.draft_utc + ' UTC' : '' }), 'success');
+                }
+                return;
+            }
             try {
                 const res  = await fetch(API_BASE + 'draft.php?form_id=' + formData.id);
                 const data = await res.json();
@@ -831,6 +954,16 @@ $translationNamespaces = ['common', 'forms'];
             html += '<div class="submit-message" id="submitMessage"></div>';
 
             card.innerHTML = html;
+            if (taskFill) {
+                // Whose work this is: the occurrence, and the day it is for (GH #190).
+                const b = document.createElement('div');
+                b.className = 'fill-task-banner';
+                b.textContent = window.t('tasks.forms.fill_for', { task: taskFill.task.title })
+                    + (taskFill.task.scheduled_date ? ' - ' + window.t('tasks.forms.fill_scheduled', { date: taskFill.task.scheduled_date }) : '');
+                card.insertBefore(b, card.firstChild);
+                const cancel = card.querySelector('.form-actions a[href="./"]');
+                if (cancel) cancel.remove();   // the task, not the Forms list, is where this came from
+            }
 
             // Any answer can be the trigger for a condition, so re-evaluate on every
             // edit. 'input' covers typing, 'change' covers ticking and selecting.
@@ -953,6 +1086,25 @@ $translationNamespaces = ['common', 'forms'];
                 return;
             }
 
+            if (taskFill) {
+                taskLastAction = () => submitForm(e);
+                try {
+                    const d = await postTaskFormAction({ action: 'submit', task_form_id: taskFill.task_form_id, revision: taskRevision,
+                                                         client_reference: taskClientRef, data: data });
+                    if (d.conflict) { showTaskConflict(d.conflict); return; }
+                    if (!d.success) { showMsg(window.t('forms.fill.error_prefix', { message: d.error }), 'error'); return; }
+                    announceTaskForm(true);
+                    document.getElementById('fillForm').style.display = 'none';
+                    const msgEl = document.getElementById('submitMessage');
+                    msgEl.className = 'submit-message success';
+                    msgEl.textContent = window.t('tasks.forms.submitted_for');
+                } catch (err) {
+                    // Not knowing whether it went through is exactly when a retry must not
+                    // submit twice: the client reference makes a second press safe.
+                    showMsg(window.t('forms.fill.submit_failed'), 'error');
+                }
+                return;
+            }
             try {
                 const res = await fetch(API_BASE + 'submit_form.php', {
                     method: 'POST',
@@ -1007,6 +1159,6 @@ $translationNamespaces = ['common', 'forms'];
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

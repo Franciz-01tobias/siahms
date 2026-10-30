@@ -50,7 +50,7 @@ return [
         'delete_failed' => 'ഇല്ലാതാക്കൽ പരാജയപ്പെട്ടു: {message}',
     ],
     'editor' => [
-        'browser_title' => 'FreeITSM — നെറ്റ്‌വർക്ക് ഡയഗ്രം',
+        'browser_title' => 'നെറ്റ്‌വർക്ക് ഡയഗ്രം',
         'browser_title_named' => 'FreeITSM — {title}',
         'back' => '← എല്ലാ ഡയഗ്രമുകളും',
         'loading' => 'ലോഡ് ചെയ്യുന്നു…',

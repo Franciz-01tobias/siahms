@@ -54,7 +54,11 @@ try {
     echo json_encode([
         'success'        => true,
         'cards'          => wtVisibleCards($conn),
-        'card_keys'      => wtCardKeys(),
+        'card_keys'      => wtCardKeys(),                    // the default order (Reset)
+        'card_order'     => wtCardOrder($conn),              // the install's order (GH #187)
+        'card_order_custom' => wtCardOrderSaved($conn) !== [],
+        // key => module colour key, from the one card list (wtCardRegistry).
+        'card_modules'   => array_map(fn($c) => $c['module'], wtCardRegistry()),
         'items'          => $items,
         'paused_hours'   => $paused,
     ]);

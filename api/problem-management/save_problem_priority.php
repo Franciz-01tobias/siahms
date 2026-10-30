@@ -1,4 +1,18 @@
 <?php
+/**
+ * API: create or update a problem priority (Problems -> Settings).
+ *
+ * Making one the default clears the default flag on every other priority. Fires the
+ * problem_priority 'created' or 'updated' workflow event.
+ *
+ * @input  id             the priority to update - omit to create one
+ * @input  name           required
+ * @input  colour         optional
+ * @input  is_default     1 to make this the default
+ * @input  display_order  sort position
+ * @input  is_active      1 or 0 (default 1)
+ * @output {success, id}
+ */
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';

@@ -48,6 +48,10 @@ function i18nGuardedInit(string $prefix): void
     } catch (Throwable $e) {
         $GLOBALS['i18nGuardedReady'] = false;   // English it is
     }
+    // pageTitle() for the <title> (GH #173). Loaded on its own, outside the try:
+    // i18n.php normally brings it, but these pages must render when it cannot.
+    // Safe without a database - systemName() falls back to "Service Desk".
+    require_once __DIR__ . '/system_name.php';
 }
 
 /**
@@ -73,13 +77,25 @@ function tr(string $key, string $english, array $params = []): string
     return $english;
 }
 
-/** tr() escaped for HTML - the normal case for anything going into the page. */
+/**
+ * tr() escaped for HTML - the normal case for anything going into the page.
+ *
+ * @param string $key      key within the prefix passed to i18nGuardedInit()
+ * @param string $english  the exact text this call replaces
+ * @param array $params    {placeholder} => value, applied before escaping
+ */
 function trh(string $key, string $english, array $params = []): string
 {
     return htmlspecialchars(tr($key, $english, $params), ENT_QUOTES, 'UTF-8');
 }
 
-/** tr() as a JavaScript literal, for the inline scripts these pages carry. */
+/**
+ * tr() as a JavaScript literal, for the inline scripts these pages carry.
+ *
+ * @param string $key      key within the prefix passed to i18nGuardedInit()
+ * @param string $english  the exact text this call replaces
+ * @param array $params    {placeholder} => value, applied before JSON-encoding
+ */
 function trj(string $key, string $english, array $params = []): string
 {
     return json_encode(tr($key, $english, $params), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

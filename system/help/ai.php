@@ -62,4 +62,28 @@ require __DIR__ . '/_top.php';
     <div class="help-note"><strong>If the list will not load at all</strong>, the page says so rather than showing an empty table. That is a database connection problem, not an AI one.</div>
 </div>
 
+<!-- 5. Your own model server (GH #192) -->
+<div class="help-section" id="own-model">
+    <div class="help-section-header"><?php echo helpSectionNum('own-model'); ?>
+        <div>
+            <h3>Your own model server</h3>
+            <p>Any AI feature can use a model you run yourself, so the text it sends never leaves your network.</p>
+        </div>
+    </div>
+    <p>In a feature's AI settings, choose the provider <strong>OpenAI-compatible (custom endpoint)</strong>. It works with any server that speaks the OpenAI API: <strong>Ollama</strong>, LM Studio, vLLM, LocalAI, or a gateway your organisation runs. Fill in three things:</p>
+    <ul>
+        <li><strong>Base URL</strong> - the server's OpenAI-compatible address, usually ending in <code>/v1</code>. For Ollama that is <code>http://llm-host:11434/v1</code>. FreeITSM adds <code>/chat/completions</code> itself.</li>
+        <li><strong>Model</strong> - the model's exact name on that server, for example <code>llama3.1:8b</code> (Ollama lists them with <code>ollama list</code>).</li>
+        <li><strong>API key</strong> - only if the server needs one. A local server usually does not, and nothing is sent when the box is empty. A key you do enter is stored encrypted, and <em>Remove the saved key</em> takes it away again.</li>
+    </ul>
+    <div class="help-note"><strong>"localhost" is the FreeITSM server.</strong> The request is made by FreeITSM's server, not by your browser. In Docker that means the FreeITSM <em>container</em>, not the machine running the model - use the model host's name or address (with Docker Desktop, <code>host.docker.internal</code>). Ollama also listens only on its own machine until it is started with <code>OLLAMA_HOST=0.0.0.0</code>.</div>
+    <p><strong>It never falls back to a cloud provider.</strong> If the server cannot be reached, or the model fails, the feature reports the failure. Nothing is sent anywhere else.</p>
+    <p><strong>Test</strong> sends a one-word question and, for a custom endpoint, also tries one <em>tool call</em>. Most features only need the first. The war room bot and the Projects assistant look things up as they answer, which needs a model that supports tool calling, and many small local models do not - so the test says which you have, rather than letting a green "Connection OK" suggest everything will work.</p>
+    <ul>
+        <li><strong>HTTPS with your own certificate authority</strong>: add your CA to the bundle FreeITSM trusts (<code>SSL_CA_BUNDLE</code> in <code>config.php</code>) rather than turning certificate checks off. Plain <code>http://</code> works for a server on your own network.</li>
+        <li><strong>Extended thinking</strong> (the switch on this page) has no effect on a custom endpoint, as with Anthropic and OpenAI.</li>
+    </ul>
+    <div class="help-note"><strong>Two things do not use these settings.</strong> Knowledge's <em>search by meaning</em> creates embeddings with OpenAI, using the key on Knowledge → Settings → Embeddings; leave that key empty and Knowledge searches by words instead, with nothing sent to OpenAI. The RFP Builder in Contracts has its own AI settings.</div>
+</div>
+
 <?php require __DIR__ . '/_bottom.php'; ?>

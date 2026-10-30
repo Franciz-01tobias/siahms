@@ -25,17 +25,41 @@ $doc = apiV1BuildOpenApi();
 $components = $doc['components']['schemas'];
 $respMap = (require __DIR__ . '/../lib/openapi_schemas.php')['responses'];
 
+/**
+ * GETs one API URL with the bearer key and returns [HTTP code, decoded JSON].
+ *
+ * @param mixed $url  the full API URL to fetch
+ * @param mixed $key  the API key, sent as a bearer token
+ */
 function oav_get($url, $key) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key], CURLOPT_TIMEOUT=>20]);
     $b = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
     return [$c, json_decode($b, true)];
 }
+/**
+ * Follows a schema's $ref chain into the component schemas and returns the schema it
+ * ends on (an empty array when a name is missing).
+ *
+ * @param mixed $schema  a schema that may be a $ref to a component schema
+ * @param mixed $components  the component schemas, keyed by name
+ */
 function oav_resolveRef($schema, $components) {
     $g = 0;
     while (isset($schema['$ref']) && $g++ < 20) { $n = preg_replace('~^#/components/schemas/~', '', $schema['$ref']); $schema = $components[$n] ?? []; }
     return $schema;
 }
+/**
+ * Validates a live value against an OpenAPI schema ($ref, allOf, nullable) and returns
+ * every problem as "path: message" - type mismatches, missing required properties and
+ * response fields the schema does not document.
+ *
+ * @param mixed $data  the live value from the API response
+ * @param mixed $schema  the documented schema for it
+ * @param mixed $components  the component schemas, keyed by name, for $ref lookups
+ * @param mixed $path  where $data sits in the response, for error messages, e.g. data.items/0
+ * @param mixed $depth  how deep the recursion is; it stops past 40
+ */
 function oav_validate($data, $schema, $components, $path = 'data', $depth = 0) {
     $errs = [];
     if ($depth > 40) return $errs;
@@ -69,6 +93,15 @@ function oav_validate($data, $schema, $components, $path = 'data', $depth = 0) {
     return $errs;
 }
 $idCache = [];
+/**
+ * Turns a path template into a real path by replacing each {id} with the first id its
+ * parent collection returns - null when there is no row to use. Ids are cached per
+ * collection.
+ *
+ * @param mixed $template  an OpenAPI path template, e.g. /tickets/{id}/notes
+ * @param mixed $base  the API's base URL, e.g. http://localhost/freeitsm-app/api/v1/index.php
+ * @param mixed $key  the API key, sent as a bearer token
+ */
 function oav_resolvePath($template, $base, $key) {
     global $idCache;
     while (preg_match('/\{([^}]+)\}/', $template, $m, PREG_OFFSET_CAPTURE)) {

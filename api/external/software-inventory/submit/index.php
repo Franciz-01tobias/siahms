@@ -1,4 +1,19 @@
 <?php
+/**
+ * External API: the software inventory agent posts one machine's installed software
+ * here.
+ *
+ * Authenticated by an API key in the Authorization header (apikeys); the key's company
+ * owns the machine. The machine is matched or created through AssetsService (the same
+ * reconcile rules as every inventory source), then software_inventory_apps and
+ * software_inventory_detail are brought in line with the list - apps no longer reported
+ * are removed from this machine. Every outcome is logged to software_inventory_log.
+ *
+ * @input  Hostname  the machine's name (JSON body)
+ * @input  Software  the installed applications - each with Display Name, Publisher, Display Version, Install Date and so on
+ * @output {status, hostname, counts of apps and detail rows inserted, updated and deleted}, or {error}
+ * @wiki Asset-Reconciliation-Developer-Guide
+ */
 header('Content-Type: application/json');
 
 // --------------------------------------------------
@@ -101,6 +116,8 @@ $softwareList = $data['Software'];
 
 // --------------------------------------------------
 // Helper function to log errors/responses
+// @param mixed $hostId  the asset id the submitting machine was matched to or created as; null before that
+// @param mixed $message  the response or error to log - a string, or an array stored as JSON
 // --------------------------------------------------
 function logApiResponse($conn, $hostId, $message) {
     try {
@@ -117,35 +134,25 @@ function logApiResponse($conn, $hostId, $message) {
 $hostId = null;
 
 try {
-    // Try to find existing host — scoped to this key's company (NULL-safe match).
-    $stmt = $conn->prepare("SELECT id FROM assets WHERE hostname = ? AND tenant_id <=> ?");
-    $stmt->execute([$hostname, $keyTenant]);
-    $hostRow = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Which asset is this machine? This agent only sends a hostname, so it
+    // matches on that - but through the same rules as every other inventory
+    // source (PR #164), and a new machine is written the same way. Scoped to
+    // this key's company (NULL-safe match).
+    require_once __DIR__ . '/../../../../includes/services/assets.php';
+    $agentCtx = ActorContext::system('Software inventory agent');
+    $reconcileRes = AssetsService::reconcileAsset($conn, $agentCtx, ['hostname' => $hostname], $keyTenant, 'software inventory');
 
-    if ($hostRow && isset($hostRow['id'])) {
+    if ($reconcileRes['asset_id'] !== null) {
         // Host exists -> update last_seen
-        $hostId = (int)$hostRow['id'];
+        $hostId = (int)$reconcileRes['asset_id'];
 
         $stmt = $conn->prepare("UPDATE assets SET last_seen = UTC_TIMESTAMP() WHERE id = ?");
         $stmt->execute([$hostId]);
     } else {
-        // Host does not exist -> insert (stamped with this key's company)
-        $stmt = $conn->prepare("INSERT INTO assets (hostname, tenant_id, first_seen, last_seen) VALUES (?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
-        $stmt->execute([$hostname, $keyTenant]);
-
-        // Re-select to get id (scoped to this key's company)
-        $stmt = $conn->prepare("SELECT id FROM assets WHERE hostname = ? AND tenant_id <=> ?");
-        $stmt->execute([$hostname, $keyTenant]);
-        $hostRow2 = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$hostRow2 || !isset($hostRow2['id'])) {
-            http_response_code(500);
-            echo json_encode(['error' => 'Could not obtain host id after insert']);
-            exit;
-        }
-        $hostId = (int)$hostRow2['id'];
+        // Host does not exist -> create it (stamped with this key's company)
+        $hostId = AssetsService::createDiscoveredAsset($conn, $agentCtx, ['hostname' => mb_substr($hostname, 0, 50)], $keyTenant, 'the software inventory agent');
     }
-} catch (PDOException $e) {
+} catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Failed to process host: ' . $e->getMessage()]);
     exit;
@@ -158,7 +165,7 @@ try {
 $existingAppIds = [];
 
 try {
-    $stmt = $conn->prepare("SELECT app_id FROM software_inventory_detail WHERE host_id = ?");
+    $stmt = $conn->prepare("SELECT app_id FROM software_inventory_detail WHERE host_id = ? AND source = 'agent'");
     $stmt->execute([$hostId]);
 
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -342,7 +349,7 @@ foreach ($softwareList as $item) {
     // 3b. Upsert detail row (host/app)
     // --------------------------
     try {
-        $stmt = $conn->prepare("SELECT id FROM software_inventory_detail WHERE host_id = ? AND app_id = ?");
+        $stmt = $conn->prepare("SELECT id FROM software_inventory_detail WHERE host_id = ? AND app_id = ? AND source = 'agent'");
         $stmt->execute([$hostId, $appId]);
         $detailRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -358,7 +365,7 @@ foreach ($softwareList as $item) {
                     estimated_size   = ?,
                     system_component = ?,
                     last_seen        = UTC_TIMESTAMP()
-                WHERE host_id = ? AND app_id = ?
+                WHERE host_id = ? AND app_id = ? AND source = 'agent'
             ");
             $stmt->execute([
                 $displayVersion,
@@ -422,7 +429,7 @@ $deletedDetails = 0;
 
 if (!empty($toDeleteAppIds)) {
     try {
-        $stmt = $conn->prepare("DELETE FROM software_inventory_detail WHERE host_id = ? AND app_id = ?");
+        $stmt = $conn->prepare("DELETE FROM software_inventory_detail WHERE host_id = ? AND app_id = ? AND source = 'agent'");
 
         foreach ($toDeleteAppIds as $appId => $_) {
             $stmt->execute([$hostId, $appId]);

@@ -62,10 +62,16 @@ try {
     $countSt->execute([$parentType, $parentId]);
     $total = (int) $countSt->fetchColumn();
 
+    // On a knowledge article, whether each one is shown in the portal's Help
+    // Centre (GH #177). Only once Database Verification has added the column.
+    $isArticle  = $parentType === 'knowledge_article';
+    $helpCentre = $isArticle && documentHelpCentreReady($conn);
+    $hcCol      = $helpCentre ? ', dl.show_in_help_centre' : '';
+
     $st = $conn->prepare(
         "SELECT d.id, d.kind, d.title, d.description, d.original_name, d.mime_type,
                 d.size_bytes, d.external_url, d.created_datetime,
-                a.full_name AS uploaded_by_name
+                a.full_name AS uploaded_by_name$hcCol
            FROM document_links dl
            JOIN documents d ON d.id = dl.document_id
       LEFT JOIN analysts a ON a.id = d.uploaded_by_id
@@ -84,6 +90,7 @@ try {
     foreach ($rows as &$r) {
         $r['id']         = (int) $r['id'];
         $r['size_bytes'] = $r['size_bytes'] !== null ? (int) $r['size_bytes'] : null;
+        if ($helpCentre) $r['show_in_help_centre'] = (int) $r['show_in_help_centre'] === 1;
         $r['also_on']    = [];
         $otherSt->execute([$r['id'], $parentType, $parentId]);
         foreach ($otherSt->fetchAll(PDO::FETCH_ASSOC) as $o) {
@@ -102,13 +109,35 @@ try {
     }
     unset($r);
 
-    echo json_encode([
+    $out = [
         'success'   => true,
         'total'     => $total,
         'offset'    => $offset,
         'limit'     => $limit,
         'documents' => $rows,
-    ]);
+    ];
+    // What the panel says about the Help Centre, for the WHOLE article rather
+    // than this page of it: can customers read the article at all, and how many
+    // of its documents are shown. 'ready' false = verification not run yet.
+    if ($isArticle) {
+        require_once '../../includes/knowledge/help_centre_documents.php';
+        $shown = 0;
+        if ($helpCentre) {
+            $c = $conn->prepare(
+                "SELECT COUNT(*) FROM document_links dl
+                   JOIN documents d ON d.id = dl.document_id AND d.deleted_datetime IS NULL
+                  WHERE dl.parent_type = 'knowledge_article' AND dl.parent_id = ? AND dl.show_in_help_centre = 1"
+            );
+            $c->execute([$parentId]);
+            $shown = (int) $c->fetchColumn();
+        }
+        $out['help_centre'] = [
+            'ready'           => $helpCentre,
+            'customer_facing' => helpCentreArticleIsCustomerFacing($conn, $parentId),
+            'shown'           => $shown,
+        ];
+    }
+    echo json_encode($out);
 
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);

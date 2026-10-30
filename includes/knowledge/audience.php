@@ -1,5 +1,14 @@
 <?php
 /**
+ * Audience - the ladder of who may read a Knowledge article: internal, customer, public.
+ *
+ * Readers state their own rung and get everything at that rung or more open; sqlFilter()
+ * gives the matching SQL. Constants, so a typo fails loudly rather than matching nothing.
+ *
+ * @wiki Knowledge-Folders-and-Security-Developer-Guide
+ */
+
+/**
  * Who is allowed to read a Knowledge article.
  *
  * `knowledge_articles.audience` answers "who may read this", which is a
@@ -63,6 +72,11 @@ class Audience
         return self::$ladder;
     }
 
+    /**
+     * True when the value is exactly one of the audience constants.
+     *
+     * @param mixed $value  anything; only an exact audience string ('internal', 'customer', 'public') passes
+     */
     public static function isValid($value): bool
     {
         return is_string($value) && in_array($value, self::$ladder, true);
@@ -71,6 +85,8 @@ class Audience
     /**
      * Normalise anything user-supplied to a valid level.
      * Anything unrecognised becomes INTERNAL — the safe end of the ladder.
+     *
+     * @param mixed $value  user-supplied audience; anything unrecognised becomes 'internal'
      */
     public static function normalise($value): string
     {
@@ -80,6 +96,8 @@ class Audience
     /**
      * The audiences a reader at $viewerLevel may see: their own rung and every
      * more open one. An unrecognised level yields PUBLIC only (fail closed).
+     *
+     * @param string $viewerLevel  the reader's audience level - 'internal', 'customer' or 'public'
      */
     public static function visibleTo(string $viewerLevel): array
     {
@@ -94,6 +112,9 @@ class Audience
      * needed and the SQL stays byte-identical to before this existed.
      *
      * $alias is the table alias ('' for an unaliased query).
+     *
+     * @param string $viewerLevel  the reader's audience level - 'internal', 'customer' or 'public'
+     * @param string $alias  the knowledge articles table's alias in the calling query; '' when it has none
      */
     public static function sqlFilter(string $viewerLevel, string $alias = 'a'): array
     {

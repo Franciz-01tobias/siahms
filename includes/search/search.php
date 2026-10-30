@@ -58,6 +58,8 @@ function searchMinTokenSize(PDO $conn): int {
  * one would make the whole query match nothing. They come back in `dropped` so
  * the caller can say so rather than silently returning an empty page.
  *
+ * @param string $raw  the search text as the user typed it - untrusted
+ * @param int $minToken  the shortest word MySQL indexes (innodb_ft_min_token_size); shorter words are dropped
  * @return array{expr:string,terms:array,phrases:array,excluded:array,dropped:array}
  */
 function searchParseQuery(string $raw, int $minToken = 3): array {
@@ -126,6 +128,8 @@ function searchParseQuery(string $raw, int $minToken = 3): array {
  * tenant means "the default company" and is only visible when the analyst's
  * active company IS the default. Ticket search in FreeITSM is not restricted by
  * department or team (see api/tickets/search_tickets.php), so neither is this.
+ *
+ * @param array $overrides  scope keys to replace after the defaults, e.g. ['include_internal' => false, 'source_types' => [...]]
  */
 function searchScopeForAnalyst(PDO $conn, int $analystId, array $overrides = []): array {
     $scope = [
@@ -181,6 +185,8 @@ function searchScopeForAnalyst(PDO $conn, int $analystId, array $overrides = [])
 /**
  * Translate the scope structure into SQL. The ONLY place this happens.
  *
+ * @param array $scope  the scope structure built by searchScopeForAnalyst()
+ * @param string $alias  the alias the calling query gives search_documents
  * @return array{0:string,1:array} [sql fragment, params]
  */
 function searchScopeToSql(array $scope, string $alias = 'sd'): array {
@@ -241,6 +247,8 @@ function searchScopeToSql(array $scope, string $alias = 'sd'): array {
  * distortion, because the top 200 documents may collapse to a handful of
  * tickets.
  *
+ * @param string $rawQuery  the search text as the user typed it - untrusted
+ * @param array $scope  the scope structure built by searchScopeForAnalyst()
  * @param array $opts limit, offset, title_only, snippet_chars
  * @return array{total:int,results:array,query:array,ok:bool,reason:?string}
  */
@@ -350,6 +358,10 @@ function searchCorpusQuery(PDO $conn, string $rawQuery, array $scope, array $opt
  * MySQL has no highlighting function, so this is done here. Returns PLAIN TEXT —
  * the caller escapes it. Never build HTML in this file; a snippet is user
  * content and the one place it must not be trusted is on its way to a page.
+ *
+ * @param string $body  the matched document's plain-text body
+ * @param array $parsed  the parsed query from searchParseQuery(); its phrases and terms locate the excerpt
+ * @param int $len  the most characters to return, before any ellipses
  */
 function searchSnippet(string $body, array $parsed, int $len = 220): string {
     $body = trim(preg_replace('~\s+~u', ' ', $body));

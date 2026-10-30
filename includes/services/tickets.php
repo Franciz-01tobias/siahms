@@ -41,6 +41,8 @@ require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 require_once __DIR__ . '/../calendar_sync/push.php';   // scheduled work -> the owner's calendar (GH #75)
 require_once __DIR__ . '/checklists.php';              // mandatory SOP steps at closure (PR #141)
 require_once __DIR__ . '/mandatory_fields.php';        // mandatory ticket fields at closure
+require_once __DIR__ . '/ticket_fields.php';           // custom ticket fields (#179)
+require_once __DIR__ . '/../ticket_sensitivity.php';   // Normal / Confidential (discussion #62)
 
 class TicketsService
 {
@@ -65,6 +67,14 @@ class TicketsService
      * $tenantId is the adapter-resolved acting company. $defaultAnalystId is the
      * assignee when the caller sends none (UI: the creator; API: null).
      * Returns the new ticket id.
+     *
+     * @param array $in  subject (required), description, requester_email (required unless user_id), requester_name, user_id
+     *     (a requester the caller has already authorised), status_id/status, priority_id/priority, department_id,
+     *     ticket_type_id, origin_id, category_id, assigned_analyst_id, assigned_team_id, mailbox_id, sensitivity,
+     *     custom_fields ([field_key => value]; PRESENT means this channel can ask, so the fields required when
+     *     logging are enforced - the New ticket form and the API pass it, an alert raised by the system does not)
+     * @param ?int $defaultAnalystId  the assignee when $in names none (UI: the creator; API: null for unassigned)
+     * @param string $creationNote  the text of the 'Ticket Created' audit row, e.g. "Created via API (key: X)"
      */
     public static function createTicket(PDO $conn, ActorContext $ctx, int $tenantId, array $in, ?int $defaultAnalystId, string $creationNote): int
     {
@@ -87,6 +97,11 @@ class TicketsService
 
         if ($subject === '') {
             throw new ServiceError('validation', 'missing_field', "'subject' is required.");
+        }
+        // Same refusal as updateTicket(): never create a ticket someone asked to be
+        // confidential as a Normal one because the column is not there yet (#62).
+        if (ticketSensitivityNormalise($in['sensitivity'] ?? '') === 'confidential' && !ticketSensitivityReady($conn)) {
+            throw new ServiceError('validation', 'invalid_field', 'Run System → Database Verification before marking tickets confidential.');
         }
         // The address is required only when there is no chosen requester to
         // stand in for it — picking somebody from the directory already
@@ -156,6 +171,17 @@ class TicketsService
             if (!$aStmt->fetchColumn()) {
                 throw new ServiceError('validation', 'invalid_field', "Unknown or inactive analyst id: {$analystId}");
             }
+        }
+        // Custom fields (#179): checked in full BEFORE the ticket exists, so a
+        // missing or malformed answer never leaves a half-made ticket behind.
+        $customDefs = [];
+        $customValues = [];
+        if (array_key_exists('custom_fields', $in)) {
+            if (!is_array($in['custom_fields'])) {
+                throw new ServiceError('validation', 'invalid_field', "'custom_fields' must be an object of field key => value.");
+            }
+            $customDefs   = TicketFieldsService::fieldsFor($conn, $tenantId, $typeId);
+            $customValues = TicketFieldsService::validate($conn, $customDefs, $in['custom_fields'], true);
         }
         if ($mailboxId !== null) {
             $mbStmt = $conn->prepare("SELECT tenant_id FROM target_mailboxes WHERE id = ? AND is_active = 1");
@@ -247,6 +273,10 @@ class TicketsService
 
             self::auditWrite($conn, $ticketId, $ctx->actorId, 'Ticket Created', null, $creationNote);
 
+            if ($customValues) {
+                TicketFieldsService::write($conn, $ctx, $ticketId, $customDefs, $customValues);
+            }
+
             $conn->commit();
         } catch (Exception $e) {
             if ($conn->inTransaction()) $conn->rollBack();
@@ -257,6 +287,13 @@ class TicketsService
         // the mailbox ingest call. The payload is built there from the stored
         // row so all three channels announce identically — see the header of
         // includes/ticket_events.php for why that stopped being true.
+        // Confidential (discussion #62): asked for outright, or by the department
+        // or mailbox defaults. Raise-only, so the order does not matter.
+        if (ticketSensitivityNormalise($in['sensitivity'] ?? '') === 'confidential') {
+            ticketSensitivityRaise($conn, $ticketId, 'set when the ticket was raised');
+        }
+        ticketSensitivityApplyDefaults($conn, $ticketId, $mailboxId !== null ? (int)$mailboxId : null);
+
         require_once dirname(__DIR__) . '/ticket_events.php';
         ticketDispatchCreated($conn, (int)$ticketId, $ctx->actorId, $requesterEmail);
 
@@ -271,6 +308,12 @@ class TicketsService
      * Apply a partial update to a ticket. $writeAudit toggles the server-side
      * audit trail (API: true; UI: false — it audits client-side). Returns void;
      * the adapter reloads for its response.
+     *
+     * @param array $in  only the fields to change: subject, status/priority (by id or name), the lookup ids, assigned_analyst_id,
+     *     assigned_team_id, company_id, sensitivity, closed_message, work_start_at, work_end_at, work_all_day,
+     *     custom_fields ([field_key => value]; '' clears; only the keys sent are touched)
+     * @param bool $writeAudit  true writes the ticket_audit rows here (API); false when the caller audits itself (UI).
+     *     Custom field changes are always audited here, by whichever channel made them.
      */
     public static function updateTicket(PDO $conn, ActorContext $ctx, int $ticketId, array $in, bool $writeAudit): void
     {
@@ -574,7 +617,47 @@ class TicketsService
             }
         }
 
-        if (!$updates) {
+        // Sensitivity (discussion #62). The one way a ticket is made Normal again:
+        // a person choosing it. Nothing automatic ever lowers it.
+        $departmentChanged = false;
+        foreach ($updates as $u) {
+            if (strpos($u, 'department_id = ') === 0) { $departmentChanged = true; }
+        }
+        // ⚠️ Refuse rather than ignore. Before Database Verification there is
+        // nowhere to store it, and quietly saving nothing would leave someone
+        // believing a ticket is confidential when it is not.
+        if (array_key_exists('sensitivity', $in) && !ticketSensitivityReady($conn)
+            && ticketSensitivityNormalise($in['sensitivity']) === 'confidential') {
+            throw new ServiceError('validation', 'invalid_field', 'Run System → Database Verification before marking tickets confidential.');
+        }
+        if (array_key_exists('sensitivity', $in) && ticketSensitivityReady($conn)) {
+            $newSens = strtolower(trim((string)$in['sensitivity']));
+            if (!in_array($newSens, TICKET_SENSITIVITIES, true)) {
+                throw new ServiceError('validation', 'invalid_field', "'sensitivity' must be 'normal' or 'confidential'.");
+            }
+            $oldSens = ticketSensitivityNormalise($current['sensitivity'] ?? 'normal');
+            if ($newSens !== $oldSens) {
+                $updates[] = 'sensitivity = ?';
+                $args[]    = $newSens;
+                $audits[]  = ['Sensitivity', ucfirst($oldSens), ucfirst($newSens)];
+            }
+        }
+
+        // Custom fields (#179). Resolved against the ticket as it will be after
+        // this save - a type changed in the same request decides which fields
+        // apply - and validated now, before anything is written.
+        $customDefs = [];
+        $customValues = null;
+        if (array_key_exists('custom_fields', $in)) {
+            if (!is_array($in['custom_fields'])) {
+                throw new ServiceError('validation', 'invalid_field', "'custom_fields' must be an object of field key => value.");
+            }
+            $customDefs   = TicketFieldsService::fieldsForTicket($conn, self::rowAfterUpdates($current, $updates, $args));
+            $customValues = TicketFieldsService::validate($conn, $customDefs, $in['custom_fields'], false);
+            if (!$customValues) $customValues = null;
+        }
+
+        if (!$updates && $customValues === null) {
             return; // idempotent
         }
 
@@ -590,13 +673,17 @@ class TicketsService
         $closeTenant  = ($afterRow['tenant_id'] ?? null) !== null ? (int)$afterRow['tenant_id'] : null;
         $emptyOnClose = [];
         if ($closing) {
-            $emptyOnClose = MandatoryFieldsService::missing($conn, $closeTenant, $afterRow);
+            $emptyOnClose = MandatoryFieldsService::missing($conn, $closeTenant, $afterRow, $customValues);
             MandatoryFieldsService::assertClosureAllowed($conn, $closeTenant, $emptyOnClose);
         }
 
         $updates[] = 'updated_datetime = UTC_TIMESTAMP()';
         $args[]    = $ticketId;
         $conn->prepare('UPDATE tickets SET ' . implode(', ', $updates) . ' WHERE id = ?')->execute($args);
+
+        if ($customValues !== null) {
+            TicketFieldsService::write($conn, $ctx, $ticketId, $customDefs, $customValues);
+        }
 
         // ⚠️ AN ENTRY FLAGGED `forced` IS WRITTEN EVEN WHEN $writeAudit IS FALSE.
         //
@@ -611,6 +698,13 @@ class TicketsService
             if ($writeAudit || !empty($entry[3])) {
                 self::auditWrite($conn, $ticketId, $actorId, $field, $old, $new);
             }
+        }
+
+        // Moved into a confidential department: raise it. Writes its own audit
+        // entry whatever $writeAudit says, because the UI asked only for the move
+        // and cannot log a change it does not know the server made.
+        if ($departmentChanged) {
+            ticketSensitivityApplyDefaults($conn, $ticketId);
         }
 
         // Template emails + CSAT — non-blocking, same as assign_ticket.php.
@@ -750,7 +844,11 @@ class TicketsService
     //  Soft delete / restore
     // ======================================================================
 
-    /** Move a ticket to the trash. $writeAudit -> the 'Trash' audit row (UI: true; API: false). */
+    /**
+     * Move a ticket to the trash. $writeAudit -> the 'Trash' audit row (UI: true; API: false).
+     *
+     * @param bool $writeAudit  true writes the 'Trash' audit row (UI); false for the API
+     */
     public static function deleteTicket(PDO $conn, ActorContext $ctx, int $ticketId, bool $writeAudit): void
     {
         $ticket = self::loadTicket($conn, $ctx, $ticketId);   // 404
@@ -768,7 +866,11 @@ class TicketsService
         calendarSyncReconcileTicket($conn, $ticketId);
     }
 
-    /** Restore a ticket from the trash. $writeAudit -> the 'Trash' audit row. */
+    /**
+     * Restore a ticket from the trash. $writeAudit -> the 'Trash' audit row.
+     *
+     * @param bool $writeAudit  true writes the 'Trash' audit row (UI); false for the API
+     */
     public static function restoreTicket(PDO $conn, ActorContext $ctx, int $ticketId, bool $writeAudit): void
     {
         $ticket = self::loadTicket($conn, $ctx, $ticketId);   // 404
@@ -785,7 +887,11 @@ class TicketsService
         calendarSyncReconcileTicket($conn, $ticketId);
     }
 
-    /** The canonical ticket workflow payload, built from a loaded (joined) row. */
+    /**
+     * The canonical ticket workflow payload, built from a loaded (joined) row.
+     *
+     * @param array $r  the ticket row, as loaded by loadTicket() or rowAfterUpdates()
+     */
     private static function eventTicket(array $r): array
     {
         return [
@@ -807,7 +913,11 @@ class TicketsService
     //  Notes
     // ======================================================================
 
-    /** Add a note. Returns the note id; touches the ticket's updated_datetime. */
+    /**
+     * Add a note. Returns the note id; touches the ticket's updated_datetime.
+     *
+     * @param array $in  text (required), is_internal (default true; false shares it with the requester and may email them)
+     */
     public static function createNote(PDO $conn, ActorContext $ctx, int $ticketId, array $in): int
     {
         $ticketRow = self::loadTicket($conn, $ctx, $ticketId);   // 404
@@ -890,7 +1000,11 @@ class TicketsService
     //  Time entries
     // ======================================================================
 
-    /** Log time on a ticket. Returns the entry id. */
+    /**
+     * Log time on a ticket. Returns the entry id.
+     *
+     * @param array $in  minutes (required, above 0), notes, entry_at (ISO 8601; default now in UTC)
+     */
     public static function createTimeEntry(PDO $conn, ActorContext $ctx, int $ticketId, array $in): int
     {
         self::loadTicket($conn, $ctx, $ticketId);   // 404
@@ -909,7 +1023,12 @@ class TicketsService
         return (int)$conn->lastInsertId();
     }
 
-    /** Edit a time entry (UI-only; only the owning analyst may edit). */
+    /**
+     * Edit a time entry (UI-only; only the owning analyst may edit).
+     *
+     * @param int $entryId  the time entry (ticket_time_entries.id) to edit; must be the actor's own
+     * @param array $in  minutes (required, above 0), notes, entry_at (ISO 8601; default now in UTC)
+     */
     public static function updateTimeEntry(PDO $conn, ActorContext $ctx, int $entryId, int $ticketId, array $in): void
     {
         self::loadTicket($conn, $ctx, $ticketId);   // 404
@@ -939,6 +1058,9 @@ class TicketsService
      * Soft-delete a time entry. $ticketId scopes it (API route); pass null to
      * resolve the ticket from the entry (the UI passes only the entry id).
      * $restrictToOwner enforces the UI's "only your own entry" rule.
+     *
+     * @param int $entryId  the time entry (ticket_time_entries.id) to remove
+     * @param bool $restrictToOwner  true allows only the analyst who logged it (UI); false allows any entry on a reachable ticket (API)
      */
     public static function deleteTimeEntry(PDO $conn, ActorContext $ctx, int $entryId, ?int $ticketId, bool $restrictToOwner): void
     {
@@ -980,6 +1102,7 @@ class TicketsService
      * is actually written. Entries with no placeholder (closed_datetime =
      * UTC_TIMESTAMP()) consume no argument.
      *
+     * @param array $current  the ticket row before the update, as loaded by loadTicket()
      * @param string[] $updates  "column = ?" / "column = <expr>" fragments
      * @param array    $args     the placeholder values, in order
      */
@@ -1063,6 +1186,13 @@ class TicketsService
         return in_array($tid, $ctx->companyScope, true);
     }
 
+    /**
+     * Records one field change in the ticket's audit trail.
+     *
+     * @param string $field  the audit field label, e.g. 'Status', 'Team', 'Trash', 'Ticket Created'
+     * @param ?string $old  the value before, or null
+     * @param ?string $new  the value after, or null
+     */
     private static function auditWrite(PDO $conn, int $ticketId, int $analystId, string $field, ?string $old, ?string $new): void
     {
         $conn->prepare(
@@ -1083,7 +1213,11 @@ class TicketsService
     // format reaching one of them would have given analyst-raised, portal and
     // emailed tickets three different schemes.
 
-    /** Resolve a status by name or id. Returns [id, name, is_closed] or null. */
+    /**
+     * Resolve a status by name or id. Returns [id, name, is_closed] or null.
+     *
+     * @param array $in  the request: status_id wins over status (a name); neither gives null, unknown throws
+     */
     private static function resolveStatus(PDO $conn, array $in): ?array
     {
         if (isset($in['status_id']) && $in['status_id'] !== '' && $in['status_id'] !== null) {
@@ -1102,7 +1236,11 @@ class TicketsService
         return [(int)$row['id'], $row['name'], (int)$row['is_closed']];
     }
 
-    /** Resolve a priority by name or id. Empty string/null id = clear. */
+    /**
+     * Resolve a priority by name or id. Empty string/null id = clear.
+     *
+     * @param array $in  the request: priority_id (null or '' clears) wins over priority (a name); neither gives null
+     */
     private static function resolvePriority(PDO $conn, array $in): ?array
     {
         if (array_key_exists('priority_id', $in)) {
@@ -1132,7 +1270,11 @@ class TicketsService
      * "is this category allowed on this ticket type?" can never be answered from
      * the row itself — it has to climb. NULL means "offered whatever the type is".
      */
-    /** A team's name for the audit trail, or null. Never throws — this is a label. */
+    /**
+     * A team's name for the audit trail, or null. Never throws — this is a label.
+     *
+     * @param ?int $teamId  the team (teams.id); null or 0 gives null
+     */
     private static function teamName(PDO $conn, ?int $teamId): ?string
     {
         if (!$teamId) return null;
@@ -1146,6 +1288,12 @@ class TicketsService
         }
     }
 
+    /**
+     * The ticket type a category is bound to, taken from its top-level category; null when
+     * unbound or it cannot be worked out.
+     *
+     * @param int $categoryId  the ticket category (ticket_categories.id) to start from
+     */
     private static function categoryEffectiveTypeId(PDO $conn, int $categoryId): ?int
     {
         $cur   = $categoryId;
@@ -1170,6 +1318,13 @@ class TicketsService
         return null;
     }
 
+    /**
+     * The name of a row in a lookup table, or null for no id; throws for an unknown id.
+     *
+     * @param string $table  the lookup table, e.g. 'departments', 'ticket_types', 'teams' - a developer literal
+     * @param mixed $id  the id as sent; null or '' gives null
+     * @param string $label  what the lookup is called in the error message, e.g. 'ticket type'
+     */
     private static function validateLookupId(PDO $conn, string $table, $id, string $label): ?string
     {
         if ($id === null || $id === '') {
@@ -1184,7 +1339,12 @@ class TicketsService
         return $name;
     }
 
-    /** Parse a date to UTC 'Y-m-d H:i:s' (mirrors apiParseDate; 400 on garbage). */
+    /**
+     * Parse a date to UTC 'Y-m-d H:i:s' (mirrors apiParseDate; 400 on garbage).
+     *
+     * @param string $value  a date and time in any form DateTimeImmutable reads; with no zone it is read as UTC
+     * @param string $field  the field name, used in the error message
+     */
     private static function parseDate(string $value, string $field): string
     {
         $v = trim($value);

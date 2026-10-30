@@ -23,13 +23,13 @@ $translationNamespaces = ['common', 'software'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('software.inventory.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('software')); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <style>
         /* Module accent (indigo). */
         body { --accent: var(--sw-accent, #5c6bc0); --accent-hover: var(--sw-accent-hover, #3f51b5); }
@@ -462,36 +462,26 @@ $translationNamespaces = ['common', 'software'];
             font-size: 14px;
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
 
+    <?php /* The action row (#185) is what used to be this page's own toolbar:
+             the count reads as part of the heading - "Software inventory -
+             1,500 applications" - and the row draws the dash only once the
+             count is filled. New adds an application by hand (#1549): the
+             inventory agent finds what is installed, nothing installs a cloud
+             platform, so this is the only way Xero or Canva can be recorded -
+             and the only way a licence can be attached to one, since
+             software_licences.app_id is NOT NULL. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('software.inventory.heading'), [actionRowNew('openAppModal(null)', t('software.inventory.new_app'))], [
+              'count_id' => 'softwareCount',
+              'extra' => '<input type="text" class="search-box" id="softwareSearch" placeholder="'
+                       . htmlspecialchars(t('software.inventory.search')) . '" oninput="searchSoftware()">',
+          ]); ?>
     <div class="main-container software-container">
-        <div class="software-toolbar">
-            <h3>
-                <?php echo htmlspecialchars(t('software.inventory.heading')); ?>
-                <?php /* The count reads as part of the heading — "Software
-                         Inventory — 1,500 applications" — rather than floating at
-                         the far right of the toolbar away from the thing it counts.
-                         The dash is drawn by CSS on :not(:empty), so there is no
-                         dangling separator in the moment before the list loads. */ ?>
-                <span class="software-count" id="softwareCount"></span>
-            </h3>
-            <div class="toolbar-right">
-                <input type="text" class="search-box" id="softwareSearch"
-                       placeholder="<?php echo htmlspecialchars(t('software.inventory.search')); ?>"
-                       oninput="searchSoftware()">
-                <?php /* Manually added applications (#1549). The inventory agent
-                         finds what is installed; nothing installs a cloud
-                         platform, so this is the only way Xero or Canva can be
-                         recorded — and the only way a licence can be attached to
-                         one, since software_licences.app_id is NOT NULL. */ ?>
-                <button type="button" class="sw-add-btn" onclick="openAppModal(null)">
-                    <?php echo htmlspecialchars(t('software.inventory.add_app')); ?>
-                </button>
-            </div>
-        </div>
         <div class="filter-tabs">
             <button class="filter-tab active" data-filter="apps" onclick="switchTab('apps')"><?php echo htmlspecialchars(t('software.inventory.tab_apps')); ?> <span class="tab-count" id="countApps">0</span></button>
             <button class="filter-tab" data-filter="components" onclick="switchTab('components')"><?php echo htmlspecialchars(t('software.inventory.tab_components')); ?> <span class="tab-count" id="countComponents">0</span></button>
@@ -823,8 +813,9 @@ $translationNamespaces = ['common', 'software'];
 
                 if (data.success && data.machines.length > 0) {
                     currentMachines = data.machines;
+                    const machineCount = new Set(data.machines.map(m => m.asset_id)).size;
                     document.getElementById('modalCount').textContent =
-                        window.t(data.machines.length !== 1 ? 'software.inventory.installed_on_many' : 'software.inventory.installed_on_one', { count: data.machines.length });
+                        window.t(machineCount !== 1 ? 'software.inventory.installed_on_many' : 'software.inventory.installed_on_one', { count: machineCount });
                     document.getElementById('modalToolbar').style.display = 'flex';
                     document.getElementById('modalBody').innerHTML = `
                         <table class="machine-table">
@@ -834,6 +825,7 @@ $translationNamespaces = ['common', 'software'];
                                     <th>${window.t('software.inventory.machine_version')}</th>
                                     <th>${window.t('software.inventory.machine_install_date')}</th>
                                     <th>${window.t('software.inventory.machine_last_seen')}</th>
+                                    <th>${window.t('common.inventory_source')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -843,6 +835,7 @@ $translationNamespaces = ['common', 'software'];
                                         <td>${escapeHtml(m.display_version || '\u2014')}</td>
                                         <td>${escapeHtml(m.install_date || '\u2014')}</td>
                                         <td>${escapeHtml(m.last_seen || '\u2014')}</td>
+                                        <td>${escapeHtml(m.source || '\u2014')}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -885,7 +878,8 @@ $translationNamespaces = ['common', 'software'];
                 window.t('software.inventory.machine_hostname'),
                 window.t('software.inventory.machine_version'),
                 window.t('software.inventory.machine_install_date'),
-                window.t('software.inventory.machine_last_seen')
+                window.t('software.inventory.machine_last_seen'),
+                window.t('common.inventory_source')
             ].map(h => csvCell(h)).join(',')];
 
             currentMachines.forEach(m => {
@@ -893,7 +887,8 @@ $translationNamespaces = ['common', 'software'];
                     csvCell(m.hostname || ''),
                     csvCell(m.display_version || ''),
                     csvCell(m.install_date || ''),
-                    csvCell(m.last_seen || '')
+                    csvCell(m.last_seen || ''),
+                    csvCell(m.source || '')
                 ].join(','));
             });
 
@@ -934,6 +929,6 @@ $translationNamespaces = ['common', 'software'];
             return div.innerHTML;
         }
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

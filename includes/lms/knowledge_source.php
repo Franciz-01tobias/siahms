@@ -48,6 +48,8 @@ function lmsSharedOnlySql(PDO $conn): string
 /**
  * True when the LMS may read $articleId's body.
  * Fails CLOSED: no row, wrong company, or an unexpected error => false.
+ *
+ * @param int $articleId  the knowledge article id; only a published, unarchived, shared one passes
  */
 function lmsCanUseArticle(PDO $conn, int $articleId): bool
 {

@@ -7,6 +7,7 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/rbac.php';
+require_once '../../includes/changes/approvals.php';
 
 header('Content-Type: application/json');
 
@@ -41,8 +42,16 @@ try {
     }
 
     $name = $conn->query("SELECT name FROM change_statuses WHERE id = " . (int)$id)->fetchColumn() ?: null;
+    $conn->beginTransaction();
     $stmt = $conn->prepare("DELETE FROM change_statuses WHERE id = ?");
     $stmt->execute([$id]);
+    // Never leave a stage the code moves changes into without a status to move them to.
+    $missing = changeStagesWithoutActiveStatus($conn);
+    if ($missing) {
+        $conn->rollBack();
+        throw new Exception(changeStagesMissingMessage($missing));
+    }
+    $conn->commit();
 
     wf_emit('change_status', 'deleted', (int)$id, $name);
     echo json_encode(['success' => true]);

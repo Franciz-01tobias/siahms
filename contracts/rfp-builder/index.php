@@ -23,13 +23,13 @@ $translationNamespaces = ['common', 'contracts'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('contracts.rfp.list.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('contracts', t('contracts.nav.rfp_builder'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         body { --accent: var(--con-accent, #f59e0b); }
 
@@ -180,7 +180,7 @@ $translationNamespaces = ['common', 'contracts'];
         [data-theme-mode="dark"] .action-btn.danger:hover { background: #3a1a1a; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="contracts" data-mobile-page="rfp-list">
     <?php include '../includes/header.php'; ?>
@@ -260,6 +260,12 @@ $translationNamespaces = ['common', 'contracts'];
             </div>
             <div class="modal-body">
                 <input type="hidden" id="rfpId">
+                <!-- The company the RFP belongs to (3.5.0) - who can see it. -->
+                <div class="form-row" id="rfpCompanyRow" hidden>
+                    <label for="rfpCompany"><?php echo htmlspecialchars(t('contracts.edit.company')); ?> <span style="color:#ef4444;">*</span></label>
+                    <select id="rfpCompany"></select>
+                    <div class="form-help"><?php echo htmlspecialchars(t('contracts.rfp.list.company_help')); ?></div>
+                </div>
                 <div class="form-row">
                     <label for="rfpName"><?php echo htmlspecialchars(t('contracts.rfp.list.col_name')); ?> <span style="color:#ef4444;">*</span></label>
                     <input type="text" id="rfpName" placeholder="<?php echo htmlspecialchars(t('contracts.rfp.list.name_ph')); ?>" maxlength="200">
@@ -293,7 +299,7 @@ $translationNamespaces = ['common', 'contracts'];
         const API_BASE = '../../api/rfp-builder/';
 
         document.addEventListener('DOMContentLoaded', async () => {
-            await loadRfps();
+            await Promise.all([loadRfps(), loadRfpCompanies()]);
             // If we landed here from view.php Edit, auto-open the modal for that RFP.
             const editId = new URLSearchParams(location.search).get('edit');
             if (editId) {
@@ -301,6 +307,20 @@ $translationNamespaces = ['common', 'contracts'];
                 history.replaceState(null, '', './');
             }
         });
+
+        // The companies an RFP can belong to - the analyst's own - and the active one (3.5.0).
+        let rfpActiveCompany = null;
+        async function loadRfpCompanies() {
+            try {
+                const r = await fetch('../../api/contracts/customer_lookup.php', { credentials: 'same-origin' });
+                const d = await r.json();
+                if (!d.success || !d.multi_company) return;
+                rfpActiveCompany = d.active_company ? String(d.active_company) : null;
+                document.getElementById('rfpCompany').innerHTML =
+                    d.companies.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+                document.getElementById('rfpCompanyRow').hidden = false;
+            } catch (e) { /* single-company behaviour: the box stays hidden */ }
+        }
 
         async function loadRfps() {
             try {
@@ -338,9 +358,10 @@ $translationNamespaces = ['common', 'contracts'];
                 tbody.innerHTML = '<tr><td colspan="8" class="empty-state">' + escapeHtml(window.t('contracts.rfp.list.empty')) + '</td></tr>';
                 return;
             }
+            const manyCompanies = new Set(rfps.map(r => r.tenant_id)).size > 1;
             tbody.innerHTML = rfps.map(r => `
                 <tr>
-                    <td><a href="view.php?id=${r.id}" class="rfp-name-link">${escapeHtml(r.name)}</a></td>
+                    <td><a href="view.php?id=${r.id}" class="rfp-name-link">${escapeHtml(r.name)}</a>${manyCompanies && r.company_name ? '<div style="font-size:12px;color:var(--text-muted,#777);margin-top:2px;">' + escapeHtml(r.company_name) + '</div>' : ''}</td>
                     <td><span class="status-badge ${r.status}">${escapeHtml(rfpStatusLabel(r.status))}</span></td>
                     <td><span class="pill-stat">${r.document_count}</span></td>
                     <td><span class="pill-stat">${r.consolidated_count}</span></td>
@@ -368,6 +389,7 @@ $translationNamespaces = ['common', 'contracts'];
             document.getElementById('rfpName').value = '';
             document.getElementById('rfpStatus').value = 'draft';
             document.getElementById('rfpStyleGuide').value = '';
+            if (rfpActiveCompany) document.getElementById('rfpCompany').value = rfpActiveCompany;
             document.getElementById('rfpModal').classList.add('active');
             setTimeout(() => document.getElementById('rfpName').focus(), 50);
         }
@@ -384,6 +406,7 @@ $translationNamespaces = ['common', 'contracts'];
                 document.getElementById('rfpName').value = full.name;
                 document.getElementById('rfpStatus').value = full.status;
                 document.getElementById('rfpStyleGuide').value = full.style_guide || '';
+                if (full.tenant_id) document.getElementById('rfpCompany').value = String(full.tenant_id);
                 document.getElementById('rfpModal').classList.add('active');
                 setTimeout(() => document.getElementById('rfpName').focus(), 50);
             } catch (err) {
@@ -402,7 +425,8 @@ $translationNamespaces = ['common', 'contracts'];
                 id: document.getElementById('rfpId').value || null,
                 name,
                 status: document.getElementById('rfpStatus').value,
-                style_guide: document.getElementById('rfpStyleGuide').value
+                style_guide: document.getElementById('rfpStyleGuide').value,
+                tenant_id: document.getElementById('rfpCompanyRow').hidden ? null : (document.getElementById('rfpCompany').value || null)
             };
             const btn = document.getElementById('rfpSaveBtn');
             btn.disabled = true; btn.textContent = window.t('common.saving');
@@ -464,6 +488,6 @@ $translationNamespaces = ['common', 'contracts'];
             if (e.target.id === 'rfpModal') closeModal();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

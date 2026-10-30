@@ -76,6 +76,13 @@ $pageStyles = <<<'CSS'
             background: var(--surface-hover, #f3f4f6);
             color: var(--text-muted, #666);
         }
+        /* "3 documents" on an article in the list (GH #177). */
+        .hc-doc-count {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 12px; color: var(--ss-accent, #0078d4); margin-top: 10px;
+        }
+        .hc-doc-count svg { width: 13px; height: 13px; flex-shrink: 0; }
+        .hc-tree-item .hc-doc-count, .hc-td-title .hc-doc-count { margin: 0 0 0 8px; vertical-align: middle; }
 
         /* Article view */
         .hc-article {
@@ -100,6 +107,25 @@ $pageStyles = <<<'CSS'
             line-height: 1.7;
             color: var(--text, #333);
         }
+        /* Article spacing. The portal loads inbox.css, whose first rule is
+           `* { margin: 0; padding: 0 }` - so an article's paragraphs ran
+           together and a numbered list lost its indent, the numbers hanging
+           out past the text. The same values the analyst reader uses
+           (assets/css/knowledge.css, .article-content-body), so an article
+           reads the same to a customer as to the team that wrote it. */
+        .hc-body h1, .hc-body h2, .hc-body h3, .hc-body h4 { margin: 24px 0 12px; line-height: 1.35; }
+        .hc-body p { margin-bottom: 16px; }
+        .hc-body ul, .hc-body ol { margin-bottom: 16px; padding-left: 24px; }
+        .hc-body li { margin-bottom: 4px; }
+        .hc-body li > ul, .hc-body li > ol { margin: 4px 0 0; }
+        .hc-body blockquote { margin: 0 0 16px; padding: 4px 0 4px 14px; border-left: 3px solid var(--border, #e5e7eb); color: var(--text-muted, #666); }
+        .hc-body table { margin-bottom: 16px; border-collapse: collapse; }
+        .hc-body th, .hc-body td { border: 1px solid var(--border, #e5e7eb); padding: 6px 10px; text-align: left; vertical-align: top; }
+        .hc-body code { background: var(--surface-hover, #f3f4f6); padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+        .hc-body pre code { background: none; padding: 0; }
+        .hc-body pre { margin-bottom: 16px; }
+        .hc-body > :first-child { margin-top: 0; }
+        .hc-body > :last-child { margin-bottom: 0; }
         .hc-body img { max-width: 100%; height: auto; }
         .hc-body table { max-width: 100%; }
         .hc-body pre {
@@ -109,31 +135,74 @@ $pageStyles = <<<'CSS'
             border-radius: 6px;
         }
         .hc-body a { color: var(--ss-accent, #0078d4); }
+        /* A real button, not a text link: on an article it is the way back, and
+           the only control left above it once the toolbar is hidden. */
         .hc-back {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             color: var(--ss-accent, #0078d4);
             text-decoration: none;
-            font-size: 13px;
-            font-weight: 500;
+            font-size: 14px;
+            font-weight: 600;
             margin-bottom: 20px;
-            background: none;
-            border: none;
+            background: var(--surface, #fff);
+            border: 1px solid var(--ss-accent, #0078d4);
+            border-radius: 8px;
             cursor: pointer;
-            padding: 0;
+            padding: 9px 16px 9px 12px;
             font-family: inherit;
+            line-height: 1;
         }
-        .hc-back:hover { text-decoration: underline; }
+        .hc-back svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .hc-back:hover { background: var(--ss-accent, #0078d4); color: var(--ss-on-accent, #fff); }
+
+        /* ── documents attached to the article (GH #177) ──────────────── */
+        .hc-docs { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border, #e5e7eb); }
+        .hc-docs h2 { font-size: 14px; font-weight: 600; color: var(--text, #333); margin: 0 0 10px; }
+        /* Tiles: a type icon, the name, then type and size. The whole tile is the
+           download. Fills the width, so a phone gets one or two per row. */
+        .hc-doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+        .hc-doc {
+            display: flex; gap: 12px; align-items: flex-start; padding: 12px;
+            border: 1px solid var(--border, #e5e7eb); border-radius: 8px;
+            background: var(--surface, #fff); color: var(--text, #333); text-decoration: none; min-width: 0;
+        }
+        .hc-doc:hover { border-color: var(--ss-accent, #0078d4); }
+        /* A page with its corner folded, and the type written on it. The hue is
+           the type's (one per KIND of file, set inline) and mid-tone on purpose,
+           so white lettering reads on it in both light and dark themes. */
+        .hc-doc-icon {
+            flex: 0 0 auto; width: 38px; height: 46px; border-radius: 4px; position: relative;
+            background: var(--doc-c, #64748b); color: #fff;
+            display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px;
+            font-size: 9.5px; font-weight: 700; letter-spacing: .3px;
+            clip-path: polygon(0 0, 72% 0, 100% 22%, 100% 100%, 0 100%);
+        }
+        .hc-doc-icon::after {
+            content: ''; position: absolute; top: 0; right: 0; width: 28%; height: 22%;
+            background: rgba(255, 255, 255, .35); border-bottom-left-radius: 3px;
+        }
+        .hc-doc-icon svg { position: absolute; top: 13px; width: 16px; height: 16px; opacity: .9; }
+        .hc-doc-text { min-width: 0; flex: 1; }
+        .hc-doc-name {
+            font-size: 13.5px; font-weight: 500; line-height: 1.35; overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .hc-doc-meta { display: block; font-size: 12px; color: var(--text-muted, #666); margin-top: 4px; }
+        .hc-doc-desc { display: block; font-size: 12px; color: var(--text-muted, #666); margin-top: 4px; line-height: 1.4; }
 
         /* ── Layout toggle ─────────────────────────────────────────── */
-        .hc-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+        /* stretch, not center: the layout buttons take the search box's height,
+           so the toolbar reads as one row rather than a tall box and small pills. */
+        .hc-toolbar { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; margin-bottom: 20px; }
         .hc-toolbar .hc-search { margin-bottom: 0; flex: 1 1 260px; }
         .hc-layouts { display: flex; gap: 4px; flex-shrink: 0; }
         .hc-layout-btn {
             background: var(--surface, #fff); border: 1px solid var(--border, #e5e7eb);
-            color: var(--text-muted, #666); border-radius: 6px; padding: 7px 10px;
-            cursor: pointer; font: inherit; font-size: 12.5px; line-height: 1;
+            color: var(--text-muted, #666); border-radius: 8px; padding: 8px 14px; min-height: 38px;
+            display: inline-flex; align-items: center;
+            cursor: pointer; font: inherit; font-size: 13.5px; line-height: 1;
         }
         .hc-layout-btn:hover { border-color: var(--ss-accent, #0078d4); }
         .hc-layout-btn.active {
@@ -143,6 +212,13 @@ $pageStyles = <<<'CSS'
 
         /* ── cards: a grid, for scanning many titles at once ─────────── */
         .hc-list.hc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        /* A card is a <button>, and a button centres its content vertically - so
+           in a row of different-length previews every title started at a
+           different height. Lay each card out from the top instead, and let the
+           preview take the spare space, so titles line up along the top of a row
+           and the pills (and "N documents") along the bottom. */
+        .hc-list.hc-cards .hc-card { display: flex; flex-direction: column; justify-content: flex-start; }
+        .hc-list.hc-cards .hc-card-preview { flex: 1 1 auto; }
 
         /* ── list: full-width rows with a preview (what this page had) ── */
         .hc-list.hc-rows { display: grid; gap: 12px; }
@@ -273,12 +349,26 @@ let hcSearchTimer = null;
         let hcArticles = [];
         let hcLayout   = 'cards';
 
+        // "3 documents" with a paperclip, when an article has any shown in the
+        // Help Centre (GH #177). compact = the number alone, for the tree and
+        // table, where a row has room for little more than the title.
+        function hcDocCount(a, compact) {
+            const n = a.doc_count || 0;
+            if (!n) return '';
+            const words = n === 1 ? window.t('self-service.help_centre.doc_count_one')
+                                  : window.t('self-service.help_centre.doc_count_many', { n: n });
+            return '<span class="hc-doc-count" title="' + escapeHtml(words) + '">'
+                 + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>'
+                 + escapeHtml(compact ? String(n) : words) + '</span>';
+        }
+
         function hcCardsHtml(articles) {
             return '<div class="hc-list hc-cards">' + articles.map(a => {
                 const tags = (a.tags || []).map(t => '<span class="hc-tag">' + escapeHtml(t) + '</span>').join('');
                 return '<button type="button" class="hc-card" onclick="openArticle(' + a.id + ')">'
                      +   '<div class="hc-card-title">' + escapeHtml(a.title || '') + '</div>'
                      +   '<div class="hc-card-preview">' + escapeHtml(a.preview || '') + '</div>'
+                     +   hcDocCount(a, false)
                      +   (tags ? '<div class="hc-tags">' + tags + '</div>' : '')
                      + '</button>';
             }).join('') + '</div>';
@@ -292,6 +382,7 @@ let hcSearchTimer = null;
                 return '<button type="button" class="hc-card" onclick="openArticle(' + a.id + ')">'
                      +   '<div class="hc-card-title">' + escapeHtml(a.title || '') + '</div>'
                      +   '<div class="hc-card-preview">' + escapeHtml(a.preview || '') + '</div>'
+                     +   hcDocCount(a, false)
                      +   (tags ? '<div class="hc-tags">' + tags + '</div>' : '')
                      + '</button>';
             }).join('') + '</div>';
@@ -314,7 +405,7 @@ let hcSearchTimer = null;
               +   '<div class="hc-tree-name">' + escapeHtml(name) + '</div>'
               +   '<div class="hc-tree-items">' + byName[name].map(a =>
                       '<button type="button" class="hc-tree-item" onclick="openArticle(' + a.id + ')">'
-                    + escapeHtml(a.title || '') + '</button>').join('')
+                    + escapeHtml(a.title || '') + hcDocCount(a, true) + '</button>').join('')
               +   '</div>'
               + '</div>').join('');
         }
@@ -326,7 +417,7 @@ let hcSearchTimer = null;
                  + '</tr></thead><tbody>'
                  + articles.map(a =>
                      '<tr onclick="openArticle(' + a.id + ')">'
-                   +   '<td class="hc-td-title">' + escapeHtml(a.title || '') + '</td>'
+                   +   '<td class="hc-td-title">' + escapeHtml(a.title || '') + hcDocCount(a, true) + '</td>'
                    +   '<td class="hc-td-folder">' + escapeHtml(a.folder_name || window.t('self-service.help_centre.unfiled')) + '</td>'
                    + '</tr>').join('')
                  + '</tbody></table>';
@@ -374,8 +465,10 @@ let hcSearchTimer = null;
 
         async function openArticle(id, isDeepLink) {
             const container = document.getElementById('hcContent');
-            const searchBox = document.getElementById('hcSearch');
-            if (searchBox) searchBox.style.display = 'none';
+            // The whole toolbar goes, not just the search: Cards / List / Tree /
+            // Table choose how the LIST is drawn and mean nothing on one article.
+            const toolbar = document.getElementById('hcToolbar');
+            if (toolbar) toolbar.style.display = 'none';
 
             try {
                 const response = await fetch('../api/self-service/get_knowledge_article.php?id=' + encodeURIComponent(id));
@@ -405,6 +498,7 @@ let hcSearchTimer = null;
                     +   '</div>'
                     +   (tags ? '<div class="hc-tags" style="margin-bottom:16px">' + tags + '</div>' : '')
                     +   '<div class="hc-body">' + safeArticleHtml(a.body) + '</div>'
+                    +   documentsHtml(a.documents || [])
                     + '</div>';
 
                 // Deep links get a real URL to share; in-page navigation doesn't
@@ -419,14 +513,83 @@ let hcSearchTimer = null;
             }
         }
 
+        // The article's documents (GH #177). The server sends only those shown in
+        // the Help Centre, on an article this requester may already read. A DMS
+        // link opens where it points; a file downloads through the portal route.
+        function documentsHtml(docs) {
+            if (!docs.length) return '';
+            return '<div class="hc-docs"><h2>' + escapeHtml(window.t('self-service.help_centre.documents')) + '</h2>'
+                + '<div class="hc-doc-grid">'
+                + docs.map(d => {
+                    const isLink = d.kind === 'link';
+                    const href = isLink
+                        ? (/^https?:\/\//i.test(d.external_url || '') ? d.external_url : '#')
+                        : '../api/self-service/get_article_document.php?id=' + encodeURIComponent(d.id);
+                    const type = docType(d);
+                    // The extension is on the icon, so the name drops it - but only
+                    // when it IS the extension the icon shows.
+                    let name = d.title || d.original_name || '';
+                    if (type.ext && name.toLowerCase().endsWith('.' + type.ext)) name = name.slice(0, -(type.ext.length + 1));
+                    const action = window.t(isLink ? 'self-service.help_centre.doc_open' : 'self-service.help_centre.doc_download');
+                    const meta = [type.label];
+                    if (!isLink && d.size_bytes) meta.push(docSize(d.size_bytes));
+                    return '<a class="hc-doc" href="' + escapeHtml(href) + '"'
+                        + (isLink ? ' target="_blank" rel="noopener noreferrer"' : '')
+                        + ' title="' + escapeHtml(action + ': ' + (d.title || d.original_name || '')) + '">'
+                        + '<span class="hc-doc-icon" style="--doc-c:' + type.colour + '" aria-hidden="true">'
+                        +   (isLink ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>' : '')
+                        +   escapeHtml(type.badge) + '</span>'
+                        + '<span class="hc-doc-text">'
+                        +   '<span class="hc-doc-name">' + escapeHtml(name) + '</span>'
+                        +   '<span class="hc-doc-meta">' + escapeHtml(meta.join(' · ')) + '</span>'
+                        +   (d.description ? '<span class="hc-doc-desc">' + escapeHtml(d.description) + '</span>' : '')
+                        + '</span>'
+                        + '</a>';
+                }).join('') + '</div></div>';
+        }
+
+        // What a document is, for its icon: the word on it, its colour, and the
+        // type in words. One colour per KIND of file (every picture format is the
+        // same purple), so the colours mean something rather than decorating.
+        function docType(d) {
+            if (d.kind === 'link') return { badge: 'LINK', label: window.t('self-service.help_centre.doc_link'), colour: '#0e7490', ext: '' };
+            const m = /\.([a-z0-9]{1,5})$/i.exec(d.original_name || d.title || '');
+            const ext = m ? m[1].toLowerCase() : '';
+            const kinds = [
+                [['pdf'], '#dc2626'],
+                [['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'tif', 'tiff'], '#7c3aed'],
+                [['doc', 'docx', 'odt', 'rtf'], '#2563eb'],
+                [['xls', 'xlsx', 'csv', 'ods'], '#16a34a'],
+                [['ppt', 'pptx', 'odp'], '#ea580c'],
+                [['zip', '7z', 'rar', 'gz', 'tar'], '#b45309'],
+                [['mp4', 'mov', 'avi', 'mkv', 'webm', 'mp3', 'wav'], '#db2777'],
+            ];
+            const hit = kinds.find(k => k[0].includes(ext));
+            return {
+                badge:  ext ? ext.toUpperCase().slice(0, 4) : 'FILE',
+                label:  ext ? ext.toUpperCase() : window.t('self-service.help_centre.doc_file'),
+                colour: hit ? hit[1] : '#64748b',
+                ext:    ext,
+            };
+        }
+
+        function docSize(n) {
+            if (n < 1024) return n + ' B';
+            if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+            return (n / 1048576).toFixed(1) + ' MB';
+        }
+
         function backButtonHtml() {
-            return '<button type="button" class="hc-back" onclick="backToList()">&lsaquo; '
+            return '<button type="button" class="hc-back" onclick="backToList()">'
+                 + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>'
                  + escapeHtml(window.t('self-service.help_centre.back')) + '</button>';
         }
 
         function backToList() {
+            const toolbar = document.getElementById('hcToolbar');
+            if (toolbar) toolbar.style.display = '';
             const searchBox = document.getElementById('hcSearch');
-            if (searchBox) { searchBox.style.display = ''; searchBox.value = ''; }
+            if (searchBox) searchBox.value = '';
             if (window.history && window.history.pushState) {
                 window.history.pushState({}, '', 'help-centre.php');
             }

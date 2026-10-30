@@ -33,6 +33,7 @@ try {
     $allowed = [
         'logo_alignment'          => Cap::FORMS_LAYOUT,
         'collection_close_effect' => Cap::FORMS_COLLECTIONS,
+        'design_restricted'       => Cap::FORMS_ACCESS,   // who may design forms (#180)
     ];
     $validAlignments = ['left', 'center', 'right'];
 
@@ -51,6 +52,9 @@ try {
            silently does nothing, which is the failure hardest to notice. */
         if ($key === 'collection_close_effect' && !in_array($value, FormsService::CLOSE_EFFECTS, true)) {
             $value = FormsService::CLOSE_EFFECT_DEFAULT;
+        }
+        if ($key === 'design_restricted') {
+            $value = $value === '1' || $value === 1 || $value === true ? '1' : '0';
         }
 
         $dbKey = 'forms_' . $key;

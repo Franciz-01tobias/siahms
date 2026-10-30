@@ -50,7 +50,7 @@ return [
         'delete_failed' => 'Falha ao excluir: {message}',
     ],
     'editor' => [
-        'browser_title' => 'FreeITSM — Diagrama de rede',
+        'browser_title' => 'Diagrama de rede',
         'browser_title_named' => 'FreeITSM — {title}',
         'back' => '← Todos os diagramas',
         'loading' => 'Carregando…',

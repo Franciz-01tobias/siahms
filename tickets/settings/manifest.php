@@ -121,6 +121,17 @@ return [
             ],
         ],
         [
+            // Custom fields (#179): the extra details each ticket type asks for.
+            // Its own capability: it decides what requesters are asked on the
+            // portal and can stop tickets being logged or closed.
+            'id'        => 'custom-fields',
+            'cap'       => Cap::TICKETS_CUSTOM_FIELDS,
+            'label_key' => 'tickets.settings.tabs.custom_fields',
+            'grant'     => 'Design the custom fields each ticket type carries, and when they must be filled in',
+            // Where the portal shows a requester the answers they gave (discussion #193).
+            'setting_keys' => ['ticket_portal_field_answers'],
+        ],
+        [
             'id'        => 'statuses',
             'cap'       => Cap::TICKETS_STATUSES,
             'label_key' => 'tickets.settings.tabs.statuses',
@@ -248,18 +259,22 @@ return [
             'cap'          => Cap::TICKETS_GENERAL,
             'label_key'    => 'tickets.settings.tabs.general',
             'grant'        => 'Manage general ticket settings',
-            'setting_keys' => ['system_name', 'reopen_on_customer_reply', 'snooze_wake_hour',
+            'setting_keys' => ['reopen_on_customer_reply', 'snooze_wake_hour',
                                 // How long messages are displayed (discussion #104).
                                 'ticket_collapse_enabled', 'ticket_collapse_lines',
                                 'ticket_collapse_expand_newest', 'ticket_collapse_quoted',
                                 'ticket_collapse_remember',
                                 // Long TICKETS, as distinct from long messages.
                                 'ticket_group_older', 'ticket_group_show', 'ticket_flag_duplicates',
+                                // Which team folders analysts see (GH #176).
+                                'ticket_team_folders',
                                 // The two AI reading aids. Both default to OFF —
                                 // they are the only settings here that spend money.
                                 'ticket_ai_summary_enabled', 'ticket_ai_summary_auto_after',
                                 'ticket_ai_summary_max_messages', 'ticket_ai_summary_include_notes',
-                                'ticket_ai_read_enabled'],
+                                'ticket_ai_read_enabled',
+                                // Whether a confidential ticket may go to AI at all (#62).
+                                'ticket_ai_confidential'],
         ],
         [
             'id'           => 'privacy',

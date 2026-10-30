@@ -50,6 +50,13 @@ header('X-Accel-Buffering: no');
 header('Connection: keep-alive');
 set_time_limit(0);
 
+/**
+ * Sends one server-sent event (an event name and a JSON data line) and flushes it to the
+ * browser straight away.
+ *
+ * @param string $event  the event name the browser listens for: 'text', 'usage', 'done', 'unconfigured' or 'error'
+ * @param array $data  the payload, sent as one JSON line
+ */
 function sse_send(string $event, array $data): void
 {
     echo "event: {$event}\n";
@@ -77,9 +84,16 @@ try {
         sse_send('error', ['message' => 'Ticket not found']);
         exit;
     }
+    // A confidential ticket is not sent to an AI provider unless Tickets -> Settings
+    // says so (discussion #62) - checked here, on the server, whatever the page does.
+    require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
+    if (!ticketAiAllowed($conn, $ticketId)) {
+        sse_send('error', ['message' => TICKET_AI_CONFIDENTIAL_ERROR, 'confidential' => true]);
+        exit;
+    }
 
     $aiCfg = aiSettingsLoad($conn, 'tickets_reply_cleanup');
-    if (($aiCfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($aiCfg)) {
         // Not an error worth shouting about: merging works without AI, and the
         // caller treats this as "no summary" rather than "the merge failed".
         sse_send('unconfigured', ['message' => 'No AI provider configured for Tickets.']);

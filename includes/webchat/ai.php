@@ -37,11 +37,14 @@ function webchatAiConfigured(PDO $conn): bool
  * The audience is always Audience::PUBLIC and is not a parameter: whoever is typing
  * into a website chat box is an anonymous stranger. They gave a name and an email;
  * we verified neither.
+ *
+ * @param string $question  the visitor's latest message - untrusted
+ * @param array $history  earlier messages, each ['sender' => 'visitor'|..., 'body' => text]; the last six are used
  */
 function webchatAiReply(PDO $conn, string $question, array $history = [], ?int $tenantId = null): array
 {
     $cfg = aiSettingsLoad($conn, 'knowledge_ai');
-    if (($cfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($cfg)) {
         return ['ok' => false, 'answer' => '', 'articles' => [], 'error' => 'AI not configured'];
     }
 
@@ -88,6 +91,8 @@ function webchatAiReply(PDO $conn, string $question, array $history = [], ?int $
  * Summarise a web chat transcript into a short support-ticket description for a human
  * agent — used as the ticket body on an "email me back" escalation. Returns '' when AI
  * is unconfigured or the call fails, so the caller can fall back to the raw transcript.
+ *
+ * @param string $transcript  the chat as plain text (webchatTranscriptText()); blank gives ''
  */
 function webchatAiSummarise(PDO $conn, string $transcript): string
 {
@@ -99,7 +104,7 @@ function webchatAiSummarise(PDO $conn, string $transcript): string
     } catch (Exception $e) {
         return '';
     }
-    if (($cfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($cfg)) {
         return '';
     }
 

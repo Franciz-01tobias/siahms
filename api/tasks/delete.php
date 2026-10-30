@@ -15,6 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tasks');
+requireModuleWriteJson('tasks');
 
 try {
     $conn = connectToDatabase();

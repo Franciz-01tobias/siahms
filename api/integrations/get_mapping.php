@@ -29,7 +29,11 @@ if ($connectionId <= 0) {
     exit;
 }
 
-/** A lookup list, tolerant of a table that is not there on every install. */
+/**
+ * A lookup list, tolerant of a table that is not there on every install.
+ *
+ * @param string $sql  a fixed SELECT written in this file - never built from user input
+ */
 function mappingList(PDO $conn, string $sql): array
 {
     try {

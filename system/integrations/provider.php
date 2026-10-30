@@ -63,9 +63,9 @@ $companies    = $multiCompany ? getAllTenants($conn, true) : [];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars($meta['name']); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.integrations.title'), $meta['name'])); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/integrations.css?v=1">
     <style>
         /* Only what this page alone draws. The container, cards, table, fields,
@@ -106,7 +106,7 @@ $companies    = $multiCompany ? getAllTenants($conn, true) : [];
         .map-group:first-child { margin-top: 0; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="integrations-provider">
     <?php include '../includes/header.php'; ?>
@@ -663,6 +663,6 @@ $('testBtn').addEventListener('click', async () => {
 
 load();
 </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

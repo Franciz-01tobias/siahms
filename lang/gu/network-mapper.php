@@ -50,7 +50,7 @@ return [
         'delete_failed' => 'કાઢી નાખવામાં નિષ્ફળ: {message}',
     ],
     'editor' => [
-        'browser_title' => 'FreeITSM — નેટવર્ક ડાયાગ્રામ',
+        'browser_title' => 'નેટવર્ક ડાયાગ્રામ',
         'browser_title_named' => 'FreeITSM — {title}',
         'back' => '← બધા ડાયાગ્રામ',
         'loading' => 'લોડ થઈ રહ્યું છે…',

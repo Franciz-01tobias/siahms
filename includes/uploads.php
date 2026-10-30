@@ -121,7 +121,13 @@ const UPLOAD_TYPES_MAIL = [
 const UPLOAD_TYPES_ATTACHMENT = UPLOAD_TYPES_DOCUMENT + UPLOAD_TYPES_IMAGE
                               + UPLOAD_TYPES_AUDIO + UPLOAD_TYPES_VIDEO + UPLOAD_TYPES_MAIL;
 
-const UPLOAD_MAX_BYTES = 10485760;   // 10 MB, matching the issue-tracker cap
+/**
+ * The fallback largest attachment. NOT the live limit any more (GH #170): a caller
+ * that passes no limit gets System -> Security -> Attachments' "largest attachment"
+ * through attachmentMaxBytes(), which starts at this same 10 MB.
+ */
+const UPLOAD_MAX_BYTES = 10485760;
+require_once __DIR__ . '/attachment_limits.php';
 
 /**
  * Validate one $_FILES entry and move it somewhere safe.
@@ -129,12 +135,13 @@ const UPLOAD_MAX_BYTES = 10485760;   // 10 MB, matching the issue-tracker cap
  * @param array  $file     one entry from $_FILES
  * @param string $destDir  absolute directory; created (and protected) if absent
  * @param array  $allowed  ext => [mime, …]; defaults to the everyday set
- * @param int    $maxBytes
+ * @param ?int   $maxBytes  null = the configured limit (attachmentMaxBytes())
  * @return array ['stored_name'=>…, 'original_name'=>…, 'size'=>int, 'mime'=>string, 'path'=>absolute]
  * @throws Exception with a message safe to show a user
  */
-function uploadStoreFile(array $file, string $destDir, array $allowed = UPLOAD_TYPES_ATTACHMENT, int $maxBytes = UPLOAD_MAX_BYTES): array
+function uploadStoreFile(array $file, string $destDir, array $allowed = UPLOAD_TYPES_ATTACHMENT, ?int $maxBytes = null): array
 {
+    $maxBytes = $maxBytes ?? attachmentMaxBytes();
     if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
         throw new Exception(uploadErrorMessage($file['error'] ?? UPLOAD_ERR_NO_FILE));
     }
@@ -211,6 +218,8 @@ function uploadStoreFile(array $file, string $destDir, array $allowed = UPLOAD_T
  * 🔑 Called on every store, not only on create — so a directory that already
  * exists from before this file was written gets protected the next time
  * anything is uploaded into it.
+ *
+ * @param string $dir  absolute path of the upload directory; created (with parents) if missing
  */
 function uploadPrepareDir(string $dir): void
 {
@@ -287,9 +296,9 @@ IIS
 
 # Belt and braces for a server that ignores the deny above: even if something is
 # reachable, it must never run.
-php_flag engine off
 RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py .jsp .asp .aspx .shtml
 RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py
+# TRAP: php_flag / php_value only ever inside <IfModule mod_php*.c>. Unguarded, Apache running PHP through PHP-FPM does not know the command and refuses EVERY file in this folder with a 500 (GH #115).
 <IfModule mod_php.c>
   php_flag engine off
 </IfModule>
@@ -310,6 +319,9 @@ RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py
 </FilesMatch>
 HT
         );
+    } else {
+        // An install written before GH #115 has the unguarded php_flag in here.
+        uploadRepairHtaccessFile($htaccess);
     }
 }
 
@@ -351,6 +363,8 @@ HT
  * it. Layer 1 stops any NEW one arriving; it cannot retroactively make an old one
  * safe. Removing an existing SVG logo is an operator action, and it is called out
  * in the release notes rather than hidden in a code comment.
+ *
+ * @param string $dir  absolute path of the directory; created (with parents) if missing
  */
 function uploadPrepareWebServableDir(string $dir): void
 {
@@ -405,9 +419,9 @@ IIS
         @file_put_contents($htaccess, <<<'HT'
 # Web-servable uploads: static content IS served, nothing executes.
 # See includes/uploads.php — uploadPrepareWebServableDir().
-php_flag engine off
 RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py .jsp .asp .aspx .shtml
 RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py
+# TRAP: php_flag / php_value only ever inside <IfModule mod_php*.c>. Unguarded, Apache running PHP through PHP-FPM does not know the command and refuses EVERY file in this folder with a 500 (GH #115).
 <IfModule mod_php.c>
   php_flag engine off
 </IfModule>
@@ -435,7 +449,149 @@ RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py
 </IfModule>
 HT
         );
+    } else {
+        // An install written before GH #115 has the unguarded php_flag in here.
+        uploadRepairHtaccessFile($htaccess);
     }
+}
+
+/**
+ * The folders FreeITSM writes uploaded files into, relative to the application
+ * root. Every .htaccess under them is one this file either shipped or wrote.
+ *
+ * Used by Database Verify to repair the .htaccess files an older release wrote
+ * (GH #115). forms/images is here and not in storagePersistenceDirectories()
+ * because that list is about what a container must persist, not about what
+ * holds an .htaccess.
+ */
+const UPLOAD_HTACCESS_ROOTS = [
+    'tickets/attachments',
+    'change-management/attachments',
+    'war-room/attachments',
+    'uploads',
+    'forms/images',
+    'lms/content',
+    'recordings',
+    'contracts/rfp-builder/uploads',
+    'system/uploads',
+];
+
+/**
+ * Line numbers (1-based) of every php_flag / php_value / php_admin_* directive in
+ * an .htaccess that is NOT inside an <IfModule> for mod_php.
+ *
+ * 🔴 WHY THIS MATTERS (GH #115). Those directives belong to mod_php. On Apache
+ * running PHP through PHP-FPM (proxy_fcgi), mod_php is not loaded, so Apache
+ * does not know the command — and an unknown command in an .htaccess is not
+ * skipped, it is a configuration error that answers EVERY request for every
+ * file in that folder, and every folder below it, with a 500. Every upload
+ * folder used to carry one unguarded `php_flag engine off`, so on PHP-FPM the
+ * logo, the portal logo and LMS course content all failed to load. Wrapped in
+ * <IfModule mod_php.c>, mod_php obeys it and every other server skips it.
+ *
+ * This is a line scanner, not an Apache parser: it follows the nesting of
+ * <Container> ... </Container> tags so a directive inside <FilesMatch> inside
+ * <IfModule mod_php.c> still counts as guarded. A negated <IfModule !mod_php.c>
+ * is not a guard — it means the opposite.
+ *
+ * @param string $text  the whole .htaccess file's contents, any line endings
+ * @return int[]
+ */
+function htaccessUnguardedPhpDirectives(string $text): array
+{
+    $lines = preg_split('/\r\n|\n|\r/', $text);
+    $stack = [];          // one entry per open container: true if it is a mod_php guard
+    $out   = [];
+    foreach ($lines as $i => $line) {
+        $t = trim($line);
+        if ($t === '' || $t[0] === '#') continue;
+        if (preg_match('#^</\s*[A-Za-z]+\s*>#', $t)) {
+            array_pop($stack);
+            continue;
+        }
+        if (preg_match('#^<\s*([A-Za-z]+)\b\s*([^>]*)>#', $t, $m)) {
+            $isGuard = strcasecmp($m[1], 'IfModule') === 0
+                && preg_match('/^(mod_php[0-9]*\.c|php[0-9]*_module)$/i', trim($m[2]));
+            $stack[] = (bool)$isGuard;
+            continue;
+        }
+        if (preg_match('/^php_(admin_)?(flag|value)\b/i', $t) && !in_array(true, $stack, true)) {
+            $out[] = $i + 1;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Wrap every unguarded PHP directive in an .htaccess in <IfModule> blocks for
+ * mod_php 8 (mod_php.c) and mod_php 7 (mod_php7.c), keeping its indentation and
+ * the file's own line endings. Returns the text unchanged when there is nothing
+ * to do, so it is safe to run on every file every time.
+ *
+ * Wrapping rather than deleting, so the repair never changes what mod_php does:
+ * a file whose only copy of the directive was the unguarded one keeps it.
+ *
+ * @param string $text  the whole .htaccess file's contents; its line endings are kept
+ */
+function htaccessGuardPhpDirectives(string $text): string
+{
+    $bad = htaccessUnguardedPhpDirectives($text);
+    if (!$bad) return $text;
+
+    $nl    = strpos($text, "\r\n") !== false ? "\r\n" : "\n";
+    $lines = preg_split('/\r\n|\n|\r/', $text);
+    foreach ($bad as $n) {
+        $line   = $lines[$n - 1];
+        $indent = substr($line, 0, strlen($line) - strlen(ltrim($line)));
+        $d      = trim($line);
+        $lines[$n - 1] = $indent . '<IfModule mod_php.c>' . $nl . $indent . '  ' . $d . $nl . $indent . '</IfModule>' . $nl
+                       . $indent . '<IfModule mod_php7.c>' . $nl . $indent . '  ' . $d . $nl . $indent . '</IfModule>';
+    }
+    return implode($nl, $lines);
+}
+
+/**
+ * Repair one .htaccess in place. True if it was changed.
+ *
+ * @param string $path  absolute path of one .htaccess file; an unreadable file is left alone
+ */
+function uploadRepairHtaccessFile(string $path): bool
+{
+    $text = @file_get_contents($path);
+    if (!is_string($text)) return false;
+    $fixed = htaccessGuardPhpDirectives($text);
+    if ($fixed === $text) return false;
+    return @file_put_contents($path, $fixed) !== false;
+}
+
+/**
+ * Repair every .htaccess under the upload folders. Returns how many changed.
+ *
+ * The committed .htaccess files are fixed by updating FreeITSM, but the ones it
+ * WROTE itself — one per ticket attachment folder, the portal logo folder,
+ * per-form image folders — stay as they were written until something rewrites
+ * them. Database Verify calls this so an upgraded install is repaired in one go.
+ *
+ * @param string $appRoot  absolute path of the FreeITSM folder; UPLOAD_HTACCESS_ROOTS are relative to it
+ */
+function uploadRepairHtaccessTree(string $appRoot): int
+{
+    $changed = 0;
+    foreach (UPLOAD_HTACCESS_ROOTS as $rel) {
+        $root = rtrim($appRoot, '/\\') . '/' . $rel;
+        if (!is_dir($root)) continue;
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY,
+            RecursiveIteratorIterator::CATCH_GET_CHILD     // an unreadable folder is skipped, not fatal
+        );
+        foreach ($it as $f) {
+            if ($f->getFilename() === '.htaccess' && uploadRepairHtaccessFile($f->getPathname())) {
+                $changed++;
+            }
+        }
+    }
+    return $changed;
 }
 
 /**
@@ -445,6 +601,8 @@ HT
  * Content-Disposition header and rendered in lists, so it must not carry a
  * newline (header injection), a quote (breaks out of the header's filename),
  * or any path segment.
+ *
+ * @param string $name  the filename as the sender gave it - untrusted, may hold a path
  */
 function uploadCleanName(string $name): string
 {
@@ -459,7 +617,11 @@ function uploadCleanName(string $name): string
     return $name;
 }
 
-/** The file's real mime type, or null if this server cannot tell us. */
+/**
+ * The file's real mime type, or null if this server cannot tell us.
+ *
+ * @param string $path  absolute path of the file on disk
+ */
 function uploadDetectMime(string $path): ?string
 {
     if (class_exists('finfo')) {
@@ -474,7 +636,11 @@ function uploadDetectMime(string $path): ?string
     return null;   // unknown → gate 1 and gate 3 still stand
 }
 
-/** PHP's upload error codes as something a person can act on. */
+/**
+ * PHP's upload error codes as something a person can act on.
+ *
+ * @param int $code  a PHP upload error code, the UPLOAD_ERR_* in $_FILES[...]['error']
+ */
 function uploadErrorMessage(int $code): string
 {
     switch ($code) {
@@ -489,6 +655,11 @@ function uploadErrorMessage(int $code): string
     }
 }
 
+/**
+ * A byte count as readable text - "1.5 MB", "300 KB" or "512 bytes".
+ *
+ * @param int $bytes  a size in bytes
+ */
 function uploadFormatBytes(int $bytes): string
 {
     if ($bytes >= 1048576) return round($bytes / 1048576, 1) . ' MB';
@@ -560,6 +731,7 @@ const ATTACHMENT_SERVE_TYPES = [
  * The stored content_type is deliberately NOT a parameter: there is no version of
  * this decision that should consult a value the sender chose.
  *
+ * @param string $filename  the attachment's original filename; only its extension decides the type
  * @return array ['type' => string, 'inline' => bool, 'filename' => string]
  *               filename is header-safe (quotes and CR/LF removed).
  */
@@ -579,6 +751,9 @@ function attachmentServeRules(string $filename): array
 /**
  * Emit the Content-Type / Content-Disposition / nosniff headers for an attachment.
  * Callers still do their own authorisation and file-existence checks first.
+ *
+ * @param string $filename  the attachment's original filename, for the type and the download name
+ * @param int $size  the file's size in bytes, sent as Content-Length
  */
 function attachmentSendHeaders(string $filename, int $size): void
 {
@@ -633,7 +808,12 @@ const ATTACHMENT_QUARANTINE_EXT = 'bin';
  * odd attachment must never cost somebody their ticket. It reports what it did and
  * lets the caller record it.
  *
+ * @param string $bytes  the file's decoded contents
+ * @param string $originalName  the sender's filename - untrusted; cleaned, and only its extension is used
+ * @param string $destDir  absolute directory to store into; created (and protected) if absent
  * @param string $policy ATTACHMENT_POLICY_STORE | ATTACHMENT_POLICY_DROP
+ * @param array $allowed  ext => [mime, ...] accepted; defaults to the everyday attachment set
+ * @param ?int $maxBytes  the size limit in bytes; null = the configured limit (attachmentMaxBytes())
  * @return array{stored:bool, quarantined:bool, stored_name:?string, path:?string,
  *               original_name:string, size:int, mime:string, reason:?string}
  */
@@ -643,8 +823,9 @@ function uploadStoreBytes(
     string $destDir,
     string $policy = ATTACHMENT_POLICY_STORE,
     array $allowed = UPLOAD_TYPES_ATTACHMENT,
-    int $maxBytes = UPLOAD_MAX_BYTES
+    ?int $maxBytes = null
 ): array {
+    $maxBytes = $maxBytes ?? attachmentMaxBytes();
     $original = uploadCleanName($originalName);
     $size     = strlen($bytes);
     $mime     = uploadDetectMimeFromBytes($bytes) ?: 'application/octet-stream';
@@ -715,7 +896,11 @@ function uploadStoreBytes(
     return $result;
 }
 
-/** The real mime type of bytes held in memory, or null if this server cannot tell. */
+/**
+ * The real mime type of bytes held in memory, or null if this server cannot tell.
+ *
+ * @param string $bytes  the file's contents
+ */
 function uploadDetectMimeFromBytes(string $bytes): ?string
 {
     if (class_exists('finfo')) {
@@ -794,6 +979,9 @@ function attachmentAllowedTypes(PDO $conn): array
  * The block appended to a message body when attachments were not accepted, so the
  * outcome is visible on the ticket instead of a file quietly vanishing.
  * Returns '' when there is nothing to say.
+ *
+ * @param array $rejected  files not saved, each ['name' => original filename, 'reason' => why]
+ * @param array $quarantined  files stored as inert .bin, each ['name' => original filename, 'reason' => why]
  */
 function attachmentIngestNotice(array $rejected, array $quarantined): string
 {

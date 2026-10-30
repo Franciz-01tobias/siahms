@@ -105,4 +105,21 @@ require __DIR__ . '/_top.php';
     <div class="help-note ok"><strong>Done.</strong> Set what you need, leave the rest at <code>0</code>, and press <strong>Save</strong> — changes take effect immediately for new sign-in attempts.</div>
 </div>
 
+<div class="help-section" id="attachments">
+    <div class="help-section-header"><?php echo helpSectionNum('attachments'); ?>
+        <div>
+            <h3>Attachments</h3>
+            <p>Which files FreeITSM accepts, and how big they may be - for email, the self-service portal, chat channels, replies and attached documents alike.</p>
+        </div>
+    </div>
+    <ul class="help-list">
+        <li><strong>When a file type is not accepted</strong> - keep it, but only as a download that never opens in the browser; or do not keep it. Either way the ticket says what happened.</li>
+        <li><strong>Accepted file types</strong> - leave empty for everything FreeITSM considers safe, or list only the extensions you want. You can only narrow the list.</li>
+        <li><strong>Largest attachment</strong> - no single attachment can be bigger than this, wherever it arrives. 10 MB unless you change it.</li>
+        <li><strong>Largest email</strong> - all the attachments on one inbound email together. 0 means no limit beyond the one above.</li>
+    </ul>
+    <div class="help-note warn"><strong>PHP has limits of its own.</strong> A file uploaded through the browser (a reply, the portal) is refused by PHP before FreeITSM sees it if it is over <code>upload_max_filesize</code> or <code>post_max_size</code> in php.ini, and a web server or proxy in front can have a lower limit again (nginx <code>client_max_body_size</code>, IIS <code>maxAllowedContentLength</code>). The card shows what PHP on your server accepts and warns when your limit is higher. Email is not uploaded, so it is not held back by those - but it is processed in memory, so a very large email needs PHP's <code>memory_limit</code> to match.</div>
+    <p>What an inbound email over these limits does - keep it without the attachments that are too big, or reject it, and who is told - is set in <strong>Tickets &rarr; Settings &rarr; Mailboxes</strong>, where each mailbox can also set limits of its own.</p>
+</div>
+
 <?php require __DIR__ . '/_bottom.php'; ?>

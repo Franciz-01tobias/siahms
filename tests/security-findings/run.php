@@ -347,7 +347,8 @@ $identityPoints = [
 ];
 foreach ($identityPoints as $p) {
     $src = code("$APP/$p");
-    check("$p rotates the session id", strpos($src, 'sessionPromoteToAuthenticated()') !== false);
+    // sessionPromoteToAuthenticated() or (false) - a password change keeps the CSRF token (S4).
+    check("$p rotates the session id", (bool)preg_match('/sessionPromoteToAuthenticated\((false)?\)/', $src));
 
     // ⚠️ …and that the call can actually DO anything. Searching for the call string is
     // not the same as checking it works: api/self-service/change_password.php opened
@@ -576,7 +577,7 @@ if ($conn === null) {
     skipped("secrets survive a full encrypt/decrypt round-trip", 'no database connection');
 } else {
     $roundTripKeys = ['sla_cron_token', 'webhook_cron_token', 'workflow_cron_token',
-                      'integration_cron_token', 'csat_token_secret'];
+                      'integration_cron_token', 'domain_cron_token', 'csat_token_secret'];
     $raw = [];
     $in  = implode(',', array_fill(0, count($roundTripKeys), '?'));
     $st  = $conn->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ($in)");
@@ -815,8 +816,11 @@ heading('Unscoped lists  Endpoints that read a scoped table');
 // activity — while `FROM users u` returned every requester on the install.
 // Found while building the requester picker (discussion #54) on top of it.
 $gu = code("$APP/api/tickets/get_users.php");
+// Either filter counts: 119d04c0 moved this list to activeTenantReadFilter()
+// so that "All companies" shows every company the analyst may see. The test
+// looked for the old name only and reported a leak that was not there.
 check("get_users.php scopes the USER LIST, not only the ticket count",
-      strpos($gu, 'activeTenantFilter') !== false,
+      preg_match('/activeTenant(Read)?Filter\(\$conn,[^;]*[\'"]u[\'"]\)/', $gu) === 1,
       'the list itself returned every requester on the install');
 // Precedence is half the fix: appended after a bare `a LIKE ? OR b LIKE ?` the
 // company clause would bind to the last OR branch only.
@@ -1006,6 +1010,42 @@ $unlisted = array_values(array_diff(array_unique($m[1] ?? []), $declared));
 check("no column drop in db_verify.php is missing from the preview's register",
       $unlisted === [],
       'undeclared: ' . implode(', ', $unlisted) . ' — add them to DB_VERIFY_DESTRUCTIVE');
+
+// ── F11 ──────────────────────────────────────────────────────────────────────
+heading('F11  Change text is cleaned on display; AI credentials need the settings permission');
+
+// Change text is stored as the editor sent it, so the display is the defence: the
+// detail view and the PDF export must both go through safeChangeHtml().
+$cmJs = code("$APP/assets/js/change-management.js");
+check("change-management.js defines safeChangeHtml() over safeHtmlFragment()",
+      (bool)preg_match('/function safeChangeHtml\(.{0,400}?return safeHtmlFragment\(/s', $cmJs));
+check("the detail view renders change text through safeChangeHtml()",
+      strpos($cmJs, '<div class="detail-section-body">${safeChangeHtml(content)}</div>') !== false
+      && strpos($cmJs, '<div class="detail-section-body">${content}</div>') === false);
+check("the PDF export renders change text through safeChangeHtml()",
+      strpos($cmJs, '${safeChangeHtml(section.content)}') !== false
+      && strpos($cmJs, '${section.content}') === false);
+$cmPage = code("$APP/change-management/index.php");
+$posSafe = strpos($cmPage, 'assets/js/safe-html.js');
+$posCm   = strpos($cmPage, 'assets/js/change-management.js');
+check("the change page loads safe-html.js, before change-management.js",
+      $posSafe !== false && $posCm !== false && $posSafe < $posCm);
+// POSITIVE CONTROL - the cleaner it relies on still strips handlers.
+check("POSITIVE CONTROL: safe-html.js still drops every on* attribute",
+      strpos(code("$APP/assets/js/safe-html.js"), "name.indexOf('on') === 0") !== false);
+
+// Saving an AI provider's key is a settings-tab job, like testing it. Module access alone
+// let any analyst with Forms / Workflow replace the key or point it at another endpoint.
+foreach (['forms' => 'FORMS_AI', 'workflow' => 'WORKFLOW_AI'] as $mod => $cap) {
+    $src = code("$APP/api/$mod/save_ai_settings.php");
+    check("api/$mod/save_ai_settings.php requires Cap::$cap",
+          strpos($src, "requireCapabilityJson(Cap::$cap)") !== false);
+    check("api/$mod/save_ai_settings.php loads rbac.php, so the guard cannot fatal",
+          (bool)preg_match('#require(_once)?[^;\n]*rbac\.php#', $src));
+    // POSITIVE CONTROL - the sibling it was copied from carries the same guard.
+    check("POSITIVE CONTROL: api/$mod/test_ai_key.php carries the same Cap::$cap",
+          strpos(code("$APP/api/$mod/test_ai_key.php"), "requireCapabilityJson(Cap::$cap)") !== false);
+}
 
 // ── Live checks (need a base URL) ──────────────────────────────────────────
 if ($BASE === null) {

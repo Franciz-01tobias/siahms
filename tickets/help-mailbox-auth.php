@@ -28,10 +28,10 @@ $translationNamespaces = ['common', 'tickets'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mailbox Authentication — Admin Guide</title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../assets/css/help.css?v=3">
+    <title><?php echo htmlspecialchars(pageTitle('tickets', t('tickets.nav.help'), 'Mailbox Authentication')); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/help.css?v=6">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
         body {
@@ -41,7 +41,7 @@ $translationNamespaces = ['common', 'tickets'];
             --on-accent:    var(--accent-on-accent);
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-page="tickets-help-mailbox">
 <?php include 'includes/header.php'; ?>
@@ -78,8 +78,11 @@ $translationNamespaces = ['common', 'tickets'];
         <a href="#google" class="help-nav-link" data-section="google">
             <span class="help-nav-num">9</span> Google Workspace
         </a>
+        <a href="#large-emails" class="help-nav-link" data-section="large-emails">
+            <span class="help-nav-num">10</span> Large emails
+        </a>
         <a href="#troubleshooting" class="help-nav-link" data-section="troubleshooting">
-            <span class="help-nav-num">10</span> Troubleshooting
+            <span class="help-nav-num">11</span> Troubleshooting
         </a>
     </div>
 
@@ -323,10 +326,30 @@ $translationNamespaces = ['common', 'tickets'];
                 <p>Google mailboxes use the <strong>Gmail API</strong> with OAuth 2.0 and behave like delegated mode — you authorise once and FreeITSM reads/sends as that account. There's no app-only equivalent in the FreeITSM UI for Google; the redirect URI uses <code>google_oauth_callback.php</code> instead of <code>oauth_callback.php</code>.</p>
             </div>
 
-            <!-- 10. Troubleshooting -->
-            <div class="help-section" id="troubleshooting">
+            <!-- 10. Large emails (GH #170) -->
+            <div class="help-section" id="large-emails">
                 <div class="help-section-header">
                     <span class="help-section-num">10</span>
+                    <div>
+                        <h3>Large emails</h3>
+                        <p>What happens when an email's attachments are bigger than you allow.</p>
+                    </div>
+                </div>
+                <p>The limits themselves - the largest single attachment, and the largest total for one email - are set in <strong>System &rarr; Security &rarr; Attachments</strong>, because the per-attachment limit applies everywhere, not just to email. This section is about what an email over them does.</p>
+                <p>Under the mailbox list in <strong>Tickets &rarr; Settings &rarr; Mailboxes</strong>, <strong>When an email is too large</strong> sets the defaults:</p>
+                <ul>
+                    <li><strong>Keep it</strong> - the ticket is created as normal, the attachments that are too big are left out, and a note at the foot of the message lists each one and why. When the attachments are each fine but together come to more than the limit for one email, you choose what else goes: the <strong>largest first</strong> until the rest fit, <strong>all of them</strong>, or keep them <strong>in the order they were attached</strong> until the next would not fit.</li>
+                    <li><strong>Reject the whole email</strong> - no ticket is made, and the email is dealt with like any other rejected mail for that mailbox (its <strong>Rejected emails</strong> setting: deleted, moved to Deleted Items, or marked as read).</li>
+                </ul>
+                <p>Either way you can <strong>email an alert</strong> to one or more addresses, saying what arrived and what was done, and <strong>reply to the sender</strong> with a message you write ({subject}, {limit} and {total_limit} are filled in). The reply is never sent to automated senders such as no-reply or mailer-daemon addresses, never to the mailbox itself, and never more than once an hour to the same sender - so two systems cannot answer each other forever.</p>
+                <p>Each mailbox can override all of this, limits included: in its settings, set <strong>Large emails</strong> to <strong>Set limits and rules for this mailbox</strong>. Useful for, say, a supplier mailbox that receives large drawings.</p>
+                <p>Every oversized email is recorded in the mailbox log (<strong>Logs</strong>), with what was removed or why it was rejected, and whether the alert and the reply were sent. The alert and the reply also appear in the email send log.</p>
+            </div>
+
+            <!-- 11. Troubleshooting -->
+            <div class="help-section" id="troubleshooting">
+                <div class="help-section-header">
+                    <span class="help-section-num">11</span>
                     <div>
                         <h3>Troubleshooting</h3>
                         <p>Common symptoms and how to clear them.</p>
@@ -384,6 +407,6 @@ $translationNamespaces = ['common', 'tickets'];
         });
     });
 </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

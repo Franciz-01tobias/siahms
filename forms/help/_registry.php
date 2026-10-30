@@ -26,7 +26,11 @@
  * asked to have translated. The module's chrome IS translated, as it always was.
  */
 
-/** @return array<string,array<string,mixed>> Help topics, keyed by slug. */
+/**
+ * Returns the Forms help topics - title, standfirst, card blurb and section list for each.
+ *
+ * @return array<string,array<string,mixed>> Help topics, keyed by slug.
+ */
 function formsHelpTopics(): array
 {
     return [

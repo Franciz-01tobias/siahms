@@ -63,6 +63,9 @@ final class Cap
 {
     // ---- LMS ---------------------------------------------------------------
     const LMS_MANAGE = 'lms.manage';
+    // Competency tests hold candidates' names, emails and scores - people who
+    // are not staff - so they are their own, sensitive grant, not part of LMS_MANAGE.
+    const LMS_TESTS  = 'lms.competency_tests';
 
     // ---- Asset Management --------------------------------------------------
     // One per settings tab. The point of the split is visible here: VCENTER and
@@ -76,9 +79,18 @@ final class Cap
     const ASSETS_FIELDS    = 'assets.fields';      // designing custom asset fields
     const ASSETS_IMPORT    = 'assets.import';      // bulk-importing assets from a file
     const ASSETS_WARRANTY  = 'assets.warranty';
+    const ASSETS_LEASING   = 'assets.leasing';     // lease outcomes (3.5.0) - shared by every company
     const ASSETS_HANDOVER  = 'assets.handover';    // designing the handover document
     const ASSETS_VCENTER   = 'assets.vcenter';     // credentials
     const ASSETS_INTUNE    = 'assets.intune';      // credentials
+    const ASSETS_PROXMOX   = 'assets.proxmox';     // Proxmox VE servers, credentials and syncs
+    const ASSETS_VCLOUD    = 'assets.vcloud';      // VMware Cloud Director servers, credentials and syncs
+    // PR #164. Numbering and the label designer are separate grants: whoever
+    // designs a sticker is not necessarily allowed to change how every future
+    // asset is numbered.
+    const ASSETS_RECONCILIATION = 'assets.reconciliation';
+    const ASSETS_TAGS           = 'assets.tags';
+    const ASSETS_LABELS         = 'assets.labels';
 
     // ---- Contracts ---------------------------------------------------------
     const CONTRACTS_MANAGE             = 'contracts.manage';              // umbrella
@@ -89,6 +101,7 @@ final class Cap
     const CONTRACTS_CONTRACT_TERMS     = 'contracts.contract_terms';
     const CONTRACTS_RFP_DEPARTMENTS    = 'contracts.rfp_departments';
     const CONTRACTS_RFP_AI             = 'contracts.rfp_ai';              // AI provider + API key
+    // contracts.customer_visibility retired in 3.5.0: a contract belongs to a company now, and that decides who sees it.
 
     // ---- Change Management -------------------------------------------------
     const CHANGES_MANAGE     = 'changes.manage';      // umbrella
@@ -97,6 +110,11 @@ final class Cap
     const CHANGES_PRIORITIES = 'changes.priorities';
     const CHANGES_TYPES      = 'changes.types';
     const CHANGES_IMPACTS    = 'changes.impacts';
+    const CHANGES_APPROVALS  = 'changes.approvals';   // the approval rules (#180) - sensitive: they govern the audit trail
+    // Everyday work, not a settings tab (#180 Part 3) - see the manifest's 'actions'.
+    const CHANGES_CHOOSE_APPROVERS = 'changes.choose_approvers';
+    const CHANGES_TEMPLATES         = 'changes.templates';           // write standard-change templates (#180 §8)
+    const CHANGES_TEMPLATES_APPROVE = 'changes.templates_approve';   // everyday work: approve a template version
 
     // ---- Tasks -------------------------------------------------------------
     const TASKS_MANAGE     = 'tasks.manage';       // umbrella
@@ -107,6 +125,27 @@ final class Cap
     const TASKS_TAGS       = 'tasks.tags';
     const TASKS_TIME       = 'tasks.time';
     const TASKS_INVOLVED   = 'tasks.involved';    // who else is on a task (GH #89)
+    const TASKS_CHECKLISTS = 'tasks.checklists';  // checklists on tasks on/off (discussion #138)
+    // Repeating task evidence (#181). EVIDENCE is the settings tab - what deleting an
+    // occurrence and changing a finished checklist do, and who may run the report.
+    // EVIDENCE_REPORT is everyday work: running the evidence report and its exports.
+    // Unrestricted until that tab says otherwise, so an upgrade changes nothing - and
+    // with Read only access to Tasks it makes an Auditor role.
+    const TASKS_EVIDENCE        = 'tasks.evidence';
+    const TASKS_EVIDENCE_REPORT = 'tasks.evidence_report';
+    // GH #190: read a task occurrence's form answers WITHOUT access to Forms - how a
+    // Read only auditor sees them and nothing else in Forms. Always restricted: off
+    // unless a role grants it, so an upgrade gives nobody anything new.
+    const TASKS_FORM_ANSWERS    = 'tasks.form_answers';
+
+    // ---- Reporting: background job health (#182) ----------------------------
+    // Not a settings tab - Reporting has no settings - so both are everyday-work
+    // permissions that always apply. VIEW opens Reporting -> System logs ->
+    // Background jobs; its messages name mailboxes, directories and servers, so it
+    // is not everybody's with Reporting. SETTINGS changes what a job is expected to
+    // do - an interval, "not used here" - which can silence an alarm: sensitive.
+    const REPORTING_JOB_HEALTH   = 'reporting.job_health';
+    const REPORTING_JOB_SETTINGS = 'reporting.job_settings';
 
     // ---- Knowledge ---------------------------------------------------------
     const KNOWLEDGE_MANAGE      = 'knowledge.manage';       // umbrella
@@ -171,6 +210,9 @@ final class Cap
     const FORMS_MANAGE = 'forms.manage';    // umbrella
     const FORMS_LAYOUT = 'forms.layout';
     const FORMS_AI     = 'forms.ai';        // AI provider + API key
+    const FORMS_ACCESS      = 'forms.access';       // who may design forms (#180)
+    // Everyday work, not a settings tab (#180 Part 3) - see the manifest's 'actions'.
+    const FORMS_DESIGN      = 'forms.design';
     const FORMS_COLLECTIONS = 'forms.collections';   // create / close collections — closing can stop forms accepting submissions
 
     // ---- Process Mapper ----------------------------------------------------
@@ -188,6 +230,50 @@ final class Cap
     // Where licence renewals surface — the dashboard, the calendar, or both (#1551).
     // NOT sensitive: it decides where a date is SHOWN, never who may see it.
     const SOFTWARE_RENEWALS = 'software.renewals';
+
+    // ---- Domains (#154) ----------------------------------------------------
+    // Four very different grants. STATUSES is a list of words. ALERTS decides who is
+    // emailed and whether tickets/tasks are raised. MONITORING switches on outbound
+    // lookups against registries, DNS, crt.sh. AUTH_CODES is the dangerous one: a
+    // registrar auth code is the secret that lets whoever holds it transfer the
+    // domain away, so seeing or changing one is its own sensitive capability.
+    const DOMAINS_MANAGE     = 'domains.manage';       // umbrella
+    const DOMAINS_STATUSES   = 'domains.statuses';
+    const DOMAINS_ALERTS     = 'domains.alerts';
+    const DOMAINS_MONITORING = 'domains.monitoring';
+    const DOMAINS_AUTH_CODES = 'domains.auth_codes';   // reveal / change transfer secrets
+    // SERVICE_STATUS decides whether a domain's problems raise incidents on the
+    // Service Status page, which customers read - sensitive for that reason.
+    const DOMAINS_SERVICE_STATUS = 'domains.service_status';
+
+    // ---- Files -------------------------------------------------------------
+    // ⚠️ None of these lets anybody READ a file. Files is pessimistic: content is
+    // reached only through a grant on the folder (files_permissions). FOLDERS is
+    // the break-glass: it creates top-level folders and can TAKE OWNERSHIP of any
+    // folder - give itself Full control, loudly audited - which is how an orphaned
+    // folder is recovered. That makes it the most sensitive grant in the module.
+    // STORAGE moves where the bytes live on disk and caps upload size.
+    const FILES_MANAGE  = 'files.manage';    // umbrella
+    const FILES_FOLDERS = 'files.folders';
+    const FILES_STORAGE = 'files.storage';
+
+    // ---- Projects (3.2.0) --------------------------------------------------
+    // GENERAL decides who may create and change projects - the module's own
+    // permission rules - so it is sensitive. HEALTH tunes the traffic light;
+    // ROLES and RAID are lists of words and scales. TEMPLATES saves a project
+    // as a template and looks after the list - shared by every company.
+    const PROJECTS_MANAGE    = 'projects.manage';      // umbrella; also may change and delete ANY project
+    const PROJECTS_GENERAL   = 'projects.general';
+    const PROJECTS_HEALTH    = 'projects.health';
+    const PROJECTS_ROLES     = 'projects.roles';
+    const PROJECTS_RAID      = 'projects.raid';
+    const PROJECTS_TEMPLATES = 'projects.templates';
+    // BUDGET sets the currency, how labour is costed and the hourly rates -
+    // including each analyst's, which is close to pay: sensitive.
+    const PROJECTS_BUDGET    = 'projects.budget';
+    // AI chooses the provider, model and key the AI project manager uses - the
+    // key is a secret that spends the organisation's money.
+    const PROJECTS_AI        = 'projects.ai';
 
     // ---- Tickets -----------------------------------------------------------
     // The module the whole per-tab design was argued FOR. Fourteen tabs, and they are
@@ -208,6 +294,9 @@ final class Cap
     // Which ticket fields must be filled before a ticket may close, and what
     // happens when they are not - warn, warn and email, or refuse.
     const TICKETS_MANDATORY_FIELDS = 'tickets.mandatory_fields';
+    // Design the custom fields a ticket type carries (#179) - what an analyst and
+    // a requester are asked when a ticket is logged, and what must be filled to close.
+    const TICKETS_CUSTOM_FIELDS   = 'tickets.custom_fields';
     const TICKETS_STATUSES        = 'tickets.statuses';
     const TICKETS_PRIORITIES      = 'tickets.priorities';
     const TICKETS_SLA             = 'tickets.sla';
@@ -267,7 +356,11 @@ function settingsManifests(): array
     return $manifests;
 }
 
-/** The manifest for one module, or null. */
+/**
+ * The manifest for one module, or null.
+ *
+ * @param string $module  a Layer 1 module slug, e.g. 'assets', as named in its settings/manifest.php
+ */
 function settingsManifestFor(string $module): ?array
 {
     foreach (settingsManifests() as $m) {
@@ -328,6 +421,24 @@ function capRegistry(): array
                 'label'     => $tab['grant'] ?? $tab['id'],
             ];
         }
+
+        // Everyday work (#180 Part 3): permissions that are not a settings tab - design a
+        // form, choose a change's approvers. Each names the module setting that makes it
+        // bite ('restrict'), because a deny-by-default permission added to an existing
+        // install would take the ability from everybody who has it today. See
+        // analystMayAct() in includes/rbac.php.
+        foreach ($m['actions'] ?? [] as $action) {
+            $cap = $action['cap'] ?? null;
+            if ($cap === null || isset($registry[$cap])) continue;
+            $registry[$cap] = [
+                'module'    => $module,
+                'umbrella'  => false,
+                'everyday'  => true,
+                'sensitive' => !empty($action['sensitive']),
+                'label'     => $action['grant'] ?? $cap,
+                'restrict'  => $action['restrict'] ?? null,   // ['setting' => key, 'value' => v]; null = always restricted
+            ];
+        }
     }
     return $registry;
 }
@@ -357,7 +468,11 @@ function capAll(): array
     return array_keys(capRegistry());
 }
 
-/** Is this a capability the code defines? Enum twin: Capability::tryFrom() !== null. */
+/**
+ * Is this a capability the code defines? Enum twin: Capability::tryFrom() !== null.
+ *
+ * @param string $key  a capability key, e.g. 'assets.manage'
+ */
 function capExists(string $key): bool
 {
     return isset(capRegistry()[$key]);
@@ -369,6 +484,8 @@ function capExists(string $key): bool
  *
  * This is the trust boundary: everything read from rbac_role_capabilities goes through
  * here, so a stale or hand-inserted key can never grant anything.
+ *
+ * @param string $key  a capability key read from outside the code (rbac_role_capabilities or a form post) - untrusted
  */
 function capFromKey(string $key): ?string
 {
@@ -378,31 +495,51 @@ function capFromKey(string $key): ?string
     return null;
 }
 
-/** Human description, shown in System -> Roles. Enum twin: $cap->label(). */
+/**
+ * Human description, shown in System -> Roles. Enum twin: $cap->label().
+ *
+ * @param string $key  a capability key; an unknown one is returned as its own label
+ */
 function capLabel(string $key): string
 {
     return capRegistry()[$key]['label'] ?? $key;
 }
 
-/** The module this capability administers. Enum twin: $cap->module(). */
+/**
+ * The module this capability administers. Enum twin: $cap->module().
+ *
+ * @param string $key  a capability key; an unknown one gives null
+ */
 function capModule(string $key): ?string
 {
     return capRegistry()[$key]['module'] ?? null;
 }
 
-/** Display name for a module slug. Enum twin: $module->label(). */
+/**
+ * Display name for a module slug. Enum twin: $module->label().
+ *
+ * @param string $module  a Layer 1 module slug; an unknown one is returned as its own label
+ */
 function capModuleLabel(string $module): string
 {
     return capModules()[$module] ?? $module;
 }
 
-/** Does granting this need a second thought? Enum twin: $cap->isSensitive(). */
+/**
+ * Does granting this need a second thought? Enum twin: $cap->isSensitive().
+ *
+ * @param string $key  a capability key; an unknown one is not sensitive
+ */
 function capIsSensitive(string $key): bool
 {
     return (bool) (capRegistry()[$key]['sensitive'] ?? false);
 }
 
-/** Every capability belonging to a module. Enum twin: Capability::forModule(). */
+/**
+ * Every capability belonging to a module. Enum twin: Capability::forModule().
+ *
+ * @param string $module  a Layer 1 module slug, e.g. 'assets'
+ */
 function capsForModule(string $module): array
 {
     $out = [];
@@ -412,7 +549,11 @@ function capsForModule(string $module): array
     return $out;
 }
 
-/** The module's umbrella capability ('<module>.manage'), or null if it has none. */
+/**
+ * The module's umbrella capability ('<module>.manage'), or null if it has none.
+ *
+ * @param string $module  a Layer 1 module slug, e.g. 'assets'
+ */
 function capUmbrella(string $module): ?string
 {
     foreach (capRegistry() as $key => $meta) {
@@ -459,11 +600,14 @@ function capGroups(): array
         $caps = capsForModule($module);
         if (!$caps) continue;
 
-        // Umbrella first, then the rest alphabetically — a stable, readable order.
+        // Umbrella first, then everyday work, then the settings tabs alphabetically — a
+        // stable, readable order, and the everyday permissions where a role-builder looks.
         $umbrella = capUmbrella($module);
         usort($caps, function ($a, $b) use ($umbrella) {
             if ($a === $umbrella) return -1;
             if ($b === $umbrella) return 1;
+            $ea = capIsEveryday($a); $eb = capIsEveryday($b);
+            if ($ea !== $eb) return $ea ? -1 : 1;
             return strcmp($a, $b);
         });
 
@@ -473,6 +617,7 @@ function capGroups(): array
                 'label'     => capLabel($key),
                 'sensitive' => capIsSensitive($key),
                 'umbrella'  => $key === $umbrella,
+                'everyday'  => capIsEveryday($key),
             ];
         }
         $groups[$module] = ['label' => $moduleLabel, 'capabilities' => $entries];
@@ -555,7 +700,32 @@ function capSelfCheck(): array
     return $problems;
 }
 
-/** Is this capability its module's umbrella? */
+/**
+ * Is this an everyday-work permission (a manifest 'action') rather than a settings tab?
+ *
+ * @param string $key  a capability key
+ */
+function capIsEveryday(string $key): bool
+{
+    return (bool) (capRegistry()[$key]['everyday'] ?? false);
+}
+
+/**
+ * The switch that makes an everyday-work permission bite: ['setting' => key,
+ * 'value' => the value meaning "restricted"], or null when it always applies.
+ *
+ * @param string $key  an everyday-work capability key
+ */
+function capActionRestriction(string $key): ?array
+{
+    return capRegistry()[$key]['restrict'] ?? null;
+}
+
+/**
+ * Is this capability its module's umbrella?
+ *
+ * @param string $key  a capability key; an unknown one is not an umbrella
+ */
 function capIsUmbrella(string $key): bool
 {
     return (bool) (capRegistry()[$key]['umbrella'] ?? false);

@@ -19,7 +19,14 @@
  */
 final class ActorContext
 {
-    /** @param ?array<int> $companyScope null = all companies, else the allowed tenant ids */
+    /**
+     * Who is acting, which companies they may reach, where the call came from (ui or api),
+     * their locale and display name.
+     *
+     * @param int $actorId  the acting analyst's id; 0 for a portal user or the system
+     * @param ?array<int> $companyScope null = all companies, else the allowed tenant ids
+     * @param string $locale  the actor's language code, e.g. 'en'
+     */
     public function __construct(
         public int $actorId,
         public ?array $companyScope = null,
@@ -66,7 +73,30 @@ final class ActorContext
         );
     }
 
-    /** Build from an authenticated API key row (API adapters). */
+    /**
+     * Build for something no person did: an inventory agent, Intune, a cron job
+     * (PR #164). actorId 0 is recorded as "no analyst" (NULL) in history, and
+     * companyScope null means the caller has already decided the company - an
+     * agent's key carries it, Intune's setting names it.
+     *
+     * @param string $name  what to record as the actor in history, e.g. 'Intune' or 'Inventory agent'
+     */
+    public static function system(string $name = 'System'): self
+    {
+        return new self(
+            actorId:      0,
+            companyScope: null,
+            source:       'system',
+            locale:       'en',
+            actorName:    $name
+        );
+    }
+
+    /**
+     * Build from an authenticated API key row (API adapters).
+     *
+     * @param array $apiKey  the authenticated API key row from apiAuthenticate(), with analyst_id, company_scope and analyst_name
+     */
     public static function fromApiKey(array $apiKey): self
     {
         return new self(
@@ -112,6 +142,14 @@ class ServiceError extends Exception
     /** @var string machine slug, e.g. 'missing_field', 'invalid_field', 'not_found' (named errorCode to avoid Exception::$code) */
     public string $errorCode;
 
+    /**
+     * A service failure with a kind (validation, not_found, conflict, forbidden...) that
+     * adapters turn into an HTTP status, a machine code and a message.
+     *
+     * @param string $kind  validation, not_found, forbidden, conflict or bad_request - decides the HTTP status
+     * @param string $code  machine slug for the API body, e.g. 'missing_field'
+     * @param string $message  the human-readable error
+     */
     public function __construct(string $kind, string $code, string $message)
     {
         parent::__construct($message);
@@ -120,7 +158,11 @@ class ServiceError extends Exception
     }
 }
 
-/** Map a ServiceError kind to the HTTP status the API adapter should return. */
+/**
+ * Map a ServiceError kind to the HTTP status the API adapter should return.
+ *
+ * @param string $kind  the ServiceError kind; anything unknown maps to 422
+ */
 function serviceErrorHttpStatus(string $kind): int
 {
     switch ($kind) {

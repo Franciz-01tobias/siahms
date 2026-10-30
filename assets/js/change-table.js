@@ -46,6 +46,7 @@
         return fmtNaiveDateTime(d);
     }
 
+    /** Translates a key under change-management.table, or returns the key when i18n.js is not loaded. */
     const T = (k) => (window.t ? window.t('change-management.table.' + k) : k);
 
     const COLUMNS = [
@@ -85,6 +86,11 @@
           value: c => c.modified_datetime || '', display: c => fmt(c.modified_datetime) },
     ];
 
+    /**
+     * Loads the active priorities, impacts and types plus the analyst list that the inline edit drop-downs offer.
+     *
+     * Failures are logged and leave the lists empty rather than stopping the table loading.
+     */
     async function loadLookups() {
         try {
             const [pRes, iRes, tRes, aRes] = await Promise.all([

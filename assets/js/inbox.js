@@ -1,5 +1,7 @@
 /**
  * Inbox JavaScript - Service Desk Ticketing System
+ *
+ * @wiki Tickets
  */
 
 // API base path - can be overridden by page before loading this script
@@ -22,6 +24,11 @@ const API_BASE = window.API_BASE || 'api/';
  * instead of racing to make two.
  */
 let closeMessagePromise = null;
+/**
+ * Resolves true when closing a ticket should offer a one-off closing message (see the note above).
+ *
+ * @return Promise<boolean>  shared, cached promise; false if the config call fails
+ */
 function closeMessageEnabled() {
     if (!closeMessagePromise) {
         closeMessagePromise = fetch(API_BASE + 'get_close_message_config.php')
@@ -95,6 +102,10 @@ let _emailBodySeq = 0;
 const _emailBodyPending = new Map();
 
 /**
+ * Returns an empty host <div> for one message body and stashes the cleaned body under its token.
+ *
+ * hydrateEmailBodies() later moves the stashed HTML into a shadow root on that host.
+ *
  * @param bodyType  the row's `emails.body_type`. Chat channels (web chat,
  *                  WhatsApp) store the sender's message verbatim as 'text';
  *                  passing it through means their words are ESCAPED rather
@@ -114,6 +125,12 @@ function emailBodyHost(rawHtml, cls, bodyType) {
     return `<div class="${cls}" data-email-body="${token}"></div>`;
 }
 
+/**
+ * Fills every pending email-body host under root with its cleaned HTML inside a Shadow DOM.
+ *
+ * Falls back to plain innerHTML where Shadow DOM is unsupported, then runs mcSweep() so long
+ * messages can be measured and collapsed now that they are in the document.
+ */
 function hydrateEmailBodies(root) {
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll('[data-email-body]').forEach(host => {
@@ -172,6 +189,7 @@ function mcOpened() {
     try { return new Set(JSON.parse(localStorage.getItem(MC_KEY) || '[]')); }
     catch (e) { return new Set(); }
 }
+/** Records in localStorage that a collapsed message was opened or closed, keeping the last 400. */
 function mcRemember(id, open) {
     if (!MC.collapse_remember || !id) return;
     try {
@@ -221,6 +239,7 @@ function mcApply(host, opts) {
     btn.type = 'button';
     btn.className = 'mc-toggle';
 
+    /** Shows the message expanded or collapsed and sets the toggle's label and aria-expanded. */
     function paint(open) {
         wrap.classList.toggle('mc-collapsed', !open);
         btn.textContent = open ? t('tickets.reading.show_less') : t('tickets.reading.show_more');
@@ -256,7 +275,13 @@ function tgGroupOlder(container) {
     const metas = [...container.querySelectorAll('.thread-meta')];
     if (metas.length <= show + 1) return;          // folding one message saves nothing
 
-    const older = metas.slice(0, metas.length - show);
+    /* TRAP: the thread is rendered NEWEST FIRST (loadEmailThread reverses
+       it), so the older messages are the LAST ones on the page. This used to
+       be metas.slice(0, metas.length - show) - written for oldest-first - and
+       folded the NEWEST messages away, leaving the oldest on show: a
+       customer's latest reply was hidden behind "14 older messages". The
+       fold now sits below the recent ones, where older messages are. */
+    const older = metas.slice(show);
     const fold = document.createElement('div');
     fold.className = 'tg-fold';
     container.insertBefore(fold, older[0].previousElementSibling || older[0]);
@@ -362,6 +387,27 @@ let ticketCategories = [];
 let ticketResolutionCodes = [];
 let ticketClassification = { category: false, closure_category: false, resolution_code: false };
 let analysts = [];
+let analystsMultiCompany = false;   // GH #176: set by loadAnalysts()
+
+/**
+ * GH #176. The analysts a ticket can be given to: on a multi-company install,
+ * those who can work in the company of every one of these tickets (the server
+ * decides who can work where - see get_analysts.php). One company: everybody.
+ *
+ * TRAP: this filters only what is OFFERED. `analysts` itself stays complete,
+ * because getDisplayName('owner') reads it - filtering it would blank the name of
+ * an owner outside the company.
+ *
+ * @param {Array} tickets  ticket rows (each with tenant_id)
+ * @param {?number} keepId  always kept - the current owner, so a dropdown never loses its value
+ */
+function assignableAnalysts(tickets, keepId) {
+    if (!analystsMultiCompany) return analysts;
+    const companies = [...new Set((tickets || []).map(ticketCompanyId).filter(id => id != null))];
+    return analysts.filter(a => (keepId != null && a.id == keepId)
+        || !Array.isArray(a.accessible_tenant_ids)
+        || companies.every(c => a.accessible_tenant_ids.includes(c)));
+}
 let currentEmail = null;
 let currentRecordings = [];
 let folderCounts = {};
@@ -428,6 +474,7 @@ function sharedApiBase() {
     return API_BASE.replace(/[^/]+\/?$/, '');
 }
 
+/** Loads the analyst's saved folder grouping (department, analyst or team) and syncs the toggle buttons. */
 async function loadFolderGroupingPreference() {
     try {
         const res = await fetch(sharedApiBase() + 'system/get_user_preference.php?key=tickets_folder_grouping');
@@ -457,6 +504,7 @@ async function loadFolderGroupingPreference() {
 // the server builds both from one helper — includes/inbox_view_filter.php — so
 // a badge and the list under it cannot disagree.
 
+/** Loads the saved view filter (My tickets / Hide closed) from user preferences and repaints its UI. */
 async function loadViewFilterPreference() {
     try {
         const res = await fetch(sharedApiBase() + 'system/get_user_preference.php?key=tickets_view_filter');
@@ -482,6 +530,7 @@ function analystFolderLabel(an) {
     return an.id == (window.CURRENT_ANALYST_ID || 0) ? t('tickets.folders.my_tickets') : an.name;
 }
 
+/** Returns the view filter as a query string (mine=1, hide_closed=1) for the counts and list calls. */
 function viewFilterParams() {
     const p = [];
     if (viewFilterMineActive()) p.push('mine=1');
@@ -489,6 +538,11 @@ function viewFilterParams() {
     return p.join('&');
 }
 
+/**
+ * Turns one view filter option on or off, reloads the folder counts and list, and saves the choice.
+ *
+ * Ignores "mine" while grouped by analyst, where My tickets is a folder instead.
+ */
 function setViewFilter(key, value) {
     if (key !== 'mine' && key !== 'hide_closed') return;
     if (key === 'mine' && folderGrouping === 'analyst') return;
@@ -504,6 +558,7 @@ function setViewFilter(key, value) {
     }).catch(() => {});
 }
 
+/** Repaints the view filter button, its menu controls and the chips that show which filters are on. */
 function updateViewFilterUI() {
     const mine = viewFilterMineActive();
     const inAnalyst = folderGrouping === 'analyst';
@@ -531,6 +586,7 @@ function updateViewFilterUI() {
     }
 }
 
+/** Opens or closes the view filter drop-down beside Search. */
 function toggleViewFilterMenu(event) {
     if (event) event.stopPropagation();
     const menu = document.getElementById('viewFilterMenu');
@@ -541,6 +597,7 @@ function toggleViewFilterMenu(event) {
     if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
+/** Closes the view filter drop-down if it is open. */
 function closeViewFilterMenu() {
     const menu = document.getElementById('viewFilterMenu');
     if (!menu || !menu.classList.contains('open')) return;
@@ -566,6 +623,7 @@ async function loadSearchIncludeClosedPreference() {
     } catch (e) { /* default stays on */ }
 }
 
+/** Saves the Search "Include closed tickets" tick as a user preference. */
 function saveSearchIncludeClosed(checked) {
     fetch(sharedApiBase() + 'system/set_user_preference.php', {
         method: 'POST',
@@ -574,11 +632,15 @@ function saveSearchIncludeClosed(checked) {
     }).catch(() => {});
 }
 
+/** Returns whether Search should include closed tickets (true when the tick box is missing). */
 function searchIncludeClosed() {
     const box = document.getElementById('searchIncludeClosed');
     return box ? box.checked : true;
 }
 
+/**
+ * Switches the folder pane between department, analyst and team grouping, resets to All Tickets and saves the choice.
+ */
 async function setFolderGrouping(mode) {
     // ⚠️ A WHITELIST, so an unknown value cannot become a grouping nothing
     // renders. 'team' was added in #1566 — and it is only reachable when the
@@ -769,7 +831,7 @@ function initTinyMCE() {
     tinymce.init({
         selector: '#emailBody',
         license_key: 'gpl',
-        height: 350,
+        height: 440,   // was 350: the Message label row and the To/Cc label rows were removed to give it this room (2.10.0)
         menubar: false,
         skin: isDark ? 'oxide-dark' : 'oxide',
         content_css: isDark ? 'dark' : 'default',
@@ -788,6 +850,7 @@ function initTinyMCE() {
         // (pointer: fine) are unchanged.
         content_style: 'body { font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif; font-size: 14px; } @media (pointer: coarse) { body { font-size: 16px; } }',
         extended_valid_elements: 'div[style|data-reply-marker|data-signature]',
+        /** Keeps a reference to the TinyMCE editor in emailEditor once it is created. */
         setup: function(editor) {
             emailEditor = editor;
         }
@@ -1005,11 +1068,12 @@ async function loadTicketPriorities() {
 // Load analysts
 async function loadAnalysts() {
     try {
-        const response = await fetch(API_BASE + 'get_analysts.php');
+        const response = await fetch(API_BASE + 'get_analysts.php?with_access=1');
         const data = await response.json();
 
         if (data.success) {
             analysts = data.analysts.filter(a => a.is_active);
+            analystsMultiCompany = !!data.multi_company;
         }
     } catch (error) {
         console.error('Error loading analysts:', error);
@@ -1471,9 +1535,15 @@ let draggedTicketIds = [];
 let dragHoverTimer = null;
 let dragHoverFolderId = null;
 
+/**
+ * Makes every ticket row draggable onto folders, carrying the whole selection when the row is part of it.
+ *
+ * Dragging several rows shows a stacked-sheets drag image with the count; dragend clears all drag state.
+ */
 function attachEmailDragHandlers() {
     document.querySelectorAll('#emailList .email-item').forEach(el => {
         el.addEventListener('dragstart', (e) => {
+            if (ticketMenuIsSheet()) { e.preventDefault(); return; }
             const mailId = Number(el.dataset.emailId);
 
             // Dragging a row that is part of the selection drags the WHOLE
@@ -1543,6 +1613,11 @@ function attachEmailDragHandlers() {
     });
 }
 
+/**
+ * Wires the folder pane: clicks on status sub-folders, and dragover/drop on folders that accept tickets.
+ *
+ * Hovering a dragged ticket over a collapsed group folder for 600ms expands it.
+ */
 function attachFolderDropHandlers() {
     // Click handler for subfolder rows (delegated so status names with apostrophes are safe)
     document.querySelectorAll('#folderList .subfolder-item').forEach(el => {
@@ -1622,6 +1697,7 @@ function attachFolderDropHandlers() {
     });
 }
 
+/** Cancels the pending hover-to-expand timer for a folder during a drag. */
 function cancelDragHover() {
     if (dragHoverTimer) {
         clearTimeout(dragHoverTimer);
@@ -1630,6 +1706,12 @@ function cancelDragHover() {
     dragHoverFolderId = null;
 }
 
+/**
+ * Applies a ticket dropped onto a folder - department, analyst, team and/or status, or Trash.
+ *
+ * What Unassigned means depends on the current grouping. Trash soft-deletes (several at once go
+ * through bulk delete without asking again); the rest updates the ticket and reloads the list.
+ */
 async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
     const dropType = targetEl.dataset.dropType;
 
@@ -1935,7 +2017,7 @@ function renderEmailList() {
                  oncontextmenu="openTicketContextMenu(event, ${ticketId}, '${escapeHtml(email.ticket_number || '')}')">
                 ${inboxRowStripes(email)}${inboxRowBlocks(email)}
                 <div class="email-from">${escapeHtml(email.ticket_number || '')}${rowNameSuffix(email)} ${countBadge}</div>
-                <div class="email-subject">${escapeHtml(email.subject)}</div>
+                <div class="email-subject">${email.sensitivity === 'confidential' ? confidentialIcon() : ''}${escapeHtml(email.subject)}</div>
                 <div class="email-preview">${escapeHtml(email.body_preview || '')}</div>
                 <div class="email-footer-row">
                     <div class="email-time">${formatDateTime(email.received_datetime)}</div>
@@ -1999,6 +2081,7 @@ async function loadInboxSlaIndicators() {
  * Once response is achieved, we follow the resolution target until it lands.
  */
 function renderInboxSlaIndicator(row) {
+    /** Picks the SLA target to show - an outstanding response first, then resolution. */
     const pickTarget = () => {
         const r = row.response;
         const f = row.resolution;
@@ -2019,6 +2102,7 @@ function renderInboxSlaIndicator(row) {
     } else if (t.percent >= 80) {
         cls = 'sla-warning';
     }
+    /** Formats a number of minutes as a short duration such as 45m, 2h or 1h30m. */
     const fmt = (mins) => {
         if (mins === null || mins === undefined) return '';
         const n = Math.abs(mins);
@@ -2095,10 +2179,12 @@ function ticketIdForEmail(emailId) {
     return rec ? Number(rec.ticket_id) : null;
 }
 
+/** Returns the ticket ids behind every selected row. */
 function selectedTicketIds() {
     return Array.from(selectedEmailIds).map(ticketIdForEmail).filter(id => id);
 }
 
+/** Returns how many rows are selected. */
 function selectionCount() {
     return selectedEmailIds.size;
 }
@@ -2124,6 +2210,7 @@ function renderSelectionUi() {
     updateSelectionSurfaces();
 }
 
+/** Shrinks the selection back to the ticket open in the reading pane, optionally repainting the list. */
 function clearMultiSelection({ repaint = true } = {}) {
     selectedEmailIds.clear();
     if (selectedEmailId) selectedEmailIds.add(selectedEmailId);
@@ -2201,6 +2288,7 @@ function handleEmailRowClick(event, emailId) {
 
 let multiSelectPaneMode = 'summary';
 
+/** Loads the analyst's choice of what the screen shows when several tickets are selected (summary, keep or bar). */
 async function loadMultiSelectPanePreference() {
     try {
         const res  = await fetch(sharedApiBase() + 'system/get_user_preference.php?key=tickets_multiselect_pane');
@@ -2282,6 +2370,7 @@ function selectionActionsHtml(compact) {
     `;
 }
 
+/** Replaces the reading pane with a "N tickets selected" summary listing them with the bulk actions. */
 function renderSelectionSummaryPane() {
     const pane = document.getElementById('readingPane');
     if (!pane) return;
@@ -2307,6 +2396,7 @@ function renderSelectionSummaryPane() {
         </div>`;
 }
 
+/** Shows the compact selection bar above the list with the count and the bulk actions. */
 function renderSelectionBar() {
     const bar = document.getElementById('selectionBar');
     if (!bar) return;
@@ -2323,6 +2413,7 @@ function renderSelectionBar() {
     bar.style.display = 'flex';
 }
 
+/** Hides and empties the selection bar. */
 function hideSelectionBar() {
     const bar = document.getElementById('selectionBar');
     if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
@@ -2351,6 +2442,7 @@ function renderKeepModeWarning() {
     strip.style.display = 'flex';
 }
 
+/** Removes the "several selected" warning strip from the reading pane. */
 function hideKeepModeWarning() {
     const strip = document.getElementById('keepModeWarning');
     if (strip) strip.remove();
@@ -2392,6 +2484,12 @@ function selectAllVisible() {
 // build a scattered selection — the keyboard equivalent of Ctrl+click, and the
 // reason the cursor is tracked separately from the selection at all.
 
+/**
+ * Moves the keyboard cursor up or down the list.
+ *
+ * Plain arrows select and open the row, Shift extends the block from the anchor, and Ctrl moves
+ * the cursor only, leaving the selection alone.
+ */
 function moveSelectionCursor(delta, { extend = false, keepSelection = false }) {
     const ids = visibleEmailIds();
     if (!ids.length) return;
@@ -2429,6 +2527,7 @@ function moveSelectionCursor(delta, { extend = false, keepSelection = false }) {
     selectEmail(nextId);
 }
 
+/** Scrolls the list's own scroll container so the row is visible, never the page itself. */
 function scrollRowIntoView(emailId) {
     const row = document.querySelector(`#emailList .email-item[data-email-id="${emailId}"]`);
     if (!row) return;
@@ -2601,6 +2700,11 @@ async function bulkSetField(fields, label) {
 // Built from the SAME lookups the right-click submenus use, so a status added in
 // settings appears in both without a second registration.
 
+/**
+ * Opens the drop-down of choices (status, priority, department or assignee) for a bulk action button.
+ *
+ * Picking an item applies it to every selected ticket through bulkSetField().
+ */
 function openSelectionMenu(event, kind) {
     event.stopPropagation();
     closeSelectionMenu();
@@ -2630,7 +2734,7 @@ function openSelectionMenu(event, kind) {
     } else if (kind === 'assignee') {
         items = [{ label: t('tickets.context.clear_assignee'), italic: true,
                    run: () => bulkSetField({ assigned_analyst_id: null }, t('tickets.bulk.label_assignee')) }]
-            .concat(analysts.map(a => ({
+            .concat(assignableAnalysts(Array.from(selectedEmailIds).map(id => emails.find(e => e.id == id)).filter(Boolean)).map(a => ({
                 label: a.full_name || a.username,
                 run: () => bulkSetField({ assigned_analyst_id: a.id }, t('tickets.bulk.label_assignee'))
             })));
@@ -2666,6 +2770,7 @@ function openSelectionMenu(event, kind) {
     menu.style.top  = y + 'px';
 }
 
+/** Removes the bulk action drop-down. */
 function closeSelectionMenu() {
     const m = document.getElementById('selectionDropdown');
     if (m) m.remove();
@@ -2676,6 +2781,7 @@ document.addEventListener('click', function (e) {
 });
 window.addEventListener('scroll', closeSelectionMenu, true);
 
+/** Asks for confirmation, then moves every selected ticket to Trash and clears the selection. */
 async function bulkDeleteSelection() {
     const n = selectionCount();
     if (!n) return;
@@ -2935,7 +3041,7 @@ function displayEmail(email, recordings) {
     `;
 
     // Build owner/analyst dropdown
-    const ownerOptions = analysts.map(analyst =>
+    const ownerOptions = assignableAnalysts([email], email.owner_id).map(analyst =>
         `<option value="${analyst.id}" ${email.owner_id == analyst.id ? 'selected' : ''}>${escapeHtml(analyst.full_name)}</option>`
     ).join('');
 
@@ -2966,6 +3072,9 @@ function displayEmail(email, recordings) {
                     ${escapeHtml(t('tickets.reading_pane.properties_title'))}
                 </div>
                 <div class="ticket-properties-summary">
+                    <!-- Discussion #62: shown with the panel collapsed too, so nobody works a
+                         confidential ticket without seeing that it is one. -->
+                    <span class="summary-confidential" id="summaryConfidential" ${email.sensitivity === 'confidential' ? '' : 'hidden'} title="${escapeHtml(t('tickets.reading_pane.sensitivity_help'))}">${confidentialIcon()}${escapeHtml(t('tickets.reading_pane.sensitivity_confidential'))}</span>
                     <span class="ticket-properties-summary-item">
                         <span class="ticket-properties-summary-label">${escapeHtml(t('tickets.reading_pane.summary_dept'))}</span>
                         <span class="ticket-properties-summary-value" id="summaryDept">${escapeHtml(summaryDept)}</span>
@@ -3010,6 +3119,13 @@ ${classificationFields}
                             ${priorityOptions}
                         </select>
                     </div>
+                    <div class="toolbar-field" title="${escapeHtml(t('tickets.reading_pane.sensitivity_help'))}">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_sensitivity'))}</label>
+                        <select class="toolbar-select${email.sensitivity === 'confidential' ? ' is-confidential' : ''}" id="sensitivitySelect" onchange="assignSensitivity()">
+                            <option value="normal" ${email.sensitivity !== 'confidential' ? 'selected' : ''}>${escapeHtml(t('tickets.reading_pane.sensitivity_normal'))}</option>
+                            <option value="confidential" ${email.sensitivity === 'confidential' ? 'selected' : ''}>${escapeHtml(t('tickets.reading_pane.sensitivity_confidential'))}</option>
+                        </select>
+                    </div>
                     <div class="toolbar-field">
                         <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_origin'))}</label>
                         <select class="toolbar-select" id="originSelect" onchange="assignOrigin()">
@@ -3038,6 +3154,7 @@ ${classificationFields}
                         </select>
                     </div>
                     ${companyField}
+                    <div class="tf-panel-fields" id="ticketCustomFields"></div>
                 </div>
             </div>
         </div>
@@ -3076,9 +3193,11 @@ ${classificationFields}
         <!-- Collision detection (#934). Left empty by the render and filled by the
              presence poll, so a re-render never flashes a stale set of faces. -->
         <div class="presence-strip" id="presenceStrip" hidden></div>
-        ${buildLinksSection(email)}
+        <div class="pane-strips">
+            ${buildLinksSection(email)}
+            ${buildAiSummarySlot()}
+        </div>
         ${buildRecordingsStrip(currentRecordings)}
-        ${buildAiSummarySlot()}
         <div class="action-toolbar">
             <button class="action-btn" onclick="openNoteModal()">
                 <span class="action-btn-icon">📝</span>
@@ -3101,19 +3220,26 @@ ${classificationFields}
                 <span>${escapeHtml(t('tickets.actions.ask_ai'))}</span>
             </button>
             ${buildReadForMeButton()}
-            <button class="action-btn" onclick="showAuditHistory()">
+            <button class="action-btn pane-secondary" onclick="showAuditHistory()">
                 <span class="action-btn-icon">📋</span>
                 <span>${escapeHtml(t('tickets.actions.audit'))}</span>
             </button>
             ${buildWriteUpButton(email)}
-            <button class="action-btn" onclick="requestCsatSurvey()" title="Send a satisfaction survey to the requester">
+            <button class="action-btn pane-secondary" onclick="requestCsatSurvey()" title="Send a satisfaction survey to the requester">
                 <span class="action-btn-icon">⭐</span>
                 <span>${escapeHtml(t('tickets.actions.request_feedback'))}</span>
             </button>
-            <button class="action-btn action-btn-danger" onclick="deleteTicket()">
+            <button class="action-btn action-btn-danger pane-secondary" onclick="deleteTicket()">
                 <span class="action-btn-icon">🗑️</span>
                 <span>${escapeHtml(t('tickets.actions.delete'))}</span>
             </button>
+            <div class="pane-more-wrap">
+                <button type="button" class="action-btn pane-more-btn" onclick="togglePaneMoreMenu(event)" aria-haspopup="true">
+                    <span class="action-btn-icon">⋯</span>
+                    <span>${escapeHtml(tf('tickets.actions.more', 'More'))} ▾</span>
+                </button>
+                <div class="pane-more-menu" id="paneMoreMenu" hidden></div>
+            </div>
         </div>
         <div class="email-body">
             <div id="ticketChecklistContainer"></div>
@@ -3128,6 +3254,7 @@ ${classificationFields}
 
     // Isolate the just-rendered email body in a shadow root (see emailBodyHost).
     hydrateEmailBodies(readingPane);
+    watchPaneCompact(readingPane);
 
     loadAiSummary(email.ticket_id);
     if (typeof loadTicketChecklists === "function") loadTicketChecklists(email.ticket_id);
@@ -3136,10 +3263,13 @@ ${classificationFields}
     loadNotes(email.ticket_id);
     loadTicketAttachments(email.ticket_id);
     loadCmdbObjects(email.ticket_id);
+    loadTicketDomains(email.ticket_id);
+    loadTicketProjects(email.ticket_id);
     loadTicketAssets(email.ticket_id);
     loadTicketTasks(email.ticket_id);
     loadTimeEntries(email.ticket_id);
     loadSlaState(email.ticket_id);
+    loadTicketCustomFields(email.ticket_id);
 
     // Announce ourselves on this ticket, and start listening for anyone else
     // (#934). Moving between tickets stops the old announcement first, so a
@@ -3176,6 +3306,7 @@ let linkProblemTicketRef = '';
 let linkProblemTicketSubject = '';
 let linkProblemSearchTimer = null;
 
+/** Opens the Link to problem dialog for a ticket and loads the open problems. */
 function openLinkProblemModal(ticketId, ticketRef, subject) {
     linkProblemTicketId = ticketId;
     linkProblemTicketRef = ticketRef || ('Ticket ' + ticketId);
@@ -3185,9 +3316,12 @@ function openLinkProblemModal(ticketId, ticketRef, subject) {
     document.getElementById('linkProblemModal').classList.add('active');
     loadLinkProblemList();
 }
+/** Closes the Link to problem dialog. */
 function closeLinkProblemModal() { document.getElementById('linkProblemModal').classList.remove('active'); }
+/** Reloads the problem list 250ms after the last keystroke in its search box. */
 function linkProblemSearchDebounced() { clearTimeout(linkProblemSearchTimer); linkProblemSearchTimer = setTimeout(loadLinkProblemList, 250); }
 
+/** Lists open problems matching the search, with a "create a new problem" row at the top. */
 async function loadLinkProblemList() {
     const list = document.getElementById('linkProblemList');
     const q = (document.getElementById('linkProblemSearch') || {}).value || '';
@@ -3205,7 +3339,9 @@ async function loadLinkProblemList() {
         list.innerHTML = createRow + (rows || '<div class="lp-empty">' + (q.trim() ? 'No matching open problems.' : 'No open problems yet — create one above.') + '</div>');
     } catch (e) { list.innerHTML = '<div class="lp-empty">Failed to load problems</div>'; }
 }
+/** Links the ticket to the problem that was clicked. */
 function pickProblem(problemId) { doLinkTicketProblem({ problem_id: problemId }); }
+/** Creates a new problem titled from the ticket's subject and links the ticket to it. */
 async function createProblemFromIncident() {
     try {
         const title = linkProblemTicketSubject || ('Problem from ' + linkProblemTicketRef);
@@ -3217,6 +3353,7 @@ async function createProblemFromIncident() {
         doLinkTicketProblem({ problem_id: cr.id });
     } catch (e) { showToast('Failed to create problem', 'error'); }
 }
+/** Links the dialog's ticket to a problem, closes the dialog and reloads the ticket if it is open. */
 async function doLinkTicketProblem(target) {
     try {
         const res = await fetch('../api/problem-management/link_ticket.php', {
@@ -3231,6 +3368,7 @@ async function doLinkTicketProblem(target) {
         } else showToast('Could not link: ' + (data.error || 'unknown error'), 'error');
     } catch (e) { showToast('Failed to link problem', 'error'); }
 }
+/** Removes the link between the open ticket and a problem, then reloads the ticket. */
 async function unlinkTicketFromProblem(problemId) {
     if (!currentEmail) return;
     try {
@@ -3258,6 +3396,7 @@ let linkChangeTicketRef = '';
 let linkChangeTicketSubject = '';
 let linkChangeSearchTimer = null;
 
+/** Opens the Link to change dialog for a ticket and loads the changes. */
 function openLinkChangeModal(ticketId, ticketRef, subject) {
     linkChangeTicketId = ticketId;
     linkChangeTicketRef = ticketRef || ('Ticket ' + ticketId);
@@ -3267,9 +3406,12 @@ function openLinkChangeModal(ticketId, ticketRef, subject) {
     document.getElementById('linkChangeModal').classList.add('active');
     loadLinkChangeList();
 }
+/** Closes the Link to change dialog. */
 function closeLinkChangeModal() { document.getElementById('linkChangeModal').classList.remove('active'); }
+/** Reloads the change list 250ms after the last keystroke in its search box. */
 function linkChangeSearchDebounced() { clearTimeout(linkChangeSearchTimer); linkChangeSearchTimer = setTimeout(loadLinkChangeList, 250); }
 
+/** Lists changes matching the search, with a "create a new change" row at the top. */
 async function loadLinkChangeList() {
     const list = document.getElementById('linkChangeList');
     const q = (document.getElementById('linkChangeSearch') || {}).value || '';
@@ -3289,7 +3431,9 @@ async function loadLinkChangeList() {
         list.innerHTML = createRow + (rows || '<div class="lp-empty">' + (q.trim() ? 'No matching changes.' : 'No changes yet — create one above.') + '</div>');
     } catch (e) { list.innerHTML = '<div class="lp-empty">Failed to load changes</div>'; }
 }
+/** Links the ticket to the change that was clicked. */
 function pickChange(changeId) { doLinkTicketChange(changeId); }
+/** Creates a new change titled from the ticket's subject and links the ticket to it. */
 async function createChangeFromIncident() {
     try {
         const title = linkChangeTicketSubject || ('Change from ' + linkChangeTicketRef);
@@ -3301,6 +3445,7 @@ async function createChangeFromIncident() {
         doLinkTicketChange(cr.change_id);
     } catch (e) { showToast('Failed to create change', 'error'); }
 }
+/** Links the dialog's ticket to a change, closes the dialog and reloads the ticket if it is open. */
 async function doLinkTicketChange(changeId) {
     try {
         const res = await fetch('../api/change-management/link_ticket.php', {
@@ -3315,6 +3460,7 @@ async function doLinkTicketChange(changeId) {
         } else showToast('Could not link: ' + (data.error || 'unknown error'), 'error');
     } catch (e) { showToast('Failed to link change', 'error'); }
 }
+/** Removes the link between the open ticket and a change, then reloads the ticket. */
 async function unlinkTicketFromChange(changeId) {
     if (!currentEmail) return;
     try {
@@ -3486,6 +3632,12 @@ function rpBadge(type, id) {
     return window.FreeITSMPreview ? window.FreeITSMPreview.badge(type, id) : '';
 }
 
+/**
+ * Builds the HTML for the ticket's Links strip - problem, change, linked-ticket and tracker pills, plus the "Link to..." menu.
+ *
+ * Equipment, CMDB, domain, project and task pills are not on the ticket record, so the strip draws empty
+ * holders for them and their own loaders fill them in afterwards.
+ */
 function buildLinksSection(email) {
     const pills = [];
 
@@ -3510,6 +3662,7 @@ function buildLinksSection(email) {
 
     // Linked tickets (🔗) — grouped by relation, open in-place.
     const L = email.linked_tickets || {};
+    /** Builds one linked-ticket pill with its relation prefix (Parent, Child, Duplicate...) and an unlink cross. */
     const tp = (item, prefix) => `<a class="pm-ticket-badge" href="#" onclick="event.preventDefault();loadTicketById(${item.ticket_id});" title="${escapeHtml(item.subject || '')}">
         🔗 ${escapeHtml(prefix)} ${escapeHtml(item.ticket_number || ('#' + item.ticket_id))}${item.status ? ' · ' + escapeHtml(item.status) : ''}
         ${rpBadge('ticket', item.ticket_id)}
@@ -3558,6 +3711,8 @@ function buildLinksSection(email) {
         ${body}
         <span class="strip-pill-group" id="stripAssetPills"></span>
         <span class="strip-pill-group" id="stripCmdbPills"></span>
+        <span class="strip-pill-group" id="stripDomainPills"></span>
+        <span class="strip-pill-group" id="stripProjectPills"></span>
         <span class="strip-pill-group" id="stripTaskPills"></span>
         <div class="link-add-wrap">
             <button class="problem-link-btn" onclick="toggleLinkAddMenu(event)">Link to… ▾</button>
@@ -3567,6 +3722,8 @@ function buildLinksSection(email) {
                 <button type="button" onclick="linkAddChoose('ticket')">Ticket</button>
                 <button type="button" onclick="linkAddChoose('equipment')">${escapeHtml(t('tickets.assets.menu_item'))}</button>
                 <button type="button" onclick="linkAddChoose('cmdb')">${escapeHtml(t('tickets.cmdb.menu_item'))}</button>
+                ${window.TICKETS_SHOW_DOMAINS ? `<button type="button" onclick="linkAddChoose('domain')">${escapeHtml(t('tickets.domains.menu_item'))}</button>` : ''}
+                ${window.TICKETS_SHOW_PROJECTS ? `<button type="button" onclick="linkAddChoose('project')">${escapeHtml(t('tickets.projects.menu_item'))}</button>` : ''}
                 <button type="button" onclick="linkAddChoose('tracker')">${escapeHtml(t('tickets.tracker.menu_item'))}</button>
                 <button type="button" onclick="linkAddChoose('task')">${escapeHtml(t('tickets.tasks.menu_item'))}</button>
             </div>
@@ -3585,7 +3742,9 @@ function syncLinksStripEmpty() {
     if (!note) return;
     const a = document.getElementById('stripAssetPills');
     const c = document.getElementById('stripCmdbPills');
-    const has = (a && a.children.length) || (c && c.children.length);
+    const dm = document.getElementById('stripDomainPills');
+    const pj = document.getElementById('stripProjectPills');
+    const has = (a && a.children.length) || (c && c.children.length) || (dm && dm.children.length) || (pj && pj.children.length);
     note.hidden = !!has;
 }
 
@@ -3615,6 +3774,7 @@ function openStripPicker(placeholder) {
         </div>`;
     const input   = document.getElementById('stripPickerInput');
     const results = document.getElementById('stripPickerResults');
+    /** Hides the strip picker and empties it. */
     const close   = () => { host.hidden = true; host.innerHTML = ''; };
     setTimeout(() => input.focus(), 0);
     return { input, results, close };
@@ -3629,10 +3789,14 @@ function toggleLinkAddMenu(e) {
     const open = m.classList.toggle('open');
     if (open) setTimeout(() => document.addEventListener('click', closeLinkAddMenu, { once: true }), 0);
 }
+/** Closes the "Link to..." popover menu. */
 function closeLinkAddMenu() {
     const m = document.getElementById('linkAddMenu');
     if (m) m.classList.remove('open');
 }
+/**
+ * Closes the "Link to..." menu and opens the modal or strip picker for the chosen kind of link on the open ticket.
+ */
 function linkAddChoose(kind) {
     closeLinkAddMenu();
     if (!currentEmail) return;
@@ -3642,6 +3806,8 @@ function linkAddChoose(kind) {
     else if (kind === 'tracker') openEscalateTrackerModal(id, ref);
     else if (kind === 'equipment') openLinkAssetPicker(id);
     else if (kind === 'cmdb') openLinkCmdbPicker(id);
+    else if (kind === 'domain') openLinkDomainPicker(id);
+    else if (kind === 'project') openLinkProjectPicker(id);
     else if (kind === 'task') openLinkTaskPicker(id);
     else openLinkTicketModal(id, ref, subj);
 }
@@ -3658,6 +3824,12 @@ function linkAddChoose(kind) {
 
 let tasksForTicket = [];
 
+/**
+ * Fetches the tasks linked to a ticket into tasksForTicket and draws them as pills in the Links strip.
+ *
+ * TRAP: the list is cleared before the fetch, so a failed fetch cannot leave the previous ticket's tasks
+ * behind for the close warning in assignStatus() to count.
+ */
 async function loadTicketTasks(ticketId) {
     const host = document.getElementById('stripTaskPills');
     if (!host) return;
@@ -3674,6 +3846,9 @@ async function loadTicketTasks(ticketId) {
     } catch (e) { /* silent — the strip simply shows no task pills */ }
 }
 
+/**
+ * Draws tasksForTicket as task pills (done box, subtask progress, unlink cross) and hides the strip's empty note when there are any.
+ */
 function renderTicketTasks(ticketId) {
     const host = document.getElementById('stripTaskPills');
     if (!host) return;
@@ -3727,6 +3902,7 @@ function openLinkTaskPicker(ticketId) {
     // and linking be the same gesture all the way down to the click handler.
     let current = [];
 
+    /** Draws the task picker rows - the "create" row first, then existing tasks - and binds a mousedown to each. */
     const render = () => {
         if (!current.length) {
             results.innerHTML = `<div class="asset-picker-empty">${escapeHtml(
@@ -3774,6 +3950,9 @@ function openLinkTaskPicker(ticketId) {
         });
     };
 
+    /**
+     * Creates a task from the typed title, or links the chosen existing task after asking first when it would move off another ticket.
+     */
     const pick = async (r) => {
         if (!r) return;
         if (r.kind === 'create') { createTaskForTicket(ticketId, r.title); return; }
@@ -3801,6 +3980,9 @@ function openLinkTaskPicker(ticketId) {
         linkTaskToTicket(ticketId, r.id);
     };
 
+    /**
+     * Searches linkable tasks for the typed text and rebuilds the list with a "create" row at the top, even when the search fails.
+     */
     const search = async (typed) => {
         let rows = [];
         try {
@@ -3827,16 +4009,23 @@ function openLinkTaskPicker(ticketId) {
     render();   // "type to search" straight away, so the box never looks broken
 }
 
+/** Creates a new task with the given title, linked to the ticket. */
 async function createTaskForTicket(ticketId, title) {
     await postTaskLink(ticketId, { ticket_id: ticketId, title: title },
         t('tickets.tasks.created_toast', { title: title }));
 }
 
+/** Links an existing task to the ticket (moving it off any other ticket it was on). */
 async function linkTaskToTicket(ticketId, taskId) {
     await postTaskLink(ticketId, { ticket_id: ticketId, task_id: taskId },
         t('tickets.tasks.linked_toast'));
 }
 
+/**
+ * Posts a create-or-link request to save_ticket_task.php, closes the strip picker and shows a toast.
+ *
+ * Reloads the task pills only when the ticket is the one open, since the request may come from a modal for another ticket.
+ */
 async function postTaskLink(ticketId, body, okMessage) {
     try {
         const res = await fetch('../api/tickets/save_ticket_task.php', {
@@ -3852,12 +4041,15 @@ async function postTaskLink(ticketId, body, okMessage) {
         const host = document.getElementById('stripPickerHost');
         if (host) { host.hidden = true; host.innerHTML = ''; }
         showToast(okMessage, 'success');
-        await loadTicketTasks(ticketId);
+        // From the phone modal the ticket may not be the open one; the open
+        // one's strip is the only one there is to refresh.
+        if (!currentEmail || currentEmail.ticket_id == ticketId) await loadTicketTasks(ticketId);
     } catch (e) {
         showToast(t('tickets.tasks.link_failed'), 'error');
     }
 }
 
+/** Asks, then unlinks a task from the ticket (the task itself is kept) and reloads the task pills. */
 async function unlinkTicketTask(event, taskId, ticketId) {
     event.preventDefault();
     event.stopPropagation();
@@ -3897,6 +4089,12 @@ async function unlinkTicketTask(event, taskId, ticketId) {
 // ============================================================
 let escalateTicketId = null;
 
+/**
+ * Opens the "escalate to an external tracker" modal for a ticket.
+ *
+ * Loads the tracker connections the ticket's company may use, then asks escalate_ticket.php for a preview
+ * (summary, body, attachments, confidential flag) so the analyst sees exactly what will be sent before anything is.
+ */
 async function openEscalateTrackerModal(ticketId, ref) {
     escalateTicketId = ticketId;
     const modal = document.getElementById('escalateTrackerModal');
@@ -3944,9 +4142,11 @@ async function openEscalateTrackerModal(ticketId, ref) {
             document.getElementById('escSummary').value = j.summary || '';
             document.getElementById('escPreview').textContent = j.body || '';
             renderEscalateAttachments(j.attachments || []);
+            renderEscalateConfidential(!!j.confidential);
         } else {
             document.getElementById('escPreview').textContent = j.error || '';
             renderEscalateAttachments([]);
+            renderEscalateConfidential(false);
         }
     } catch (e) {
         document.getElementById('escPreview').textContent = t('tickets.tracker.preview_failed');
@@ -3985,12 +4185,41 @@ function renderEscalateAttachments(files) {
     box.style.display = '';
 }
 
+/**
+ * A confidential ticket (discussion #62) can still be escalated, but only on
+ * purpose: a warning and a box to tick, above the attachments. The server
+ * refuses the escalation without it, so this is the explanation, not the guard.
+ */
+function renderEscalateConfidential(isConfidential) {
+    let box = document.getElementById('escConfidential');
+    const anchor = document.getElementById('escAttachments');
+    if (!box && anchor) {
+        box = document.createElement('div');
+        box.id = 'escConfidential';
+        anchor.parentNode.insertBefore(box, anchor);
+    }
+    if (!box) return;
+    if (!isConfidential) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.cssText = 'margin:10px 0;padding:10px 12px;border-radius:6px;font-size:13px;line-height:1.45;'
+        + 'background:var(--warning-bg,#fff4ce);border:1px solid var(--warning-border,#f0d78c);color:var(--warning-text,#6b5900);';
+    box.innerHTML = '<strong>' + escapeHtml(t('tickets.tracker.confidential_title')) + '</strong><br>'
+        + escapeHtml(t('tickets.tracker.confidential_body'))
+        + '<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:600;">'
+        + '<input type="checkbox" id="escConfidentialOk"> ' + escapeHtml(t('tickets.tracker.confidential_confirm')) + '</label>';
+}
+
+/** Closes the escalate-to-tracker modal and forgets which ticket it was for. */
 function closeEscalateTrackerModal() {
     const m = document.getElementById('escalateTrackerModal');
     if (m) m.classList.remove('active');
     escalateTicketId = null;
 }
 
+/**
+ * Raises the issue in the chosen tracker from the escalate modal, toasts the new issue key and reloads the ticket.
+ *
+ * Requires a project; passes the confidential tick through and leaves the server to decide whether it is needed.
+ */
 async function submitEscalateTracker() {
     if (!escalateTicketId) return;
     const btn = document.getElementById('escalateGoBtn');
@@ -4007,7 +4236,9 @@ async function submitEscalateTracker() {
                 connection_id: document.getElementById('escConnection').value,
                 project:       project,
                 issue_type:    document.getElementById('escIssueType').value.trim() || 'Bug',
-                summary:       document.getElementById('escSummary').value.trim()
+                summary:       document.getElementById('escSummary').value.trim(),
+                // Only meaningful for a confidential ticket; the server decides.
+                confirm_confidential: !!(document.getElementById('escConfidentialOk') || {}).checked
             })
         });
         const j = await r.json();
@@ -4046,6 +4277,9 @@ let linkTicketSourceId = null;
 let linkTicketSourceRef = '';
 let linkTicketSearchTimer = null;
 
+/**
+ * Opens the link-ticket modal for a source ticket with "Related" preselected, and loads the list of tickets to link to.
+ */
 function openLinkTicketModal(ticketId, ticketRef, subject) {
     linkTicketSourceId = ticketId;
     linkTicketSourceRef = ticketRef || ('Ticket ' + ticketId);
@@ -4056,9 +4290,14 @@ function openLinkTicketModal(ticketId, ticketRef, subject) {
     document.getElementById('linkTicketModal').classList.add('active');
     loadLinkTicketList();
 }
+/** Closes the link-ticket modal. */
 function closeLinkTicketModal() { document.getElementById('linkTicketModal').classList.remove('active'); }
+/** Reloads the link-ticket list 250ms after the last keystroke in its search box. */
 function linkTicketSearchDebounced() { clearTimeout(linkTicketSearchTimer); linkTicketSearchTimer = setTimeout(loadLinkTicketList, 250); }
 
+/**
+ * Fills the link-ticket modal with the tickets that may be linked to the source ticket, filtered by the search box.
+ */
 async function loadLinkTicketList() {
     const list = document.getElementById('linkTicketList');
     const q = (document.getElementById('linkTicketSearch') || {}).value || '';
@@ -4074,6 +4313,9 @@ async function loadLinkTicketList() {
     } catch (e) { list.innerHTML = '<div class="lp-empty">Failed to load tickets</div>'; }
 }
 
+/**
+ * Links the source ticket to the chosen ticket with the selected relation, then refreshes the open ticket if it is the source.
+ */
 async function pickLinkTicket(targetId) {
     const relEl = document.querySelector('input[name="ticketLinkRelation"]:checked');
     const relation = relEl ? relEl.value : 'related';
@@ -4091,6 +4333,7 @@ async function pickLinkTicket(targetId) {
     } catch (e) { showToast('Failed to link tickets', 'error'); }
 }
 
+/** Removes a ticket-to-ticket link and refreshes the open ticket. */
 async function unlinkTicketLink(linkId) {
     try {
         const res = await fetch('../api/tickets/delete_ticket_link.php', {
@@ -4103,6 +4346,9 @@ async function unlinkTicketLink(linkId) {
     } catch (e) { showToast('Failed', 'error'); }
 }
 
+/**
+ * Builds the HTML strip of screen recordings on a ticket - a video player and file name, size and duration for each - or an empty string when there are none.
+ */
 function buildRecordingsStrip(recordings) {
     if (!recordings || !recordings.length) return '';
     const cards = recordings.map(r => {
@@ -4128,6 +4374,7 @@ function buildRecordingsStrip(recordings) {
         </div>`;
 }
 
+/** Formats a number of seconds as m:ss. */
 function formatRecordingDuration(seconds) {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -4212,11 +4459,27 @@ async function loadCorrespondenceThread(ticketId, isAuto = false) {
     }
 }
 
+/** Stops the 15-second thread refresh used for channel (WhatsApp, Telegram...) tickets, if it is running. */
 function stopChannelAutoRefresh() {
     if (channelRefreshTimer) {
         clearInterval(channelRefreshTimer);
         channelRefreshTimer = null;
     }
+}
+
+// Shared translation helper for every channel-composer string (WhatsApp/
+// Telegram/Slack reply box, its templates, and its AI actions), falling back
+// to the key itself — same convention as the other per-module t() wrappers in
+// this file (e.g. the search modal's T() above) — so a missing key is visible
+// rather than silently blank.
+function Tc(key, params) {
+    return window.t ? window.t('tickets.channel_composer.' + key, params) : key;
+}
+
+// A human label for a channel, used in the composer header and toasts.
+function channelDisplayLabel(channelType) {
+    const labels = { whatsapp: 'WhatsApp', telegram: 'Telegram', slack: 'Slack', webchat: Tc('label_webchat') };
+    return labels[channelType] || channelType;
 }
 
 // Render (or remove) the inline channel reply composer for WhatsApp-style tickets.
@@ -4228,39 +4491,54 @@ function renderChannelComposer(ticketId) {
         return;
     }
 
-    const label = currentTicketChannel === 'whatsapp' ? 'WhatsApp' : currentTicketChannel;
+    const label = channelDisplayLabel(currentTicketChannel);
+
+    // Attaching a file is only offered where MessagingProvider::sendMedia() is
+    // actually implemented (Telegram, and WhatsApp via Twilio or Meta).
+    // Slack and web chat still hit the base class's "not supported for this
+    // channel yet" — showing the button there would just be a guaranteed
+    // error, so it's gated on the channel rather than shown always and left
+    // to fail. Widen this list as more providers gain sendMedia().
+    const canAttach = (currentTicketChannel === 'telegram' || currentTicketChannel === 'whatsapp');
 
     let inner;
     if (currentChannelWindowOpen) {
-        // Inside the 24h window: free-text composer.
+        // Inside the 24h window (or always, for a channel with no such window).
         inner = `
-            <textarea id="channelComposerText" class="channel-composer-text" rows="3" placeholder="Type your reply…"></textarea>
+            <textarea id="channelComposerText" class="channel-composer-text" rows="3" placeholder="${escapeHtml(Tc('placeholder'))}"></textarea>
+            ${canAttach ? `<input type="file" id="channelAttachFile" style="display:none;" onchange="sendChannelAttachment(${ticketId})">` : ''}
             <div class="channel-composer-actions">
-                <button class="action-btn" onclick="aiSuggestChannelReply(${ticketId})" title="Draft a reply with AI">
-                    <span class="action-btn-icon">🤖</span><span>Suggest</span>
+                ${canAttach ? `<button class="action-btn" id="channelAttachBtn" onclick="document.getElementById('channelAttachFile').click()" title="${escapeHtml(Tc('attach_title'))}">
+                    <span class="action-btn-icon">📎</span><span>${escapeHtml(Tc('attach'))}</span>
+                </button>` : ''}
+                <button class="action-btn" onclick="aiSuggestChannelReply(${ticketId})" title="${escapeHtml(Tc('suggest_title'))}">
+                    <span class="action-btn-icon">🤖</span><span>${escapeHtml(Tc('suggest'))}</span>
                 </button>
-                <button class="action-btn" onclick="aiSummariseChannel(${ticketId})" title="Summarise this conversation into the ticket">
-                    <span class="action-btn-icon">📝</span><span>Summarise</span>
+                <button class="action-btn" onclick="aiSummariseChannel(${ticketId})" title="${escapeHtml(Tc('summarise_title'))}">
+                    <span class="action-btn-icon">📝</span><span>${escapeHtml(Tc('summarise'))}</span>
                 </button>
                 <button class="action-btn action-btn-primary" id="channelSendBtn" onclick="sendChannelMessage(${ticketId})">
-                    <span class="action-btn-icon">📤</span><span>Send</span>
+                    <span class="action-btn-icon">📤</span><span>${escapeHtml(Tc('send'))}</span>
                 </button>
             </div>`;
     } else {
         // Window closed: only a pre-approved template can re-open the conversation.
+        // Only WhatsApp providers (Twilio/Meta) have this rule — this branch is
+        // unreachable for every other channel (see get_ticket_thread.php), so the
+        // wording can safely name WhatsApp specifically rather than say "the provider".
         inner = `
-            <div class="channel-window-closed">⏳ The 24-hour reply window has closed. Free-text replies are blocked by WhatsApp — send a pre-approved template to re-open the conversation.</div>
-            <label class="channel-tpl-label">Template</label>
+            <div class="channel-window-closed">${escapeHtml(Tc('window_closed'))}</div>
+            <label class="channel-tpl-label">${escapeHtml(Tc('template_label'))}</label>
             <select id="channelTemplateSelect" class="channel-composer-text" onchange="onChannelTemplatePick(${ticketId})">
-                <option value="">Loading templates…</option>
+                <option value="">${escapeHtml(Tc('loading_templates'))}</option>
             </select>
             <div id="channelTemplateVars"></div>
             <div class="channel-composer-actions">
-                <button class="action-btn" onclick="aiSummariseChannel(${ticketId})" title="Summarise this conversation into the ticket">
-                    <span class="action-btn-icon">📝</span><span>Summarise</span>
+                <button class="action-btn" onclick="aiSummariseChannel(${ticketId})" title="${escapeHtml(Tc('summarise_title'))}">
+                    <span class="action-btn-icon">📝</span><span>${escapeHtml(Tc('summarise'))}</span>
                 </button>
                 <button class="action-btn action-btn-primary" id="channelSendTplBtn" onclick="sendChannelTemplate(${ticketId})" disabled>
-                    <span class="action-btn-icon">📤</span><span>Send template</span>
+                    <span class="action-btn-icon">📤</span><span>${escapeHtml(Tc('send_template'))}</span>
                 </button>
             </div>`;
     }
@@ -4269,7 +4547,7 @@ function renderChannelComposer(ticketId) {
         <div id="channelComposer" class="channel-composer">
             <div class="channel-composer-head">
                 <span class="thread-direction-badge outbound">${escapeHtml(label)}</span>
-                <span class="channel-composer-title">Reply to the customer over ${escapeHtml(label)}</span>
+                <span class="channel-composer-title">${escapeHtml(Tc('reply_title', { channel: label }))}</span>
             </div>
             ${inner}
         </div>`;
@@ -4297,13 +4575,13 @@ async function loadChannelTemplates() {
         const data = await res.json();
         channelTemplates = (data.success && data.templates) ? data.templates : [];
         if (!channelTemplates.length) {
-            sel.innerHTML = '<option value="">No templates set up — add them in Settings → Messaging</option>';
+            sel.innerHTML = `<option value="">${escapeHtml(Tc('no_templates'))}</option>`;
             return;
         }
-        sel.innerHTML = '<option value="">— choose a template —</option>' +
+        sel.innerHTML = `<option value="">${escapeHtml(Tc('choose_template'))}</option>` +
             channelTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
     } catch (e) {
-        sel.innerHTML = '<option value="">Failed to load templates</option>';
+        sel.innerHTML = `<option value="">${escapeHtml(Tc('templates_load_failed'))}</option>`;
     }
 }
 
@@ -4317,7 +4595,7 @@ function onChannelTemplatePick(ticketId) {
 
     let fields = '';
     for (let i = 1; i <= (tpl.var_count || 0); i++) {
-        fields += `<input type="text" class="channel-composer-text channel-tpl-var" data-idx="${i}" placeholder="Value for {{${i}}}" oninput="updateChannelTemplatePreview()" style="margin-top:6px;">`;
+        fields += `<input type="text" class="channel-composer-text channel-tpl-var" data-idx="${i}" placeholder="${escapeHtml(Tc('template_var_placeholder', { n: i }))}" oninput="updateChannelTemplatePreview()" style="margin-top:6px;">`;
     }
     varsEl.innerHTML = `
         ${fields}
@@ -4341,12 +4619,12 @@ function updateChannelTemplatePreview() {
 async function sendChannelTemplate(ticketId) {
     const sel = document.getElementById('channelTemplateSelect');
     const btn = document.getElementById('channelSendTplBtn');
-    if (!sel || !sel.value) { showToast('Choose a template first', 'error'); return; }
+    if (!sel || !sel.value) { showToast(Tc('choose_template_first'), 'error'); return; }
     const vars = Array.from(document.querySelectorAll('.channel-tpl-var')).map(i => i.value.trim());
-    if (vars.some(v => v === '')) { showToast('Fill in all template values', 'error'); return; }
+    if (vars.some(v => v === '')) { showToast(Tc('fill_all_template_values'), 'error'); return; }
 
     const original = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span>Sending…</span>'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<span>${escapeHtml(Tc('sending'))}</span>`; }
     try {
         const res = await fetch(API_BASE.replace('tickets/', 'messaging/') + 'send_template.php', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
@@ -4354,13 +4632,13 @@ async function sendChannelTemplate(ticketId) {
         });
         const data = await res.json();
         if (data.success) {
-            showToast('Template sent', 'success');
+            showToast(Tc('template_sent'), 'success');
             loadCorrespondenceThread(ticketId);
         } else {
-            showToast('Could not send: ' + (data.error || 'unknown error'), 'error');
+            showToast(Tc('could_not_send', { error: data.error || Tc('unknown_error') }), 'error');
         }
     } catch (e) {
-        showToast('Failed to send template', 'error');
+        showToast(Tc('template_send_failed'), 'error');
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = original; }
     }
@@ -4372,10 +4650,10 @@ async function sendChannelMessage(ticketId) {
     const btn = document.getElementById('channelSendBtn');
     if (!ta) return;
     const body = ta.value.trim();
-    if (!body) { showToast('Type a message first', 'error'); return; }
+    if (!body) { showToast(Tc('type_message_first'), 'error'); return; }
 
     const original = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span>Sending…</span>'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<span>${escapeHtml(Tc('sending'))}</span>`; }
     try {
         const res = await fetch(API_BASE.replace('tickets/', 'messaging/') + 'send_message.php', {
             method: 'POST',
@@ -4386,15 +4664,55 @@ async function sendChannelMessage(ticketId) {
         const data = await res.json();
         if (data.success) {
             ta.value = '';
-            showToast('Message sent', 'success');
+            showToast(Tc('message_sent'), 'success');
             loadCorrespondenceThread(ticketId);
         } else {
-            showToast('Could not send: ' + (data.error || 'unknown error'), 'error');
+            showToast(Tc('could_not_send', { error: data.error || Tc('unknown_error') }), 'error');
         }
     } catch (e) {
-        showToast('Failed to send message', 'error');
+        showToast(Tc('message_send_failed'), 'error');
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = original; }
+    }
+}
+
+// Send a file (image, document, …) picked via the composer's Attach button.
+// The composer's text box, if anything is typed in it, becomes the caption —
+// Telegram shows a caption under the photo/document, same as a person would
+// type one there directly, so reusing the textarea needs no separate field.
+async function sendChannelAttachment(ticketId) {
+    const input = document.getElementById('channelAttachFile');
+    const attachBtn = document.getElementById('channelAttachBtn');
+    const ta = document.getElementById('channelComposerText');
+    if (!input || !input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const caption = ta ? ta.value.trim() : '';
+
+    const original = attachBtn ? attachBtn.innerHTML : '';
+    if (attachBtn) { attachBtn.disabled = true; attachBtn.innerHTML = `<span>${escapeHtml(Tc('sending'))}</span>`; }
+    try {
+        const form = new FormData();
+        form.append('ticket_id', ticketId);
+        form.append('caption', caption);
+        form.append('file', file);
+        const res = await fetch(API_BASE.replace('tickets/', 'messaging/') + 'send_attachment.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: form
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (ta) ta.value = '';
+            showToast(Tc('attachment_sent'), 'success');
+            loadCorrespondenceThread(ticketId);
+        } else {
+            showToast(Tc('could_not_send', { error: data.error || Tc('unknown_error') }), 'error');
+        }
+    } catch (e) {
+        showToast(Tc('attachment_send_failed'), 'error');
+    } finally {
+        if (attachBtn) { attachBtn.disabled = false; attachBtn.innerHTML = original; }
+        input.value = ''; // let the same file be picked again if the send failed
     }
 }
 
@@ -4402,7 +4720,7 @@ async function sendChannelMessage(ticketId) {
 async function aiSuggestChannelReply(ticketId) {
     const ta = document.getElementById('channelComposerText');
     if (!ta || ta.disabled) return;
-    showToast('Drafting a reply…', 'info');
+    showToast(Tc('drafting_reply'), 'info');
     try {
         const res = await fetch(API_BASE.replace('tickets/', 'messaging/') + 'ai_suggest_reply.php', {
             method: 'POST',
@@ -4415,16 +4733,16 @@ async function aiSuggestChannelReply(ticketId) {
             ta.value = data.reply;
             ta.focus();
         } else {
-            showToast(data.error || 'Could not draft a reply', 'error');
+            showToast(data.error || Tc('draft_failed'), 'error');
         }
     } catch (e) {
-        showToast('Failed to draft a reply', 'error');
+        showToast(Tc('draft_failed'), 'error');
     }
 }
 
 // AI: summarise the conversation and save it as an internal note on the ticket.
 async function aiSummariseChannel(ticketId) {
-    showToast('Summarising…', 'info');
+    showToast(Tc('summarising'), 'info');
     try {
         const res = await fetch(API_BASE.replace('tickets/', 'messaging/') + 'ai_summary.php', {
             method: 'POST',
@@ -4434,13 +4752,13 @@ async function aiSummariseChannel(ticketId) {
         });
         const data = await res.json();
         if (data.success) {
-            showToast('Summary added to ticket notes', 'success');
+            showToast(Tc('summary_added'), 'success');
             if (typeof loadNotes === 'function') loadNotes(ticketId);
         } else {
-            showToast(data.error || 'Could not summarise', 'error');
+            showToast(data.error || Tc('summarise_failed'), 'error');
         }
     } catch (e) {
-        showToast('Failed to summarise', 'error');
+        showToast(Tc('summarise_failed'), 'error');
     }
 }
 
@@ -4464,6 +4782,16 @@ async function assignDepartment() {
         if (data.success) {
             await logAudit(currentEmail.ticket_id, 'Department', oldValue, newValue);
             currentEmail.department_id = departmentId || null;
+            // Moving into a confidential department makes the ticket confidential on
+            // the server (discussion #62) - show it now, not on the next open.
+            if (data.sensitivity && data.sensitivity !== currentEmail.sensitivity) {
+                currentEmail.sensitivity = data.sensitivity;
+                const sensSel = document.getElementById('sensitivitySelect');
+                if (sensSel) {
+                    sensSel.value = data.sensitivity;
+                    sensSel.classList.toggle('is-confidential', data.sensitivity === 'confidential');
+                }
+            }
             updatePropertiesSummary();
             loadFolderCounts();
             loadEmails();
@@ -4496,6 +4824,9 @@ async function assignTicketType() {
         if (data.success) {
             await logAudit(currentEmail.ticket_id, 'Ticket Type', oldValue, newValue);
             currentEmail.ticket_type_id = ticketTypeId || null;
+            // Custom fields follow the type (#179): the new type's appear, and
+            // answers to fields it does not have are hidden, never deleted.
+            loadTicketCustomFields(currentEmail.ticket_id);
             // #1540. A category can be tied to one ticket type, so changing the
             // type can leave the ticket wearing a category that no longer belongs
             // to it. The server CLEARS such a category rather than keeping a pair
@@ -4526,6 +4857,7 @@ async function assignTeam() {
     if (!sel || !currentEmail) return;
     const newId = sel.value || null;
 
+    /** Returns the name of a team id from ticketTeams, or an empty string, for the audit line. */
     const nameFor = id => {
         if (!id) return '';
         const tm = ticketTeams.find(x => String(x.id) === String(id));
@@ -4608,6 +4940,9 @@ async function assignClassificationField(selectId, field, auditLabel) {
     if (!sel || !currentEmail) return;
     const newId = sel.value || null;
 
+    /**
+     * Returns the readable label for an id of this field - the resolution code name, or the category's full path - for the audit line.
+     */
     const labelFor = id => {
         if (!id) return '';
         if (field === 'resolution_code_id') {
@@ -4683,6 +5018,7 @@ async function assignStatus() {
 
         if (attached === 0 && emptyMode !== 'off') {
             const ticketId = currentEmail ? (currentEmail.ticket_id || currentEmail.id) : null;
+            /** Opens the attach-checklist modal for the ticket, when the Checklists script is loaded. */
             const openAttach = () => {
                 if (typeof openAttachChecklistModal === "function" && ticketId) {
                     openAttachChecklistModal(ticketId);
@@ -4731,11 +5067,15 @@ async function assignStatus() {
     if (closing && typeof getIncompleteMandatorySteps === "function") {
         const pendingMandatory = getIncompleteMandatorySteps();
         if (pendingMandatory.length > 0) {
+            /** Opens the ticket's checklist modal, when the Checklists script is loaded. */
             const openChecklist = () => {
                 if (typeof openChecklistModal === "function") {
                     openChecklistModal(currentEmail ? currentEmail.ticket_id : null);
                 }
             };
+            /**
+             * Formats outstanding mandatory steps as text, grouped under the name of their checklist, for the confirm dialogue.
+             */
             const listOf = (steps) => {
                 const grouped = {};
                 steps.forEach(m => {
@@ -4900,6 +5240,7 @@ async function confirmCloseWithMandatoryFields(ticketIds) {
     const found = await mandatoryFieldsCheck(ids);
     if (!found || !found.length) return true;
 
+    /** Returns a ticket's missing mandatory fields as a comma-separated list of labels. */
     const fieldsOf = tk => tk.missing.map(m => m.label).join(', ');
     const blocked  = found.filter(tk => tk.mode === 'block');
     const warned   = found.filter(tk => tk.mode !== 'block');
@@ -4987,6 +5328,48 @@ async function assignPriority() {
     } catch (error) {
         console.error('Error:', error);
         showToast('Failed to assign priority', 'error');
+    }
+}
+
+// Normal / Confidential (discussion #62). Confidential keeps a ticket from the
+// requester's managers; the service desk is unaffected. Lowering it back to
+// Normal is only ever done here, by a person - nothing automatic does.
+function confidentialIcon() {
+    return `<span class="row-confidential-icon" title="${escapeHtml(t('tickets.reading_pane.sensitivity_confidential'))}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>`;
+}
+
+/**
+ * Saves the ticket's sensitivity (Normal or Confidential) from the reading pane, audits the change and refreshes the list.
+ *
+ * Puts the picker back to the old value if the save fails.
+ */
+async function assignSensitivity() {
+    const select = document.getElementById('sensitivitySelect');
+    const value  = select.value;
+    /** Returns the translated label for a sensitivity value, for the audit line. */
+    const label  = v => t(v === 'confidential' ? 'tickets.reading_pane.sensitivity_confidential' : 'tickets.reading_pane.sensitivity_normal');
+    const old    = currentEmail.sensitivity === 'confidential' ? 'confidential' : 'normal';
+    try {
+        const response = await fetch(API_BASE + 'assign_ticket.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_id: currentEmail.ticket_id, sensitivity: value })
+        });
+        const data = await response.json();
+        if (data.success) {
+            await logAudit(currentEmail.ticket_id, 'Sensitivity', label(old), label(value));
+            currentEmail.sensitivity = value;
+            select.classList.toggle('is-confidential', value === 'confidential');
+            updatePropertiesSummary();
+            loadEmails();
+        } else {
+            select.value = old;
+            showToast(t('tickets.reading_pane.sensitivity_failed') + ': ' + data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        select.value = old;
+        showToast(t('tickets.reading_pane.sensitivity_failed'), 'error');
     }
 }
 
@@ -5131,6 +5514,9 @@ async function requestCsatSurvey() {
     }
 }
 
+/**
+ * Asks, then moves the open ticket to the trash, clears the reading pane and refreshes the folder counts and list.
+ */
 async function deleteTicket() {
     if (!currentEmail || !currentEmail.ticket_id) {
         showToast('No ticket selected', 'error');
@@ -5361,6 +5747,9 @@ function rowNameSuffix(email) {
     return label === '' ? '' : ' - ' + label;
 }
 
+/**
+ * Returns the name shown on a ticket's list row - the requester, the last sender, or nothing - per the row display setting.
+ */
 function inboxRowName(email) {
     const mode = (window.INBOX_ROW_DISPLAY && window.INBOX_ROW_DISPLAY.row_name) || 'requester';
     if (mode === 'off') return '';
@@ -5373,6 +5762,11 @@ function inboxRowName(email) {
     return senderLabel(email.from_name, email.from_address, false);
 }
 
+/**
+ * Returns an escaped label for a person - the name, or the address when there is no name, or "Unknown sender" when there is neither.
+ *
+ * @param withAngles  true to show "Name <address>" when both are known
+ */
 function senderLabel(name, address, withAngles) {
     const n = (name || '').trim();
     const a = (address || '').trim();
@@ -5395,6 +5789,9 @@ function senderLabel(name, address, withAngles) {
 // implementations of a date helper is exactly how the 'en-GB' drift behind
 // GH #105 spread in the first place.
 
+/**
+ * Formats a UTC date for the ticket list - just the time today, "Yesterday" and the time, otherwise day, month and time.
+ */
 function formatDateTime(dateStr) {
     if (!dateStr) return '';
     const date = parseUTCDate(dateStr);
@@ -5471,6 +5868,10 @@ function updatePropertiesSummary() {
     if (summaryOwner && currentEmail) {
         summaryOwner.textContent = getDisplayName('owner', currentEmail.owner_id) || t('tickets.reading_pane.summary_unassigned');
     }
+    const summaryConfidential = document.getElementById('summaryConfidential');
+    if (summaryConfidential && currentEmail) {
+        summaryConfidential.hidden = currentEmail.sensitivity !== 'confidential';
+    }
 }
 
 // ===== Linked CMDB objects on a ticket =====
@@ -5482,6 +5883,7 @@ let cmdbObjectsForTicket = [];
 let cmdbAcTimer = null;
 let cmdbAcHighlightedIdx = -1;
 
+/** Fetches the CMDB objects linked to a ticket and draws them as pills in the Links strip. */
 async function loadCmdbObjects(ticketId) {
     const host = document.getElementById('stripCmdbPills');
     if (!host) return;
@@ -5494,6 +5896,7 @@ async function loadCmdbObjects(ticketId) {
     } catch (e) { /* silent — the strip simply shows no CI pills */ }
 }
 
+/** Draws cmdbObjectsForTicket as CMDB pills, with class and parent in the tooltip and an unlink cross. */
 function renderCmdbObjects(ticketId) {
     const host = document.getElementById('stripCmdbPills');
     if (!host) return;
@@ -5510,6 +5913,9 @@ function renderCmdbObjects(ticketId) {
     syncLinksStripEmpty();
 }
 
+/**
+ * Opens the strip picker to search every CMDB object and link the chosen one to the ticket, with arrow-key and Enter support.
+ */
 function openLinkCmdbPicker(ticketId) {
     const ui = openStripPicker(t('tickets.cmdb.search_placeholder'));
     if (!ui) return;
@@ -5518,6 +5924,7 @@ function openLinkCmdbPicker(ticketId) {
     let current = [];
     cmdbAcHighlightedIdx = -1;
 
+    /** Draws the CMDB search results with the highlighted row and binds a mousedown to each. */
     const renderResults = () => {
         if (current.length === 0) {
             results.innerHTML = `<div class="cmdb-picker-empty">${escapeHtml(t('tickets.cmdb.no_matches'))}</div>`;
@@ -5538,6 +5945,7 @@ function openLinkCmdbPicker(ticketId) {
         });
     };
 
+    /** Links the chosen CMDB object to the ticket, closes the picker and reloads the CMDB pills. */
     const pick = async (r) => {
         try {
             const res = await fetch('../api/tickets/save_ticket_cmdb_object.php', {
@@ -5584,6 +5992,227 @@ function openLinkCmdbPicker(ticketId) {
     };
 }
 
+// ============================================================
+// Domains on a ticket (3.0.0) - pills in the Links strip, the same shape as
+// CMDB objects. Every rule (Domains access, same company, the ticket itself)
+// is server-side in includes/domains/links.php; for an analyst who cannot open
+// Domains none of this is drawn at all.
+// ============================================================
+let domainsForTicket = [];
+let domainAcTimer = null;
+
+/** Fetches the domains linked to a ticket and draws them as pills, when the analyst may see Domains. */
+async function loadTicketDomains(ticketId) {
+    const host = document.getElementById('stripDomainPills');
+    if (!host || !window.TICKETS_SHOW_DOMAINS) return;
+    domainsForTicket = [];
+    try {
+        const res = await fetch('../api/domains/links.php?for=ticket&id=' + ticketId);
+        const data = await res.json();
+        if (data.success) domainsForTicket = data.domains || [];
+    } catch (e) { /* silent - the strip simply shows no domain pills */ }
+    renderTicketDomains(ticketId);
+}
+
+/** Draws domainsForTicket as domain pills, with the expiry date in the tooltip and an unlink cross. */
+function renderTicketDomains(ticketId) {
+    const host = document.getElementById('stripDomainPills');
+    if (!host) return;
+    host.innerHTML = domainsForTicket.map(dm => {
+        // A calendar date, so the naive formatter (never fmtDate, which shifts it).
+        const when = dm.expiry_date ? (window.fmtNaiveDate ? fmtNaiveDate(String(dm.expiry_date).slice(0, 10) + 'T00:00:00') : dm.expiry_date) : '';
+        const title = when ? t('tickets.domains.expires', { date: when }) : '';
+        return `<a class="pm-ticket-badge" href="../${escapeHtml(dm.url)}" title="${escapeHtml(title)}">
+            🌐 ${escapeHtml(dm.name)}
+            <span class="pm-ticket-unlink" title="${escapeHtml(t('tickets.domains.unlink_title'))}" onclick="event.preventDefault();event.stopPropagation();removeTicketDomain(event, ${dm.id}, ${ticketId});">✕</span>
+        </a>`;
+    }).join('');
+    syncLinksStripEmpty();
+}
+
+/** Opens the strip picker listing the domains that can be linked to the ticket, filtered as the analyst types. */
+function openLinkDomainPicker(ticketId) {
+    const ui = openStripPicker(t('tickets.domains.search_placeholder'));
+    if (!ui) return;
+    const { input, results, close } = ui;
+    let current = [], hi = -1;
+
+    /** Draws the domain results with the highlighted row and binds a mousedown to each. */
+    const renderResults = () => {
+        if (!current.length) {
+            results.innerHTML = `<div class="cmdb-picker-empty">${escapeHtml(t('tickets.domains.no_matches'))}</div>`;
+            results.classList.add('active');
+            return;
+        }
+        results.innerHTML = current.map((r, i) => `
+            <div class="cmdb-picker-result ${i === hi ? 'highlighted' : ''}" data-idx="${i}">
+                <span>${escapeHtml(r.name)}</span>
+                <span class="cmdb-picker-class">${escapeHtml(r.status || '')}</span>
+            </div>`).join('');
+        results.classList.add('active');
+        results.querySelectorAll('.cmdb-picker-result').forEach(el => {
+            el.addEventListener('mousedown', e => { e.preventDefault(); pick(current[parseInt(el.dataset.idx, 10)]); });
+        });
+    };
+
+    /** Links the chosen domain to the ticket, closes the picker and reloads the domain pills. */
+    const pick = async (r) => {
+        try {
+            const res = await fetch('../api/domains/links.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add', domain_id: r.id, kind: 'ticket', target_id: ticketId })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Link failed');
+            showToast(t('tickets.domains.linked_toast', { name: r.name }), 'success');
+            close();
+            await loadTicketDomains(ticketId);
+        } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    };
+
+    /** Fetches the linkable domains matching the search box. */
+    const search = async () => {
+        try {
+            const res = await fetch('../api/domains/links.php?for=ticket&id=' + ticketId + '&pick=1&q=' + encodeURIComponent(input.value.trim()));
+            const data = await res.json();
+            current = data.success ? (data.domains || []) : [];
+            hi = -1;
+            renderResults();
+        } catch (e) { /* silent */ }
+    };
+    input.oninput = () => { if (domainAcTimer) clearTimeout(domainAcTimer); domainAcTimer = setTimeout(search, 200); };
+    input.onkeydown = e => {
+        if (!results.classList.contains('active')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); hi = Math.min(current.length - 1, hi + 1); renderResults(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); hi = Math.max(0, hi - 1); renderResults(); }
+        else if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); pick(current[hi]); }
+        else if (e.key === 'Escape') { close(); }
+    };
+    // Domains are a short list: show it straight away, before any typing.
+    search();
+}
+
+/** Asks, then unlinks a domain from the ticket and reloads the domain pills. */
+async function removeTicketDomain(ev, domainId, ticketId) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!(await showConfirm({ title: 'Confirm', message: t('tickets.domains.unlink_confirm'), okLabel: 'OK', okClass: 'primary' }))) return;
+    try {
+        const res = await fetch('../api/domains/links.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'remove', domain_id: domainId, kind: 'ticket', target_id: ticketId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Unlink failed');
+        showToast(t('tickets.domains.unlinked_toast'), 'success');
+        await loadTicketDomains(ticketId);
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
+}
+
+// ============================================================
+// Projects on a ticket (3.2.0) - the projects this ticket is part of, as pills
+// in the Links strip, with "Project" in the Link to... menu. Every rule
+// (Projects access, same company, who may change the project) is server-side in
+// includes/projects/links.php; for an analyst who cannot open Projects none of
+// this is drawn.
+// ============================================================
+let projectsForTicket = [];
+let projectAcTimer = null;
+
+/** Fetches the projects a ticket is part of and draws them as coloured pills, when the analyst may see Projects. */
+async function loadTicketProjects(ticketId) {
+    const host = document.getElementById('stripProjectPills');
+    if (!host || !window.TICKETS_SHOW_PROJECTS) return;
+    projectsForTicket = [];
+    try {
+        const res = await fetch('../api/projects/links.php?for=ticket&id=' + ticketId);
+        const data = await res.json();
+        if (data.success) projectsForTicket = data.projects || [];
+    } catch (e) { /* silent - the strip simply shows no project pills */ }
+    host.innerHTML = projectsForTicket.map(p => `<a class="pm-ticket-badge" href="../${escapeHtml(p.url)}" title="${escapeHtml(p.code + ' - ' + (p.status || ''))}">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${escapeHtml(p.colour)};margin-right:5px"></span>${escapeHtml(p.name)}
+            <span class="pm-ticket-unlink" title="${escapeHtml(t('tickets.projects.unlink_title'))}" onclick="event.preventDefault();event.stopPropagation();removeTicketProject(event, ${p.id}, ${ticketId});">&#10005;</span>
+        </a>`).join('');
+    if (typeof syncLinksStripEmpty === 'function') syncLinksStripEmpty();
+}
+
+/** Opens the strip picker listing the projects the ticket can be added to, filtered as the analyst types. */
+function openLinkProjectPicker(ticketId) {
+    const ui = openStripPicker(t('tickets.projects.search_placeholder'));
+    if (!ui) return;
+    const { input, results, close } = ui;
+    let current = [], hi = -1;
+    /** Draws the project results with colour, code and the highlighted row, and binds a mousedown to each. */
+    const renderResults = () => {
+        if (!current.length) {
+            results.innerHTML = `<div class="cmdb-picker-empty">${escapeHtml(t('tickets.projects.no_matches'))}</div>`;
+            results.classList.add('active');
+            return;
+        }
+        results.innerHTML = current.map((r, i) => `
+            <div class="cmdb-picker-result ${i === hi ? 'highlighted' : ''}" data-idx="${i}">
+                <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${escapeHtml(r.colour)};margin-right:6px"></span>${escapeHtml(r.name)}</span>
+                <span class="cmdb-picker-class">${escapeHtml(r.code)}</span>
+            </div>`).join('');
+        results.classList.add('active');
+        results.querySelectorAll('.cmdb-picker-result').forEach(el => {
+            el.addEventListener('mousedown', e => { e.preventDefault(); pick(current[parseInt(el.dataset.idx, 10)]); });
+        });
+    };
+    /** Links the ticket to the chosen project, closes the picker and reloads the project pills. */
+    const pick = async (r) => {
+        try {
+            const res = await fetch('../api/projects/links.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add', project_id: r.id, kind: 'ticket', target_id: ticketId })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Link failed');
+            showToast(t('tickets.projects.linked_toast', { name: r.name }), 'success');
+            close();
+            await loadTicketProjects(ticketId);
+        } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    };
+    /** Fetches the linkable projects matching the search box. */
+    const search = async () => {
+        try {
+            const res = await fetch('../api/projects/links.php?for=ticket&id=' + ticketId + '&pick=1&q=' + encodeURIComponent(input.value.trim()));
+            const data = await res.json();
+            current = data.success ? (data.projects || []) : [];
+            hi = -1;
+            renderResults();
+        } catch (e) { /* silent */ }
+    };
+    input.oninput = () => { if (projectAcTimer) clearTimeout(projectAcTimer); projectAcTimer = setTimeout(search, 200); };
+    input.onkeydown = e => {
+        if (!results.classList.contains('active')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); hi = Math.min(current.length - 1, hi + 1); renderResults(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); hi = Math.max(0, hi - 1); renderResults(); }
+        else if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); pick(current[hi]); }
+        else if (e.key === 'Escape') { close(); }
+    };
+    // Live projects are a short list: show them straight away.
+    search();
+}
+
+/** Asks, then takes the ticket out of a project and reloads the project pills. */
+async function removeTicketProject(ev, projectId, ticketId) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!(await showConfirm({ title: 'Confirm', message: t('tickets.projects.unlink_confirm'), okLabel: 'OK', okClass: 'primary' }))) return;
+    try {
+        const res = await fetch('../api/projects/links.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'remove', project_id: projectId, kind: 'ticket', target_id: ticketId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Unlink failed');
+        showToast(t('tickets.projects.unlinked_toast'), 'success');
+        await loadTicketProjects(ticketId);
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
+}
+
+/** Asks, then unlinks a CMDB object from the ticket and reloads the CMDB pills. */
 async function removeCmdbObject(ev, linkId, ticketId) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -5613,6 +6242,7 @@ let assetsForTicket = [];
 let assetAcTimer = null;
 let assetAcHighlightedIdx = -1;
 
+/** Fetches the equipment linked to a ticket and draws it as pills in the Links strip. */
 async function loadTicketAssets(ticketId) {
     const host = document.getElementById('stripAssetPills');
     if (!host) return;
@@ -5630,6 +6260,9 @@ function assetDisplayName(a) {
     return a.hostname || a.asset_tag || t('tickets.assets.unnamed');
 }
 
+/**
+ * Draws assetsForTicket as equipment pills, with type, make, serial and location in the tooltip and an unlink cross.
+ */
 function renderTicketAssets(ticketId) {
     const host = document.getElementById('stripAssetPills');
     if (!host) return;
@@ -5653,6 +6286,11 @@ function renderTicketAssets(ticketId) {
     syncLinksStripEmpty();
 }
 
+/**
+ * Opens the strip picker for linking equipment to the ticket.
+ *
+ * Shows the requester's own equipment before anything is typed; typing searches the whole estate, listed under a second heading.
+ */
 function openLinkAssetPicker(ticketId) {
     const ui = openStripPicker(t('tickets.assets.search_placeholder'));
     if (!ui) return;
@@ -5664,6 +6302,9 @@ function openLinkAssetPicker(ticketId) {
     let firstOtherIdx = -1;
     assetAcHighlightedIdx = -1;
 
+    /**
+     * Draws the equipment results under "requester" and "all" headings with the highlighted row, and binds a mousedown to each.
+     */
     const renderResults = () => {
         if (current.length === 0) {
             results.innerHTML = `<div class="asset-picker-empty">${escapeHtml(
@@ -5697,6 +6338,9 @@ function openLinkAssetPicker(ticketId) {
         });
     };
 
+    /**
+     * Fetches linkable equipment for the text and joins the requester's own and everything else into one keyboard-navigable list.
+     */
     const search = async (q) => {
         try {
             const url = '../api/tickets/search_linkable_assets.php?ticket_id=' + ticketId +
@@ -5713,6 +6357,7 @@ function openLinkAssetPicker(ticketId) {
         } catch (e) { /* silent */ }
     };
 
+    /** Links the chosen asset to the ticket, closes the picker and reloads the equipment pills. */
     const pick = async (r) => {
         try {
             const res = await fetch('../api/tickets/save_ticket_asset.php', {
@@ -5752,6 +6397,7 @@ function openLinkAssetPicker(ticketId) {
     search('');
 }
 
+/** Asks, then unlinks an asset from the ticket and reloads the equipment pills. */
 async function removeTicketAsset(ev, linkId, ticketId) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -5918,16 +6564,60 @@ function showAttachmentList() {
         <div class="modal-content attachment-list-modal">
             <button class="modal-close-top" onclick="closeAttachmentListModal()">&times;</button>
             <div class="modal-header">
-                <h3>${escapeHtml(t('tickets.reading_pane.attach_modal_title', { ref: currentEmail.ticket_number }))}</h3>
+                ${ticketMenuIsSheet()
+                    // Phone: word and ticket number on two lines (reuses the
+                    // reply modal's already-translated "Attachments").
+                    ? `<h3>${escapeHtml(t('tickets.reply_modal.attachments'))}<span class="att-modal-ref">${escapeHtml(currentEmail.ticket_number || '')}</span></h3>`
+                    : `<h3>${escapeHtml(t('tickets.reading_pane.attach_modal_title', { ref: currentEmail.ticket_number }))}</h3>`}
             </div>
             <div class="modal-body">
-                ${previewsHtml}
-                ${tableHtml}
+                ${ticketMenuIsSheet() ? attachmentCardsHtml(trackerLink) : previewsHtml + tableHtml}
             </div>
         </div>
     `;
 
     document.body.appendChild(modal);
+}
+
+// Phone-only body for the attachment list: no table (six columns cannot fit a
+// phone), one full-width card per attachment instead - the preview when the
+// browser can show one, then the filename and every column the table had as
+// label/value lines. Tapping the details downloads, as a table row does.
+// Desktop never calls this (showAttachmentList gates on ticketMenuIsSheet).
+function attachmentCardsHtml(trackerLink) {
+    /** Returns one label/value line for an attachment card, or nothing when the value is empty. */
+    const line = (label, value) => value ? `<div class="att-card-line">
+        <span class="att-card-k">${escapeHtml(label)}</span><span class="att-card-v">${value}</span></div>` : '';
+    return `<div class="att-cards">${ticketAttachments.map(att => {
+        const url = `${API_BASE}get_attachment.php?id=${att.id}`;
+        const ct = (att.content_type || '').toLowerCase();
+        let media = '';
+        if (ct.startsWith('image/')) {
+            media = `<img src="${url}" alt="${escapeHtml(att.filename)}" class="att-card-media" loading="lazy" onclick="window.open('${url}','_blank')" title="${escapeHtml(t('tickets.reading_pane.attach_click_fullsize'))}">`;
+        } else if (ct.startsWith('audio/')) {
+            media = `<audio controls preload="none" src="${url}" class="att-card-audio"></audio>`;
+        } else if (ct.startsWith('video/')) {
+            media = `<video controls preload="metadata" src="${url}" class="att-card-media"></video>`;
+        }
+        const send = (trackerLink && !att.is_inline)
+            ? `<button class="att-send-btn" data-att="${att.id}" data-link="${trackerLink.id}"
+                       data-name="${escapeHtml(att.filename)}" data-issue="${escapeHtml(trackerLink.external_key || '')}"
+                       onclick="sendAttachmentToTracker(this)">${
+                    escapeHtml(t('tickets.tracker.attach_send_btn').replace('{issue}', trackerLink.external_key || ''))
+                }</button>`
+            : '';
+        return `<div class="att-card">
+            ${media}
+            <div class="att-card-info" onclick="openAttachment(${att.id})" title="${escapeHtml(t('tickets.reading_pane.attach_click_download'))}">
+                <div class="att-card-name"><span class="attachment-icon">${getFileIcon(att.filename)}</span>${escapeHtml(att.filename)}${
+                    att.is_inline ? ` <span class="inline-badge">${escapeHtml(t('tickets.reading_pane.attach_inline_badge'))}</span>` : ''}</div>
+                ${line(t('tickets.reading_pane.attach_col_from'), escapeHtml(att.from_name || att.from_address || ''))}
+                ${line(t('tickets.reading_pane.attach_col_datetime'), escapeHtml(formatDateDMY(att.received_datetime)))}
+                ${line(t('tickets.reading_pane.attach_col_size'), escapeHtml(formatFileSize(att.file_size || 0)))}
+            </div>
+            ${send}
+        </div>`;
+    }).join('')}</div>`;
 }
 
 // Close attachment list modal
@@ -6316,6 +7006,11 @@ function correspondentAddress(email) {
            ) || '';
 }
 
+/**
+ * Opens the email composer as a reply to the open ticket, addressed to the correspondent with an RE: subject carrying the [SDREF:] reference.
+ *
+ * Channel tickets (WhatsApp and the like) are sent to the inline channel composer instead. Also applies the default signature, shows the AI Cleanup button and marks the analyst as composing for the collision warning.
+ */
 function openReplyModal() {
     // Channel tickets (WhatsApp etc.) reply via the inline composer, not email.
     if (currentTicketChannel && currentTicketChannel !== 'email') {
@@ -6446,6 +7141,9 @@ function splitPlural(n, baseKey) {
     return t(baseKey).replace('%d', String(count));
 }
 
+/**
+ * Opens the Split ticket dialog for a ticket, reset to empty, then loads its movable messages with the opened-from message pre-ticked.
+ */
 async function openSplitModal(ticketId, emailId) {
     splitTicketId = ticketId;
     splitAnchorId = Number(emailId) || null;
@@ -6463,6 +7161,7 @@ async function openSplitModal(ticketId, emailId) {
     await loadSplitMessages();
 }
 
+/** Closes the Split ticket dialog. */
 function closeSplitModal() {
     document.getElementById('splitModal').classList.remove('active');
 }
@@ -6519,6 +7218,7 @@ function renderSplitList() {
     }).join('');
 }
 
+/** Ticks or unticks one message in the split checklist and refreshes the count, subject and warning. */
 function splitToggle(id, on) {
     id = Number(id);
     if (on) splitSelected.add(id); else splitSelected.delete(id);
@@ -6544,6 +7244,9 @@ function splitSelectNewer(ev) {
     splitUpdateState();
 }
 
+/**
+ * Ticks every message in the split checklist (the Split button then stays disabled, as moving them all would empty the ticket).
+ */
 function splitSelectAll(ev) {
     if (ev) ev.preventDefault();
     splitSelected = new Set(splitMessages.map(m => Number(m.id)));
@@ -6551,6 +7254,7 @@ function splitSelectAll(ev) {
     splitUpdateState();
 }
 
+/** Unticks every message in the split checklist. */
 function splitClearSel(ev) {
     if (ev) ev.preventDefault();
     splitSelected = new Set();
@@ -6626,6 +7330,9 @@ async function undoSplit(splitId) {
     }
 }
 
+/**
+ * Sends the ticked messages and the new subject to split_ticket.php, then reloads the list and opens the newly created ticket.
+ */
 async function confirmSplit() {
     if (!splitSelected.size) return;
     const btn = document.getElementById('splitConfirmBtn');
@@ -6669,6 +7376,9 @@ async function confirmSplit() {
 
 let subjectTicketId = null;
 
+/**
+ * Opens the Change subject dialog for the right-clicked ticket, prefilled with its current subject from the loaded list.
+ */
 function openSubjectModal() {
     closeTicketContextMenu();
     if (!ctxTargetTicketId) return;
@@ -6686,11 +7396,15 @@ function openSubjectModal() {
     setTimeout(() => { input.focus(); input.select(); }, 50);
 }
 
+/** Closes the Change subject dialog and forgets which ticket it was for. */
 function closeSubjectModal() {
     document.getElementById('subjectModal').classList.remove('active');
     subjectTicketId = null;
 }
 
+/**
+ * Saves the new subject through save_ticket_subject.php, reloads the list and repaints the reading pane if that ticket is open.
+ */
 async function saveSubject() {
     if (!subjectTicketId) return;
     const input = document.getElementById('subjectInput');
@@ -6740,6 +7454,11 @@ let mergeSettingsCache = null;
 let mergeCandidateList = [];
 let mergeResultTicketId = null;
 
+/**
+ * Returns the install's merge policy (reference mode, originals mode, AI summary), fetched once and cached.
+ *
+ * Falls back to survivor / thread / AI summary on when the settings cannot be loaded.
+ */
 async function loadMergeSettings() {
     if (mergeSettingsCache) return mergeSettingsCache;
     try {
@@ -6753,6 +7472,11 @@ async function loadMergeSettings() {
     return mergeSettingsCache;
 }
 
+/**
+ * Opens the Merge dialog for the selected tickets (two or more): lists them as radio choices and spells out what the configured policy will do.
+ *
+ * Resets the dialog to its first stage, as the same modal is reused for every merge.
+ */
 async function openMergeModal() {
     closeTicketContextMenu();
 
@@ -6819,10 +7543,16 @@ function mergeEffectText(s, count) {
     return parts.map(p => '• ' + escapeHtml(p)).join('<br>');
 }
 
+/** Closes the Merge dialog. */
 function closeMergeModal() {
     document.getElementById('mergeModal').classList.remove('active');
 }
 
+/**
+ * Merges the other selected tickets into the chosen one through merge_tickets.php and reloads the list.
+ *
+ * When the install has the AI summary on, moves the dialog to its second stage and streams a briefing; otherwise closes it and opens the merged ticket.
+ */
 async function confirmMerge() {
     const chosen = document.querySelector('input[name="mergeTarget"]:checked');
     if (!chosen) return;
@@ -6867,6 +7597,9 @@ async function confirmMerge() {
     }
 }
 
+/**
+ * Switches the Merge dialog to its AI briefing stage, showing the merge result line with Save disabled until text arrives.
+ */
 function showMergeSummaryStage(data) {
     document.getElementById('mergeStageChoose').style.display  = 'none';
     document.getElementById('mergeStageSummary').style.display = '';
@@ -6901,11 +7634,13 @@ function showMergeSummaryStage(data) {
  */
 let mergeSummaryTimer = null;
 
+/** Shows a spinner with an elapsed-seconds counter, ticking every second, while the AI briefing is written. */
 function startMergeSummaryProgress() {
     const el = document.getElementById('mergeSummaryProgress');
     if (!el) return;
     const started = Date.now();
     el.style.display = 'flex';
+    /** Redraws the spinner and the seconds elapsed since the request started. */
     const paint = () => {
         const secs = Math.floor((Date.now() - started) / 1000);
         el.innerHTML = '<span class="spinner-inline"></span><span>'
@@ -6915,12 +7650,18 @@ function startMergeSummaryProgress() {
     mergeSummaryTimer = setInterval(paint, 1000);
 }
 
+/** Stops the elapsed-seconds timer and hides the AI briefing progress line. */
 function stopMergeSummaryProgress() {
     if (mergeSummaryTimer) { clearInterval(mergeSummaryTimer); mergeSummaryTimer = null; }
     const el = document.getElementById('mergeSummaryProgress');
     if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 
+/**
+ * Streams the AI briefing for a merged ticket from ai_merge_summary.php (server-sent events) into the summary textarea.
+ *
+ * Handles the text, unconfigured (no AI provider - not a failure) and error events, and enables Save only once some text has arrived.
+ */
 function streamMergeSummary(ticketId) {
     const box  = document.getElementById('mergeSummaryText');
     const save = document.getElementById('mergeSaveSummaryBtn');
@@ -6938,6 +7679,9 @@ function streamMergeSummary(ticketId) {
         const decoder = new TextDecoder();
         let buffer = '';
 
+        /**
+         * Reads the next chunk of the stream, splits it into SSE frames and applies each one, until the stream ends.
+         */
         function pump() {
             return reader.read().then(({ done, value }) => {
                 if (done) { stopMergeSummaryProgress(); save.disabled = (box.value.trim() === ''); return; }
@@ -6977,6 +7721,11 @@ function streamMergeSummary(ticketId) {
     });
 }
 
+/**
+ * Saves the briefing text on the merged ticket through save_merge_summary.php, then closes the dialog and opens that ticket.
+ *
+ * An empty box just closes the dialog.
+ */
 async function saveMergeSummary() {
     const text = document.getElementById('mergeSummaryText').value.trim();
     if (!text || !mergeResultTicketId) { closeMergeModal(); return; }
@@ -6995,6 +7744,7 @@ async function saveMergeSummary() {
     selectEmailByTicketId(mergeResultTicketId);
 }
 
+/** Closes the Merge dialog without saving the briefing and opens the merged ticket - the merge itself stands. */
 function discardMergeSummary() {
     // The merge itself already happened and stands; only the briefing is discarded.
     closeMergeModal();
@@ -7022,6 +7772,12 @@ function selectEmailByTicketId(ticketId) {
 let replyTemplateCache = null;
 let saveReplyTemplateMode = { mode: 'new', id: null };
 
+/**
+ * Returns the analyst's reply templates (shared and personal) from get_reply_templates.php, cached unless `force` is true.
+ *
+ * @param boolean force  true to re-fetch even when a cached list exists
+ * @return Promise<Array>  the templates, or an empty list on failure
+ */
 async function loadReplyTemplatesForPicker(force = false) {
     if (replyTemplateCache && !force) return replyTemplateCache;
     try {
@@ -7034,6 +7790,9 @@ async function loadReplyTemplatesForPicker(force = false) {
     return replyTemplateCache;
 }
 
+/**
+ * Opens or closes the reply templates menu in the composer footer, closing the signature menu and re-fetching the templates on every open.
+ */
 async function toggleReplyTemplateMenu(event) {
     if (event) event.stopPropagation();
     const menu = document.getElementById('replyTemplateMenu');
@@ -7043,6 +7802,9 @@ async function toggleReplyTemplateMenu(event) {
         menu.style.display = 'none';
         return;
     }
+    // Opening one menu closes the other: side by side in the footer, two open
+    // menus overlap each other.
+    closeSignatureMenu();
 
     // Always re-fetch on open: a colleague may have added a shared template since
     // this page was loaded, and the inbox stays open for a whole shift.
@@ -7051,6 +7813,7 @@ async function toggleReplyTemplateMenu(event) {
     menu.style.display = 'block';
 }
 
+/** Hides the reply templates menu. */
 function closeReplyTemplateMenu() {
     const menu = document.getElementById('replyTemplateMenu');
     if (menu) menu.style.display = 'none';
@@ -7064,6 +7827,9 @@ document.addEventListener('click', function(e) {
     }
 });
 
+/**
+ * Builds the reply templates menu: the team's shared templates, the analyst's own (with edit and delete buttons), and a Save draft as template action.
+ */
 function renderReplyTemplateMenu() {
     const menu = document.getElementById('replyTemplateMenu');
     if (!menu) return;
@@ -7107,6 +7873,11 @@ function renderReplyTemplateMenu() {
     menu.innerHTML = html;
 }
 
+/**
+ * Inserts a reply template at the cursor in the composer, with its merge codes filled in by the server for the open ticket (render_reply_template.php).
+ *
+ * Inserts rather than replaces, so nothing the analyst has already typed is lost.
+ */
 async function insertReplyTemplate(templateId) {
     closeReplyTemplateMenu();
     if (!emailEditor) return;
@@ -7137,6 +7908,12 @@ async function insertReplyTemplate(templateId) {
     }
 }
 
+/**
+ * Opens the Save as template dialog for the current draft, as a new personal template or an update of an existing one.
+ *
+ * @param string mode  'new' or 'update'
+ * @param ?number id   the personal template being updated, or null
+ */
 function openSaveReplyTemplateModal(mode, id) {
     closeReplyTemplateMenu();
 
@@ -7158,10 +7935,14 @@ function openSaveReplyTemplateModal(mode, id) {
     document.getElementById('saveReplyTemplateName').focus();
 }
 
+/** Closes the Save as template dialog. */
 function closeSaveReplyTemplateModal() {
     document.getElementById('saveReplyTemplateModal').classList.remove('active');
 }
 
+/**
+ * Saves the composer's draft as one of the analyst's own reply templates (scope 'mine'), new or updated, then refreshes the cached list.
+ */
 async function savePersonalReplyTemplate() {
     const name = document.getElementById('saveReplyTemplateName').value.trim();
     if (name === '') {
@@ -7196,6 +7977,7 @@ async function savePersonalReplyTemplate() {
     }
 }
 
+/** Deletes one of the analyst's own reply templates after a confirmation, then refreshes and redraws the menu. */
 async function deleteMyReplyTemplate(id) {
     const tpl = (replyTemplateCache || []).find(x => x.id == id);
     const ok = await showConfirm({
@@ -7231,6 +8013,11 @@ let replyCleanupOriginalDraft = null;
 let replyCleanupUndoTimer = null;
 let replyCleanupCountdownTimer = null;
 
+/**
+ * Shows the AI Cleanup button only when composing a reply (not a forward) and hides any leftover undo bar.
+ *
+ * @param string mode  the compose mode - 'reply' shows the button
+ */
 function setReplyCleanupVisibility(mode) {
     const btn = document.getElementById('replyCleanupBtn');
     if (btn) btn.style.display = (mode === 'reply') ? '' : 'none';
@@ -7249,6 +8036,11 @@ function replyCleanupTextToHtml(text) {
     }).join('');
 }
 
+/**
+ * Sends the draft reply to ai_cleanup_reply.php and streams the AI's tidied version back into the editor.
+ *
+ * Keeps the original HTML for the 30-second Undo bar, and puts it back in the editor if the stream fails so no typing is lost.
+ */
 async function cleanupReplyDraft() {
     if (!emailEditor) return;
     if (!currentEmail || !currentEmail.ticket_id) {
@@ -7358,6 +8150,7 @@ async function cleanupReplyDraft() {
     showReplyCleanupUndoBar();
 }
 
+/** Shows the Undo bar after an AI cleanup with a 30-second countdown, then hides it. */
 function showReplyCleanupUndoBar() {
     const bar = document.getElementById('replyCleanupUndoBar');
     const timer = document.getElementById('replyCleanupUndoTimer');
@@ -7381,6 +8174,7 @@ function showReplyCleanupUndoBar() {
     replyCleanupUndoTimer = setTimeout(hideReplyCleanupUndoBar, 30000);
 }
 
+/** Hides the AI cleanup Undo bar and stops its countdown timers. */
 function hideReplyCleanupUndoBar() {
     const bar = document.getElementById('replyCleanupUndoBar');
     if (bar) bar.style.display = 'none';
@@ -7525,6 +8319,87 @@ function logout() {
 }
 
 // New Ticket Modal Functions
+/**
+ * The ticket's custom fields (#179), drawn into the properties panel beside
+ * the built-in ones. Each saves as it changes, through updateTicket() - so the
+ * history row is written by the server, not here.
+ */
+async function loadTicketCustomFields(ticketId) {
+    const box = document.getElementById('ticketCustomFields');
+    if (!box || !window.TicketFields) return;
+    try {
+        const r = await fetch(API_BASE + 'get_ticket_custom_fields.php?ticket_id=' + encodeURIComponent(ticketId));
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        // Drawn only if the ticket is still the one on screen.
+        if (!currentEmail || String(currentEmail.ticket_id) !== String(ticketId)) return;
+        box.innerHTML = TicketFields.render(d.fields || [], { variant: 'toolbar', onchange: 'saveTicketCustomField(this)' });
+    } catch (e) {
+        box.innerHTML = '';
+    }
+}
+
+async function saveTicketCustomField(el) {
+    const ticketId = currentEmail && currentEmail.ticket_id;
+    if (!ticketId) return;
+    try {
+        const r = await fetch(API_BASE + 'save_ticket_custom_fields.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_id: ticketId, values: { [el.dataset.tfKey]: el.value } })
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        showToast(tf('common.ticket_fields.saved', 'Saved'), 'success');
+    } catch (e) {
+        showToast(e.message || 'Error', 'error');
+        // Put the stored value back, so the screen never shows a value the
+        // database does not hold.
+        loadTicketCustomFields(ticketId);
+    }
+}
+
+/**
+ * Shrink the reading pane's header to the subject alone once the thread is
+ * scrolled, and bring it back in full at the top - the header never scrolls, so
+ * on a long thread it was a third of the pane spent on lines already read.
+ * Two thresholds, so a scroll resting near the boundary does not flicker.
+ * Desktop only: the phone has its own collapsed header.
+ */
+function watchPaneCompact(pane) {
+    const body = pane && pane.querySelector('.email-body');
+    pane && pane.classList.remove('pane-compact');
+    if (!body || !window.matchMedia('(min-width: 769px)').matches) return;
+    body.addEventListener('scroll', () => {
+        if (body.scrollTop > 60) pane.classList.add('pane-compact');
+        else if (body.scrollTop < 10) pane.classList.remove('pane-compact');
+    }, { passive: true });
+}
+
+/**
+ * The toolbar's More menu (desktop). Built from the toolbar's own secondary
+ * buttons each time it opens, so it can never offer something the toolbar does
+ * not - the Write up button only exists on a closed ticket, for one.
+ */
+function togglePaneMoreMenu(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('paneMoreMenu');
+    if (!menu) return;
+    if (!menu.hidden) { menu.hidden = true; return; }
+    const toolbar = menu.closest('.action-toolbar');
+    menu.innerHTML = '';
+    toolbar.querySelectorAll('.pane-secondary').forEach(btn => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.innerHTML = btn.innerHTML;
+        if (btn.classList.contains('action-btn-danger')) item.classList.add('is-danger');
+        item.addEventListener('click', () => { menu.hidden = true; btn.click(); });
+        menu.appendChild(item);
+    });
+    menu.hidden = false;
+    const close = e => { if (!menu.contains(e.target)) { menu.hidden = true; document.removeEventListener('click', close); } };
+    setTimeout(() => document.addEventListener('click', close), 0);
+}
+
 function openNewTicketModal() {
     // Clear form. The requester picker owns the name/email fields now, so it
     // resets them — clearing them here as well would fight it.
@@ -7532,6 +8407,8 @@ function openNewTicketModal() {
     reqReset();
     document.getElementById('newTicketSubject').value = '';
     document.getElementById('newTicketBody').value = '';
+    const sensEl = document.getElementById('newTicketSensitivity');
+    if (sensEl) sensEl.value = 'normal';
 
     // Populate department dropdown
     const deptSelect = document.getElementById('newTicketDepartment');
@@ -7580,8 +8457,38 @@ function openNewTicketModal() {
 
     // Populate the "Send replies from" mailbox dropdown for the active company.
     loadNewTicketMailboxes();
+    loadNewTicketCustomFields();
 
     document.getElementById('newTicketModal').classList.add('active');
+}
+
+/**
+ * The custom fields (#179) a new ticket of the chosen type asks for, drawn
+ * under the department / type / priority row. Fields on every type show before
+ * a type is picked; choosing a type adds its own. Answers already typed are
+ * kept when the type changes, for the fields the new type still has.
+ */
+let newTicketCustomFieldDefs = [];
+async function loadNewTicketCustomFields() {
+    const box = document.getElementById('newTicketCustomFields');
+    if (!box || !window.TicketFields) return;
+    const kept = TicketFields.collect(box);
+    const typeId = document.getElementById('newTicketType').value;
+    const coRow = document.getElementById('newTicketCompanyRow');
+    const coId = coRow && !coRow.hidden ? (document.getElementById('newTicketCompany').value || '') : '';
+    try {
+        const r = await fetch(API_BASE + 'get_ticket_custom_fields.php?type_id=' + encodeURIComponent(typeId) + '&tenant_id=' + encodeURIComponent(coId));
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        newTicketCustomFieldDefs = (d.fields || []).map(f => Object.assign({}, f, { value: kept[f.key] !== undefined && kept[f.key] !== '' ? kept[f.key] : null }));
+        box.innerHTML = TicketFields.render(newTicketCustomFieldDefs, { variant: 'form', required: true, inputClass: 'form-input', selectClass: 'form-select', labelClass: 'form-label' });
+        // A boolean or dropdown kept across a type change is a string here;
+        // put it back into the control the renderer just drew.
+        box.querySelectorAll('[data-tf-key]').forEach(el => { if (kept[el.dataset.tfKey] !== undefined) el.value = kept[el.dataset.tfKey]; });
+    } catch (e) {
+        newTicketCustomFieldDefs = [];
+        box.innerHTML = '';
+    }
 }
 
 /**
@@ -7605,6 +8512,7 @@ function onNewTicketCompanyChange() {
     typeSelect.innerHTML = '<option value="">' + escapeHtml(t('tickets.new_ticket_modal.select_placeholder')) + '</option>' +
         list.map(ty => `<option value="${ty.id}">${escapeHtml(ty.name)}</option>`).join('');
     typeSelect.disabled = false;
+    loadNewTicketCustomFields();
 }
 
 // Load the mailboxes this ticket can be sent from (scoped to the active company)
@@ -7642,10 +8550,16 @@ async function loadNewTicketMailboxes() {
     }
 }
 
+/** Closes the New ticket dialog. */
 function closeNewTicketModal() {
     document.getElementById('newTicketModal').classList.remove('active');
 }
 
+/**
+ * Creates a ticket from the New ticket dialog through create_ticket.php, then refreshes the folder counts and list.
+ *
+ * Sends either the chosen requester's user_id or a typed name and address for someone new, never both. On the consolidated all-companies view a company must be picked too.
+ */
 async function createNewTicket() {
     const fromName = document.getElementById('newTicketFromName').value.trim();
     const fromEmail = document.getElementById('newTicketFromEmail').value.trim();
@@ -7682,6 +8596,14 @@ async function createNewTicket() {
         showToast(t('tickets.new_ticket_modal.company_required'), 'error');
         return;
     }
+    // Custom fields required when logging (#179). The server refuses too; this
+    // only saves a round trip and points at the field.
+    const cfBox = document.getElementById('newTicketCustomFields');
+    const cfMissing = window.TicketFields ? TicketFields.firstMissing(cfBox, newTicketCustomFieldDefs) : null;
+    if (cfMissing) {
+        showToast(tf('common.ticket_fields.required', 'Fill in {name}', { name: cfMissing }), 'error');
+        return;
+    }
 
     // Get the create button and show loading state
     const createBtn = document.querySelector('#newTicketModal .btn-primary');
@@ -7706,8 +8628,13 @@ async function createNewTicket() {
                 ticket_type_id: ticketTypeId || null,
                 priority: priority,
                 mailbox_id: mailboxId || null,
+                // Normal / Confidential (discussion #62).
+                sensitivity: (document.getElementById('newTicketSensitivity') || {}).value || 'normal',
                 // #1554: only sent from the consolidated view, where it was asked for.
-                tenant_id: newTicketCompanyId || null
+                tenant_id: newTicketCompanyId || null,
+                // Custom fields (#179): always sent from this form, so the ones
+                // required when logging are enforced; '' leaves one unanswered.
+                custom_fields: window.TicketFields ? TicketFields.collect(cfBox) : {}
             })
         });
 
@@ -7756,6 +8683,9 @@ let reqSearchTimer = null;
 let reqActiveIndex = -1;       // keyboard cursor into reqLastResults
 let reqLastResults = [];
 
+/**
+ * Returns the requester picker's elements (search box, results list, chosen chip, new-person fields) in one object.
+ */
 function reqEls() {
     return {
         picker:  document.getElementById('reqPicker'),
@@ -7786,6 +8716,7 @@ function reqReset() {
     if (e.email) e.email.value = '';
 }
 
+/** Hides the requester results list and resets the keyboard cursor. */
 function reqCloseList() {
     const e = reqEls();
     if (!e.results) return;
@@ -7832,6 +8763,12 @@ function reqShowNew(term) {
     reqCloseList();
 }
 
+/**
+ * Draws the requester typeahead results, always ending with an "Add someone new" row, and remembers them for keyboard selection.
+ *
+ * @param Array users   people returned by get_users.php
+ * @param string term   what was typed, used in the add row's label
+ */
 function reqRenderResults(users, term) {
     const e = reqEls();
     reqLastResults = users;
@@ -7867,6 +8804,7 @@ function reqRenderResults(users, term) {
     e.input.setAttribute('aria-expanded', 'true');
 }
 
+/** Searches people (up to 8) for the requester picker through get_users.php and draws the results. */
 async function reqSearch() {
     const e = reqEls();
     const term = e.input.value.trim();
@@ -7895,6 +8833,11 @@ function reqMove(delta) {
     });
 }
 
+/**
+ * Activates the requester row under the keyboard cursor.
+ *
+ * @return boolean  true when a row was activated (so Enter should not submit the form)
+ */
 function reqCommitActive() {
     const e = reqEls();
     const opts = e.results.querySelectorAll('.req-opt');
@@ -7904,6 +8847,7 @@ function reqCommitActive() {
     return true;
 }
 
+/** Acts on a requester row: the add row opens the new-person fields, any other row chooses that person. */
 function reqActivateOption(el) {
     const e = reqEls();
     if (el.hasAttribute('data-add')) {
@@ -7920,6 +8864,9 @@ function reqActivateOption(el) {
     });
 }
 
+/**
+ * Wires the requester picker once: debounced search as you type, arrow keys, Enter and Escape, mouse picks, clear, cancel and the Browse button.
+ */
 function initRequesterPicker() {
     const e = reqEls();
     if (!e.input || e.input.getAttribute('data-req-ready')) return;
@@ -7963,6 +8910,9 @@ function initRequesterPicker() {
 
 // ─── Browse modal: the escape hatch ──────────────────────────────────────────
 
+/**
+ * Opens the Browse people dialog, carrying across the term typed in the picker, and wires its debounced search the first time.
+ */
 function openReqBrowse() {
     const m = document.getElementById('reqBrowseModal');
     m.classList.add('active');
@@ -7977,10 +8927,12 @@ function openReqBrowse() {
     }
 }
 
+/** Closes the Browse people dialog. */
 function closeReqBrowse() {
     document.getElementById('reqBrowseModal').classList.remove('active');
 }
 
+/** Loads up to 100 people matching the browse search through get_users.php and lists them as clickable rows. */
 async function reqBrowseLoad() {
     const list = document.getElementById('reqBrowseList');
     const term = document.getElementById('reqBrowseSearch').value.trim();
@@ -8030,6 +8982,9 @@ let searchModalDragging = false;
 let searchModalOffsetX = 0;
 let searchModalOffsetY = 0;
 
+/**
+ * Opens the floating ticket search panel, lined up under the refresh button, makes it draggable and focuses the ticket number box.
+ */
 function openSearchModal() {
     const modal = document.getElementById('searchModal');
     modal.classList.add('active');
@@ -8059,6 +9014,7 @@ function openSearchModal() {
     document.getElementById('searchTicketNumber').focus();
 }
 
+/** Hides the ticket search panel, keeping its fields and results for when it is reopened. */
 function closeSearchModal() {
     document.getElementById('searchModal').classList.remove('active');
     // Don't clear search - user can reopen to see previous results
@@ -8083,10 +9039,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+/** Makes the ticket search panel draggable by its header, kept inside the window. */
 function initSearchModalDrag() {
     const modal = document.getElementById('searchModal');
     const header = document.getElementById('searchModalHeader');
 
+    /** Starts a drag of the search panel from its header (not from the close button). */
     header.onmousedown = function(e) {
         if (e.target.classList.contains('search-modal-close')) return;
 
@@ -8101,6 +9059,7 @@ function initSearchModalDrag() {
         searchModalOffsetX = e.clientX - rect.left;
         searchModalOffsetY = e.clientY - rect.top;
 
+        /** Moves the search panel with the mouse, clamped to the viewport. */
         document.onmousemove = function(e) {
             if (!searchModalDragging) return;
 
@@ -8115,6 +9074,7 @@ function initSearchModalDrag() {
             modal.style.top = newY + 'px';
         };
 
+        /** Ends the search panel drag and removes the move and up handlers. */
         document.onmouseup = function() {
             searchModalDragging = false;
             document.onmousemove = null;
@@ -8123,6 +9083,9 @@ function initSearchModalDrag() {
     };
 }
 
+/**
+ * Runs the ticket search: by ticket number, email address and subject through search_tickets.php, or a content search when the content box is filled (that wins).
+ */
 async function performSearch() {
     const ticketNumber = document.getElementById('searchTicketNumber').value.trim();
     const email = document.getElementById('searchEmail').value.trim();
@@ -8170,6 +9133,7 @@ async function performSearch() {
     }
 }
 
+/** Draws the ticket search results (reference, subject, sender, status, date) in the search panel. */
 function renderSearchResults(results) {
     const container = document.getElementById('searchResults');
 
@@ -8223,8 +9187,14 @@ async function performContentSearch(query) {
     }
 }
 
+/**
+ * Draws content search results with a snippet and which parts of the ticket matched.
+ *
+ * Says why nothing could be searched (terms too short, index not built yet) rather than just "no tickets found", and lists any terms that were ignored.
+ */
 function renderContentSearchResults(data) {
     const container = document.getElementById('searchResults');
+    /** Translates a tickets.search_modal key, or returns the key when translations are not loaded. */
     const T = (k, p) => window.t ? window.t('tickets.search_modal.' + k, p) : k;
 
     // "We could not search that" is not the same as "it is not in your tickets",
@@ -8246,6 +9216,7 @@ function renderContentSearchResults(data) {
         return;
     }
 
+    /** Returns the translated name of a matched ticket part, falling back to the raw part key. */
     const partName = (t) => T('part_' + t) || t;
     let html = `<div class="search-results-count">${data.total} ticket${data.total === 1 ? '' : 's'} found</div>`;
     if (data.dropped && data.dropped.length) {
@@ -8271,12 +9242,14 @@ function renderContentSearchResults(data) {
     container.innerHTML = html;
 }
 
+/** Opens a search result in the reading pane, leaving the search panel open. */
 function selectSearchResult(emailId) {
     // Keep the modal open so user can try another result if needed
     // Select the email in the reading pane
     selectEmail(emailId);
 }
 
+/** Empties every search field and the results in the search panel. */
 function clearSearch() {
     document.getElementById('searchTicketNumber').value = '';
     document.getElementById('searchEmail').value = '';
@@ -8374,6 +9347,7 @@ function openScheduleModal(ticketId, ticketRef, sched) {
 
     // Default: today, on the next hour, for an hour, not all day.
     const now = new Date();
+    /** Pads a number to two digits for the date and time inputs. */
     const p = n => String(n).padStart(2, '0');
     document.getElementById('scheduleDate').value =
         `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
@@ -8406,6 +9380,7 @@ function openScheduleModal(ticketId, ticketRef, sched) {
     document.getElementById('scheduleModal').classList.add('active');
 }
 
+/** Closes the Schedule work dialog. */
 function closeScheduleModal() {
     document.getElementById('scheduleModal').classList.remove('active');
 }
@@ -8430,6 +9405,9 @@ function applyScheduleLocally(ticketId, start, end, allDay) {
         });
 }
 
+/**
+ * Saves the scheduled work start, end and all-day flag for the target ticket through schedule_ticket.php and updates the page's copies of it.
+ */
 async function saveSchedule() {
     const date   = document.getElementById('scheduleDate').value;
     const time   = document.getElementById('scheduleTime').value;
@@ -8473,6 +9451,9 @@ async function saveSchedule() {
     }
 }
 
+/**
+ * After a confirmation, clears the target ticket's scheduled work through schedule_ticket.php and wipes it from the page's copies too.
+ */
 async function clearSchedule() {
     if (!(await showConfirm({ title: 'Confirm', message: 'Are you sure you want to clear the scheduled work time?', okLabel: 'OK', okClass: 'primary' }))) return;
 
@@ -8508,6 +9489,11 @@ async function clearSchedule() {
 
 let _ticketAiContextId = null; // Track which ticket has been auto-queried
 
+/**
+ * Opens the Ask AI side panel for the open ticket.
+ *
+ * On a ticket the panel has not seen yet, resets the chat and automatically asks for knowledge articles that match the subject and the first 1,500 characters of the body.
+ */
 function openTicketAiChat() {
     if (!currentEmail) return;
 
@@ -8532,11 +9518,13 @@ function openTicketAiChat() {
     document.getElementById('ticketAiInput').focus();
 }
 
+/** Closes the Ask AI side panel and its overlay. */
 function closeTicketAiChat() {
     document.getElementById('ticketAiPanel').classList.remove('active');
     document.getElementById('ticketAiOverlay').classList.remove('active');
 }
 
+/** Sends the question typed in the Ask AI box and clears the box. */
 function askTicketAi() {
     const input = document.getElementById('ticketAiInput');
     const question = input.value.trim();
@@ -8545,6 +9533,14 @@ function askTicketAi() {
     _sendTicketAiMessage(question, false);
 }
 
+/**
+ * Posts a question to the knowledge base AI chat (api/knowledge/ai_chat.php) and adds the question and the answer as chat bubbles.
+ *
+ * The ticket id goes too, so the server can keep a confidential ticket's text away from the AI provider. An automatic first question is shown as a short summary rather than in full.
+ *
+ * @param string question       the text sent to the AI
+ * @param boolean isAutoContext  true for the automatic opening question
+ */
 async function _sendTicketAiMessage(question, isAutoContext) {
     const messagesContainer = document.getElementById('ticketAiMessages');
     const input = document.getElementById('ticketAiInput');
@@ -8578,7 +9574,9 @@ async function _sendTicketAiMessage(question, isAutoContext) {
         const response = await fetch('../api/knowledge/ai_chat.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: question, include_archived: false })
+            // The ticket goes too, so the server can keep a confidential one's
+            // text away from the AI provider (#62).
+            body: JSON.stringify({ question: question, include_archived: false, ticket_id: currentEmail ? currentEmail.ticket_id : null })
         });
         const data = await response.json();
 
@@ -8610,12 +9608,24 @@ async function _sendTicketAiMessage(question, isAutoContext) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
+/**
+ * Turns the AI's answer into HTML: quoted article titles become links to the article, and simple Markdown (bold, italics, code, lists, paragraphs) is rendered.
+ *
+ * TRAP: only the article titles are escaped - any HTML in the rest of the answer reaches the page as markup.
+ */
 function formatTicketAiResponse(text, articlesList) {
+    // TRAP: escape the WHOLE answer first, then add markup. The answer is model
+    // output, and the model reads the ticket - text a customer wrote - so it can be
+    // steered into replying with HTML. Formatting raw text and handing it to
+    // innerHTML ran that HTML in the analyst's browser. Only the tags added below
+    // (links, strong, em, code, lists) may appear.
+    text = escapeHtml(String(text == null ? '' : text));
     // Replace quoted article titles with hyperlinks
     if (articlesList && articlesList.length > 0) {
         const sorted = [...articlesList].sort((a, b) => b.title.length - a.title.length);
         sorted.forEach(article => {
-            const escapedTitle = article.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // matched against the escaped answer, so escape the title the same way
+            const escapedTitle = escapeHtml(article.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const regex = new RegExp('["\u201c]' + escapedTitle + '(\\s*\\(ID:\\s*\\d+\\))?["\u201d]', 'gi');
             const link = '<a href="../knowledge/?id=' + article.id + '" target="_blank" class="ai-article-link">\u201c' + escapeHtml(article.title) + '\u201d</a>';
             text = text.replace(regex, link);
@@ -8707,6 +9717,11 @@ function selectEmailFullScreen(emailId) {
  */
 let currentTimeEntries = [];
 
+/**
+ * Loads a ticket's time entries from get_time_entries.php and draws them with the running total.
+ *
+ * When time tracking is switched off for the ticket's company the server says so and the section is left empty - nothing is deleted.
+ */
 async function loadTimeEntries(ticketId) {
     try {
         const response = await fetch(`${API_BASE}get_time_entries.php?ticket_id=${ticketId}`);
@@ -8742,6 +9757,9 @@ function formatMinutes(mins) {
     return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+/**
+ * Draws the Time entries section: the total, an add form (minutes and notes), and the entries, with a delete button only on the analyst's own.
+ */
 function renderTimeEntries(totalMinutes) {
     const container = document.getElementById('timeEntriesContainer');
     if (!container) return;
@@ -8793,6 +9811,7 @@ function renderTimeEntries(totalMinutes) {
     `;
 }
 
+/** Logs time against the open ticket through save_time_entry.php, then reloads the entries. */
 async function saveTimeEntry() {
     if (!currentEmail) return;
     const minutes = parseInt(document.getElementById('timeEntryMinutes').value, 10);
@@ -8825,6 +9844,9 @@ async function saveTimeEntry() {
     }
 }
 
+/**
+ * After a confirmation, deletes one of the analyst's time entries through delete_time_entry.php and reloads the list.
+ */
 async function deleteTimeEntry(id) {
     if (!(await showConfirm({ title: 'Confirm', message: t('tickets.time_entries.delete_confirm'), okLabel: 'OK', okClass: 'primary' }))) return;
     try {
@@ -8876,8 +9898,22 @@ let ctxTargetTicketRef = '';
 let ctxCmdbAcTimer = null;
 let ctxCmdbSessionCount = 0;
 
+/**
+ * Opens the ticket right-click menu for a row, or the full-screen sheet on a phone.
+ *
+ * Right-clicking inside the multi-selection acts on the whole selection; outside it, the selection
+ * is replaced by that one row. Shows or hides the selection-dependent items (Merge, Change subject,
+ * Schedule, Wake), rebuilds every submenu from its lookup, then places the menu at the cursor.
+ * @param event     the contextmenu event, or a synthetic one from the long-press handler
+ * @param ticketId  the ticket the menu acts on
+ * @param ticketRef the ticket number shown in the menu header
+ */
 function openTicketContextMenu(event, ticketId, ticketRef) {
     event.preventDefault();
+    // Android fires a native contextmenu on a long press as well as the
+    // long-press timer below firing, so the sheet would open twice and the
+    // second open would throw away a level somebody had already tapped into.
+    if (ticketMenuSheetOpenedAt && Date.now() - ticketMenuSheetOpenedAt < 900) return;
     ctxTargetTicketId = ticketId;
     ctxTargetTicketRef = ticketRef || ('Ticket ' + ticketId);
     const menu = document.getElementById('ticketContextMenu');
@@ -8942,6 +9978,13 @@ function openTicketContextMenu(event, ticketId, ticketRef) {
     populateContextAssigneeSubmenu();
     populateContextTeamSubmenu();
     populateContextCompanySubmenu();
+
+    // On a phone the menu is a full-screen sheet, not a popup at the finger:
+    // a 220px flyout menu with hover submenus cannot be used with a thumb.
+    if (ticketMenuIsSheet()) {
+        openTicketMenuSheet(menu);
+        return;
+    }
 
     // Position at cursor — flip if it would overflow the viewport
     menu.classList.add('active');
@@ -9282,7 +10325,10 @@ function populateContextAssigneeSubmenu() {
         <span class="ctx-status-name" style="color:#888; font-style: italic;">${escapeHtml(t('tickets.context.clear_assignee'))}</span>
         ${(currentOwnerId === null) ? '<span class="ctx-status-check">&#10003;</span>' : ''}
     </div>`;
-    sub.innerHTML = clearRow + analysts.map(a => {
+    // GH #176: only people who can work in this ticket's company (plus its owner).
+    const ctxRow = (currentEmail && currentEmail.ticket_id == ctxTargetTicketId)
+        ? currentEmail : emails.find(e => e.ticket_id == ctxTargetTicketId);
+    sub.innerHTML = clearRow + assignableAnalysts(ctxRow ? [ctxRow] : [], currentOwnerId).map(a => {
         const isCurrent = (currentOwnerId != null && a.id == currentOwnerId);
         // Use the first letter of the name as a colourless initial chip — keeps
         // the row visually aligned with status / priority swatches without
@@ -9475,10 +10521,149 @@ async function setStatusFromContext(statusName) {
     }
 }
 
+/** Closes the ticket context menu (popup or phone sheet) and empties the sheet's second level. */
 function closeTicketContextMenu() {
     const menu = document.getElementById('ticketContextMenu');
-    if (menu) menu.classList.remove('active');
+    if (menu) {
+        menu.classList.remove('active', 'ctx-sheet', 'ctx-drilled');
+        const level2 = menu.querySelector('.ctx-sheet-level2');
+        if (level2) level2.innerHTML = '';
+    }
+    ticketMenuSheetOpenedAt = 0;
 }
+
+// ── The ticket menu on a phone: long press, full-screen sheet, drill-down ────
+//
+// Ed's design: a long press on a ticket opens the SAME menu the desktop gets on
+// a right-click, as a full-screen panel. A row that leads to a further level
+// (Set priority, Assign to...) slides the first level off to the left and its
+// options slide in, with a Back button to return.
+//
+// The sheet IS the desktop menu - the same element, the same items, the same
+// handlers - restyled by .ctx-sheet in mobile.css. The second level is a copy of
+// the submenu the desktop shows on hover; its items call the same functions by
+// inline onclick, so a copy behaves exactly like the original. Nothing here runs
+// above 768px.
+let ticketMenuSheetOpenedAt = 0;
+
+/** True when the screen is 768px wide or less, so the ticket menu shows as a full-screen sheet. */
+function ticketMenuIsSheet() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+/**
+ * Shows the ticket menu as a full-screen phone sheet.
+ *
+ * The first call adds the close button, the second-level panel and a delegated click handler that
+ * drills into a submenu; every call resets the sheet to its first level.
+ */
+function openTicketMenuSheet(menu) {
+    // Built once: the close button, and the panel the second level slides into.
+    if (!menu.querySelector('.ctx-sheet-close')) {
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'ctx-sheet-close';
+        x.setAttribute('aria-label', t('common.close'));
+        x.innerHTML = '&times;';
+        x.onclick = closeTicketContextMenu;
+        menu.appendChild(x);
+
+        const level2 = document.createElement('div');
+        level2.className = 'ctx-sheet-level2';
+        level2.setAttribute('role', 'menu');
+        menu.appendChild(level2);
+
+        // A tap on a row with a further level drills into it. Delegated, and
+        // inert outside sheet mode, so the desktop's hover flyouts are untouched.
+        menu.addEventListener('click', function (e) {
+            if (!menu.classList.contains('ctx-sheet')) return;
+            const parent = e.target.closest('.ticket-context-menu-parent');
+            if (!parent || !menu.contains(parent) || e.target.closest('.ctx-sheet-level2')) return;
+            const sub = parent.querySelector('.ticket-context-submenu');
+            if (!sub) return;
+            const label = parent.querySelector('span') ? parent.querySelector('span').textContent : '';
+            openTicketMenuLevel(menu, label, sub);
+        });
+    }
+    menu.style.left = '';
+    menu.style.top  = '';
+    menu.classList.remove('ctx-drilled', 'flip-sub');
+    menu.querySelector('.ctx-sheet-level2').innerHTML = '';
+    menu.classList.add('active', 'ctx-sheet');
+    menu.scrollTop = 0;
+    ticketMenuSheetOpenedAt = Date.now();
+}
+
+/**
+ * Slides a submenu into the phone sheet as its second level, with a Back button and the parent's label.
+ *
+ * The items are a copy of the desktop submenu, so their inline onclick handlers work unchanged.
+ */
+function openTicketMenuLevel(menu, label, sub) {
+    const level2 = menu.querySelector('.ctx-sheet-level2');
+    level2.innerHTML =
+        '<div class="ctx-sheet-level2-head">'
+      +   '<button type="button" class="ctx-sheet-back">'
+      +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'
+      +     '<span>' + escapeHtml(t('common.back')) + '</span>'
+      +   '</button>'
+      +   '<span class="ctx-sheet-level2-title">' + escapeHtml(label) + '</span>'
+      + '</div>'
+      + '<div class="ctx-sheet-level2-list">' + sub.innerHTML + '</div>';
+    level2.querySelector('.ctx-sheet-back').onclick = function () {
+        menu.classList.remove('ctx-drilled');
+    };
+    level2.scrollTop = 0;
+    // Read a layout value first, so the panel is laid out off-screen before
+    // the class moves it - otherwise the browser skips the slide.
+    void level2.offsetWidth;
+    menu.classList.add('ctx-drilled');
+}
+
+// The long press itself. Touch only: a mouse has a right button.
+(function wireTicketLongPress() {
+    const HOLD_MS = 500;
+    const SLOP_PX = 10;          // a finger that moves this far is scrolling, not holding
+    let timer = null, startX = 0, startY = 0, fired = false;
+
+    /** Stops a pending long-press timer. */
+    function cancel() { if (timer) { clearTimeout(timer); timer = null; } }
+
+    document.addEventListener('touchstart', function (e) {
+        fired = false;
+        if (!ticketMenuIsSheet() || e.touches.length !== 1) return;
+        const row = e.target.closest && e.target.closest('#emailList .email-item');
+        if (!row) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        cancel();
+        timer = setTimeout(function () {
+            timer = null;
+            fired = true;
+            try { if (navigator.vibrate) navigator.vibrate(12); } catch (err) { /* optional */ }
+            openTicketContextMenu({
+                /**
+                 * No-op stand-in, so the synthetic long-press event can be passed where a real event is expected.
+                 */
+                preventDefault: function () {}, target: row, clientX: startX, clientY: startY
+            }, Number(row.dataset.ticketId), row.dataset.ticketNumber || '');
+        }, HOLD_MS);
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function (e) {
+        if (!timer) return;
+        const p = e.touches[0];
+        if (Math.abs(p.clientX - startX) > SLOP_PX || Math.abs(p.clientY - startY) > SLOP_PX) cancel();
+    }, { passive: true });
+
+    // Lifting the finger after the menu opened must not ALSO open the ticket:
+    // preventing the touchend stops the browser making a click out of it.
+    document.addEventListener('touchend', function (e) {
+        cancel();
+        if (fired) { fired = false; if (e.cancelable) e.preventDefault(); }
+    }, { passive: false });
+    document.addEventListener('touchcancel', cancel, { passive: true });
+})();
 
 // Right-click a ticket -> Move to trash (soft-delete the context-menu target).
 async function contextMoveToTrash() {
@@ -9531,10 +10716,12 @@ const SNOOZE_PRESETS = [
     { key: 'next_week',   label: 'tickets.snooze.next_week',   at: () => nextMondayLocal(snoozeWakeHour()) },
 ];
 
+/** Returns the snooze presets whose name is still true right now ("This evening" drops out after 18:00). */
 function availableSnoozePresets() {
     return SNOOZE_PRESETS.filter(p => !p.available || p.available());
 }
 
+/** The install's snooze wake hour from window.SNOOZE_WAKE_HOUR, or 9 when it is missing or invalid. */
 function snoozeWakeHour() {
     const h = Number(window.SNOOZE_WAKE_HOUR);
     return (Number.isInteger(h) && h >= 0 && h <= 23) ? h : 9;
@@ -9550,6 +10737,7 @@ function atHourLocal(hour, addDays) {
     return d;
 }
 
+/** Returns the next Monday (1 to 7 days ahead, never today) at the given hour, local time. */
 function nextMondayLocal(hour) {
     const d = new Date();
     // 1..7 days forward — never today, so "next week" can't mean "in ten minutes".
@@ -9601,6 +10789,11 @@ function formatWakeTime(value) {
 
 const INBOX_STYLE_WHITELIST = ['off', 'stripe', 'pill', 'block', 'dot', 'name', 'initials'];
 
+/**
+ * Returns the analyst's display style for a row field (priority, status, agent) from INBOX_ROW_DISPLAY.
+ *
+ * Anything outside the whitelist comes back as 'off', because the value is used to build markup.
+ */
 function inboxRowStyle(field) {
     const cfg = (typeof INBOX_ROW_DISPLAY === 'object' && INBOX_ROW_DISPLAY) ? INBOX_ROW_DISPLAY : {};
     const v = cfg[field];
@@ -9672,6 +10865,7 @@ function inboxRowBlocks(email) {
 function inboxRowChips(email) {
     const out = [];
 
+    /** Adds a pill or dot for one field to the footer chips when that field is set to pill or dot. */
     const colourField = (field, value, colour) => {
         const style = inboxRowStyle(field);
         if (style !== 'pill' && style !== 'dot') return;
@@ -9708,6 +10902,11 @@ function inboxRowChips(email) {
     return out.join('');
 }
 
+/**
+ * The moon pill showing when a snoozed ticket wakes, for its list row.
+ *
+ * Returns '' unless the snooze is still in the future; the reason, if any, goes in the tooltip.
+ */
 function snoozeRowPill(snoozedUntil, reason) {
     if (!snoozedUntil) return '';
     const d = parseUTCDate(snoozedUntil);
@@ -9752,6 +10951,15 @@ function ctxSnoozeTargets() {
     return ctxActsOnSelection ? selectedTicketIds() : (ctxTargetTicketId ? [ctxTargetTicketId] : []);
 }
 
+/**
+ * Snoozes the context-menu target (or the whole selection) via snooze_ticket.php.
+ *
+ * The server works out the wake time from the preset key; 'custom' sends untilLocal instead. On
+ * success it toasts the wake time, clears the reading pane of any snoozed ticket and reloads the list.
+ * @param preset      a SNOOZE_PRESETS key, or 'custom'
+ * @param untilLocal  'YYYY-MM-DD HH:MM' for a custom snooze
+ * @param reason      optional note shown on the snoozed ticket
+ */
 async function snoozeFromContext(preset, untilLocal, reason) {
     const ids = ctxSnoozeTargets();
     closeTicketContextMenu();
@@ -9787,6 +10995,7 @@ async function snoozeFromContext(preset, untilLocal, reason) {
     }
 }
 
+/** Wakes the context-menu target, or the whole selection, from the right-click menu. */
 async function wakeFromContext() {
     const ids = ctxSnoozeTargets();
     closeTicketContextMenu();
@@ -9826,6 +11035,7 @@ async function wakeTickets(ids) {
 // --- Snooze until a specific time -----------------------------------------
 let snoozeModalTargets = [];
 
+/** Opens the "snooze until" dialog for the context-menu targets, defaulting to tomorrow at the wake hour. */
 function openSnoozeModal() {
     snoozeModalTargets = ctxSnoozeTargets();
     closeTicketContextMenu();
@@ -9848,11 +11058,13 @@ function openSnoozeModal() {
     setTimeout(() => document.getElementById('snoozeDate').focus(), 50);
 }
 
+/** Closes the "snooze until" dialog and forgets its targets. */
 function closeSnoozeModal() {
     document.getElementById('snoozeModal').classList.remove('active');
     snoozeModalTargets = [];
 }
 
+/** Snoozes the dialog's tickets until the picked date and time, through the same path as the presets. */
 async function saveCustomSnooze() {
     const date = document.getElementById('snoozeDate').value;
     const time = document.getElementById('snoozeTime').value;
@@ -9942,6 +11154,12 @@ function stopPresence() {
     renderPresenceStrip();
 }
 
+/**
+ * Sends one presence heartbeat for the open ticket and repaints who else is in it.
+ *
+ * Skipped while the tab is hidden, and a reply that arrives after the analyst has moved to another
+ * ticket is ignored.
+ */
 async function beatPresence() {
     const id = presenceTicketId;
     if (!id) return;
@@ -10090,6 +11308,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ===== Trash folder context menu (Empty trash) =====
+/** Opens the Trash folder's right-click menu (Empty trash) at the cursor, kept inside the viewport. */
 function openTrashContextMenu(event) {
     event.preventDefault();
     const menu = document.getElementById('trashContextMenu');
@@ -10102,10 +11321,16 @@ function openTrashContextMenu(event) {
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
 }
+/** Closes the Trash folder's right-click menu. */
 function closeTrashContextMenu() {
     const m = document.getElementById('trashContextMenu');
     if (m) m.classList.remove('active');
 }
+/**
+ * Permanently deletes every ticket in the trash after a confirm, via empty_trash.php.
+ *
+ * Clears the reading pane and refreshes the folder counts, and the list when Trash is open.
+ */
 async function emptyTrash() {
     closeTrashContextMenu();
     const n = folderCounts.trash_count || 0;
@@ -10155,7 +11380,12 @@ document.addEventListener('keydown', function (e) {
 });
 // Right-clicking a different row should reopen, not stack
 window.addEventListener('blur', closeTicketContextMenu);
-window.addEventListener('scroll', closeTicketContextMenu, true);
+window.addEventListener('scroll', function (e) {
+    // The phone sheet scrolls itself; only a scroll somewhere else closes it.
+    const menu = document.getElementById('ticketContextMenu');
+    if (menu && e.target instanceof Node && menu.contains(e.target)) return;
+    closeTicketContextMenu();
+}, true);
 
 /* --- Context menu action: Link CMDB object --- */
 /**
@@ -10171,10 +11401,109 @@ async function openContextLinkTask() {
     closeTicketContextMenu();
     if (!ctxTargetTicketId) return;
     const id = ctxTargetTicketId;
+    // TRAP: on a phone the strip picker opens inside the Links sheet, which
+    // mobile.js has moved out of the reading pane and keeps hidden - the menu
+    // item looked like it glitched and did nothing. Phones get a modal list
+    // instead, built like Link to change; desktop keeps the strip picker.
+    if (ticketMenuIsSheet()) { openLinkTaskModal(id, ctxTargetTicketRef); return; }
     await loadTicketById(id);
     openLinkTaskPicker(id);
 }
 
+// Phone Link to task modal: the change modal's shape (search box, a create row,
+// then the list) over the same endpoint and link/create calls as the strip
+// picker. An empty search lists the most recently updated tasks.
+let linkTaskTicketId = null;
+let linkTaskSearchTimer = null;
+let linkTaskRows = [];
+
+/** Opens the phone "Link to task" dialog for a ticket and loads the task list. */
+function openLinkTaskModal(ticketId, ticketRef) {
+    linkTaskTicketId = ticketId;
+    document.getElementById('linkTaskTitle').textContent =
+        t('tickets.tasks.modal_title', { ticket: ticketRef || ('#' + ticketId) });
+    const s = document.getElementById('linkTaskSearch'); if (s) s.value = '';
+    document.getElementById('linkTaskModal').classList.add('active');
+    loadLinkTaskList();
+}
+/** Closes the phone "Link to task" dialog. */
+function closeLinkTaskModal() { document.getElementById('linkTaskModal').classList.remove('active'); }
+/** Reloads the "Link to task" list 250ms after the analyst stops typing. */
+function linkTaskSearchDebounced() { clearTimeout(linkTaskSearchTimer); linkTaskSearchTimer = setTimeout(loadLinkTaskList, 250); }
+
+/**
+ * Fills the phone "Link to task" list from search_linkable_tasks.php for the typed search.
+ *
+ * Typed text also gets a "create" row; tasks already on another ticket say which one they move from.
+ */
+async function loadLinkTaskList() {
+    const list = document.getElementById('linkTaskList');
+    const typed = ((document.getElementById('linkTaskSearch') || {}).value || '').trim();
+    list.innerHTML = '<div class="lp-empty">…</div>';
+    let rows = [];
+    try {
+        const data = await fetch('../api/tickets/search_linkable_tasks.php?ticket_id=' + linkTaskTicketId
+            + '&q=' + encodeURIComponent(typed)).then(r => r.json());
+        if (!data.success) { list.innerHTML = '<div class="lp-empty">' + escapeHtml(data.error || t('tickets.tasks.link_failed')) + '</div>'; return; }
+        rows = data.results || [];
+    } catch (e) { /* still offer to create what they typed */ }
+    linkTaskRows = rows;
+
+    const createRow = typed
+        ? `<div class="lp-row lp-create" onclick="pickLinkTask(-1)">
+            <span class="lp-plus">＋</span><span>${escapeHtml(t('tickets.tasks.create_named', { title: typed }))}</span></div>`
+        : '';
+    // Indexed rather than inlined: a title with a quote would break an onclick
+    // built by string concatenation (same reason the strip picker binds).
+    const body = rows.map((r, i) => {
+        const box = r.status_is_closed ? '&#9745;' : '&#9744;';
+        const detail = r.linked_elsewhere
+            ? t('tickets.tasks.moves_from', { ticket: r.linked_ticket_number || '' })
+            : (r.status || '');
+        return `<div class="lp-row" onclick="pickLinkTask(${i})">
+            <span class="lp-num">${box}</span>
+            <span class="lp-title">${escapeHtml(r.title || '')}</span>
+            <span class="lp-status">${escapeHtml(detail)}</span></div>`;
+    }).join('');
+    const empty = typed ? t('tickets.tasks.no_matches') : t('tickets.tasks.none_yet');
+    list.innerHTML = createRow + (body || '<div class="lp-empty">' + escapeHtml(empty) + '</div>');
+}
+
+/**
+ * Links the picked task to the ticket, or creates a task from the typed text when idx is -1.
+ *
+ * A task already linked to another ticket asks first, because a task belongs to one ticket only.
+ */
+async function pickLinkTask(idx) {
+    const ticketId = linkTaskTicketId;
+    if (idx < 0) {
+        const typed = ((document.getElementById('linkTaskSearch') || {}).value || '').trim();
+        if (!typed) return;
+        closeLinkTaskModal();
+        await createTaskForTicket(ticketId, typed);
+        return;
+    }
+    const r = linkTaskRows[idx];
+    if (!r) return;
+    // Same consent as the strip picker: a task belongs to ONE ticket, so this
+    // takes it off the other one.
+    if (r.linked_elsewhere) {
+        const ok = await showConfirm({
+            title:   t('tickets.tasks.move_title'),
+            message: t('tickets.tasks.move_confirm', {
+                title:  r.title || '',
+                ticket: r.linked_ticket_number || t('tickets.tasks.another_ticket')
+            }),
+            okLabel: t('tickets.tasks.move_ok'),
+            okClass: 'primary'
+        });
+        if (!ok) return;
+    }
+    closeLinkTaskModal();
+    await linkTaskToTicket(ticketId, r.id);
+}
+
+/** Opens the "Link CMDB object" dialog for the right-clicked ticket, with an empty search and log. */
 function openContextLinkCmdb() {
     closeTicketContextMenu();
     if (!ctxTargetTicketId) return;
@@ -10187,6 +11516,7 @@ function openContextLinkCmdb() {
     setTimeout(() => document.getElementById('ctxCmdbSearchInput').focus(), 50);
 }
 
+/** Closes the "Link CMDB object" dialog, refreshing the open ticket's CMDB list if it gained a link. */
 function closeContextCmdbModal() {
     document.getElementById('ctxCmdbModal').classList.remove('active');
     // If we linked anything and the affected ticket is the one currently open
@@ -10230,6 +11560,11 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+/**
+ * Links a CMDB object to the right-clicked ticket and adds it to the dialog's log.
+ *
+ * The dialog stays open with a cleared search, so several objects can be linked in one go.
+ */
 async function linkContextCmdbObject(objectId, objectName) {
     if (!ctxTargetTicketId) return;
     try {
@@ -10277,6 +11612,7 @@ function openContextSchedule() {
     );
 }
 
+/** Opens the "Record time" dialog for the right-clicked ticket, set to now in the display zone. */
 function openContextRecordTime() {
     closeTicketContextMenu();
     if (!ctxTargetTicketId) return;
@@ -10293,10 +11629,16 @@ function openContextRecordTime() {
     setTimeout(() => document.getElementById('ctxTimeMinutes').focus(), 50);
 }
 
+/** Closes the "Record time" dialog. */
 function closeContextTimeModal() {
     document.getElementById('ctxTimeModal').classList.remove('active');
 }
 
+/**
+ * Saves a time entry on the right-clicked ticket via save_time_entry.php, sending the time as UTC.
+ *
+ * Refreshes the time entries when that ticket is the one open in the reading pane.
+ */
 async function saveContextTimeEntry() {
     if (!ctxTargetTicketId) return;
     const minutes = parseInt(document.getElementById('ctxTimeMinutes').value, 10);
@@ -10360,11 +11702,13 @@ async function loadSlaState(ticketId) {
     }
 }
 
+/** Renders the SLA panel in the reading pane - a row with a progress bar for response and for resolution. */
 function renderSlaPanel(sla) {
     const container = document.getElementById('slaContainer');
     if (!container) return;
     if (!sla.response && !sla.resolution) return;
 
+    /** Formats minutes as "45m", "2h" or "2h 15m" (negative keeps its sign, null shows a dash). */
     const fmt = (mins) => {
         if (mins === null || mins === undefined) return '—';
         const n = Math.abs(mins);
@@ -10374,6 +11718,7 @@ function renderSlaPanel(sla) {
         return sign + (r ? `${h}h ${r}m` : `${h}h`);
     };
 
+    /** Builds one SLA target row - green when achieved or under 80%, amber from 80%, red once breached. */
     const renderRow = (label, target) => {
         if (!target) return '';
         const achieved = target.achieved_at !== null;
@@ -10440,10 +11785,11 @@ function ticketIsClosed(email) {
     return !!(s && s.is_closed);
 }
 
+/** The "Write up" toolbar button, only when the Knowledge write-up is turned on and the ticket is closed. */
 function buildWriteUpButton(email) {
     if (!window.KB_WRITEUP_ENABLED || !ticketIsClosed(email)) return '';
     return `
-            <button class="action-btn" onclick="openWriteUpModal()" title="Turn this into a knowledge base article">
+            <button class="action-btn pane-secondary" onclick="openWriteUpModal()" title="Turn this into a knowledge base article">
                 <span class="action-btn-icon">📖</span>
                 <span>Write up</span>
             </button>`;
@@ -10452,6 +11798,7 @@ function buildWriteUpButton(email) {
 let wuDraftHtml = '';
 let wuTicketId = 0;
 
+/** Opens the "Write this up" dialog for the open ticket (building it on first use) and starts the stream. */
 function openWriteUpModal() {
     if (!currentEmail) return;
     wuTicketId = currentEmail.ticket_id || currentEmail.id;
@@ -10484,11 +11831,13 @@ function openWriteUpModal() {
     wuStream({ ticket_id: wuTicketId });
 }
 
+/** Hides the "Write this up" dialog. */
 function closeWriteUpModal() {
     const m = document.getElementById('writeUpModal');
     if (m) m.style.display = 'none';
 }
 
+/** Sends the analyst's answers to the assistant's questions back with the ticket and streams a new attempt. */
 function wuRetryWithAnswers() {
     const answers = Array.from(document.querySelectorAll('#wuContent .wu-q')).map(q => {
         const label = q.querySelector('label').textContent;
@@ -10511,7 +11860,9 @@ function wuRetryWithAnswers() {
  */
 async function wuStream(payload) {
     wuDraftHtml = '';
+    /** The write-up dialog's status line. */
     const statusEl = () => document.getElementById('wuStatus');
+    /** The write-up dialog's content area. */
     const contentEl = () => document.getElementById('wuContent');
     let verdict = null;
     let buffer = '';
@@ -10528,6 +11879,11 @@ async function wuStream(payload) {
         return;
     }
 
+    /**
+     * Handles one streamed event (error, verdict, text, done) from writeup_stream.php.
+     *
+     * Text is sanitised into the preview for an article, or shown as plain text for a refusal.
+     */
     const handle = (event, data) => {
         if (event === 'error') { statusEl().textContent = data.message || 'Something went wrong.'; return; }
         if (event === 'verdict') {
@@ -10573,6 +11929,12 @@ async function wuStream(payload) {
     }
 }
 
+/**
+ * Finishes the write-up dialog once the stream is done.
+ *
+ * An article gets Cancel and Save; a refusal shows its explanation and, when the assistant asked
+ * questions, a box for each one and a Retry button.
+ */
 function wuFinish(data) {
     const statusEl = document.getElementById('wuStatus');
     const contentEl = document.getElementById('wuContent');
@@ -10609,6 +11971,11 @@ function wuFinish(data) {
     }
 }
 
+/**
+ * Saves the write-up to Knowledge as an unpublished draft via writeup_save.php.
+ *
+ * The first <h1> becomes the title (else the ticket subject) and the rest is the body.
+ */
 async function wuSaveDraft() {
     const btn = document.getElementById('wuSaveBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -10654,6 +12021,11 @@ async function wuSaveDraft() {
 
 let mySignatureCache = null;
 
+/**
+ * Loads the analyst's email signatures, cached unless force is set.
+ *
+ * @return the signatures, [] when there are none, or null when the request failed
+ */
 async function loadMySignatures(force) {
     if (mySignatureCache && !force) return mySignatureCache;
     try {
@@ -10670,6 +12042,7 @@ async function loadMySignatures(force) {
     return mySignatureCache;
 }
 
+/** Wraps a rendered signature in the data-signature div that lets the picker find and replace it. */
 function signatureWrap(sig) {
     return '<div data-signature="' + sig.id + '">' + (sig.rendered || '') + '</div>';
 }
@@ -10721,17 +12094,20 @@ function setSignatureInEditor(sig) {
     } catch (e) { /* cursor placement is a nicety, never a reason to fail */ }
 }
 
+/** Opens or closes the composer's signature menu, re-fetching the signatures each time it opens. */
 async function toggleSignatureMenu(event) {
     if (event) event.stopPropagation();
     const menu = document.getElementById('signatureMenu');
     if (!menu) return;
     if (menu.style.display === 'block') { menu.style.display = 'none'; return; }
+    closeReplyTemplateMenu();   // one menu open at a time - see toggleReplyTemplateMenu()
     // Re-fetch on open: the analyst may have just added one in another tab.
     await loadMySignatures(true);
     renderSignatureMenu();
     menu.style.display = 'block';
 }
 
+/** Closes the composer's signature menu. */
 function closeSignatureMenu() {
     const menu = document.getElementById('signatureMenu');
     if (menu) menu.style.display = 'none';
@@ -10744,6 +12120,11 @@ document.addEventListener('click', function (e) {
     }
 });
 
+/**
+ * Builds the signature menu: one row per signature (default marked), Remove, and a link to manage them.
+ *
+ * Says so when the signatures failed to load or there are none.
+ */
 function renderSignatureMenu() {
     const menu = document.getElementById('signatureMenu');
     if (!menu) return;
@@ -10779,6 +12160,7 @@ function renderSignatureMenu() {
     + manage;
 }
 
+/** Puts the chosen signature into the editor, or removes the current one when id is 0. */
 function pickSignature(id) {
     closeSignatureMenu();
     if (!emailEditor) return;
@@ -10821,7 +12203,9 @@ let _aiSummaryTicketId = 0;
 let _aiSummaryState = null;
 let _aiSummaryBusy = false;
 
+/** True when an administrator has turned on the AI ticket summary. */
 function aiSummaryOn() { return !!(window.TICKET_AI && window.TICKET_AI.summary_enabled); }
+/** True when an administrator has turned on "Read this ticket for me". */
 function aiReadOn()    { return !!(window.TICKET_AI && window.TICKET_AI.read_enabled); }
 
 /** The slot. Empty markup when the feature is off, so nothing reserves space. */
@@ -10830,6 +12214,7 @@ function buildAiSummarySlot() {
     return '<div class="ai-summary" id="aiSummarySlot" hidden></div>';
 }
 
+/** The "Read this ticket for me" toolbar button, or '' when the feature is off. */
 function buildReadForMeButton() {
     if (!aiReadOn()) return '';
     return `            <button class="action-btn" onclick="openReadForMe()" title="${escapeHtml(t('tickets.ai.read_for_me_help'))}">
@@ -10841,6 +12226,12 @@ function buildReadForMeButton() {
 
 /* ── the standing summary ───────────────────────────────────────────────── */
 
+/**
+ * Loads the stored AI summary for a ticket from ai_summary.php and renders it.
+ *
+ * A confidential ticket shows the reason instead, and a reply for a ticket no longer open is dropped.
+ * Asks for an automatic refresh when the server says one is due.
+ */
 async function loadAiSummary(ticketId) {
     if (!aiSummaryOn() || !ticketId) return;
     _aiSummaryTicketId = ticketId;
@@ -10850,6 +12241,13 @@ async function loadAiSummary(ticketId) {
         const d = await r.json();
         // The ticket may have changed underneath a slow request. Landing an old
         // ticket's summary on a new ticket would be a quiet, confident lie.
+        // Confidential and not sent to AI (#62): say so where the summary would
+        // be, rather than leave the analyst wondering where it went.
+        if (d.confidential && _aiSummaryTicketId === ticketId) {
+            const slot = document.getElementById('aiSummarySlot');
+            if (slot) slot.innerHTML = '<div class="ai-summary-confidential" style="font-size:12px;color:var(--text-muted,#666);padding:6px 0;">' + escapeHtml(d.error || '') + '</div>';
+            return;
+        }
         if (!d.success || d.disabled || _aiSummaryTicketId !== ticketId) return;
         _aiSummaryState = d;
         renderAiSummary();
@@ -10863,6 +12261,12 @@ async function loadAiSummary(ticketId) {
     }
 }
 
+/**
+ * Paints the AI summary slot: not configured, none yet, or the summary with its meta line and actions.
+ *
+ * Warns when the summary was cut off or when messages have arrived since it was written, and
+ * remembers whether the analyst collapsed it.
+ */
 function renderAiSummary() {
     const slot = document.getElementById('aiSummarySlot');
     if (!slot || !_aiSummaryState) return;
@@ -10927,6 +12331,7 @@ function renderAiSummary() {
         <div class="ai-summary-body"${collapsed ? ' hidden' : ''}>${escapeHtml(s.text)}</div>`;
 }
 
+/** Shows or hides the AI summary text and remembers the choice in localStorage. */
 function toggleAiSummary() {
     const body = document.querySelector('#aiSummarySlot .ai-summary-body');
     if (!body) return;
@@ -10935,6 +12340,13 @@ function toggleAiSummary() {
     renderAiSummary();
 }
 
+/**
+ * Asks ai_summary.php to write a new summary for the open ticket.
+ *
+ * A manual refresh shows a seconds counter and any error; an automatic one runs behind the summary
+ * already on screen and stays quiet if the server refuses. Only one runs at a time.
+ * @param auto  true for the automatic refresh, false when the analyst clicked
+ */
 async function refreshAiSummary(auto) {
     if (_aiSummaryBusy || !_aiSummaryTicketId) return;
     _aiSummaryBusy = true;
@@ -11100,6 +12512,7 @@ function aiReadRender(b, versionCount) {
         <div class="ai-read-foot">${escapeHtml(b.model || '')}</div>`;
 }
 
+/** Shows an AI error code, in words, in the AI panel body. */
 function aiReadShowError(code) {
     const box = document.querySelector('#aiPanelModal .ai-panel-body');
     if (box) box.innerHTML = `<div class="ai-read-working">${escapeHtml(aiErrorText(code))}</div>`;
@@ -11125,6 +12538,7 @@ async function showAiReadHistory() {
 
 /* ── the shared panel ───────────────────────────────────────────────────── */
 
+/** Opens the shared AI panel with a title and body HTML, building it on first use. */
 function showAiPanel(title, html) {
     let m = document.getElementById('aiPanelModal');
     if (!m) {
@@ -11145,6 +12559,7 @@ function showAiPanel(title, html) {
     m.classList.add('active');
 }
 
+/** Closes the shared AI panel. */
 function closeAiPanel() {
     const m = document.getElementById('aiPanelModal');
     if (m) m.classList.remove('active');

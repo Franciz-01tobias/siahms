@@ -11,6 +11,7 @@
 // files that establish or change an identity, because every one of them already
 // includes this file — one require instead of ten, and a new sign-in path gets
 // sessionPromoteToAuthenticated() available without anyone having to remember.
+require_once __DIR__ . '/base_url.php';   // BASE_URL when config.php does not define it - first, before anything uses it
 require_once __DIR__ . '/db.php';    // dbConnectionOptions() — NOT in config.php, see GH #129
 require_once __DIR__ . '/ssl.php';   // sslApplyCurl() — same reason: 43 callers, config.php is the operator's
 require_once __DIR__ . '/session_security.php';
@@ -77,13 +78,138 @@ function connectToDatabase() {
  */
 function getModuleRegistry(): array {
     $keys = ['watchtower','tickets','assets','knowledge','changes','problems','calendar',
-             'morning-checks','reporting','software','forms','contracts','service-status',
-             'war-room','wiki','lms','process-mapper','checklists','tasks','cmdb','network-mapper','workflow'];
+             'morning-checks','reporting','software','forms','contracts','domains','people','service-status','files',
+             'war-room','wiki','lms','process-mapper','checklists','tasks','projects','cmdb','network-mapper','workflow'];
     $out = [];
     foreach ($keys as $k) {
         $out[$k] = function_exists('t') ? t("common.modules.$k.name") : ucfirst($k);
     }
     return $out;
+}
+
+/**
+ * The modules that offer a Read only level (#180 Part 3). A module joins only once EVERY
+ * one of its write endpoints calls requireModuleWriteJson() and its service has the
+ * backstop - otherwise Read only would be a promise with a hole in it.
+ * tests/module-access-coverage.php holds the line.
+ */
+const MODULES_WITH_READ_ONLY = ['changes', 'forms', 'tasks'];   // tasks: #181 Part G (the Auditor role)
+
+/**
+ * What may this analyst do in this module: 'full', 'read', or null (no access)? The
+ * same sources and the same most/least rule as getAnalystAllowedModules(): 'most' takes
+ * the highest level any source gives, 'least' the lowest every source gives. An
+ * all-modules flag means full on everything, as it always has; a module without a Read
+ * only level is always full where it is granted.
+ *
+ * analystCanAccessModule() is unchanged - read IS access - so every page and read
+ * endpoint lets a reviewer in without being touched. Only writes ask this.
+ *
+ * @param int $analystId  the analyst
+ * @param string $moduleKey  a module key from getModuleRegistry()
+ */
+function analystModuleLevel(PDO $conn, int $analystId, string $moduleKey): ?string {
+    static $cache = [];
+    $k = $analystId . '|' . $moduleKey;
+    if (array_key_exists($k, $cache)) return $cache[$k];
+    if (!analystCanAccessModule($conn, $analystId, $moduleKey)) return $cache[$k] = null;
+    if (!in_array($moduleKey, MODULES_WITH_READ_ONLY, true)) return $cache[$k] = 'full';
+
+    $rank = ['read' => 1, 'full' => 2];
+    $levels = [];   // one per source that grants the module; null where a source does not
+    try {
+        $a = $conn->prepare("SELECT can_access_all_modules FROM analysts WHERE id = ?");
+        $a->execute([$analystId]);
+        if ((int)$a->fetchColumn() === 1) {
+            $levels[] = 'full';
+        } else {
+            $r = $conn->prepare("SELECT access_level FROM analyst_modules WHERE analyst_id = ? AND module_key = ?");
+            $r->execute([$analystId, $moduleKey]);
+            $lv = $r->fetchColumn();
+            $levels[] = $lv === false ? null : ($lv === 'read' ? 'read' : 'full');
+        }
+        $t = $conn->prepare(
+            "SELECT t.can_access_all_modules, tm.access_level
+               FROM analyst_teams at JOIN teams t ON at.team_id = t.id
+               LEFT JOIN team_modules tm ON tm.team_id = t.id AND tm.module_key = ?
+              WHERE at.analyst_id = ?"
+        );
+        $t->execute([$moduleKey, $analystId]);
+        foreach ($t->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $levels[] = (int)$row['can_access_all_modules'] === 1 ? 'full'
+                : ($row['access_level'] === null ? null : ($row['access_level'] === 'read' ? 'read' : 'full'));
+        }
+    } catch (Throwable $e) {
+        return $cache[$k] = 'full';   // pre-upgrade DB (no access_level yet): today's behaviour
+    }
+
+    $granted = array_values(array_filter($levels, fn($l) => $l !== null));
+    if (!$granted) return $cache[$k] = 'full';   // access came from somewhere this does not model: unchanged
+    if (getModulePermissionMode($conn) === 'least') {
+        $lowest = 'full';
+        foreach ($granted as $l) if ($rank[$l] < $rank[$lowest]) $lowest = $l;
+        return $cache[$k] = $lowest;
+    }
+    $highest = 'read';
+    foreach ($granted as $l) if ($rank[$l] > $rank[$highest]) $highest = $l;
+    return $cache[$k] = $highest;
+}
+
+/**
+ * The level of each specific grant one analyst or team holds: module_key => 'full'|'read'.
+ * Every screen that rewrites grants (delete, then insert the new list) reads this first
+ * and writes the levels back, so saving a module list never quietly turns a Read only
+ * grant into Full.
+ *
+ * @param string $kind  'analyst' or 'team'
+ * @param int $id  the analyst or team id
+ */
+function moduleGrantLevels(PDO $conn, string $kind, int $id): array {
+    $table = $kind === 'team' ? 'team_modules' : 'analyst_modules';
+    $col   = $kind === 'team' ? 'team_id' : 'analyst_id';
+    try {
+        $s = $conn->prepare("SELECT module_key, access_level FROM {$table} WHERE {$col} = ?");
+        $s->execute([$id]);
+        return $s->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+    } catch (Throwable $e) {
+        return [];   // before Database Verify added access_level: every grant is full
+    }
+}
+
+/**
+ * May this analyst change things in this module, not only read them? (#180 Part 3)
+ *
+ * @param int $analystId  the analyst
+ * @param string $moduleKey  a module key
+ */
+function analystCanWriteModule(PDO $conn, int $analystId, string $moduleKey): bool {
+    return analystModuleLevel($conn, $analystId, $moduleKey) === 'full';
+}
+
+/**
+ * JSON gate for a module WRITE: 403 for an analyst with Read only access. Beside
+ * requireModuleAccessJson(), never instead of it.
+ *
+ * TRAP: voting on a change and deciding as its approver are NOT writes - they are decided
+ * by identity (a CAB row, the approver_id), so a read-only approver can still approve.
+ * Those endpoints must not call this.
+ *
+ * @param string $moduleKey  a module key
+ */
+function requireModuleWriteJson(string $moduleKey, ?PDO $conn = null): void {
+    $ok = false;
+    try {
+        if ($conn === null) $conn = connectToDatabase();
+        $ok = isset($_SESSION['analyst_id']) && analystCanWriteModule($conn, (int)$_SESSION['analyst_id'], $moduleKey);
+    } catch (Throwable $e) {
+        $ok = false;
+    }
+    if (!$ok) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => function_exists('t') ? t('common.module_read_only') : 'You have read-only access to this module.', 'code' => 'read_only']);
+        exit;
+    }
 }
 
 /**
@@ -112,6 +238,8 @@ function getModulePermissionMode(PDO $conn): string {
  *
  * Returns: null = ALL modules (unrestricted) · [] = NO modules · [keys] = a specific set.
  * Cached per request. System is deliberately excluded (gated by is_admin instead).
+ *
+ * @param mixed $analyst_id  the analyst whose access to resolve (cast to int); deactivated or unknown gives []
  */
 function getAnalystAllowedModules($conn, $analyst_id) {
     static $cache = [];
@@ -122,11 +250,20 @@ function getAnalystAllowedModules($conn, $analyst_id) {
     $sources = [];
 
     // 1. The analyst themselves.
+    // 🔴 A DEACTIVATED analyst has no modules at all (3.5.0). Deactivating stops new
+    // sign-ins, but a session already open used to carry on working until it
+    // expired - so taking someone's access away at the source (System -> Analysts,
+    // or PATCH /api/v1/analysts/{id}) did nothing to the person still at their desk.
+    // Every module page and endpoint asks this question, so this is where it ends.
     $analystAll = true;
     try {
-        $a = $conn->prepare("SELECT can_access_all_modules FROM analysts WHERE id = ?");
+        $a = $conn->prepare("SELECT can_access_all_modules, COALESCE(is_active, 1) AS is_active FROM analysts WHERE id = ?");
         $a->execute([$analyst_id]);
-        $analystAll = ((int) $a->fetchColumn() === 1);
+        $me = $a->fetch(PDO::FETCH_ASSOC);
+        if (!$me || (int) $me['is_active'] !== 1) {
+            return $cache[$analyst_id] = [];
+        }
+        $analystAll = ((int) $me['can_access_all_modules'] === 1);
     } catch (Throwable $e) { /* pre-upgrade DB: treat as unrestricted */ }
     if ($analystAll) {
         $sources[] = ['all' => true, 'set' => []];
@@ -201,9 +338,26 @@ function analystIsAdmin(PDO $conn, int $analystId): bool {
     static $cache = [];
     if (array_key_exists($analystId, $cache)) return $cache[$analystId];
 
-    $stmt = $conn->prepare("SELECT is_admin FROM analysts WHERE id = ?");
+    // A deactivated admin is not an admin - see getAnalystAllowedModules() (3.5.0).
+    $stmt = $conn->prepare("SELECT is_admin FROM analysts WHERE id = ? AND COALESCE(is_active, 1) = 1");
     $stmt->execute([$analystId]);
     return $cache[$analystId] = ((int) $stmt->fetchColumn() === 1);
+}
+
+/**
+ * Is this requester still active? "Mark as left" (Assets -> Users, Tickets ->
+ * Users) and PATCH /api/v1/users/{id} clear users.is_active. A requester who has
+ * left cannot sign in to the portal, by any route, and is signed out of an open
+ * portal session on their next page (self-service/includes/auth.php). 3.5.0.
+ * NULL counts as active, as everywhere else.
+ *
+ * @param int $userId  the requester's users.id; 0 or less, or an unknown id, gives false
+ */
+function requesterIsActive(PDO $conn, int $userId): bool {
+    if ($userId <= 0) return false;
+    $stmt = $conn->prepare("SELECT COALESCE(is_active, 1) FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    return (int) $stmt->fetchColumn() === 1;
 }
 
 /**
@@ -249,6 +403,8 @@ function requireAdminJson(PDO $conn): void {
  * 'system' here defers to analystIsAdmin(), and any unknown key is denied. The
  * heavy lifting (union/intersection across the analyst + their teams) lives in the
  * single choke-point getAnalystAllowedModules(), which this just consults.
+ *
+ * @param string $moduleKey  the module key, e.g. 'tickets', 'assets', 'files'; 'system' means administrators only
  */
 function analystCanAccessModule(PDO $conn, int $analystId, string $moduleKey): bool {
     if ($analystId <= 0) return false;
@@ -264,6 +420,8 @@ function analystCanAccessModule(PDO $conn, int $analystId, string $moduleKey): b
  * (DB-checked) — a just-restricted analyst is stopped even on a stale session.
  * Call near the top of a module's page after functions.php is loaded and the
  * "are you logged in?" check. Passes $conn if you already have one, else connects.
+ *
+ * @param string $moduleKey  the module the page belongs to, e.g. 'tickets'; also sent back as ?denied= on refusal
  */
 function requireModuleAccess(string $moduleKey, ?PDO $conn = null): void {
     if (!isset($_SESSION['analyst_id'])) {
@@ -295,7 +453,7 @@ function requireModuleAccess(string $moduleKey, ?PDO $conn = null): void {
  * "Any of these modules" is the honest gate. Use it sparingly: if an endpoint belongs to
  * ONE module, use requireModuleAccessJson().
  *
- * @param array<int,string> $moduleKeys
+ * @param array<int,string> $moduleKeys  the module keys that may use the endpoint, e.g. ['knowledge', 'tickets']
  */
 function requireAnyModuleAccessJson(array $moduleKeys, ?PDO $conn = null): void {
     if (!isset($_SESSION['analyst_id'])) {
@@ -328,6 +486,8 @@ function requireAnyModuleAccessJson(array $moduleKeys, ?PDO $conn = null): void 
  * after connecting, e.g. requireModuleAccessJson('assets', $conn);
  * Shared READ endpoints that other modules or the login page depend on must NOT
  * call this — guarding those would break normal cross-module flows.
+ *
+ * @param string $moduleKey  the module the endpoint belongs to, e.g. 'assets'; 'system' means administrators only
  */
 function requireModuleAccessJson(string $moduleKey, ?PDO $conn = null): void {
     if (!isset($_SESSION['analyst_id'])) {
@@ -351,12 +511,42 @@ function requireModuleAccessJson(string $moduleKey, ?PDO $conn = null): void {
 }
 
 /**
+ * Is the signed-in analyst a catalogue approver WITHOUT the Forms module (#180 Part 3)?
+ * Then the launcher and the landing page offer them Form approvals - their one way into
+ * Forms. Without this front door the approver would hold the permission and have no way
+ * to find it. The page itself checks again (catalogueApproverCanEnter()).
+ */
+function sessionIsFormApproverOnly(): bool
+{
+    static $memo = null;
+    if ($memo !== null) return $memo;
+    $memo = false;
+    $aid = (int)($_SESSION['analyst_id'] ?? 0);
+    $allowed = $_SESSION['allowed_modules'] ?? null;
+    if ($aid <= 0 || $allowed === null || in_array('forms', $allowed, true)) return $memo;   // null = every module
+    try {
+        $st = connectToDatabase()->prepare(
+            "SELECT 1 FROM forms WHERE approver_id = ? AND requires_approval = 1
+             UNION SELECT 1 FROM form_submissions WHERE approver_id = ? LIMIT 1"
+        );
+        $st->execute([$aid, $aid]);
+        $memo = (bool)$st->fetchColumn();
+    } catch (Throwable $e) { /* no door rather than a broken page */ }
+    return $memo;
+}
+
+/**
  * Fire a settings/CRUD workflow event ({entity}.{created|updated|deleted}) from a
  * UI settings endpoint, without each file having to require the workflow engine.
  * Lazily loads the engine and is fully self-safe — swallows any Throwable
  * (including a missing engine on a minimal install) so it can NEVER affect the
  * save it follows. Funnels into the exact same WorkflowEngine::dispatch() path as
  * every other event, so a webhook fires identically however it was emitted.
+ *
+ * @param string $entity  the entity key, e.g. 'asset' or 'asset_location' - the first half of the event name
+ * @param string $action  'created', 'updated' or 'deleted' - the second half of the event name
+ * @param int $id         the id of the record that changed
+ * @param ?string $name   its display name for the payload, if known
  */
 function wf_emit(string $entity, string $action, int $id, ?string $name = null): void
 {

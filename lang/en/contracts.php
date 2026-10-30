@@ -94,7 +94,7 @@ return [
 
     // View contract (view.php)
     'detail' => [
-        'page_title'                => 'Service Desk - View contract',
+        'page_title'                => 'View contract',
         'loading'                   => 'Loading contract...',
         'error_prefix'              => 'Error:',
         'load_failed'               => 'Failed to load contract',
@@ -102,6 +102,7 @@ return [
         'back'                      => 'Back',
         'task'                      => 'Task',
         'calendar'                  => 'Calendar',
+        'company'                   => 'Company',
         'contract_number'           => 'Contract number',
         'status'                    => 'Status',
         'title_label'               => 'Title',
@@ -180,13 +181,17 @@ return [
 
     // Add/Edit contract (edit.php)
     'edit' => [
-        'page_title_edit'      => 'Service Desk - Edit contract',
-        'page_title_add'       => 'Service Desk - Add contract',
+        'page_title_edit'      => 'Edit contract',
+        'page_title_add'       => 'Add contract',
         'heading_edit'         => 'Edit contract',
         'heading_add'          => 'Add contract',
         'none'                 => 'None',
         'select_supplier'      => 'Select supplier',
         'select_owner'         => 'Select owner',
+        'company'              => 'Company',
+        'company_hint'         => 'The company this contract belongs to. Only analysts who can see that company see the contract.',
+        'cost_centre_inactive' => 'inactive',
+        'cost_centre_previous' => 'Previously recorded: {text}',
         'contract_number'      => 'Contract number',
         'contract_number_ph'   => 'e.g. CON-001',
         'title_ph'             => 'e.g. Annual Support Agreement',
@@ -204,6 +209,32 @@ return [
         'configure_in_settings'=> 'Configure in settings',
         'toast_saved'          => 'Contract saved',
         'toast_save_failed'    => 'Failed to save contract',
+    ],
+
+    // Who a contract is WITH (#153): a supplier (you buy) or a customer (you sell)
+    'party' => [
+        'with'                 => 'Contract with',
+        'supplier'             => 'Supplier',
+        'customer'             => 'Customer',
+        'company'              => 'Company',
+        'select_company'       => 'Select company',
+        'person'               => 'Person',
+        'person_ph'            => 'Search for a person (optional)...',
+        'clear_person'         => 'Clear',
+        'no_people'            => 'Nobody matches.',
+        'hint_multi'           => 'Choose the company, a person, or both. Who can see the contract is decided by the company it belongs to, at the top of the form.',
+        'hint_single'          => 'Choose the person you sell this contract to.',
+        'col_with'             => 'With',
+        'filter'               => 'Show contracts with',
+        'filter_all'           => 'Suppliers and customers',
+        'filter_supplier'      => 'Suppliers only',
+        'filter_customer'      => 'Customers only',
+        'customer_suffix'      => '(Customer: {customer})',
+        'err_customer_required'=> 'Choose the customer: a company, a person, or both.',
+        'err_type'             => 'A contract is with a supplier or a customer.',
+        'err_company'          => 'That company is not one you can access.',
+        'err_person'           => 'That person is not one you can see.',
+        'err_person_company'   => 'That person is not in the company you chose.',
     ],
 
     // Settings (settings/index.php)
@@ -290,7 +321,7 @@ return [
     // Suppliers (suppliers/index.php + suppliers/view/index.php)
     'suppliers' => [
         'page_title'           => 'Service Desk - Suppliers',
-        'view_page_title'      => 'Service Desk - View Supplier',
+        'view_page_title'      => 'View Supplier',
         'all_suppliers'        => 'All suppliers',
         'add_supplier'         => 'Add supplier',
         'edit_supplier'        => 'Edit supplier',
@@ -435,13 +466,14 @@ return [
         'feature_settings'  => 'Configure the dropdown options that drive the module &mdash; supplier types, supplier statuses, contract statuses, payment schedules, and custom contract term tabs.',
 
         'managing_intro'     => 'Contracts are the core of this module. Each contract record captures everything you need to know about a supplier agreement &mdash; who it\'s with, how long it runs, what it costs, and what documents support it.',
-        'managing_step1'     => '<strong>Create a contract</strong> &mdash; from the contracts dashboard, click the Add button. Fill in the contract name, select a supplier, and set the status.',
+        'managing_step1'     => '<strong>Create a contract</strong> &mdash; click <strong>New</strong> at the top right of the contracts page. Fill in the contract name, choose who it is with (a supplier, or a customer), and set the status.',
         'managing_step2'     => '<strong>Set the dates</strong> &mdash; enter the start date, end date, and review date. The review date acts as your early warning so you have time to renegotiate or renew before the contract expires.',
         'managing_step3'     => '<strong>Record the financials</strong> &mdash; enter the total contract value and select the payment schedule (monthly, quarterly, annually, or a custom schedule configured in settings).',
         'managing_step4'     => '<strong>Add contract terms</strong> &mdash; use the rich text tabs to write out SLAs, KPIs, special conditions, or any other terms. Each tab uses the TinyMCE editor for full formatting.',
         'managing_step5'     => '<strong>Upload documents</strong> &mdash; attach signed copies, schedules, amendments, or any other supporting files directly to the contract record.',
         'managing_step6'     => '<strong>Save</strong> and the contract appears on your dashboard. You can return to edit it at any time or update the status as it moves through its lifecycle.',
         'managing_dashboard' => 'The contracts dashboard gives you an at-a-glance view of all active, expiring, and expired contracts. The sidebar shows summary statistics &mdash; total contracts, those expiring soon, and quick links to create new records or jump to suppliers.',
+        'managing_customers' => '<strong>Contracts you sell.</strong> A contract can be with a <em>customer</em> as well as a supplier &mdash; for example a support contract you provide. Choose <strong>Customer</strong> under <em>Contract with</em>, then pick the company, a person, or both. The list shows who each contract is with, and the drop-down above it narrows the list to suppliers or customers. Every contract also <strong>belongs to a company</strong> &mdash; chosen in <em>Company</em> at the top of the form, the company you are working in by default. Only analysts who can see that company see the contract, and the contracts list shows the company you have switched to. Who a contract is <em>with</em> is separate: a contract can belong to your own company and be with a customer.',
         'managing_tip'       => 'Use the review date field to set reminders well before a contract\'s end date. This gives your procurement or legal team enough lead time to negotiate renewals on favourable terms.',
 
         'terms_title'             => 'Contract terms &mdash; rich text tabs',
@@ -536,6 +568,7 @@ return [
             'col_updated'         => 'Updated',
             'empty'               => 'No RFPs yet. Click "+ New RFP" to create one.',
             'name_ph'             => 'e.g. New ITSM platform 2026',
+            'company_help'        => 'The company this RFP belongs to. Only analysts who can see that company see it, its documents and its scores.',
             'style_guide_override'=> 'Style guide override',
             'style_guide_ph'      => 'Optional. Leave blank to use the system default.',
             'style_guide_help'    => 'Appended to AI prompts to control writing style of the generated RFP. Plain text, one rule per line.',
@@ -576,6 +609,7 @@ return [
             'overview_p1'  => 'The RFP Builder takes departmental feedback documents (one per contributing department), uses AI to extract every individual requirement, deduplicates and categorises them, drafts a professional RFP document you can send to suppliers, and then scores supplier responses requirement-by-requirement to drive a decision.',
             'overview_p2'  => 'The tool is <strong>internal-only</strong>. Suppliers never log in — you share the generated PDF with them via your usual procurement channel (email, sourcing platform, etc.) and they reply outside FreeITSM. You enter their scores yourself based on reading their responses.',
             'overview_tip' => '<strong>The differentiating step is consolidation.</strong> Five departments asking for "the same thing" rarely use the same words — Pass 2 (consolidation) merges those duplicates while preserving every original quote for political cover, and flags genuine contradictions between departments for you to resolve.',
+            'overview_company' => '<strong>Every RFP belongs to a company</strong> - chosen in <em>Company</em> when you create it, the company you are working in by default. Only analysts who can see that company see the RFP, its documents, requirements and scores, and the list shows the company you have switched to.',
 
             'wf_source'      => 'Source docs',
             'wf_extract'     => 'Extract',
@@ -787,7 +821,7 @@ return [
 
         // Scoring (scoring.php)
         'scoring' => [
-            'page_title'          => 'Service Desk - Scoring',
+            'page_title'          => 'Scoring',
             'title'               => 'Scoring',
             'score_by_category'   => 'Score by category',
             'my_overall'          => 'My overall',
@@ -816,7 +850,7 @@ return [
 
         // Source documents (documents.php)
         'documents' => [
-            'page_title'          => 'Service Desk - RFP Documents',
+            'page_title'          => 'RFP Documents',
             'rfp'                 => 'RFP',
             'documents'           => 'Documents',
             'heading'             => 'Source documents',
@@ -873,7 +907,7 @@ return [
 
         // Generated document (document.php)
         'document' => [
-            'page_title'          => 'Service Desk - RFP Document',
+            'page_title'          => 'RFP Document',
             'heading'             => 'Generated document',
             'preview_document'    => 'Preview document',
             'generate_all'        => 'Generate all',
@@ -963,7 +997,7 @@ return [
 
         // Extracted requirements (extracted.php)
         'extracted' => [
-            'page_title'        => 'Service Desk - Extracted requirements',
+            'page_title'        => 'Extracted requirements',
             'heading'           => 'Extracted requirements',
             'total'             => 'Total',
             'requirements'      => 'Requirements',
@@ -1009,7 +1043,7 @@ return [
 
         // Compare suppliers (compare.php)
         'compare' => [
-            'page_title'         => 'Service Desk - Compare',
+            'page_title'         => 'Compare',
             'compare'            => 'Compare',
             'heading'            => 'Compare suppliers',
             'load_failed'        => 'Failed to load compare data',
@@ -1034,7 +1068,7 @@ return [
 
         // Coverage heatmap (coverage.php)
         'coverage' => [
-            'page_title'              => 'Service Desk - Coverage map',
+            'page_title'              => 'Coverage map',
             'heading'                 => 'Coverage map',
             'consolidated_requirements' => 'Consolidated requirements',
             'load_failed'             => 'Failed to load coverage',
@@ -1055,7 +1089,7 @@ return [
 
         // AI audit trail (audit.php)
         'audit' => [
-            'page_title'          => 'Service Desk - AI audit trail',
+            'page_title'          => 'AI audit trail',
             'audit_trail'         => 'Audit trail',
             'heading'             => 'AI audit trail',
             'total_input_tokens'  => 'Total input tokens',
@@ -1073,7 +1107,7 @@ return [
 
         // Consolidated requirements (consolidate.php)
         'consolidate' => [
-            'page_title'          => 'Service Desk - Consolidated requirements',
+            'page_title'          => 'Consolidated requirements',
             'consolidated'        => 'Consolidated',
             'heading'             => 'Consolidated requirements',
             'add_custom'          => 'Add custom',

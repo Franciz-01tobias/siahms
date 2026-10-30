@@ -27,6 +27,10 @@
     const ICON_LAUNCH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg>';
     const ICON_CLOSE  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
 
+    /**
+     * Sets the page's panel configuration, injects the panel markup if needed, and wires Escape to
+     * close it once.
+     */
     function init(config) {
         cfg = Object.assign({
             apiBase: '',
@@ -43,8 +47,10 @@
         }
     }
 
+    /** Adds the quick-look panel and its overlay to the page, unless they are already there. */
     function ensureMarkup() {
         if (document.getElementById('tqPanel')) return;
+        /** Translates a key under tasks.detail.*. */
         const T = k => window.t('tasks.detail.' + k);
         document.body.insertAdjacentHTML('beforeend',
             `<div class="detail-overlay" id="tqOverlay" onclick="TasksQuickPanel.close()"></div>
@@ -60,6 +66,7 @@
              </div>`);
     }
 
+    /** Opens the quick-look panel on a task, showing a loading line until get.php returns it. */
     async function open(id) {
         taskId = id;
         document.getElementById('tqOpenFull').href = cfg.fullEditUrl ? cfg.fullEditUrl(id) : '#';
@@ -73,6 +80,10 @@
         } catch (e) { console.error(e); }
     }
 
+    /**
+     * Closes the panel and, if a task was open, calls onUpdate so the calendar or timeline shows any
+     * edits.
+     */
     function close() {
         document.getElementById('tqPanel').classList.remove('open');
         document.getElementById('tqOverlay').classList.remove('open');
@@ -82,6 +93,10 @@
         if (wasOpen && cfg && cfg.onUpdate) cfg.onUpdate();
     }
 
+    /**
+     * Saves one field of the open task through save.php straight away; a failure is only logged to the
+     * console.
+     */
     async function saveField(field, value) {
         if (taskId === null) return;
         try {
@@ -93,8 +108,13 @@
         } catch (e) { console.error(e); }
     }
 
+    /**
+     * Fills the panel with the task's editable title, status, priority, assignee, team and dates, plus
+     * its tags and a description preview.
+     */
     function render(task) {
         const lookups = cfg.getLookups();
+        /** Translates a key under tasks.detail.*. */
         const T = k => window.t('tasks.detail.' + k);
 
         const statusOpts = (lookups.statuses || []).filter(s => s.is_active).map(s =>
@@ -116,7 +136,9 @@
             : `<span style="color:#999;font-size:13px;">—</span>`;
 
         const descBlock = task.description
-            ? `<div class="cal-detail-desc-preview">${task.description}</div>
+            // TRAP: rich text - cleaned, never inserted raw (an onerror handler runs on insertion).
+            // Fails closed to plain text if safe-html.js is missing.
+            ? `<div class="cal-detail-desc-preview">${typeof safeHtmlFragment === 'function' ? safeHtmlFragment(task.description) : esc(task.description)}</div>
                <div style="font-size:12px;color:#999;margin-top:6px;">${esc(T('description_preview_hint'))}</div>`
             : `<div style="color:#999;font-size:13px;">${esc(T('no_description'))}</div>`;
 
@@ -165,6 +187,7 @@
         `;
     }
 
+    /** HTML-escapes a value through a text node; null and undefined become an empty string. */
     function esc(text) {
         if (text == null) return '';
         const div = document.createElement('div');

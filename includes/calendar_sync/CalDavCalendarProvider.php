@@ -56,6 +56,11 @@ class CalDavCalendarProvider extends CalendarSyncProvider
      */
     const OWNED = ['DTSTART', 'DTEND', 'DURATION', 'SUMMARY', 'DESCRIPTION', 'URL', 'DTSTAMP', 'LAST-MODIFIED'];
 
+    /**
+     * CalDAV supports all-day events, checking a target calendar, and per-analyst accounts.
+     *
+     * @param string $capability  a CalendarSyncProvider::CAP_* key - true for all_day, verify_target and per_analyst
+     */
     public function supports(string $capability): bool
     {
         return in_array($capability, [
@@ -74,6 +79,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $u === '' ? '' : rtrim($u, '/') . '/';
     }
 
+    /** Returns the configured HTTP auth mode - 'auto', 'digest' or 'basic' (anything else reads as 'auto'). */
     private function authMode(): string
     {
         $a = (string)($this->connection['credentials']['auth'] ?? 'auto');
@@ -83,6 +89,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
     /**
      * Request settings for cardDavRequest(), signed in as the current analyst.
      *
+     * @param string $url  the absolute URL the request goes to, copied into the settings
      * @param bool $interactive short timeouts - true for anything that runs
      *                          inside somebody's Save, false for the cron
      */
@@ -107,6 +114,9 @@ class CalDavCalendarProvider extends CalendarSyncProvider
      * to make FreeITSM send authenticated requests to any host an analyst names
      * - the metadata service, an internal admin page. The address must sit on
      * the server an administrator configured.
+     *
+     * @param string $a  the first absolute URL (untrusted - may be an analyst's saved address)
+     * @param string $b  the second absolute URL - a missing port is read as 443 for https, 80 otherwise
      */
     public static function sameOrigin(string $a, string $b): bool
     {
@@ -122,7 +132,11 @@ class CalDavCalendarProvider extends CalendarSyncProvider
             && $port($pa, $sa) === $port($pb, $sb);
     }
 
-    /** A calendar address, checked and normalised to end in a slash. */
+    /**
+     * A calendar address, checked and normalised to end in a slash.
+     *
+     * @param string $address  the calendar address as saved under Preferences (untrusted); must be on the configured server
+     */
     public function calendarUrl(string $address): string
     {
         $url = rtrim(trim($address), '/') . '/';
@@ -135,7 +149,12 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $url;
     }
 
-    /** The URL of one of our events. Refuses any id FreeITSM did not mint. */
+    /**
+     * The URL of one of our events. Refuses any id FreeITSM did not mint.
+     *
+     * @param string $calendarAddress  the analyst's calendar address, checked by calendarUrl()
+     * @param string $remoteEventId  the event's 'freeitsm-<hex>' id; any other shape throws
+     */
     private function eventUrl(string $calendarAddress, string $remoteEventId): string
     {
         if (!preg_match(self::ID_PATTERN, $remoteEventId)) {
@@ -144,7 +163,11 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $this->calendarUrl($calendarAddress) . $remoteEventId . '.ics';
     }
 
-    /** Parse a DAV XML body, or null. External entities are never loaded. */
+    /**
+     * Parse a DAV XML body, or null. External entities are never loaded.
+     *
+     * @param string $xml  a response body from the DAV server; blank or unparseable gives null
+     */
     private static function xpath(string $xml): ?DOMXPath
     {
         if (trim($xml) === '') return null;
@@ -160,6 +183,13 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $xp;
     }
 
+    /**
+     * Returns the trimmed text of the first node an XPath query matches (optionally inside $ctx), or ''.
+     *
+     * @param DOMXPath $xp  the parsed document from xpath()
+     * @param string $query  an XPath query using the d: (DAV) and c: (CalDAV) prefixes
+     * @param ?DOMNode $ctx  the node a relative query runs inside (one d:response); null searches the whole document
+     */
     private static function text(DOMXPath $xp, string $query, ?DOMNode $ctx = null): string
     {
         $n = $ctx ? $xp->query($query, $ctx) : $xp->query($query);
@@ -168,7 +198,12 @@ class CalDavCalendarProvider extends CalendarSyncProvider
 
     // ---------------------------------------------------------- the event
 
-    /** One whole VCALENDAR holding our event. No METHOD: RFC 4791 forbids it in a stored object. */
+    /**
+     * One whole VCALENDAR holding our event. No METHOD: RFC 4791 forbids it in a stored object.
+     *
+     * @param string $uid  the 'freeitsm-<hex>' id, written as the iCalendar UID
+     * @param array $event  the canonical event shape (see CalendarSyncProvider)
+     */
     private function buildCalendar(string $uid, array $event): string
     {
         $lines = array_merge(
@@ -179,7 +214,12 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return implode("\r\n", $lines) . "\r\n";
     }
 
-    /** BEGIN:VEVENT … END:VEVENT for the canonical event (see CalendarSyncProvider). */
+    /**
+     * BEGIN:VEVENT … END:VEVENT for the canonical event (see CalendarSyncProvider).
+     *
+     * @param string $uid  the 'freeitsm-<hex>' id, written as the iCalendar UID
+     * @param array $event  the canonical event shape (see CalendarSyncProvider); 'timezone' defaults to PHP's zone
+     */
     private function eventLines(string $uid, array $event): array
     {
         $lines = icsEvent([
@@ -197,14 +237,22 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $lines;
     }
 
-    /** RFC 5545 unfolding: a line starting with a space or tab continues the one before. */
+    /**
+     * RFC 5545 unfolding: a line starting with a space or tab continues the one before.
+     *
+     * @param string $ics  raw iCalendar text, CRLF or LF line endings
+     */
     public static function unfold(string $ics): array
     {
         $ics = preg_replace("/\r\n[ \t]|\n[ \t]/", '', $ics);
         return preg_split("/\r\n|\n|\r/", rtrim($ics, "\r\n"));
     }
 
-    /** The property name of a content line, upper-cased: "DTSTART;TZID=…:x" -> "DTSTART". */
+    /**
+     * The property name of a content line, upper-cased: "DTSTART;TZID=…:x" -> "DTSTART".
+     *
+     * @param string $line  one unfolded content line
+     */
     private static function propName(string $line): string
     {
         return strtoupper((string)preg_split('/[;:]/', $line, 2)[0]);
@@ -216,6 +264,9 @@ class CalDavCalendarProvider extends CalendarSyncProvider
      * Only the FIRST VEVENT is touched, and only its own properties - never
      * those of a VALARM inside it, which carry DESCRIPTION and SUMMARY of their
      * own. Returns null when there is no VEVENT to edit.
+     *
+     * @param string $ics  the event's calendar data as the server sent it back
+     * @param array $newEventLines  fresh VEVENT lines from eventLines(); their BEGIN, END and UID lines are ignored
      */
     public static function rewriteEvent(string $ics, array $newEventLines): ?string
     {
@@ -258,6 +309,13 @@ class CalDavCalendarProvider extends CalendarSyncProvider
 
     // ------------------------------------------------------------ outbound
 
+    /**
+     * PUTs a new event under a random 'freeitsm-...' name with If-None-Match, so nothing existing is overwritten; retries once on a name clash.
+     *
+     * @param string $calendarAddress  the analyst's calendar address, checked by calendarUrl()
+     * @param array $event  the canonical event shape (see CalendarSyncProvider)
+     * @return string  the event's uid, kept as the remote id
+     */
     public function createEvent(string $calendarAddress, array $event): string
     {
         $calendar = $this->calendarUrl($calendarAddress);
@@ -278,6 +336,15 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         throw new Exception('Could not create the calendar event: the server kept reporting that the name was taken.');
     }
 
+    /**
+     * Reads the event, replaces only the properties FreeITSM owns and PUTs it back with If-Match, rereading once if it changed meanwhile.
+     *
+     * Throws CalendarEventMissing when the event was deleted from the calendar, so the caller can create a fresh one.
+     *
+     * @param string $calendarAddress  the analyst's calendar address, checked by calendarUrl()
+     * @param string $remoteEventId  the 'freeitsm-<hex>' id createEvent() returned
+     * @param array $event  the canonical event shape (see CalendarSyncProvider)
+     */
     public function updateEvent(string $calendarAddress, string $remoteEventId, array $event): void
     {
         $url = $this->eventUrl($calendarAddress, $remoteEventId);
@@ -318,6 +385,12 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         throw new Exception('Could not update the calendar event: it kept changing on the server while FreeITSM was writing it.');
     }
 
+    /**
+     * Deletes the event; one already gone counts as success.
+     *
+     * @param string $calendarAddress  the analyst's calendar address, checked by calendarUrl()
+     * @param string $remoteEventId  the 'freeitsm-<hex>' id createEvent() returned
+     */
     public function deleteEvent(string $calendarAddress, string $remoteEventId): void
     {
         $url = $this->eventUrl($calendarAddress, $remoteEventId);
@@ -344,13 +417,20 @@ class CalDavCalendarProvider extends CalendarSyncProvider
      * `etags:`), so one is never read as the other, and anything else - a
      * Microsoft delta link left over from before the provider was switched -
      * is simply re-baselined.
+     *
+     * @param string $calendarAddress  the analyst's calendar address, checked by calendarUrl()
+     * @param ?string $token  the token the last poll returned ('sync:...' or 'etags:{json}'); null or '' takes a baseline
      */
     public function pollChanges(string $calendarAddress, ?string $token): array
     {
         return $this->pollChangesOnce($calendarAddress, $token, false);
     }
 
-    /** The calendar's own sync-token right now, or '' when it does not say. */
+    /**
+     * The calendar's own sync-token right now, or '' when it does not say.
+     *
+     * @param string $calendar  the calendar URL, already checked by calendarUrl()
+     */
     private function currentSyncToken(string $calendar): string
     {
         $res = cardDavRequest($this->cfg($calendar, false), 'PROPFIND', $calendar,
@@ -360,7 +440,15 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $xp ? self::text($xp, '//d:sync-token') : '';
     }
 
-    /** @param bool $retried true on the second look after a suspicious "no changes" */
+    /**
+     * One pass of pollChanges() - sync-collection when the server supports it,
+     * otherwise a comparison of our events' ETags - returning token, baseline,
+     * changed and removed.
+     *
+     * @param string $calendarAddress  the analyst's calendar address, checked by calendarUrl()
+     * @param ?string $token  the token the last poll returned ('sync:...' or 'etags:{json}'); null or '' takes a baseline
+     * @param bool $retried true on the second look after a suspicious "no changes"
+     */
     private function pollChangesOnce(string $calendarAddress, ?string $token, bool $retried): array
     {
         $calendar = $this->calendarUrl($calendarAddress);
@@ -477,7 +565,11 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $out;
     }
 
-    /** The event id in an href, or null when the href is not one of ours. */
+    /**
+     * The event id in an href, or null when the href is not one of ours.
+     *
+     * @param string $href  a d:href from a multistatus response, absolute or server-relative
+     */
     private static function idFromHref(string $href): ?string
     {
         $name = rawurldecode(basename(rtrim($href, '/')));
@@ -489,6 +581,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
     /**
      * Read the new times of changed events, in batches.
      *
+     * @param string $calendar  the calendar URL, already checked by calendarUrl()
      * @param array $hrefs id => href as the server reported it
      * @return array the 'changed' shape pollChanges() returns
      */
@@ -526,6 +619,8 @@ class CalDavCalendarProvider extends CalendarSyncProvider
      * The start, end and all-day flag of the first VEVENT, as FreeITSM stores
      * them: naive wall clock in $tz, all-day as 00:00 to 23:59:59 of the last day.
      *
+     * @param string $ics  one event's calendar data as the server sent it
+     * @param string $tz  the PHP zone name the times are converted into (FreeITSM's own zone)
      * @return array|null ['start'=>…, 'end'=>…, 'all_day'=>bool]
      */
     public static function eventTimes(string $ics, string $tz): ?array
@@ -598,6 +693,9 @@ class CalDavCalendarProvider extends CalendarSyncProvider
      * "GMT Standard Time" - is read as FreeITSM's zone rather than rejected. An
      * event that lands an hour out is visible and fixable; a change that is
      * silently dropped is neither.
+     *
+     * @param string $line  one unfolded DTSTART or DTEND line, parameters included
+     * @param string $tz  the PHP zone name to convert into; also how floating times and unknown TZIDs are read
      */
     private static function parseDate(string $line, string $tz): ?array
     {
@@ -655,6 +753,11 @@ class CalDavCalendarProvider extends CalendarSyncProvider
             : 'The server answered, but not like a calendar server (HTTP ' . $res['status'] . '). Check the address - for Baikal it ends in /dav.php/.');
     }
 
+    /**
+     * True when the signed-in analyst can write events into this calendar (see checkCalendar()).
+     *
+     * @param string $calendarAddress  the calendar address to test, as the analyst chose it
+     */
     public function verifyTarget(string $calendarAddress): bool
     {
         try {
@@ -667,6 +770,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
     /**
      * Can the signed-in analyst write events into this calendar?
      *
+     * @param string $calendarAddress  the calendar address to test, as the analyst chose it
      * @return array ['ok'=>bool, 'name'=>string, 'error'=>string]
      */
     public function checkCalendar(string $calendarAddress): array
@@ -753,6 +857,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         return $out;
     }
 
+    /** The PROPFIND body asking a collection for its name, type, supported components and the analyst's privileges. */
     private static function calendarPropfind(): string
     {
         return '<?xml version="1.0" encoding="utf-8"?>'
@@ -767,6 +872,10 @@ class CalDavCalendarProvider extends CalendarSyncProvider
      * Missing properties are read generously: a server that does not report
      * its component set is assumed to hold events, and one that does not report
      * privileges is assumed writable - the write itself will say otherwise.
+     *
+     * @param DOMXPath $xp  the parsed multistatus document
+     * @param DOMNode $resp  one d:response element in it
+     * @param string $url  the collection's absolute URL - its last path segment is the name when no displayname is given
      */
     private static function describeCalendar(DOMXPath $xp, DOMNode $resp, string $url): array
     {
@@ -796,7 +905,11 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         ];
     }
 
-    /** One readable sentence for a failed request, without calling it a contacts problem. */
+    /**
+     * One readable sentence for a failed request, without calling it a contacts problem.
+     *
+     * @param array $res  the result of cardDavRequest() - 'status' and 'error' are read
+     */
     private function explain(array $res): string
     {
         $status = (int)($res['status'] ?? 0);

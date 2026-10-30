@@ -13,6 +13,7 @@
  */
 const PM = (() => {
     const GRID = 20;
+    /** Rounds a coordinate to the nearest 20px grid line. */
     const snap = v => Math.round(v / GRID) * GRID;
 
     // Type registry helpers. Lookup by slug — the step.type string IS the slug
@@ -21,9 +22,11 @@ const PM = (() => {
     // type (e.g. a custom type was deleted while a diagram still referenced it).
     const FALLBACK_SHAPE = 'rounded';
     const FALLBACK_COLOR = '#0078d4';
+    /** The configured step type for a slug, or null when no such type exists any more. */
     function getType(slug) {
         return (window.STEP_TYPES_BY_SLUG || {})[slug] || null;
     }
+    /** The shape for a step type slug, falling back to rounded when the type has gone. */
     function shapeForSlug(slug) {
         const t = getType(slug);
         return t ? t.shape : FALLBACK_SHAPE;
@@ -120,6 +123,7 @@ const PM = (() => {
     // cursor approach (CSS does the actual sliding via .sidebar-hover on the
     // layout container). Set via Process Mapper → Settings → Left panel.
     const SIDEBAR_MODE_KEY = 'process_mapper_sidebar_mode';
+    /** Loads the analyst's left-panel preference ('always' or 'hover') and applies it. */
     async function loadSidebarModePreference() {
         try {
             const r = await fetch('../api/system/get_user_preference.php?key=' + encodeURIComponent(SIDEBAR_MODE_KEY), { credentials: 'same-origin' });
@@ -130,6 +134,7 @@ const PM = (() => {
             applySidebarMode('always');
         }
     }
+    /** Switches the layout between a pinned sidebar and the hover-to-expand one. */
     function applySidebarMode(mode) {
         const layout = document.querySelector('.pm-layout');
         if (!layout) return;
@@ -158,6 +163,7 @@ const PM = (() => {
         }
     }
 
+    /** Opens the process named by ?id= in the address bar, if it is in the list, without pushing another history entry. */
     function openInitialFromUrl() {
         const id = parseInt(new URLSearchParams(window.location.search).get('id'), 10);
         if (id && processes.some(p => p.id == id)) {
@@ -197,6 +203,7 @@ const PM = (() => {
         if (autosaveOn) scheduleAutosave();
     }
 
+    /** Restarts the 2-second autosave timer; when it fires mid-drag it waits for the next tick rather than reloading the canvas under the drag. */
     function scheduleAutosave() {
         clearTimeout(autosaveTimer);
         autosaveTimer = setTimeout(() => {
@@ -236,6 +243,7 @@ const PM = (() => {
         }
     }
 
+    /** Loads the analyst's autosave on/off preference and applies it without saving it back. */
     async function loadAutosavePreference() {
         try {
             const r = await fetch('../api/system/get_user_preference.php?key=' + encodeURIComponent(AUTOSAVE_PREF_KEY), { credentials: 'same-origin' });
@@ -247,6 +255,7 @@ const PM = (() => {
         }
     }
 
+    /** Sets autosave on or off, ticks the toggle, updates the status line and, when persist is true, saves the preference. */
     function applyAutosaveState(on, persist) {
         autosaveOn = !!on;
         const cb = document.getElementById('pmAutosaveToggle');
@@ -270,6 +279,7 @@ const PM = (() => {
         }
     }
 
+    /** The autosave toggle's handler - applies and saves the choice, and saves pending edits straight away when turned on. */
     function toggleAutosave(on) {
         clearTimeout(autosaveTimer);
         applyAutosaveState(on, true);
@@ -277,6 +287,7 @@ const PM = (() => {
         if (autosaveOn && dirty && currentProcessId) scheduleAutosave();
     }
 
+    /** Adds the SVG arrowhead markers (normal and selected) used by connector lines. */
     function addArrowheadDef() {
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
         defs.innerHTML = `<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
@@ -302,6 +313,7 @@ const PM = (() => {
         } catch (e) { console.error(e); }
     }
 
+    /** Draws the sidebar's process list, optionally filtered by title, with each row's date and delete button. */
     function renderProcessList(filter = '') {
         const fl = filter.toLowerCase();
         const filtered = fl ? processes.filter(p => p.title.toLowerCase().includes(fl)) : processes;
@@ -320,6 +332,7 @@ const PM = (() => {
         }).join('');
     }
 
+    /** Filters the sidebar list by the typed text. */
     function filterProcesses(val) {
         renderProcessList(val);
     }
@@ -349,11 +362,13 @@ const PM = (() => {
         input.focus();
     }
 
+    /** Closes the new-process dialog. */
     function closeNewProcess() {
         const modal = document.getElementById('newProcessModal');
         if (modal) modal.style.display = 'none';
     }
 
+    /** Creates an empty process with the typed title, refreshes the list and opens it; the button is disabled meanwhile so a double submit cannot create two. */
     async function submitNewProcess() {
         const input = document.getElementById('newProcessTitle');
         const btn = document.getElementById('newProcessSubmit');
@@ -387,6 +402,7 @@ const PM = (() => {
         }
     }
 
+    /** Asks, then deletes a process; clears the canvas and the ?id= when it was the open one. */
     async function deleteProcess(id) {
         if (!(await showConfirm({ title: 'Delete', message: 'Delete this process?', okLabel: 'Delete', okClass: 'danger' }))) return;
         try {
@@ -527,6 +543,7 @@ const PM = (() => {
         renderConnectors();
     }
 
+    /** Builds a step's element - shape, position, colour, label, the four connector edge handles, the link badge when it has a URL, and its mouse handlers. */
     function createStepEl(step) {
         const el = document.createElement('div');
         el.className = 'pm-step';
@@ -577,6 +594,7 @@ const PM = (() => {
         return el;
     }
 
+    /** Redraws every connector as a straight SVG line with a wider invisible hit area and an optional label that can be double-clicked to edit. */
     function renderConnectors() {
         // Clear existing
         svg.querySelectorAll('.pm-connector-group').forEach(g => g.remove());
@@ -650,6 +668,7 @@ const PM = (() => {
         });
     }
 
+    /** The start and end points of a connector - the facing edges of the two steps, chosen by whether they sit more apart horizontally or vertically. */
     function calcConnectorPoints(from, to) {
         // Centre of each step
         const fcx = from.x + from.width / 2;
@@ -749,6 +768,7 @@ const PM = (() => {
         };
     }
 
+    /** Renames a step in place - lays a text box over it; Enter or leaving the box keeps the new label, Escape puts the old one back. */
     function onStepDblClick(e, step) {
         e.stopPropagation();
         // Inline rename
@@ -762,6 +782,7 @@ const PM = (() => {
         input.style.width = el.offsetWidth + 'px';
         input.style.height = el.offsetHeight + 'px';
 
+        /** Writes the typed label back to the step and the detail panel, removes the text box and marks the diagram changed. */
         const finish = () => {
             step.label = input.value;
             el.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = step.label || '(unnamed)'; });
@@ -797,6 +818,7 @@ const PM = (() => {
         canvas.addEventListener('keydown', onCanvasKeyDown);
     }
 
+    /** Starts a rubber-band selection on bare canvas or a lane body; cancels click-to-connect instead when it is armed. */
     function onCanvasMouseDown(e) {
         if (e.button !== 0) return;
         // Rubber-band starts on:
@@ -836,6 +858,7 @@ const PM = (() => {
         rubberBand = { startX: sx, startY: sy, el: box };
     }
 
+    /** Mouse-move for every drag on the canvas - hands annotation, lane and group drags to their own handlers, and moves steps (snapped), draws the connector being dragged or sizes the rubber band. */
     function onDocMouseMove(e) {
         // Dragging an annotation (move or resize)
         if (annotationDragging) {
@@ -914,6 +937,7 @@ const PM = (() => {
         }
     }
 
+    /** Finishes whatever drag is in progress - re-assigns lanes and groups after a step move, opens the detail panel for a plain click, adds the dragged connector or selects the steps inside the rubber band. */
     function onDocMouseUp(e) {
         if (annotationDragging) {
             onAnnotationDocMouseUp();
@@ -992,6 +1016,7 @@ const PM = (() => {
         }
     }
 
+    /** A click on bare canvas clears every selection and closes the detail panel. */
     function onCanvasClick(e) {
         if (e.target === canvas || e.target.classList.contains('pm-canvas-empty')) {
             if (!rubberBand) {
@@ -1006,6 +1031,7 @@ const PM = (() => {
         }
     }
 
+    /** Canvas keys - Delete removes the selection, arrows nudge selected steps one grid square, Ctrl+S saves and Ctrl+A selects every step. */
     function onCanvasKeyDown(e) {
         // Delete key
         if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1072,6 +1098,7 @@ const PM = (() => {
         connectDrag = { fromStepId: id, side, startX: sx, startY: sy };
     }
 
+    /** The step whose box contains the given canvas point, if any. */
     function findStepAt(x, y) {
         return steps.find(s =>
             x >= s.x && x <= s.x + s.width &&
@@ -1145,10 +1172,12 @@ const PM = (() => {
         };
     }
 
+    /** True when two rectangles overlap. */
     function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
         return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
     }
 
+    /** Right-click on a step - makes it the only selection, remembers the click position for Paste and opens the context menu. */
     function onStepContextMenu(e, step) {
         e.preventDefault();
         e.stopPropagation();
@@ -1170,6 +1199,7 @@ const PM = (() => {
         showContextMenu(e.clientX, e.clientY);
     }
 
+    /** Opens the step context menu at the cursor, showing Apply formatting and Paste only when there is something to apply, enabling the connector items only when the step has connectors, and keeping the menu on screen. */
     function showContextMenu(x, y) {
         const menu = document.getElementById('pmContextMenu');
         if (!menu) return;
@@ -1239,18 +1269,21 @@ const PM = (() => {
         });
     }
 
+    /** Escapes text for safe use in HTML. */
     function escapeForAttr(s) {
         const d = document.createElement('div');
         d.textContent = s == null ? '' : String(s);
         return d.innerHTML;
     }
 
+    /** Closes the step context menu and forgets its target step. */
     function hideContextMenu() {
         const menu = document.getElementById('pmContextMenu');
         if (menu) menu.style.display = 'none';
         ctxTargetStep = null;
     }
 
+    /** Wires the step context menu - Create new, Change to and the flat actions - plus closing it on an outside click, Escape (which also cancels click-to-connect and an uncommitted cut), scroll or window blur. */
     function bindContextMenu() {
         const menu = document.getElementById('pmContextMenu');
         if (!menu) return;
@@ -1376,6 +1409,7 @@ const PM = (() => {
         showToast(t('process-mapper.toast.format_copied'), 'success');
     }
 
+    /** Paints the copied colour and gradient onto a step and updates the detail panel if it shows that step. */
     function applyFormat(step) {
         if (!step || !copiedFormat) return;
         step.color  = copiedFormat.color;
@@ -1410,6 +1444,7 @@ const PM = (() => {
         showToast(t('process-mapper.toast.connect_prompt'), 'info');
     }
 
+    /** Leaves click-to-connect mode and says so. */
     function cancelClickConnect() {
         if (clickConnectFromId == null) return;
         clickConnectFromId = null;
@@ -1589,6 +1624,7 @@ const PM = (() => {
         }
     }
 
+    /** Puts a step on the step clipboard as a cut and fades it; the original is removed only when pasted. */
     function cutStep(step) {
         clearStepClipboardVisual();
         stepClipboard = { mode: 'cut', data: cloneStepData(step), sourceId: step.id || step.tempId };
@@ -1596,6 +1632,7 @@ const PM = (() => {
         showToast(t('process-mapper.toast.step_cut'), 'info');
     }
 
+    /** Puts a copy of a step on the step clipboard, ready to paste any number of times. */
     function copyStepForPaste(step) {
         clearStepClipboardVisual();
         stepClipboard = { mode: 'copy', data: cloneStepData(step), sourceId: null };
@@ -1638,10 +1675,12 @@ const PM = (() => {
     //  Annotations (sticky notes)
     // =========================================================
 
+    /** The sticky note with this saved or temporary id. */
     function getAnnotation(id) {
         return annotations.find(a => (a.id != null && a.id == id) || a.tempId == id);
     }
 
+    /** A sticky note's saved id, or its temporary id when not yet saved. */
     function annotationRef(a) {
         return a.id != null ? a.id : a.tempId;
     }
@@ -1680,6 +1719,7 @@ const PM = (() => {
         if (ta) { ta.focus(); ta.select(); }
     }
 
+    /** Builds a sticky note's element - body text, resize corner, drag and double-click-to-edit handlers. */
     function createAnnotationEl(a) {
         const el = document.createElement('div');
         el.className = 'pm-annotation';
@@ -1706,6 +1746,7 @@ const PM = (() => {
         return el;
     }
 
+    /** Applies a sticky note's position, size, colour and text to its element. */
     function applyAnnotationStyle(el, a) {
         el.style.left   = a.x + 'px';
         el.style.top    = a.y + 'px';
@@ -1716,6 +1757,7 @@ const PM = (() => {
         if (body) body.textContent = a.text || '';
     }
 
+    /** Starts moving or resizing a sticky note (resize from the corner handle) and selects it; cancels click-to-connect instead when it is armed. */
     function onAnnotationMouseDown(e, a) {
         if (e.button !== 0) return;
         if (clickConnectFromId != null) { cancelClickConnect(); e.stopPropagation(); e.preventDefault(); return; }
@@ -1728,6 +1770,7 @@ const PM = (() => {
             : { id: annotationRef(a), mode: 'move',   startMouseX: e.clientX, startMouseY: e.clientY, startX: a.x, startY: a.y, moved: false };
     }
 
+    /** Moves or resizes the dragged sticky note on the grid (at least 80x60) and keeps the detail panel's numbers in step. */
     function onAnnotationDocMouseMove(e) {
         if (!annotationDragging) return;
         const a = getAnnotation(annotationDragging.id);
@@ -1751,12 +1794,14 @@ const PM = (() => {
         }
     }
 
+    /** Ends a sticky-note drag, marking the diagram changed if it actually moved. */
     function onAnnotationDocMouseUp() {
         if (!annotationDragging) return;
         if (annotationDragging.moved) markDirty();
         annotationDragging = null;
     }
 
+    /** Makes a sticky note the only selection and opens its detail panel. */
     function selectAnnotation(a) {
         selectedStepIds.clear();
         selectedConnectorId = null;
@@ -1768,6 +1813,7 @@ const PM = (() => {
         showDetailForAnnotation(a);
     }
 
+    /** Opens the detail panel's sticky-note section filled from the note. */
     function showDetailForAnnotation(a) {
         detailPanel.classList.add('open');
         document.getElementById('detailBodyStep').style.display = 'none';
@@ -1787,6 +1833,7 @@ const PM = (() => {
         detailPanel.dataset.laneId = '';
     }
 
+    /** Copies the detail panel's text, colour, position and size back onto the selected sticky note. */
     function updateAnnotationFromDetail() {
         const id = detailPanel.dataset.annId;
         if (!id) return;
@@ -1887,6 +1934,7 @@ const PM = (() => {
     //  Groups (visual underlays)
     // =========================================================
 
+    /** Adds a new 240x160 group in the middle of the visible canvas and selects it. */
     function addGroup() {
         if (!currentProcessId) { showToast(t('process-mapper.toast.no_process_open'), 'error'); return; }
         const tempId = nextTempId--;
@@ -1908,6 +1956,7 @@ const PM = (() => {
         markDirty();
     }
 
+    /** Builds a group's element - label, resize corner, drag handler, and double-click to rename in the detail panel. */
     function createGroupEl(group) {
         const el = document.createElement('div');
         el.className = 'pm-group';
@@ -1936,6 +1985,7 @@ const PM = (() => {
         return el;
     }
 
+    /** Applies a group's position, size, fill and label to its element, with a border a shade darker than the fill. */
     function applyGroupStyle(el, group) {
         el.style.left   = group.x + 'px';
         el.style.top    = group.y + 'px';
@@ -1969,10 +2019,12 @@ const PM = (() => {
         return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
     }
 
+    /** The group with this saved or temporary id. */
     function getGroup(id) {
         return groups.find(g => g.id == id || g.tempId == id);
     }
 
+    /** A group's saved id, or its temporary id when not yet saved. */
     function groupRef(group) {
         return group.id != null ? group.id : group.tempId;
     }
@@ -2001,6 +2053,7 @@ const PM = (() => {
         });
     }
 
+    /** Sets group_id on the given steps from the group their centre now sits in. */
     function reassignStepGroups(stepIds) {
         stepIds.forEach(sid => {
             const s = getStep(sid);
@@ -2011,6 +2064,7 @@ const PM = (() => {
         });
     }
 
+    /** Makes a group the only selection and opens its detail panel. */
     function selectGroup(g) {
         // Group selection is exclusive — clear step + connector selection.
         selectedStepIds.clear();
@@ -2021,6 +2075,7 @@ const PM = (() => {
         showDetailForGroup(g);
     }
 
+    /** Starts moving or resizing a group (resize from the corner handle), first tagging every step inside it so a move carries them along. */
     function onGroupMouseDown(e, group) {
         if (e.button !== 0) return;
         // Click-to-connect cares only about steps as targets — clicking
@@ -2041,6 +2096,7 @@ const PM = (() => {
             : { id: groupRef(group), mode: 'move',   startMouseX: e.clientX, startMouseY: e.clientY, startX: group.x, startY: group.y,         moved: false };
     }
 
+    /** Moves the dragged group with its steps, or resizes it (at least 80x60), keeping the detail panel's numbers in step. */
     function onGroupDocMouseMove(e) {
         if (!groupDragging) return;
         const g = getGroup(groupDragging.id);
@@ -2083,6 +2139,7 @@ const PM = (() => {
         }
     }
 
+    /** Ends a group drag - re-assigns lanes for steps carried by a move, or every step's group after a resize. */
     function onGroupDocMouseUp() {
         if (!groupDragging) return;
         if (groupDragging.moved) {
@@ -2104,6 +2161,7 @@ const PM = (() => {
         groupDragging = null;
     }
 
+    /** Opens the detail panel's group section filled from the group. */
     function showDetailForGroup(g) {
         detailPanel.classList.add('open');
         document.getElementById('detailBodyStep').style.display = 'none';
@@ -2125,6 +2183,7 @@ const PM = (() => {
         detailPanel.dataset.stepId = '';
     }
 
+    /** Copies the detail panel's label, colours, position and size back onto the selected group. */
     function updateGroupFromDetail() {
         const id = detailPanel.dataset.groupId;
         if (!id) return;
@@ -2150,14 +2209,17 @@ const PM = (() => {
     //  Lanes (swimlanes — structured with step ownership)
     // =========================================================
 
+    /** The lane with this saved or temporary id. */
     function getLane(id) {
         return lanes.find(l => (l.id != null && l.id == id) || l.tempId == id);
     }
 
+    /** A lane's saved id, or its temporary id when not yet saved. */
     function laneRef(lane) {
         return lane.id != null ? lane.id : lane.tempId;
     }
 
+    /** The lanes sorted by display order, top to bottom. */
     function lanesOrdered() {
         return [...lanes].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     }
@@ -2172,6 +2234,7 @@ const PM = (() => {
         }
     }
 
+    /** The lane whose band contains this canvas y position, if any. */
     function laneAtY(y) {
         recomputeLaneBandTops();
         for (const l of lanes) {
@@ -2180,6 +2243,7 @@ const PM = (() => {
         return null;
     }
 
+    /** Redraws every lane band behind everything else on the canvas, in order. */
     function renderLanes() {
         canvas.querySelectorAll('.pm-lane').forEach(el => el.remove());
         recomputeLaneBandTops();
@@ -2191,6 +2255,7 @@ const PM = (() => {
         updateLaneSelectionVisuals();
     }
 
+    /** Builds a lane band's element with its header (drag to reorder, click to select) and bottom divider (drag to resize). */
     function createLaneEl(lane) {
         const el = document.createElement('div');
         el.className = 'pm-lane';
@@ -2214,6 +2279,7 @@ const PM = (() => {
         return el;
     }
 
+    /** Applies a lane's band position, height, fill and header label to its element. */
     function applyLaneStyle(el, lane) {
         el.style.top    = lane._bandTop + 'px';
         el.style.left   = '0px';
@@ -2224,12 +2290,14 @@ const PM = (() => {
         if (headerEl) headerEl.textContent = lane.label || '(unnamed lane)';
     }
 
+    /** Highlights the selected lane band. */
     function updateLaneSelectionVisuals() {
         canvas.querySelectorAll('.pm-lane').forEach(el => {
             el.classList.toggle('selected', el.dataset.laneId == selectedLaneId);
         });
     }
 
+    /** Adds a new 180px lane at the bottom of the lane order and selects it. */
     function addLane() {
         if (!currentProcessId) { showToast(t('process-mapper.toast.no_process_open'), 'error'); return; }
         const tempId = nextTempId--;
@@ -2254,6 +2322,7 @@ const PM = (() => {
         markDirty();
     }
 
+    /** Makes a lane the only selection and opens its detail panel. */
     function selectLane(lane) {
         // Exclusive single-select: clear step / connector / group selection.
         selectedStepIds.clear();
@@ -2265,6 +2334,7 @@ const PM = (() => {
         showDetailForLane(lane);
     }
 
+    /** Opens the detail panel's lane section filled from the lane. */
     function showDetailForLane(lane) {
         detailPanel.classList.add('open');
         document.getElementById('detailBodyStep').style.display = 'none';
@@ -2286,6 +2356,7 @@ const PM = (() => {
         detailPanel.dataset.groupId = '';
     }
 
+    /** Copies the detail panel's label, colours, height and order back onto the selected lane, resizing or reordering it (contents move with it) and redrawing. */
     function updateLaneFromDetail() {
         const id = detailPanel.dataset.laneId;
         if (!id) return;
@@ -2424,6 +2495,7 @@ const PM = (() => {
         if (lane.el) lane.el.classList.add('pm-lane-dragging');
     }
 
+    /** Starts resizing a lane from its bottom divider, first tagging every step with the lane it sits in. */
     function onLaneDividerMouseDown(e, lane) {
         if (e.button !== 0) return;
         if (clickConnectFromId != null) { cancelClickConnect(); e.stopPropagation(); e.preventDefault(); return; }
@@ -2440,6 +2512,7 @@ const PM = (() => {
         };
     }
 
+    /** Resizes the dragged lane in grid steps, or reorders it by counting the lanes whose midline is above the cursor, redrawing as it goes. */
     function onLaneDocMouseMove(e) {
         if (!laneDragging) return;
         const lane = getLane(laneDragging.id);
@@ -2492,6 +2565,7 @@ const PM = (() => {
         }
     }
 
+    /** Ends a lane drag, marking the diagram changed if it actually moved. */
     function onLaneDocMouseUp() {
         if (!laneDragging) return;
         if (laneDragging.moved) markDirty();
@@ -2530,6 +2604,7 @@ const PM = (() => {
         });
     }
 
+    /** Removes the selected lane - its steps keep their place but lose the lane, and the contents of the lanes below move up to close the gap. */
     function deleteSelectedLane() {
         if (!selectedLaneId) return;
         const lane = getLane(selectedLaneId);
@@ -2569,6 +2644,7 @@ const PM = (() => {
         markDirty();
     }
 
+    /** Adds a connector between two steps unless one already joins them in either direction. */
     function addConnector(fromId, toId) {
         // Check for duplicate
         const exists = connectors.some(c =>
@@ -2583,6 +2659,7 @@ const PM = (() => {
         markDirty();
     }
 
+    /** Deletes whatever is selected - a sticky note, lane, group (its steps stay), connector, or the selected steps with their connectors. */
     function deleteSelected() {
         if (selectedAnnotationId != null) {
             const a = getAnnotation(selectedAnnotationId);
@@ -2654,6 +2731,7 @@ const PM = (() => {
         renderConnectors();
     }
 
+    /** Makes a connector the only selection and closes the detail panel. */
     function selectConnector(c) {
         selectedStepIds.clear();
         selectedConnectorId = c.id || c.tempId;
@@ -2703,6 +2781,7 @@ const PM = (() => {
         }
     }
 
+    /** Closes the detail panel and resets it to the step section. */
     function closeDetail() {
         detailPanel.classList.remove('open');
         detailPanel.dataset.stepId = '';
@@ -2717,6 +2796,7 @@ const PM = (() => {
         document.getElementById('detailTitle').textContent = t('process-mapper.detail.step_title');
     }
 
+    /** Copies the detail panel's label, type, colours, description, link and position back onto the selected step and redraws it. */
     function updateStepFromDetail() {
         const sid = detailPanel.dataset.stepId;
         if (!sid) return;
@@ -2747,6 +2827,7 @@ const PM = (() => {
         markDirty();
     }
 
+    /** Keeps the detail panel's X and Y boxes in step with the selected step while it moves. */
     function updateDetailPosition() {
         const sid = detailPanel.dataset.stepId;
         if (!sid) return;
@@ -2756,6 +2837,7 @@ const PM = (() => {
         document.getElementById('detailY').value = step.y;
     }
 
+    /** Sets a connector's label from the detail panel. */
     function updateConnectorLabel(cid, value) {
         const c = connectors.find(c => (c.id || c.tempId) == cid);
         if (c) {
@@ -2765,6 +2847,7 @@ const PM = (() => {
         }
     }
 
+    /** Deletes a connector from the detail panel's list and refreshes the list. */
     function removeConnector(cid) {
         connectors = connectors.filter(c => (c.id || c.tempId) != cid);
         renderConnectors();
@@ -2777,6 +2860,7 @@ const PM = (() => {
         markDirty();
     }
 
+    /** Edits a connector's label in place with a small text box at its midpoint; Enter or leaving the box keeps it, Escape cancels. */
     function editConnectorLabel(c, mx, my) {
         const input = document.createElement('input');
         input.type = 'text';
@@ -2787,6 +2871,7 @@ const PM = (() => {
         input.style.width = '120px';
         input.style.height = '28px';
 
+        /** Writes the typed label back to the connector, removes the text box and redraws. */
         const finish = () => {
             c.label = input.value;
             input.remove();
@@ -3016,6 +3101,7 @@ const PM = (() => {
         return steps.find(s => s.id == id || s.tempId == id);
     }
 
+    /** Removes every step, connector, group, lane and sticky note from the canvas and the in-memory diagram, clears all selections and a pending cut, and resets the changed flag. */
     function clearCanvas() {
         canvas.querySelectorAll('.pm-step').forEach(el => el.remove());
         canvas.querySelectorAll('.pm-group').forEach(el => el.remove());
@@ -3056,6 +3142,7 @@ const PM = (() => {
             .replace(/>/g, '&gt;')
             .replace(/\r?\n/g, '<br/>');
 
+        /** A step's Mermaid node id - s plus its saved id, or st plus its temporary id. */
         const nodeId = (step) => 's' + (step.id != null ? step.id : ('t' + Math.abs(step.tempId)));
 
         // Map each Process Mapper shape to its closest Mermaid v10 flowchart
@@ -3138,6 +3225,7 @@ const PM = (() => {
         document.getElementById('exportModal').style.display = 'flex';
     }
 
+    /** Closes the export dialog and resets its Copy button. */
     function closeExportModal() {
         document.getElementById('exportModal').style.display = 'none';
         const btn = document.getElementById('exportCopyBtn');
@@ -3161,6 +3249,7 @@ const PM = (() => {
         }, 0);
     }
 
+    /** Copies the Mermaid markup to the clipboard, showing "Copied" for two seconds; if the copy is refused it selects the text for Ctrl+C instead. */
     async function copyExport() {
         const text = document.getElementById('exportText').value;
         const btn = document.getElementById('exportCopyBtn');
@@ -3317,6 +3406,7 @@ const PM = (() => {
         }
     }
 
+    /** Captures the diagram at 2x and downloads it as a PNG named after the process. */
     async function exportToPng() {
         if (!currentProcessId) { showToast('Open a process first', 'error'); return; }
         closeExportModal();
@@ -3331,6 +3421,7 @@ const PM = (() => {
         showToast(t('process-mapper.toast.png_exported'), 'success');
     }
 
+    /** Captures the diagram and downloads it as an A4 PDF, landscape or portrait to match its shape, scaled to fit inside a 24pt margin. */
     async function exportToPdf() {
         if (!currentProcessId) { showToast('Open a process first', 'error'); return; }
         // jsPDF UMD exposes its constructor under window.jspdf.jsPDF
@@ -3367,6 +3458,7 @@ const PM = (() => {
         showToast(t('process-mapper.toast.pdf_exported'), 'success');
     }
 
+    /** Escapes text for safe use in HTML. */
     function esc(str) {
         const div = document.createElement('div');
         div.textContent = str;
@@ -3400,6 +3492,7 @@ const PM = (() => {
             });
         }
     }
+    /** Closes the process documents panel. */
     function closeProcessDocs() {
         const panel = document.getElementById('processDocsPanel');
         if (panel) panel.classList.remove('open');

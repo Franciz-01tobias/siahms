@@ -34,9 +34,15 @@ try {
     if (!analystCanAccessTicket($conn, (int) $_SESSION['analyst_id'], $ticketId)) {
         throw new Exception('Ticket not found');
     }
+    // A confidential ticket is not sent to an AI provider unless Tickets -> Settings
+    // says so (discussion #62) - checked here, on the server, whatever the page does.
+    require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
+    if (!ticketAiAllowed($conn, $ticketId)) {
+        throw new Exception(TICKET_AI_CONFIDENTIAL_ERROR);
+    }
 
     $cfg = aiSettingsLoad($conn, 'tickets_reply_cleanup');
-    if (($cfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($cfg)) {
         throw new Exception('AI is not configured. Set up the provider and key in Tickets → Settings → Reply Cleanup.');
     }
 

@@ -1,5 +1,7 @@
 /**
  * Rota Page JS - Weekly staff rota management
+ *
+ * @wiki Rota-Copy-And-Paste-Developer-Deep-Dive
  */
 
 const ROTA_API = '../api/tickets/';
@@ -35,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadRota();
 });
 
+/** Returns the Monday of the week holding a date, as YYYY-MM-DD. */
 function getMonday(d) {
     const date = new Date(d);
     const day = date.getDay(); // 0=Sun 1=Mon...6=Sat
@@ -43,6 +46,7 @@ function getMonday(d) {
     return formatDate(date);
 }
 
+/** Formats a Date as a local YYYY-MM-DD. */
 function formatDate(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -52,6 +56,7 @@ function formatDate(d) {
 
 // ==================== Week Navigation ====================
 
+/** Moves the rota forward or back by a number of weeks and reloads it. */
 function changeWeek(delta) {
     const d = new Date(currentWeekStart + 'T00:00:00');
     d.setDate(d.getDate() + (delta * 7));
@@ -59,6 +64,7 @@ function changeWeek(delta) {
     loadRota();
 }
 
+/** Jumps the rota back to the current week and reloads it. */
 function goToThisWeek() {
     currentWeekStart = getMonday(new Date());
     loadRota();
@@ -66,6 +72,10 @@ function goToThisWeek() {
 
 // ==================== Data Loading ====================
 
+/**
+ * Loads the week's analysts, shifts, entries and locations from get_rota.php, then redraws the title
+ * and grid.
+ */
 async function loadRota() {
     try {
         const response = await fetch(ROTA_API + 'get_rota.php?week=' + currentWeekStart);
@@ -88,6 +98,7 @@ async function loadRota() {
     }
 }
 
+/** Sets the week title (e.g. "3 - 7 Mar 2026"), ending on Friday unless weekends are included. */
 function updateTitle(weekStart, weekEnd) {
     const start = new Date(weekStart + 'T00:00:00');
     const end = new Date(weekEnd + 'T00:00:00');
@@ -114,6 +125,13 @@ function updateTitle(weekStart, weekEnd) {
 
 // ==================== Grid Rendering ====================
 
+/**
+ * Rebuilds the rota grid - day headers, one row per analyst, and a cell per day showing the shift,
+ * times, location and on-call badges.
+ *
+ * Every cell and header carries data-analyst / data-date so hover, selection and the right-click menu
+ * can find it; the selection is re-marked afterwards.
+ */
 function renderRotaGrid(weekStart) {
     const grid = document.getElementById('rotaGrid');
     const numDays = includeWeekends ? 7 : 5;
@@ -216,11 +234,13 @@ function renderRotaGrid(weekStart) {
     applyRotaSelection();
 }
 
+/** Trims a HH:MM:SS time to HH:MM. */
 function fmtTime(t) {
     if (!t) return '';
     return t.substring(0, 5);
 }
 
+/** HTML-escapes a string through a text node; empty values become an empty string. */
 function escapeHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
@@ -230,6 +250,10 @@ function escapeHtml(str) {
 
 // ==================== Entry Modal ====================
 
+/**
+ * Opens the rota entry dialog for an analyst and date - shift list, location radios and on-call -
+ * filled from the entry when editing one.
+ */
 async function openRotaEntryModal(analystId, date, entryId) {
     // Find analyst name
     const analyst = rotaAnalysts.find(a => a.id == analystId);
@@ -287,6 +311,7 @@ async function openRotaEntryModal(analystId, date, entryId) {
     document.getElementById('rotaEntryModal').classList.add('active');
 }
 
+/** Closes the rota entry dialog. */
 function closeRotaEntryModal() {
     document.getElementById('rotaEntryModal').classList.remove('active');
 }
@@ -383,6 +408,7 @@ function rotaSetClipboard(cell, line) {
     rotaLineClipboard = line;
 }
 
+/** Returns the loaded rota entry for an analyst on a date, or null. */
 function rotaEntryAt(analystId, date) {
     return rotaEntries.find(e => e.analyst_id == analystId && e.rota_date === date) || null;
 }
@@ -410,10 +436,12 @@ let rotaDragMoved = false;          // ...and whether it ever left that cell
 let rotaSuppressClick = false;      // the click that ends a drag opens nothing
 let rotaHoverKey = '';              // the column / row currently lit up
 
+/** Returns the selection key for a cell - "analystId|YYYY-MM-DD". */
 function rotaCellKey(analystId, date) {
     return analystId + '|' + date;
 }
 
+/** Returns the selected cells as {analyst_id, rota_date} targets. */
 function rotaSelectionTargets() {
     return Array.from(rotaSelection).map(key => {
         const parts = key.split('|');
@@ -421,6 +449,7 @@ function rotaSelectionTargets() {
     });
 }
 
+/** Marks the grid cells that are in the selection. */
 function applyRotaSelection() {
     document.querySelectorAll('#rotaGrid .rota-cell').forEach(cell => {
         cell.classList.toggle('selected',
@@ -428,6 +457,7 @@ function applyRotaSelection() {
     });
 }
 
+/** Empties the cell selection and unmarks the grid. */
 function clearRotaSelection() {
     if (!rotaSelection.size) return;
     rotaSelection.clear();
@@ -459,6 +489,7 @@ function rotaLineCells(head) {
     return Array.from(document.querySelectorAll('#rotaGrid ' + sel));
 }
 
+/** Removes the column / row highlight. */
 function rotaHoverClear() {
     rotaHoverKey = '';
     document.querySelectorAll('#rotaGrid .line-hover').forEach(el => el.classList.remove('line-hover'));
@@ -540,6 +571,13 @@ function rotaHoverSet(head) {
 
 // ---- The cell menu ----------------------------------------------------
 
+/**
+ * Opens the right-click menu on a rota cell, aimed at the selection when the cell is inside one,
+ * otherwise at that cell alone.
+ *
+ * Sets up Copy, Clear and Paste for what is on the clipboard; a copied day or analyst line cannot be
+ * pasted onto cells, and Paste says why.
+ */
 function openRotaCellMenu(event, cell) {
     event.preventDefault();
     rotaCtxCell = cell;
@@ -711,6 +749,10 @@ function rotaSetPasteBlocked(label, why) {
     rotaHidePasteEmpty();
 }
 
+/**
+ * Sets the Paste item to the given label when a shift is on the cell clipboard, otherwise disables it
+ * as "Nothing copied yet".
+ */
 function rotaSetPasteItem(label) {
     const pasteBtn = document.getElementById('rotaCtxPaste');
     const pasteLbl = document.getElementById('rotaCtxPasteLabel');
@@ -727,6 +769,7 @@ function rotaSetPasteItem(label) {
     }
 }
 
+/** Hides the "paste into empty cells only" item. */
 function rotaHidePasteEmpty() {
     document.getElementById('rotaCtxPasteEmpty').style.display = 'none';
 }
@@ -788,6 +831,10 @@ function rotaPositionMenu(event) {
     menu.style.top  = Math.max(8, y) + 'px';
 }
 
+/**
+ * Closes the rota right-click menu and forgets the cell or line it was opened on, clearing the line
+ * highlight.
+ */
 function closeRotaCellMenu() {
     const menu = document.getElementById('rotaContextMenu');
     if (menu) menu.classList.remove('active');
@@ -807,6 +854,12 @@ document.addEventListener('keydown', function (e) {
     clearRotaSelection();
 });
 
+/**
+ * Runs a right-click menu choice (copy, clear, paste, paste into empty cells) on the line, the
+ * selection or the cell the menu was opened on.
+ *
+ * A Paste the menu already refused shows its reason as a toast instead.
+ */
 async function rotaCtxAction(action) {
     const cell = rotaCtxCell;
     const line = rotaCtxLine;
@@ -1155,6 +1208,10 @@ function rotaVisibleEntries(weekStart) {
     return out;
 }
 
+/**
+ * Copies the visible week's entries to the week clipboard as day offsets, so they can be pasted onto a
+ * different week.
+ */
 function copyRotaWeek() {
     // Stored as a DAY OFFSET, not a date. The whole point is to land these on a
     // different week, and the offset is the only part that survives the move.
@@ -1176,6 +1233,10 @@ function copyRotaWeek() {
     showToast(t('tickets.rota.copy.week_copied', { count: entries.length }), 'success');
 }
 
+/**
+ * Shows the Paste week button, with the copied week in its tooltip, only while a week is on the
+ * clipboard.
+ */
 function updatePasteWeekButton() {
     const btn = document.getElementById('rotaPasteWeekBtn');
     if (!btn) return;
@@ -1185,6 +1246,12 @@ function updatePasteWeekButton() {
     btn.title = t('tickets.rota.copy.clipboard_week', { date: rotaDateLabel(rotaWeekClipboard.week_start) });
 }
 
+/**
+ * Pastes the copied week onto the week on screen through paste_rota_week.php, after a confirmation
+ * that counts the entries it replaces.
+ *
+ * Warns when rows were skipped because their shift no longer exists.
+ */
 async function pasteRotaWeek() {
     if (!rotaWeekClipboard) return;
 

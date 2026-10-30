@@ -71,9 +71,9 @@ try {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('asset-management.table.title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('assets', t('asset-management.nav.table'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/data-table.css?v=4">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
@@ -84,7 +84,7 @@ try {
     <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js"></script>
     <?php /* Mobile-friendly opt-in (#937). Last stylesheet so its @media rules
              win on ties. Every rule inside is gated at 768px. */ ?>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
     <style>
         /* The "not seen in N days" banner (#97). Amber to match the Watchtower
            card it is reached from, and shrink-proof so it cannot be squeezed to
@@ -119,6 +119,8 @@ try {
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
+    <?php require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('asset-management.nav.assets'), [actionRowNew('./?new=1', t('asset-management.list.new_asset'), true)]); ?>
 
     <div class="dt-page">
         <?php /* Filled in by asset-table.js when the page is opened as
@@ -130,8 +132,8 @@ try {
 
     <script>window.assetCustomColumns = <?php echo json_encode($assetCustomColumns, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../assets/js/data-table.js?v=6"></script>
-    <script src="../assets/js/asset-table.js?v=8"></script>
+    <script src="../assets/js/asset-table.js?v=10"></script>
     <?php /* Loaded last so it can wrap this page's globals; inert on desktop. */ ?>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

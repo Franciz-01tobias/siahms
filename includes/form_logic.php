@@ -22,7 +22,12 @@
  * decides whether an answer was really required, because a client can simply not run.
  */
 
-/** Split a stored answer into a scalar string + a list, so one operator works for both shapes. */
+/**
+ * Split a stored answer into a scalar string + a list, so one operator works for both shapes.
+ *
+ * @param mixed $raw  one field's answer - a string, a JSON array string (checkboxes), a lookup's
+ *                    {"id","label"} JSON string, a PHP array, or null
+ */
 function formLogicNormaliseValue($raw): array
 {
     $scalar = is_array($raw) ? '' : trim((string)($raw ?? ''));
@@ -53,7 +58,12 @@ function formLogicNormaliseValue($raw): array
     return ['scalar' => $scalar, 'list' => $list];
 }
 
-/** Evaluate one rule against the answers given so far. */
+/**
+ * Evaluate one rule against the answers given so far.
+ *
+ * @param array $rule             array{field:int,op:string,value:string} - one entry of visible_if.rules
+ * @param array $valuesByFieldId  field_id => stored answer; a missing field counts as blank
+ */
 function formLogicTestRule(array $rule, array $valuesByFieldId): bool
 {
     $refId = (int)($rule['field'] ?? 0);

@@ -150,17 +150,30 @@ function documentEntityRegistry(): array {
             'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
         ],
         'contract' => [
-            // No tenant_id column at all — module membership IS the whole rule
-            // here, and pretending otherwise would invent a filter on a column
-            // that does not exist.
+            // No tenant_id column: a SUPPLIER contract is install-wide, so module
+            // membership is the rule. A CUSTOMER contract belongs to its
+            // customer's company (#153) and is gated by it.
             'module' => 'contracts',
             'table'  => 'contracts',
             'label'  => 'Contract',
             'url'    => 'contracts/view.php?id=%d',
             'title'  => 'title',
             'alive'  => null,
-            'can'    => null,
-            'filter' => null,
+            'can'    => function (PDO $c, int $a, int $id) { require_once __DIR__ . '/contract_party.php'; return contractCanView($c, $a, $id); },
+            'filter' => function (PDO $c, int $a, string $alias) { require_once __DIR__ . '/contract_party.php'; return contractVisibilitySql($c, $a, $alias); },
+        ],
+        'domain' => [
+            // Registrar invoices, transfer authorisations, the letter from the
+            // brand-protection agency (#154). Scoped data: the domain's company
+            // decides who sees its documents, like an asset's.
+            'module' => 'domains',
+            'table'  => 'domains',
+            'label'  => 'Domain',
+            'url'    => 'domains/view.php?id=%d',
+            'title'  => 'domain_name',
+            'alive'  => null,
+            'can'    => function (PDO $c, int $a, int $id) { return analystCanAccessDomain($c, $a, $id); },
+            'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
         ],
         'knowledge_article' => [
             // ⚠️ Knowledge is the module that does NOT follow the others:
@@ -211,18 +224,17 @@ function documentEntityRegistry(): array {
             'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
         ],
         'task' => [
-            // No tenant_id column — module membership is the whole rule, as with
-            // contracts. Inventing a filter on a column that does not exist would
-            // simply error and, because the builder drops a type it cannot filter,
-            // silently hide every task's documents.
+            // Tasks belong to a company (they gained tenant_id in GH #83), so a
+            // task's documents follow the task's company exactly as a change's do.
+            // This entry predates that and said tasks had no company column.
             'module' => 'tasks',
             'table'  => 'tasks',
             'label'  => 'Task',
             'url'    => 'tasks/?task_id=%d',
             'title'  => 'title',
             'alive'  => null,
-            'can'    => null,
-            'filter' => null,
+            'can'    => function (PDO $c, int $a, int $id) { return analystCanAccessTask($c, $a, $id); },
+            'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
         ],
         'supplier' => [
             // Sits beside contracts and wants the same things — due diligence,
@@ -256,6 +268,17 @@ function documentEntityRegistry(): array {
             'can'    => null,
             'filter' => null,
         ],
+        'lease' => [
+            // Assets -> Leases (3.5.0). Scoped data like assets: NULL = Default.
+            'module' => 'assets',
+            'table'  => 'leases',
+            'label'  => 'Lease',
+            'url'    => 'asset-management/leases/view.php?id=%d',
+            'title'  => 'name',
+            'alive'  => null,
+            'can'    => function (PDO $c, int $a, int $id) { require_once __DIR__ . '/leases.php'; return leaseCanView($c, $a, $id); },
+            'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
+        ],
         'software_licence' => [
             // ⚠️ THE ONLY ENTRY THAT NEEDS `title_sql`. A licence has no name of
             // its own — `software_licences` holds a type, a key and a renewal
@@ -283,6 +306,18 @@ function documentEntityRegistry(): array {
             'can'    => null,
             'filter' => null,
         ],
+        'project' => [
+            // 3.3.0: plans, designs, sign-off letters, backout plans - and what a
+            // gate checklist's document items point at. Scoped by the project's company.
+            'module' => 'projects',
+            'table'  => 'projects',
+            'label'  => 'Project',
+            'url'    => 'projects/view.php?id=%d',
+            'title'  => 'name',
+            'alive'  => null,
+            'can'    => function (PDO $c, int $a, int $id) { return analystCanAccessProject($c, $a, $id); },
+            'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
+        ],
         'cmdb_object' => [
             'module' => 'cmdb',
             'table'  => 'cmdb_objects',
@@ -297,11 +332,20 @@ function documentEntityRegistry(): array {
     return $reg;
 }
 
-/** @return string[] Entity types this build knows about. */
+/**
+ * Returns the keys of every record type documents can be attached to.
+ *
+ * @return string[] Entity types this build knows about.
+ */
 function documentEntityTypes(): array {
     return array_keys(documentEntityRegistry());
 }
 
+/**
+ * Returns one record type's registry entry (label, URL, title column, access checks), or null when unknown.
+ *
+ * @param string $type  an entity type key from documentEntityRegistry(), e.g. 'contract' - may be untrusted
+ */
 function documentEntityDef(string $type): ?array {
     $reg = documentEntityRegistry();
     return $reg[$type] ?? null;
@@ -313,6 +357,8 @@ function documentEntityDef(string $type): ?array {
  * Module membership is the read gate, exactly as the command palette has it:
  * "Reads aren't capability-gated in FreeITSM, so module membership is the right
  * gate here." A NULL allowed_modules means unrestricted.
+ *
+ * @param ?array $allowedModules  the analyst's allowed module keys ($_SESSION['allowed_modules']); null means all
  */
 function documentAccessibleTypes(?array $allowedModules): array {
     $out = [];
@@ -330,6 +376,10 @@ function documentAccessibleTypes(?array $allowedModules): array {
  * Used for the exact, one-row question: may this document be downloaded, may it
  * be attached here. Checks the module gate first (cheap, and the coarse rule),
  * then the module's own record-level check where it has one.
+ *
+ * @param ?array $allowedModules  the analyst's allowed module keys ($_SESSION['allowed_modules']); null means all
+ * @param string $type            the parent's entity type key from documentEntityRegistry(); unknown gives false
+ * @param int    $parentId        the parent record's id in that type's table
  */
 function documentCanViewParent(PDO $conn, int $analystId, ?array $allowedModules, string $type, int $parentId): bool {
     $def = documentEntityDef($type);
@@ -358,6 +408,24 @@ function documentCanViewParent(PDO $conn, int $analystId, ?array $allowedModules
 }
 
 /**
+ * May this analyst CHANGE what is attached to a record - attach, upload to it, or unlink?
+ * documentCanViewParent(), plus the module's Read only level (#180, #181): somebody who
+ * may only read Change Management, Forms or Tasks must not attach evidence to it either.
+ *
+ * @param ?array $allowedModules  the analyst's allowed module keys; null means all
+ * @param string $type            the parent's entity type key from documentEntityRegistry()
+ * @param int    $parentId        the parent record's id
+ */
+function documentCanWriteParent(PDO $conn, int $analystId, ?array $allowedModules, string $type, int $parentId): bool {
+    if (!documentCanViewParent($conn, $analystId, $allowedModules, $type, $parentId)) return false;
+    $def = documentEntityDef($type);
+    if ($def && in_array($def['module'], MODULES_WITH_READ_ONLY, true)) {
+        return analystCanWriteModule($conn, $analystId, $def['module']);
+    }
+    return true;
+}
+
+/**
  * SQL constraining a document query to what this analyst may see.
  *
  * Builds one EXISTS per accessible entity type, OR'd together — which is
@@ -367,6 +435,9 @@ function documentCanViewParent(PDO $conn, int $analystId, ?array $allowedModules
  *
  * ⚠️ Returns ' AND 0=1' when the analyst can reach no entity type at all. An
  * empty string would mean "no constraint", i.e. every document in the system.
+ *
+ * @param ?array $allowedModules  the analyst's allowed module keys ($_SESSION['allowed_modules']); null means all
+ * @param string $docAlias        the alias the calling query gives the documents table; '' for no alias
  *
  * @return array [sqlFragment, params] — the [sql, params] shape every other
  *               filter in includes/tenancy.php uses.
@@ -423,6 +494,9 @@ function documentVisibilityClause(PDO $conn, int $analystId, ?array $allowedModu
  * download, preview and metadata read, and must never trust that the caller
  * found the id through a filtered list — /download.php?id=12345 is the attack,
  * and guessing an integer is not hard.
+ *
+ * @param ?array $allowedModules  the analyst's allowed module keys ($_SESSION['allowed_modules']); null means all
+ * @param int    $documentId      the documents.id asked for - untrusted, often straight from the URL
  */
 function documentCanView(PDO $conn, int $analystId, ?array $allowedModules, int $documentId): bool {
     if ($documentId <= 0) return false;
@@ -459,6 +533,9 @@ function documentCanView(PDO $conn, int $analystId, ?array $allowedModules, int 
  * software licence has no name of its own — it lives in software_inventory_apps
  * via app_id — so its entry supplies a scalar subquery instead. Both come from
  * the registry, which is code, so neither is ever attacker-supplied.
+ *
+ * @param string $type      the parent's entity type key from documentEntityRegistry(); unknown gives null
+ * @param int    $parentId  the parent record's id in that type's table
  */
 function documentParentName(PDO $conn, string $type, int $parentId): ?string
 {
@@ -488,6 +565,9 @@ function documentParentName(PDO $conn, string $type, int $parentId): ?string
  * see would disclose that a contract exists, and its title, to somebody with no
  * access to Contracts at all. So a hidden parent is omitted silently rather than
  * shown as "1 other record", which would leak the same fact more quietly.
+ *
+ * @param ?array $allowedModules  the analyst's allowed module keys ($_SESSION['allowed_modules']); null means all
+ * @param int    $documentId      the documents.id whose attachments to list
  *
  * @return array<int,array{parent_type:string,parent_id:int,label:string,name:?string,url:?string}>
  */
@@ -551,6 +631,9 @@ function documentVisibleParents(PDO $conn, int $analystId, ?array $allowedModule
  * Call this from a module's delete path when you have one. It is the tidy answer:
  * the links go at the moment the parent does.
  *
+ * @param string $parentType  the deleted record's entity type key from documentEntityRegistry(); unknown does nothing
+ * @param int    $parentId    the deleted record's id
+ *
  * @return int links removed
  */
 function documentsDetachParent(PDO $conn, string $parentType, int $parentId): int
@@ -583,6 +666,8 @@ function documentsDetachParent(PDO $conn, string $parentType, int $parentId): in
  * correct on its own.
  *
  * Bounded so it can run opportunistically without becoming the cost of a page load.
+ *
+ * @param int $limit  most rows to delete per entity type, and most documents to collect, in one run (at least 1)
  *
  * @return array{links_removed:int,documents_orphaned:int,files_removed:int,errors:string[]}
  */
@@ -662,6 +747,8 @@ function documentsCollectOrphans(PDO $conn, int $limit = 200): array
  * 🔑 The database stores an opaque KEY, never a path. A path baked into a row is
  * a data migration the day the files move to another disk, a NAS or object
  * storage; a key is a change to this one function.
+ *
+ * @param string $storageKey  documents.storage_key, as made by documentStorageKey(); any "../" is stripped
  */
 function documentStoragePath(string $storageKey): string {
     $key = str_replace('\\', '/', $storageKey);
@@ -678,7 +765,75 @@ function documentStoragePath(string $storageKey): string {
  * single directory is not a problem worth solving. Sharding into subdirectories,
  * or moving to object storage entirely, changes THIS function and nothing else —
  * which is the entire reason the column holds a key rather than a path.
+ *
+ * @param string $storedName  the random file name uploadStoreFile() gave the upload (its 'stored_name')
  */
 function documentStorageKey(string $storedName): string {
     return basename(str_replace('\\', '/', $storedName));
+}
+
+// ─── The Help Centre (GH #177) ───────────────────────────────────────────────
+//
+// Documents on a KNOWLEDGE ARTICLE can be downloaded from the self-service
+// portal's Help Centre, by anyone who may read that article there - unless the
+// link says not to. Every other kind of record is unaffected: its documents
+// never reach the portal (ticket-note files have their own route,
+// api/self-service/get_document.php). The article side lives in
+// includes/knowledge/help_centre_documents.php.
+
+/**
+ * Has Database Verification added document_links.show_in_help_centre yet?
+ *
+ * Every writer of document_links asks this first, because naming a column that
+ * is not there yet would break EVERY document upload on EVERY module between
+ * pulling the code and running verification - not just the new feature.
+ */
+function documentHelpCentreReady(PDO $conn): bool {
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try {
+        $ready = (bool) $conn->query("SHOW COLUMNS FROM `document_links` LIKE 'show_in_help_centre'")->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        $ready = false;
+    }
+    return $ready;
+}
+
+/**
+ * The show_in_help_centre value a NEW link to this kind of record starts with:
+ * 1 for a knowledge article (attaching a document to a customer-facing article
+ * publishes it, which is what people expect), 0 for everything else.
+ *
+ * TRAP: new links only. Never backfill existing rows to 1 - they were attached
+ *   before anybody was told that publishes them (see the column's TRAP in
+ *   includes/db_verify_schema.php).
+ *
+ * @param string $parentType  the document_links.parent_type being written, e.g. 'knowledge_article'
+ */
+function documentLinkHelpCentreDefault(string $parentType): int {
+    return $parentType === 'knowledge_article' ? 1 : 0;
+}
+
+/**
+ * Insert one document_links row, setting show_in_help_centre when the column
+ * exists. The one place a link is written, so the default above cannot be
+ * forgotten by a new caller.
+ *
+ * @param int $documentId  documents.id
+ * @param string $parentType  the record type, a key of documentEntityRegistry()
+ * @param int $parentId  that record's id
+ * @param ?int $linkedById  the analyst making the link; null for the system
+ * @param bool $ignoreDuplicate  true = INSERT IGNORE (attaching twice is a no-op)
+ */
+function documentInsertLink(PDO $conn, int $documentId, string $parentType, int $parentId, ?int $linkedById, bool $ignoreDuplicate = false): void {
+    $verb = $ignoreDuplicate ? 'INSERT IGNORE' : 'INSERT';
+    if (documentHelpCentreReady($conn)) {
+        $conn->prepare("$verb INTO document_links (document_id, parent_type, parent_id, linked_by_id, show_in_help_centre)
+                        VALUES (?,?,?,?,?)")
+             ->execute([$documentId, $parentType, $parentId, $linkedById, documentLinkHelpCentreDefault($parentType)]);
+    } else {
+        $conn->prepare("$verb INTO document_links (document_id, parent_type, parent_id, linked_by_id)
+                        VALUES (?,?,?,?)")
+             ->execute([$documentId, $parentType, $parentId, $linkedById]);
+    }
 }

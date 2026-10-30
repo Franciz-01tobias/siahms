@@ -50,17 +50,42 @@ if (!$__dbgAdmin) {
 if (!headers_sent()) header('Content-Type: text/plain; charset=utf-8');
 
 $sections = [];
+/**
+ * Adds one titled section ("=== TITLE ===" and its lines) to the report; $body is a
+ * string or an array of lines.
+ *
+ * @param mixed $sections  the report so far, a list of section strings - appended to by reference
+ * @param mixed $title  the section heading, printed between === marks
+ * @param mixed $body  the section text - a string, or an array of lines
+ */
 function addSection(&$sections, $title, $body) {
     if (is_array($body)) $body = implode("\n", $body);
     $sections[] = "=== {$title} ===\n" . rtrim($body, "\n");
 }
+/**
+ * Formats a boolean as YES or NO for the report.
+ *
+ * @param mixed $v  any value, judged as true or false
+ */
 function yn($v) { return $v ? 'YES' : 'NO'; }
+/**
+ * Prints every section, separated by blank lines, and stops - the end of the report, and
+ * the early exit when a check cannot go on.
+ *
+ * @param mixed $sections  the report, a list of section strings as built by addSection()
+ */
 function emit_and_exit($sections) {
     echo implode("\n\n", $sections) . "\n";
     exit;
 }
 
 // ---- masking (see D010 — same rules, same reasons) ----------------------
+/**
+ * Masks a value for a report that will be sent on - all stars when very short, otherwise
+ * the first one or two characters (and the last, for a long value) with stars between.
+ *
+ * @param mixed $s  the value to mask; empty gives (empty)
+ */
 function mask($s) {
     $s = (string)$s;
     if ($s === '') return '(empty)';
@@ -75,6 +100,8 @@ function mask($s) {
  * returned ['includes'=>…,'excludes'=>…] rather than a flat list) and printed a
  * masked "Array" — i.e. "A****" — which looked like a real, if odd, DN. A
  * diagnostic that quietly mangles its own input is worse than no diagnostic.
+ *
+ * @param mixed $s  an LDAP distinguished name; empty gives (not set), an array or object is flagged
  */
 function maskDn($s) {
     if (is_array($s) || is_object($s)) return '(UNEXPECTED ' . gettype($s) . ' — please report this)';
@@ -88,6 +115,11 @@ function maskDn($s) {
     }
     return implode(',', $parts);
 }
+/**
+ * Masks a newline-separated list of DNs, one maskDn() per line - ['(none)'] when it is empty.
+ *
+ * @param mixed $raw  DNs one per line, as stored in the provider's settings
+ */
 function maskDnList($raw) {
     $raw = trim((string)$raw);
     if ($raw === '') return ['(none)'];
@@ -118,6 +150,14 @@ try {
     emit_and_exit($sections);
 }
 
+/**
+ * Whether a column exists in this database - false on any error, so an older install
+ * reads as not ready rather than breaking the report.
+ *
+ * @param PDO $c  the database connection
+ * @param mixed $table  the table name to look for
+ * @param mixed $col  the column name to look for
+ */
 function colExists(PDO $c, $table, $col) {
     try {
         $s = $c->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -126,6 +166,13 @@ function colExists(PDO $c, $table, $col) {
         return (int)$s->fetchColumn() > 0;
     } catch (Throwable $e) { return false; }
 }
+/**
+ * Whether a table exists in this database - false on any error, so an older install
+ * reads as not ready rather than breaking the report.
+ *
+ * @param PDO $c  the database connection
+ * @param mixed $table  the table name to look for
+ */
 function tableExists(PDO $c, $table) {
     try {
         $s = $c->prepare("SELECT COUNT(*) FROM information_schema.TABLES
@@ -262,6 +309,11 @@ try {
 /**
  * Describe what is actually stored, keeping the three "blank" cases apart:
  * the column is absent, the value is NULL, or the value is an empty string.
+ *
+ * @param array $row  the auth_providers row as read back
+ * @param string $col  the column to describe
+ * @param array $apCols  the columns auth_providers really has, keyed by lower-case name
+ * @param bool $maskIt  true to mask the value with mask() rather than print it
  */
 function storedValue(array $row, string $col, array $apCols, bool $maskIt = false) {
     if (!isset($apCols[strtolower($col)]))  return 'COLUMN DOES NOT EXIST in this database';

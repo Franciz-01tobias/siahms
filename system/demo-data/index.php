@@ -27,9 +27,9 @@ if (!isset($_SESSION['analyst_id'])) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.demo.heading')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.demo.heading'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* System module accent (blue-grey) */
         body {
@@ -303,7 +303,7 @@ if (!isset($_SESSION['analyst_id'])) {
         [data-theme-mode="dark"] .error-text { color: var(--danger-text, #fca5a5); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="demo-data">
     <?php include '../includes/header.php'; ?>
@@ -444,6 +444,26 @@ if (!isset($_SESSION['analyst_id'])) {
                 <div class="error-text" id="err-contracts" style="display:none"></div>
             </div>
 
+            <div class="module-card" data-module="domains">
+                <h4>Domains</h4>
+                <p class="module-desc">8 domains on the reserved .example ending, graded A to F, with 2 registrar accounts. Monitoring is off on them, so nothing is ever looked up.</p>
+                <div class="module-footer">
+                    <span class="record-count">~10 records</span>
+                    <button class="import-btn" id="btn-domains" onclick="importModule('domains', this)" disabled><?php echo htmlspecialchars(t('system.demo.import')); ?></button>
+                </div>
+                <div class="error-text" id="err-domains" style="display:none"></div>
+            </div>
+
+            <div class="module-card" data-module="cost-centres">
+                <h4>Cost Centres</h4>
+                <p class="module-desc">24 cost centres (nominal codes) in the default company, two levels deep, with one retired. Includes 0010 and N1414 to show codes are kept as text.</p>
+                <div class="module-footer">
+                    <span class="record-count">~24 records</span>
+                    <button class="import-btn" id="btn-cost-centres" onclick="importModule('cost-centres', this)" disabled><?php echo htmlspecialchars(t('system.demo.import')); ?></button>
+                </div>
+                <div class="error-text" id="err-cost-centres" style="display:none"></div>
+            </div>
+
             <div class="module-card" data-module="services">
                 <h4>Service Status</h4>
                 <p class="module-desc">5 services with 2 incidents showing resolved and monitoring states.</p>
@@ -475,10 +495,10 @@ if (!isset($_SESSION['analyst_id'])) {
             </div>
 
             <div class="module-card" data-module="tasks">
-                <h4>Tasks</h4>
-                <p class="module-desc">12 parent tasks across To Do, In Progress, Done with subtasks, due dates, and comments.</p>
+                <h4>Tasks and Projects</h4>
+                <p class="module-desc">12 parent tasks across To Do, In Progress, Done with subtasks, due dates, and comments - plus 9 projects covering every way of running one and every status: a staged office move (team, stakeholder map, scope, RACI, RAID, gates with checklists, budget, change control, benefits, reports), an Agile laptop refresh with sprints and an asset target, a mail migration in trouble, a closed project with its closure report and measured benefits, a proposal waiting for approval, a members-only project, one on hold and one cancelled - 72 project tasks with dependencies, estimates and 40 days of status history for the charts. Import Assets, Changes, Tickets, Contracts, Knowledge and CMDB first and the projects link to their records too.</p>
                 <div class="module-footer">
-                    <span class="record-count">~42 records</span>
+                    <span class="record-count">~875 records</span>
                     <button class="import-btn" id="btn-tasks" onclick="importModule('tasks', this)" disabled><?php echo htmlspecialchars(t('system.demo.import')); ?></button>
                 </div>
                 <div class="error-text" id="err-tasks" style="display:none"></div>
@@ -627,7 +647,7 @@ if (!isset($_SESSION['analyst_id'])) {
         }
 
         function enableModuleButtons() {
-            const modules = ['tickets', 'assets', 'knowledge', 'changes', 'calendar', 'checks', 'checklists', 'contracts', 'services', 'software', 'forms', 'tasks', 'process-mapper', 'cmdb', 'lms', 'workflow', 'network-mapper'];
+            const modules = ['tickets', 'assets', 'knowledge', 'changes', 'calendar', 'checks', 'checklists', 'contracts', 'domains', 'cost-centres', 'services', 'software', 'forms', 'tasks', 'process-mapper', 'cmdb', 'lms', 'workflow', 'network-mapper'];
             modules.forEach(function(m) {
                 const btn = document.getElementById('btn-' + m);
                 if (btn && !btn.classList.contains('success')) {
@@ -694,6 +714,6 @@ if (!isset($_SESSION['analyst_id'])) {
             } catch (e) { /* ignore - user can still click Import */ }
         })();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

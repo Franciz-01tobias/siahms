@@ -121,6 +121,10 @@ function enrolReconcileTasks(PDO $conn, int $analystId): void
  * CalDAV address is a web address that means nothing to Microsoft, and the
  * other way round). A push that was on is switched off here; the caller
  * switches it back on once the new connection has been checked.
+ *
+ * @param array $enrolment  the analyst's calendar_enrolments row, as from calendarSyncEnrolment()
+ * @param ?array $current  the calendar_connections row the analyst is on now; null when none
+ * @param array $target  the calendar_connections row to move them onto
  */
 function enrolSwitchConnection(PDO $conn, int $analystId, array $enrolment, ?array $current, array $target): bool
 {

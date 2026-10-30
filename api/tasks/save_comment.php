@@ -15,6 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tasks');
+requireModuleWriteJson('tasks');   // Read only access to Tasks writes nothing (#181 Part G)
 
 try {
     $conn = connectToDatabase();

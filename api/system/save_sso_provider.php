@@ -8,7 +8,9 @@
  *              ldap_bind_dn, ldap_bind_password, ldap_base_dn, ldap_user_filter,
  *              ldap_attr_*, ... }
  * Shared: enabled, auto_create_users, require_verified_email, default_modules,
- *         sort_order, tenant_id.
+ *         sort_order, tenant_id, auto_create_analysts (discussion #155).
+ * OIDC only in practice: analyst_fallback_mode, profile_sync_mode (#155).
+ * OIDC only: portal_email_domains, portal_show_button (GH #147).
  *
  * Secrets (client_secret / ldap_bind_password) are encrypted at rest via
  * encryptValue(). On update, a blank or masked ("****") secret means "leave the
@@ -19,6 +21,7 @@ require_once '../../config.php';
 require_once '../../includes/admin_api_guard.php'; // System admins only (issue #34)
 require_once '../../includes/functions.php';
 require_once '../../includes/encryption.php';
+require_once '../../includes/sso_identity.php';
 
 header('Content-Type: application/json');
 
@@ -33,6 +36,11 @@ if (!is_array($data)) {
     exit;
 }
 
+/**
+ * Answers {success: false, error} as JSON and stops.
+ *
+ * @param string $msg  the error shown to the admin
+ */
 function bail(string $msg): void {
     echo json_encode(['success' => false, 'error' => $msg]);
     exit;
@@ -55,6 +63,8 @@ function bail(string $msg): void {
  * Whether the base is one the bind account may read is the DIRECTORY's decision,
  * not ours: an unreadable base returns nothing, and a base outside the tree
  * errors. Neither leaks anything the bind account could not already read.
+ *
+ * @param mixed $value  the DNs from the request - an array, or newline-separated text (untrusted)
  */
 function ssoDnLines($value): ?string
 {
@@ -80,15 +90,37 @@ $displayName = trim($data['display_name'] ?? '');
 if ($displayName === '') bail('Display name is required');
 
 // --- Shared optional fields ---
-$enabled         = !empty($data['enabled']) ? 1 : 0;
-$autoCreate      = !empty($data['auto_create_users']) ? 1 : 0;
-$requireVerified = !empty($data['require_verified_email']) ? 1 : 0;
+$enabled            = !empty($data['enabled']) ? 1 : 0;
+$autoCreate         = !empty($data['auto_create_users']) ? 1 : 0;
+$autoCreateAnalysts = !empty($data['auto_create_analysts']) ? 1 : 0;
+$fallbackInput      = $data['analyst_fallback_mode'] ?? 'confirm';
+$analystFallback    = in_array($fallbackInput, ['confirm', 'redirect', 'block'], true) ? $fallbackInput : 'confirm';
+$requireVerified    = !empty($data['require_verified_email']) ? 1 : 0;
+$profileSyncMode    = in_array($data['profile_sync_mode'] ?? '', ['always', 'initial', 'never'], true) ? $data['profile_sync_mode'] : 'never';
 $defaultModules  = isset($data['default_modules']) && trim($data['default_modules']) !== ''
                    ? trim($data['default_modules']) : null;
 $sortOrder       = (int)($data['sort_order'] ?? 0);
+// 3.5.0: companies an auto-created analyst can see (ssoApplyJitCompanies()).
+$jitCompanyIn    = in_array($data['jit_company_access'] ?? '', ['all', 'provider', 'none'], true) ? $data['jit_company_access'] : 'all';
+// SSO claim mapping (3.5.0, OIDC only) - see includes/sso_claims.php.
+$groupClaimIn    = mb_substr(trim((string)($data['oidc_group_claim'] ?? '')), 0, 100);
+$analystGroupIn  = mb_substr(trim((string)($data['oidc_analyst_group'] ?? '')), 0, 255);
+$adminGroupIn    = mb_substr(trim((string)($data['oidc_admin_group'] ?? '')), 0, 255);
+// Group -> team rows (sso_group_teams): only touched when the dialog sends them.
+$teamMappingsIn  = (isset($data['team_mappings']) && is_array($data['team_mappings'])) ? $data['team_mappings'] : null;
+// Names for the groups the provider has sent (sso_groups_seen.label).
+$groupLabelsIn   = (isset($data['group_labels']) && is_array($data['group_labels'])) ? $data['group_labels'] : null;
 // Which client company owns this provider. Empty/0 = a global (MSP-internal) one.
 $tenantId        = !empty($data['tenant_id']) ? (int)$data['tenant_id'] : null;
 $id              = isset($data['id']) ? (int)$data['id'] : 0;
+// GH #147 - portal routing. Only an OIDC provider can be redirected to, so
+// the per-protocol branches below reset these for LDAP and CardDAV.
+$portalShowButton = array_key_exists('portal_show_button', $data) ? (!empty($data['portal_show_button']) ? 1 : 0) : 1;
+$portalDomains    = ssoParseEmailDomains($data['portal_email_domains'] ?? '');
+if ($portalDomains['invalid']) {
+    bail('"' . implode('", "', $portalDomains['invalid']) . '" is not an email domain. Type just the part after the @, for example company.com.');
+}
+$portalDomainList = $portalDomains['domains'];
 
 // --- Per-protocol fields ---
 // The unused column group is written empty, so switching a provider's protocol
@@ -185,11 +217,15 @@ if ($protocol === 'carddav') {
     $secretInput     = '';
     $ldapSecretInput = '';
 
-    // An address book cannot authenticate anybody, so these two are meaningless
+    // An address book cannot authenticate anybody, so these are meaningless
     // here and are forced off rather than trusted from the request — the dialog
     // hides them, and a hidden control is not a guard.
-    $autoCreate      = 0;
-    $requireVerified = 0;
+    $autoCreate         = 0;
+    $autoCreateAnalysts = 0;
+    $requireVerified    = 0;
+    $profileSyncMode    = 'never';
+    $portalDomainList   = [];
+    $portalShowButton   = 1;
 
 } elseif ($protocol === 'oidc') {
     $issuerUrl = rtrim(trim($data['issuer_url'] ?? ''), '/');
@@ -218,6 +254,9 @@ if ($protocol === 'carddav') {
     $issuerUrl = '';
     $clientId  = '';
     $scopes    = 'openid email profile'; // column default; unused by LDAP
+    // A directory has no redirect and no portal button (GH #147).
+    $portalDomainList = [];
+    $portalShowButton = 1;
 
     $host   = trim($data['ldap_host'] ?? '');
     $baseDn = trim($data['ldap_base_dn'] ?? '');
@@ -294,7 +333,7 @@ try {
 
     // Columns common to both branches, in a fixed order.
     $cols = ['display_name', 'protocol', 'issuer_url', 'client_id', 'scopes',
-             'enabled', 'auto_create_users', 'require_verified_email',
+             'enabled', 'auto_create_users', 'auto_create_analysts', 'analyst_fallback_mode', 'require_verified_email', 'profile_sync_mode',
              'default_modules', 'sort_order', 'tenant_id',
              'ldap_host', 'ldap_port', 'ldap_encryption', 'ldap_bind_dn',
              'ldap_base_dn', 'ldap_user_filter', 'ldap_attr_username',
@@ -307,7 +346,7 @@ try {
              'carddav_url', 'carddav_username', 'carddav_addressbook', 'carddav_auth',
              'carddav_scope', 'carddav_scope_value', 'carddav_write_back', 'carddav_allow_create'];
     $vals = [$displayName, $protocol, $issuerUrl, $clientId, $scopes,
-             $enabled, $autoCreate, $requireVerified,
+             $enabled, $autoCreate, $autoCreateAnalysts, $analystFallback, $requireVerified, $profileSyncMode,
              $defaultModules, $sortOrder, $tenantId,
              $ldap['host'], $ldap['port'], $ldap['encryption'], $ldap['bind_dn'],
              $ldap['base_dn'], $ldap['user_filter'], $ldap['attr_username'],
@@ -319,6 +358,18 @@ try {
              $ldap['attr_phone'], $ldap['attr_mobile'], $ldap['attr_employee_id'], $ldap['attr_manager'],
              $carddav['url'], $carddav['username'], $carddav['addressbook'], $carddav['auth'],
              $carddav['scope'], $carddav['scope_value'], $carddav['write_back'], $carddav['allow_create']];
+    $cols[] = 'portal_email_domains';
+    $vals[] = $portalDomainList ? implode("\n", $portalDomainList) : null;
+    $cols[] = 'portal_show_button';
+    $vals[] = $portalShowButton;
+    $cols[] = 'jit_company_access';
+    $vals[] = $protocol === 'carddav' ? 'all' : $jitCompanyIn;   // an address book creates nobody
+    // Claim mapping (3.5.0): an OIDC provider's; cleared for any other protocol.
+    $isOidcRow = $protocol === 'oidc';
+    array_push($cols, 'oidc_group_claim', 'oidc_analyst_group', 'oidc_admin_group');
+    array_push($vals, $isOidcRow && $groupClaimIn !== '' ? $groupClaimIn : null,
+                      $isOidcRow && $analystGroupIn !== '' ? $analystGroupIn : null,
+                      $isOidcRow && $adminGroupIn !== '' ? $adminGroupIn : null);
 
     // 🔴 ON UPDATE, A SETTING THE REQUEST DOES NOT MENTION KEEPS ITS STORED VALUE.
     //
@@ -344,11 +395,13 @@ try {
         if (!$existing) bail('Provider not found');
 
         if ($existing['protocol'] === $protocol) {
-            $readable = ['enabled', 'default_modules', 'sort_order', 'tenant_id'];
+            $readable = ['enabled', 'default_modules', 'sort_order', 'tenant_id', 'jit_company_access'];
             if ($protocol === 'oidc') {
-                $readable = array_merge($readable, ['auto_create_users', 'require_verified_email', 'issuer_url', 'client_id', 'scopes']);
+                $readable = array_merge($readable, ['auto_create_users', 'auto_create_analysts', 'analyst_fallback_mode', 'require_verified_email', 'profile_sync_mode', 'issuer_url', 'client_id', 'scopes',
+                                                    'portal_email_domains', 'portal_show_button',
+                                                    'oidc_group_claim', 'oidc_analyst_group', 'oidc_admin_group']);
             } elseif ($protocol === 'ldap') {
-                $readable = array_merge($readable, ['auto_create_users', 'require_verified_email'],
+                $readable = array_merge($readable, ['auto_create_users', 'auto_create_analysts', 'analyst_fallback_mode', 'require_verified_email', 'profile_sync_mode'],
                     array_values(array_filter($cols, fn($c) => strpos($c, 'ldap_') === 0 || strpos($c, 'sync_') === 0)));
             } else {
                 $readable = array_merge($readable,
@@ -387,11 +440,86 @@ try {
         array_splice($cols, $iAc, 1);
         array_splice($vals, $iAc, 1);
     }
+    // Same for the three discussion #155 columns, which arrive together.
+    if (!ssoJitColumnsReady($conn)) {
+        foreach (['auto_create_analysts', 'analyst_fallback_mode', 'profile_sync_mode'] as $jitCol) {
+            $i = array_search($jitCol, $cols, true);
+            if ($i !== false) {
+                array_splice($cols, $i, 1);
+                array_splice($vals, $i, 1);
+            }
+        }
+    }
+
+    if (!ssoJitCompanyReady($conn)) {
+        $i = array_search('jit_company_access', $cols, true);
+        if ($i !== false) { array_splice($cols, $i, 1); array_splice($vals, $i, 1); }
+    }
+    // Claim mapping: leave the columns out until Database Verification adds them;
+    // otherwise the analyst / admin groups and team rows need the claim they are
+    // read from.
+    require_once '../../includes/sso_claims.php';
+    if (!ssoClaimsReady($conn)) {
+        foreach (['oidc_group_claim', 'oidc_analyst_group', 'oidc_admin_group'] as $c) {
+            $i = array_search($c, $cols, true);
+            if ($i !== false) { array_splice($cols, $i, 1); array_splice($vals, $i, 1); }
+        }
+        $teamMappingsIn = null;
+    } else {
+        $fClaim = $vals[array_search('oidc_group_claim', $cols, true)];
+        $anyMapping = $teamMappingsIn !== null && array_filter($teamMappingsIn, fn($r) => trim((string)($r['group'] ?? '')) !== '');
+        if (($fClaim === null || $fClaim === '')
+            && ($vals[array_search('oidc_analyst_group', $cols, true)] || $vals[array_search('oidc_admin_group', $cols, true)] || $anyMapping)) {
+            bail('Choose where the groups come from first - the analyst group, admin group and teams are read from it.');
+        }
+        if ($protocol !== 'oidc') $teamMappingsIn = [];   // a protocol switch clears them
+    }
+
+    // GH #147 portal routing. Checked on the FINAL value (sent or kept), so a
+    // rename that does not mention the domains is still held to the same rules.
+    if (ssoPortalRoutingColumnsReady($conn)) {
+        $finalDomains = (string)($vals[array_search('portal_email_domains', $cols, true)] ?? '');
+        $finalDomains = $finalDomains === '' ? [] : explode("\n", $finalDomains);
+        if ($finalDomains) {
+            // A public email domain would send every Gmail or Outlook user on the
+            // portal to this provider - the same reason System -> Companies will
+            // not map one to a company.
+            require_once '../../includes/tenancy.php';
+            foreach ($finalDomains as $d) {
+                if (isFreemailDomain($conn, $d)) {
+                    bail("$d is a public email domain, so it cannot be sent to one provider - everyone who uses it would be.");
+                }
+            }
+            // One provider per domain, or which one wins would be decided by sort order
+            // and nobody would be able to see why.
+            $others = $conn->prepare("SELECT display_name, portal_email_domains FROM auth_providers
+                                       WHERE id <> ? AND portal_email_domains IS NOT NULL AND portal_email_domains <> ''");
+            $others->execute([$id]);
+            foreach ($others->fetchAll(PDO::FETCH_ASSOC) as $o) {
+                $clash = array_intersect($finalDomains, explode("\n", $o['portal_email_domains']));
+                if ($clash) {
+                    bail(implode(', ', $clash) . ' is already sent to ' . $o['display_name'] . '. A domain can only go to one provider.');
+                }
+            }
+        }
+    } else {
+        foreach (['portal_email_domains', 'portal_show_button'] as $c) {
+            $i = array_search($c, $cols, true);
+            if ($i !== false) {
+                array_splice($cols, $i, 1);
+                array_splice($vals, $i, 1);
+            }
+        }
+    }
 
     // A blank/masked secret on update = keep what is stored.
     $writeSecret        = !isMaskedNoChangeValue($secretInput);
     $writeLdapSecret    = !isMaskedNoChangeValue($ldapSecretInput);
     $writeCardDavSecret = !isMaskedNoChangeValue($cardDavSecretIn);
+
+    // The provider and its group -> team rows are saved together or not at all
+    // (bail() exits; the open transaction is rolled back when the request ends).
+    $conn->beginTransaction();
 
     if ($id > 0) {
         if ($writeSecret)        { $cols[] = 'client_secret';      $vals[] = encryptValue($secretInput); }
@@ -402,6 +530,11 @@ try {
         $vals[] = $id;
         $conn->prepare("UPDATE auth_providers SET $set, last_modified_datetime = UTC_TIMESTAMP() WHERE id = ?")
              ->execute($vals);
+        if ($teamMappingsIn !== null) {
+            try { ssoSaveTeamMappings($conn, $id, $teamMappingsIn); } catch (ServiceError $e) { bail($e->getMessage()); }
+        }
+        if ($groupLabelsIn !== null && ssoClaimsReady($conn)) ssoSaveGroupLabels($conn, $id, $groupLabelsIn);
+        $conn->commit();
         echo json_encode(['success' => true, 'id' => $id]);
 
     } else {
@@ -415,9 +548,15 @@ try {
         $names  = '`' . implode('`, `', $cols) . '`';
         $marks  = implode(', ', array_fill(0, count($cols), '?'));
         $conn->prepare("INSERT INTO auth_providers ($names) VALUES ($marks)")->execute($vals);
-        echo json_encode(['success' => true, 'id' => (int)$conn->lastInsertId()]);
+        $newId = (int)$conn->lastInsertId();
+        if ($teamMappingsIn) {
+            try { ssoSaveTeamMappings($conn, $newId, $teamMappingsIn); } catch (ServiceError $e) { bail($e->getMessage()); }
+        }
+        $conn->commit();
+        echo json_encode(['success' => true, 'id' => $newId]);
     }
 
 } catch (Exception $e) {
+    if (isset($conn) && $conn->inTransaction()) $conn->rollBack();
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }

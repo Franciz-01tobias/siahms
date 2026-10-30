@@ -39,7 +39,11 @@ class NetworkMapperService
     //  Diagrams
     // ======================================================================
 
-    /** Create a new diagram (v1 of a chain), optionally with contents. Returns the id. */
+    /**
+     * Create a new diagram (v1 of a chain), optionally with contents. Returns the id.
+     *
+     * @param array $in  title (required), description, version_label, paper_size, paper_orientation, branding, nodes, connectors
+     */
     public static function createDiagram(PDO $conn, ActorContext $ctx, array $in): int
     {
         $title = trim((string)($in['title'] ?? ''));
@@ -85,7 +89,12 @@ class NetworkMapperService
         return $diagramId;
     }
 
-    /** Save a diagram: partial metadata; sending nodes/connectors replaces BOTH sets. Returns the id. */
+    /**
+     * Save a diagram: partial metadata; sending nodes/connectors replaces BOTH sets. Returns the id.
+     *
+     * @param int $diagramId  the diagram (current version) to save
+     * @param array $in  any of title, description, version_label, paper_*, branding; nodes and/or connectors replace both sets
+     */
     public static function saveDiagram(PDO $conn, ActorContext $ctx, int $diagramId, array $in): int
     {
         $current = self::loadDiagram($conn, $diagramId);        // 404 if gone
@@ -140,7 +149,12 @@ class NetworkMapperService
         return $diagramId;
     }
 
-    /** Delete a diagram version (leaf-only) or the whole chain. Returns ['id','versions_deleted']. */
+    /**
+     * Delete a diagram version (leaf-only) or the whole chain. Returns ['id','versions_deleted'].
+     *
+     * @param int $diagramId  the diagram version to delete
+     * @param bool $chain  true to delete every version, false for this (leaf) version only
+     */
     public static function deleteDiagram(PDO $conn, ActorContext $ctx, int $diagramId, bool $chain = false): array
     {
         $diagram = self::loadDiagram($conn, $diagramId);
@@ -166,7 +180,12 @@ class NetworkMapperService
         return ['id' => $diagramId, 'versions_deleted' => count($ids)];
     }
 
-    /** Fork the leaf into a new version (clones nodes + connectors forward). Returns the new id. */
+    /**
+     * Fork the leaf into a new version (clones nodes + connectors forward). Returns the new id.
+     *
+     * @param int $parentId  the current (leaf) version to copy forward
+     * @param array $in  optional title, description and version_label for the new version; the rest is copied
+     */
     public static function createVersion(PDO $conn, ActorContext $ctx, int $parentId, array $in): int
     {
         $parent = self::loadDiagram($conn, $parentId);          // 404 if gone (incl. a 0/absent parent)
@@ -233,6 +252,11 @@ class NetworkMapperService
     //  Internals
     // ======================================================================
 
+    /**
+     * Loads one diagram with a count of its newer versions; throws not found when it does not exist.
+     *
+     * @param int $diagramId  the diagram to load
+     */
     private static function loadDiagram(PDO $conn, int $diagramId): array
     {
         $stmt = $conn->prepare(
@@ -248,6 +272,11 @@ class NetworkMapperService
         return $row;
     }
 
+    /**
+     * Throws when the diagram is a historical version, which is read-only.
+     *
+     * @param array $diagram  the diagram row from loadDiagram(), with child_count
+     */
     private static function requireLeaf(array $diagram): void
     {
         if ((int)$diagram['child_count'] > 0) {
@@ -255,7 +284,11 @@ class NetworkMapperService
         }
     }
 
-    /** The whole version chain containing $diagramId: root first. */
+    /**
+     * The whole version chain containing $diagramId: root first.
+     *
+     * @param int $diagramId  any version in the chain
+     */
     private static function chainIds(PDO $conn, int $diagramId): array
     {
         $rootId = $diagramId;
@@ -280,7 +313,12 @@ class NetworkMapperService
         return $ids;
     }
 
-    /** paper_size / paper_orientation whitelists. */
+    /**
+     * paper_size / paper_orientation whitelists.
+     *
+     * @param array $in  the request fields; paper_size and paper_orientation, '' or null meaning none
+     * @param ?array $current  the stored diagram for keys not sent, or null on create
+     */
     private static function validatePaper(array $in, ?array $current): array
     {
         $sizes = ['A4', 'A3', 'A2', 'Letter', 'Tabloid'];
@@ -299,7 +337,14 @@ class NetworkMapperService
         return [$size, $orientation];
     }
 
-    /** Read a branding slot from in.branding.{band}.{slot}. NULL = inherit, '' = explicit blank. */
+    /**
+     * Read a branding slot from in.branding.{band}.{slot}. NULL = inherit, '' = explicit blank.
+     *
+     * @param array $in  the request fields; the value is read from branding.<band>.<slot>
+     * @param string $band  'header' or 'footer'
+     * @param string $slot  'left', 'center' or 'right'
+     * @param ?string $current  the stored value, kept when the slot is not sent
+     */
     private static function brandingSlot(array $in, string $band, string $slot, ?string $current): ?string
     {
         if (!isset($in['branding']) || !is_array($in['branding'])
@@ -311,7 +356,13 @@ class NetworkMapperService
         return $v === null ? null : substr((string)$v, 0, 200);
     }
 
-    /** Full contents replace (delete + reinsert; ref-based connector wiring, strict validation). */
+    /**
+     * Full contents replace (delete + reinsert; ref-based connector wiring, strict validation).
+     *
+     * @param int $diagramId  the diagram whose nodes and connectors are replaced
+     * @param array $nodesIn  [{cmdb_object_id, x?, y?, size?, icon_override?, ref?}] - nodes with no x/y are placed automatically
+     * @param array $connectorsIn  [{from_ref | from_object_id, to_ref | to_object_id, cmdb_relationship_id?, label?, line_style?}]
+     */
     private static function replaceContents(PDO $conn, ActorContext $ctx, int $diagramId, array $nodesIn, array $connectorsIn): void
     {
         $conn->prepare("DELETE FROM network_diagram_connectors WHERE diagram_id = ?")->execute([$diagramId]);
@@ -386,7 +437,12 @@ class NetworkMapperService
         }
     }
 
-    /** Validate one node input row. Returns [objectId, x|null, y|null, size, icon, ref]. */
+    /**
+     * Validate one node input row. Returns [objectId, x|null, y|null, size, icon, ref].
+     *
+     * @param array $n  one node from the request
+     * @param int $index  its position in the nodes list, for error messages
+     */
     private static function validateNodeInput(PDO $conn, ActorContext $ctx, array $n, int $index): array
     {
         $objectId = isset($n['cmdb_object_id']) ? (int)$n['cmdb_object_id'] : 0;
@@ -411,6 +467,12 @@ class NetworkMapperService
         ];
     }
 
+    /**
+     * A function that hands out positions for new nodes, in columns of eight to the right
+     * of what is already on the diagram.
+     *
+     * @param int $diagramId  the diagram whose existing nodes the new ones go to the right of
+     */
     private static function autoPlacer(PDO $conn, int $diagramId): callable
     {
         $stmt = $conn->prepare("SELECT COALESCE(MAX(x), -60) AS max_x, COALESCE(MIN(y), 80) AS min_y FROM network_diagram_nodes WHERE diagram_id = ?");
@@ -426,6 +488,14 @@ class NetworkMapperService
         };
     }
 
+    /**
+     * The CMDB relationship a connector stands for: null, 'auto' (any relationship between
+     * the two nodes' CIs) or a validated id.
+     *
+     * @param mixed $raw  the connector's cmdb_relationship_id: null or '' for none, 'auto' to find one, or an id
+     * @param int $fromNodeId  the connector's start node (network_diagram_nodes.id)
+     * @param int $toNodeId  the connector's end node
+     */
     private static function resolveRelationshipId(PDO $conn, $raw, int $fromNodeId, int $toNodeId): ?int
     {
         if ($raw === null || $raw === '') {
@@ -454,6 +524,11 @@ class NetworkMapperService
         return $relId;
     }
 
+    /**
+     * Throws unless the CI exists and is in a company the actor can reach.
+     *
+     * @param int $objectId  the CI a node places
+     */
     private static function validateObjectExists(PDO $conn, ActorContext $ctx, int $objectId): void
     {
         $stmt = $conn->prepare("SELECT tenant_id FROM cmdb_objects WHERE id = ?");
@@ -475,6 +550,11 @@ class NetworkMapperService
         }
     }
 
+    /**
+     * Validates a node size against NODE_SIZES.
+     *
+     * @param string $size  a NODE_SIZES key: 'small', 'medium' or 'large'
+     */
     private static function validateSize(string $size): string
     {
         if (!isset(self::NODE_SIZES[$size])) {
@@ -483,6 +563,11 @@ class NetworkMapperService
         return $size;
     }
 
+    /**
+     * Validates a connector line style against LINE_STYLES.
+     *
+     * @param string $style  'solid' or 'dashed'
+     */
     private static function validateLineStyle(string $style): string
     {
         if (!in_array($style, self::LINE_STYLES, true)) {
@@ -491,6 +576,11 @@ class NetworkMapperService
         return $style;
     }
 
+    /**
+     * Validates an icon key against cmdb_icons.
+     *
+     * @param string $iconKey  a cmdb_icons icon_key
+     */
     private static function validateIcon(PDO $conn, string $iconKey): string
     {
         $stmt = $conn->prepare("SELECT 1 FROM cmdb_icons WHERE icon_key = ?");

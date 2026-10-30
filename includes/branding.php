@@ -91,7 +91,11 @@ function brandingLogoUrl(?PDO $conn = null): string
     return $cached;
 }
 
-/** A stored upload pointer is only ever a file inside the branding directory. */
+/**
+ * A stored upload pointer is only ever a file inside the branding directory.
+ *
+ * @param string $rel  the stored upload path, relative to the app root
+ */
 function brandingPathIsSafe(string $rel): bool
 {
     if (strpos($rel, BRANDING_UPLOAD_DIR) !== 0) return false;
@@ -118,12 +122,18 @@ function brandingScopes(): array
         'portal' => ['prefix' => 'branding_portal_', 'page' => 'self-service/login.php'],
         // No form on this one, so no form position and no panel style.
         'home'   => ['prefix' => 'branding_home_',   'page' => 'index.php',
-                     'omit'   => ['form_position', 'card_style'],
+                     // …and one line under the welcome heading is all that page has.
+                     'omit'   => ['form_position', 'card_style', 'subheading2'],
                      // …and it keeps the theme's own background unless asked otherwise.
                      'defaults' => ['bg_style' => 'theme']],
     ];
 }
 
+/**
+ * Returns the scope when it is one of the branded screens (login, portal, home), otherwise 'login'.
+ *
+ * @param string $scope  the screen asked for, possibly from the request - login, portal or home
+ */
 function brandingScopeValid(string $scope): string
 {
     return isset(brandingScopes()[$scope]) ? $scope : 'login';
@@ -142,6 +152,8 @@ function brandingScopeValid(string $scope): string
  *   int    clamped to min..max
  *   text   plain text, trimmed, cut to `max` characters — NEVER HTML
  *   upload a path inside the branding directory that still exists
+ *
+ * @param string $scope  which screen - login, portal or home; anything else is treated as login
  */
 function brandingLoginFields(string $scope = 'login'): array
 {
@@ -198,6 +210,9 @@ function brandingLoginFields(string $scope = 'login'): array
         // ---- words ----
         'heading'         => ['type' => 'text',   'default' => '', 'max' => 80],
         'subheading'      => ['type' => 'text',   'default' => '', 'max' => 160],
+        // A second line under the first (GH #150). On the portal it replaces
+        // "Sign in to view your tickets" when set; empty keeps that default.
+        'subheading2'     => ['type' => 'text',   'default' => '', 'max' => 160],
         'accent'          => ['type' => 'colour', 'default' => '#2b88d8'],
 
         // ---- banner strip ----
@@ -215,7 +230,12 @@ function brandingLoginFields(string $scope = 'login'): array
     return $fields;
 }
 
-/** `form_position` → the settings key it is stored under, for this screen. */
+/**
+ * `form_position` → the settings key it is stored under, for this screen.
+ *
+ * @param string $field  a field name from brandingLoginFields(), e.g. 'form_position'
+ * @param string $scope  which screen - login, portal or home; anything else is treated as login
+ */
 function brandingLoginKey(string $field, string $scope = 'login'): string
 {
     return brandingScopes()[brandingScopeValid($scope)]['prefix'] . $field;
@@ -224,6 +244,10 @@ function brandingLoginKey(string $field, string $scope = 'login'): string
 /**
  * One value, validated against its declared type. Anything that does not fit
  * becomes the default — never an error, because this runs on the login page.
+ *
+ * @param string $field  the field's name; not used by the check itself
+ * @param mixed $raw  the stored or posted value (untrusted); null or '' gives the default
+ * @param array $spec  the field's entry from brandingLoginFields() - type, default, and values/min/max as the type needs
  */
 function brandingLoginValidate(string $field, $raw, array $spec)
 {
@@ -262,6 +286,8 @@ function brandingLoginValidate(string $field, $raw, array $spec)
 /**
  * The whole design, validated. Safe to call on the login page: it swallows any
  * database failure and returns the defaults.
+ *
+ * @param string $scope  which screen - login, portal or home; anything else is treated as login
  */
 function brandingLoginDesign(?PDO $conn = null, string $scope = 'login'): array
 {
@@ -298,6 +324,8 @@ function brandingLoginDesign(?PDO $conn = null, string $scope = 'login'): array
  * reaching this function has already been through brandingLoginValidate(): a
  * colour matched `#rrggbb`, a direction was one of five words, a number was
  * clamped. Nothing else may be interpolated into CSS.
+ *
+ * @param array $d  a design from brandingLoginDesign(), every value already validated
  */
 function brandingLoginCss(array $d): string
 {
@@ -380,6 +408,9 @@ function brandingLoginPresets(): array
  * Not a gate — an administrator may have a reason — but the designer says so
  * before it is saved, because the failure mode is people who cannot read the
  * login screen and cannot tell you why.
+ *
+ * @param string $hexA  the first colour as #rrggbb
+ * @param string $hexB  the second colour as #rrggbb
  */
 function brandingContrastRatio(string $hexA, string $hexB): float
 {

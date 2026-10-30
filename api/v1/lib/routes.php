@@ -24,6 +24,9 @@ return [
     ['POST',   '#^/tickets/(\d+)/time-entries$#',          ['ticket_time_entries', 'create'], 'apiTicketTimeEntriesCreate'],
     ['DELETE', '#^/tickets/(\d+)/time-entries/(\d+)$#',    ['ticket_time_entries', 'delete'], 'apiTicketTimeEntriesDelete'],
 
+    ['GET', '#^/assets/(\\d+)/inventory$#', ['asset_inventory','read'], 'apiAssetInventoryProvenance'],
+    ['POST', '#^/assets/(\\d+)/inventory$#', ['asset_inventory','create'], 'apiAssetInventorySubmit'],
+    ['DELETE', '#^/assets/(\\d+)/inventory/([a-z0-9][a-z0-9._-]{0,47})$#', ['asset_inventory','delete'], 'apiAssetInventoryUnlink'],
     ['GET',    '#^/assets$#',                              ['assets', 'read'],                'apiAssetsList'],
     ['POST',   '#^/assets$#',                              ['assets', 'create'],              'apiAssetsCreate'],
     ['GET',    '#^/assets/(\d+)$#',                        ['assets', 'read'],                'apiAssetsGet'],
@@ -58,6 +61,9 @@ return [
     ['GET',    '#^/problem-statuses$#',                    ['reference', 'read'],             'apiProblemStatusesList'],
     ['GET',    '#^/problem-priorities$#',                  ['reference', 'read'],             'apiProblemPrioritiesList'],
 
+    ['GET', '#^/changes/(\\d+)/attachments$#', ['change_attachments','read'], 'apiChangeAttachmentsList'],
+    ['POST', '#^/changes/(\\d+)/attachments$#', ['change_attachments','create'], 'apiChangeAttachmentsCreate'],
+    ['GET', '#^/changes/(\\d+)/attachments/(\\d+)/content$#', ['change_attachments','read'], 'apiChangeAttachmentContent'],
     ['GET',    '#^/changes$#',                             ['changes', 'read'],               'apiChangesList'],
     ['POST',   '#^/changes$#',                             ['changes', 'create'],             'apiChangesCreate'],
     ['GET',    '#^/changes/(\d+)$#',                       ['changes', 'read'],               'apiChangesGet'],
@@ -70,6 +76,11 @@ return [
     ['GET',    '#^/changes/(\d+)/cab$#',                   ['change_cab', 'read'],            'apiChangeCabGet'],
     ['POST',   '#^/changes/(\d+)/cab$#',                   ['change_cab', 'manage'],          'apiChangeCabSave'],
     ['POST',   '#^/changes/(\d+)/cab/vote$#',              ['change_cab', 'vote'],            'apiChangeCabVote'],
+    ['GET',    '#^/changes/(\d+)/approvals$#',             ['change_approvals', 'read'],      'apiChangeApprovalsList'],
+    ['POST',   '#^/changes/(\d+)/approval/decide$#',       ['change_approvals', 'decide'],    'apiChangeApprovalDecide'],
+    ['POST',   '#^/changes/(\d+)/cancel$#',                ['changes', 'update'],             'apiChangesCancel'],
+    ['GET',    '#^/changes/(\d+)/revisions$#',             ['change_revisions', 'read'],      'apiChangeRevisionsList'],
+    ['GET',    '#^/changes/(\d+)/revisions/(\d+)$#',       ['change_revisions', 'read'],      'apiChangeRevisionGet'],
     ['GET',    '#^/change-statuses$#',                     ['reference', 'read'],             'apiChangeStatusesList'],
     ['GET',    '#^/change-types$#',                        ['reference', 'read'],             'apiChangeTypesList'],
     ['GET',    '#^/change-priorities$#',                   ['reference', 'read'],             'apiChangePrioritiesList'],
@@ -95,6 +106,9 @@ return [
     ['POST',   '#^/tasks/(\d+)/move$#',                    ['tasks', 'update'],               'apiTasksMove'],
     ['GET',    '#^/tasks/(\d+)/comments$#',                ['task_comments', 'read'],         'apiTaskCommentsList'],
     ['POST',   '#^/tasks/(\d+)/comments$#',                ['task_comments', 'create'],       'apiTaskCommentsCreate'],
+    // GH #190 phase 5: the forms a task occurrence needs, and submitting one for it.
+    ['GET',    '#^/tasks/(\d+)/forms$#',                   ['task_forms', 'read'],            'apiTaskFormsList'],
+    ['POST',   '#^/tasks/(\d+)/forms/(\d+)/submissions$#',  ['task_forms', 'create'],          'apiTaskFormSubmit'],
     ['GET',    '#^/task-statuses$#',                       ['reference', 'read'],             'apiTaskStatusesList'],
     ['GET',    '#^/task-priorities$#',                     ['reference', 'read'],             'apiTaskPrioritiesList'],
     ['GET',    '#^/task-tags$#',                           ['reference', 'read'],             'apiTaskTagsList'],
@@ -187,6 +201,9 @@ return [
     ['GET',    '#^/forms/(\d+)/submissions/(\d+)$#',       ['form_submissions', 'read'],      'apiFormSubmissionsGet'],
     ['DELETE', '#^/forms/(\d+)/submissions/(\d+)$#',       ['form_submissions', 'delete'],    'apiFormSubmissionsDelete'],
 
+    // Background job health (#182) - for outside monitoring; ?strict=1 answers 503 while unhealthy.
+    ['GET',    '#^/jobs/health$#',                         ['job_health', 'read'],            'apiJobsHealth'],
+
     ['GET',    '#^/workflows$#',                           ['workflows', 'read'],             'apiWorkflowsList'],
     ['POST',   '#^/workflows$#',                           ['workflows', 'create'],           'apiWorkflowsCreate'],
     ['GET',    '#^/workflows/(\d+)$#',                     ['workflows', 'read'],             'apiWorkflowsGet'],
@@ -215,12 +232,69 @@ return [
     ['DELETE', '#^/network-diagrams/(\d+)/connectors/(\d+)$#', ['network_diagrams', 'update'], 'apiNmConnectorsDelete'],
     ['GET',    '#^/cmdb-icons$#',                              ['reference', 'read'],          'apiCmdbIconsList'],
 
+    // Domains (#154) — company-scoped; auth codes never cross the API.
+    ['GET',    '#^/domains$#',                             ['domains', 'read'],               'apiDomainsList'],
+    ['POST',   '#^/domains$#',                             ['domains', 'create'],             'apiDomainsCreate'],
+    ['GET',    '#^/domains/(\d+)$#',                       ['domains', 'read'],               'apiDomainsGet'],
+    ['PATCH',  '#^/domains/(\d+)$#',                       ['domains', 'update'],             'apiDomainsUpdate'],
+    ['DELETE', '#^/domains/(\d+)$#',                       ['domains', 'delete'],             'apiDomainsDelete'],
+    ['POST',   '#^/domains/(\d+)/lookup$#',                ['domains', 'update'],             'apiDomainsLookup'],
+    ['POST',   '#^/domains/(\d+)/check$#',                 ['domains', 'update'],             'apiDomainsCheck'],
+    ['GET',    '#^/domains/(\d+)/findings$#',              ['domains', 'read'],               'apiDomainsFindings'],
+    ['GET',    '#^/domains/(\d+)/history$#',               ['domains', 'read'],               'apiDomainsHistory'],
+    ['GET',    '#^/domain-statuses$#',                     ['domains', 'read'],               'apiDomainStatusesList'],
+    ['GET',    '#^/domain-registrar-accounts$#',           ['domains', 'read'],               'apiDomainAccountsList'],
+
+    // Cost centres (GH #160) — company-scoped; /sync is what an accounting system calls.
+    ['GET',    '#^/cost-centres$#',                        ['cost_centres', 'read'],          'apiCostCentresList'],
+    ['POST',   '#^/cost-centres$#',                        ['cost_centres', 'create'],        'apiCostCentresCreate'],
+    ['POST',   '#^/cost-centres/sync$#',                   ['cost_centres', 'update'],        'apiCostCentresSync'],
+    ['GET',    '#^/cost-centres/(\d+)$#',                  ['cost_centres', 'read'],          'apiCostCentresGet'],
+    ['PATCH',  '#^/cost-centres/(\d+)$#',                  ['cost_centres', 'update'],        'apiCostCentresUpdate'],
+    ['DELETE', '#^/cost-centres/(\d+)$#',                  ['cost_centres', 'delete'],        'apiCostCentresDelete'],
+
+    // Projects (3.2.0) — company-scoped; the key acts as its analyst, so the
+    // module's own create / change / delete rules apply. Sub-resources are
+    // reached only through their project, so they share its scope; changing
+    // one is a change to the project ('update').
+    ['GET',    '#^/projects$#',                            ['projects', 'read'],              'apiProjectsList'],
+    ['POST',   '#^/projects$#',                            ['projects', 'create'],            'apiProjectsCreate'],
+    ['GET',    '#^/projects/(\d+)$#',                      ['projects', 'read'],              'apiProjectsGet'],
+    ['PATCH',  '#^/projects/(\d+)$#',                      ['projects', 'update'],            'apiProjectsUpdate'],
+    ['DELETE', '#^/projects/(\d+)$#',                      ['projects', 'delete'],            'apiProjectsDelete'],
+    ['GET',    '#^/projects/(\d+)/stages$#',               ['projects', 'read'],              'apiProjectStagesList'],
+    ['POST',   '#^/projects/(\d+)/stages$#',               ['projects', 'update'],            'apiProjectStagesCreate'],
+    ['PATCH',  '#^/projects/(\d+)/stages/(\d+)$#',         ['projects', 'update'],            'apiProjectStagesUpdate'],
+    ['DELETE', '#^/projects/(\d+)/stages/(\d+)$#',         ['projects', 'update'],            'apiProjectStagesDelete'],
+    ['POST',   '#^/projects/(\d+)/stages/(\d+)/gate$#',    ['projects', 'update'],            'apiProjectStagesGate'],
+    ['GET',    '#^/projects/(\d+)/items$#',                ['projects', 'read'],              'apiProjectItemsList'],
+    ['POST',   '#^/projects/(\d+)/items$#',                ['projects', 'update'],            'apiProjectItemsCreate'],
+    ['PATCH',  '#^/projects/(\d+)/items/(\d+)$#',          ['projects', 'update'],            'apiProjectItemsUpdate'],
+    ['DELETE', '#^/projects/(\d+)/items/(\d+)$#',          ['projects', 'update'],            'apiProjectItemsDelete'],
+    ['GET',    '#^/projects/(\d+)/raid$#',                 ['projects', 'read'],              'apiProjectRaidList'],
+    ['POST',   '#^/projects/(\d+)/raid$#',                 ['projects', 'update'],            'apiProjectRaidCreate'],
+    ['PATCH',  '#^/projects/(\d+)/raid/(\d+)$#',           ['projects', 'update'],            'apiProjectRaidUpdate'],
+    ['DELETE', '#^/projects/(\d+)/raid/(\d+)$#',           ['projects', 'update'],            'apiProjectRaidDelete'],
+    ['GET',    '#^/projects/(\d+)/budget$#',               ['projects', 'read'],              'apiProjectBudget'],
+    ['POST',   '#^/projects/(\d+)/budget-lines$#',         ['projects', 'update'],            'apiProjectBudgetLinesCreate'],
+    ['PATCH',  '#^/projects/(\d+)/budget-lines/(\d+)$#',   ['projects', 'update'],            'apiProjectBudgetLinesUpdate'],
+    ['DELETE', '#^/projects/(\d+)/budget-lines/(\d+)$#',   ['projects', 'update'],            'apiProjectBudgetLinesDelete'],
+    ['GET',    '#^/projects/(\d+)/tasks$#',                ['projects', 'read'],              'apiProjectTasks'],
+    ['GET',    '#^/projects/(\d+)/links$#',                ['projects', 'read'],              'apiProjectLinks'],
+    ['GET',    '#^/projects/(\d+)/history$#',              ['projects', 'read'],              'apiProjectHistory'],
+
     ['GET',    '#^/users$#',                               ['users', 'read'],                 'apiUsersList'],
     ['POST',   '#^/users$#',                               ['users', 'create'],               'apiUsersCreate'],
     ['GET',    '#^/users/(\d+)$#',                         ['users', 'read'],                 'apiUsersGet'],
     ['PATCH',  '#^/users/(\d+)$#',                         ['users', 'update'],               'apiUsersUpdate'],
 
     ['GET',    '#^/analysts$#',                            ['analysts', 'read'],              'apiAnalystsList'],
+    // Analyst provisioning (3.5.0, PR #174) - resources/analysts.php
+    ['POST',   '#^/analysts$#',                            ['analysts', 'create'],            'apiAnalystsCreate'],
+    ['GET',    '#^/analysts/(\d+)$#',                      ['analysts', 'read'],              'apiAnalystsGet'],
+    ['PATCH',  '#^/analysts/(\d+)$#',                      ['analysts', 'update'],            'apiAnalystsUpdate'],
+    ['GET',    '#^/analysts/(\d+)/access$#',               ['analyst_access', 'read'],        'apiAnalystsAccessGet'],
+    ['PATCH',  '#^/analysts/(\d+)/access$#',               ['analyst_access', 'manage'],      'apiAnalystsAccessUpdate'],
     ['GET',    '#^/companies$#',                           ['companies', 'read'],             'apiCompaniesList'],
     ['GET',    '#^/statuses$#',                            ['reference', 'read'],             'apiStatusesList'],
     ['GET',    '#^/priorities$#',                          ['reference', 'read'],             'apiPrioritiesList'],

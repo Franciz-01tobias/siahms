@@ -22,10 +22,12 @@
  */
 
 (function (global) {
+    /** Escapes text for safe use in HTML and attributes. */
     function escapeHtmlAttr(s) {
         return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
     }
 
+    /** Turns the stored options (plain strings or {value, colour}) into {value, colour} objects, colour '' when unset. */
     function normalizeInitial(opts) {
         if (!Array.isArray(opts)) return [];
         return opts.map(o => {
@@ -37,6 +39,7 @@
         });
     }
 
+    /** Returns one option row - value box, colour swatch, clear-colour, up, down and delete buttons. */
     function renderRow(value, colour, index) {
         const colourValue = colour && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(colour) ? colour : '#cccccc';
         const hasColour = !!colour;
@@ -54,6 +57,7 @@
             </div>`;
     }
 
+    /** Adds the editor's stylesheet to the page the first time an editor is rendered. */
     function injectStylesOnce() {
         if (document.getElementById('cmdb-opt-editor-styles')) return;
         const style = document.createElement('style');
@@ -144,6 +148,7 @@
         document.head.appendChild(style);
     }
 
+    /** Wires every row's delete, move up, move down, colour pick and clear-colour buttons. */
     function wireRowHandlers(container) {
         // Delete row
         container.querySelectorAll('.cmdb-opt-del').forEach(btn => {
@@ -192,6 +197,7 @@
         });
     }
 
+    /** Renders the options editor into a container from the stored options, with an Add button that appends an empty row. */
     global.renderOptionsEditor = function (containerId, initialOptions) {
         injectStylesOnce();
         const container = document.getElementById(containerId);
@@ -216,6 +222,9 @@
         };
     };
 
+    /**
+     * Reads the rows back in their current order as [{value, colour}], dropping empty values; colour is '' when none was picked.
+     */
     global.collectOptionsFromEditor = function (containerId) {
         const container = document.getElementById(containerId);
         if (!container) return [];

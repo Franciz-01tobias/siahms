@@ -77,7 +77,12 @@ $tabs = [
 $activeTab = in_array($_GET['tab'] ?? '', ['connection', 'contacts', 'history'], true)
     ? $_GET['tab'] : 'connection';
 
-/** Print a value into an input safely. */
+/**
+ * Print a value into an input safely.
+ *
+ * @param mixed $row  the provider row being edited (an auth_providers row)
+ * @param string $k  the column to print
+ */
 function v($row, string $k): string { return htmlspecialchars((string)($row[$k] ?? '')); }
 ?>
 <!DOCTYPE html>
@@ -86,9 +91,9 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars($p['display_name']); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.sso.title'), $p['display_name'])); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -212,7 +217,7 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
         @media (max-width: 700px) { .prov-wrap { padding: 14px 12px 50px; } }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="sso-carddav">
 <?php include '../includes/header.php'; ?>

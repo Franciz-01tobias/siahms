@@ -43,7 +43,9 @@ try {
     $conn = connectToDatabase();
 
     // 1. The record you are attaching TO.
-    if (!documentCanViewParent($conn, $analystId, $allowed, $parentType, $parentId)) {
+    // documentCanWriteParent: seeing the record is not enough - Read only access to its
+    // module (Change Management, Forms, Tasks) attaches and removes nothing (#181).
+    if (!documentCanWriteParent($conn, $analystId, $allowed, $parentType, $parentId)) {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'You do not have access to that record.']);
         exit;
@@ -58,10 +60,8 @@ try {
 
     // INSERT IGNORE against the unique key: attaching twice is a no-op, not an
     // error somebody has to understand.
-    $conn->prepare(
-        "INSERT IGNORE INTO document_links (document_id, parent_type, parent_id, linked_by_id)
-         VALUES (?,?,?,?)"
-    )->execute([$documentId, $parentType, $parentId, $analystId]);
+    // documentInsertLink() also sets the Help Centre flag for an article (#177).
+    documentInsertLink($conn, $documentId, $parentType, $parentId, $analystId, true);
 
     // The corpus row carries no parent, but its VISIBILITY just changed — and the
     // search clause resolves that live, so nothing needs reindexing. Reindexed

@@ -13,6 +13,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('tasks');
 
 try {
     $conn = connectToDatabase();
@@ -45,6 +46,28 @@ try {
     if (!isset($settings['collaborator_completion'])) {
         $settings['collaborator_completion'] = '0';
     }
+    // Checklists on tasks (discussion #138). OFF by default, for the same reason
+    // as the per-person tick: it adds procedure to a module some teams use as a
+    // simple to-do board.
+    if (!isset($settings['checklists_enabled'])) {
+        $settings['checklists_enabled'] = '0';
+    }
+    // Forms on tasks (GH #190). Off by default, like checklists.
+    $settings['forms_enabled'] = (string)($settings['forms_enabled'] ?? '0') === '1' ? '1' : '0';
+    // Procedures on tasks (GH #190 phase 2). Off by default.
+    $settings['procedures_enabled'] = (string)($settings['procedures_enabled'] ?? '0') === '1' ? '1' : '0';
+    // Repeating task evidence (#181) - each defaults to the forgiving choice.
+    $settings['evidence_completed_checklist'] = ($settings['evidence_completed_checklist'] ?? '') === 'refuse' ? 'refuse' : 'allow';
+    $settings['evidence_delete_occurrence']   = ($settings['evidence_delete_occurrence'] ?? '') === 'refuse' ? 'refuse' : 'allow';
+    $settings['evidence_report_access']       = ($settings['evidence_report_access'] ?? '') === 'permission' ? 'permission' : 'anyone';
+    $settings['evidence_skip_status_id']      = (string)($settings['evidence_skip_status_id'] ?? '');
+    $settings['evidence_open_followups']      = in_array($settings['evidence_open_followups'] ?? '', ['warn', 'block'], true) ? $settings['evidence_open_followups'] : 'allow';
+    // The closed statuses to choose from, and which one an unset choice falls back to.
+    require_once '../../includes/services/tasks.php';
+    $settings['evidence_closed_statuses'] = $conn->query(
+        "SELECT id, name FROM task_statuses WHERE is_closed = 1 AND is_active = 1 ORDER BY display_order, id"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    $settings['evidence_skip_status_effective'] = TasksService::skipStatusId($conn);
 
     // card_fields — which extras show on board cards. Stored as JSON;
     // always returned as a complete object so callers needn't merge defaults.

@@ -11,6 +11,9 @@
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/sso_identity.php';
+require_once '../../includes/i18n.php';
+I18n::initFromSession();
 
 header('Content-Type: application/json');
 
@@ -28,6 +31,13 @@ try {
     };
 
     $conn = connectToDatabase();
+
+    // Enforced here, not only by greying the fields out: an OIDC provider set
+    // to sync 'always' would put these back at the next sign-in (#155).
+    if (ssoAnalystProfileLocked($conn, (int)$_SESSION['analyst_id'])) {
+        echo json_encode(['success' => false, 'error' => t('system.preferences.details_managed_note')]);
+        exit;
+    }
     $stmt = $conn->prepare("UPDATE analysts
                                SET job_title = ?, department = ?, phone = ?, mobile = ?,
                                    last_modified_datetime = UTC_TIMESTAMP()

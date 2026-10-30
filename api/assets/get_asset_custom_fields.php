@@ -26,7 +26,11 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 requireModuleAccessJson('assets');
 
-/** Dropdown options for a field, memoised for the life of the request. */
+/**
+ * Dropdown options for a field, memoised for the life of the request.
+ *
+ * @param int $fieldId  the asset_custom_fields id whose options are wanted
+ */
 function assetFieldOptions(PDO $conn, int $fieldId): array
 {
     static $cache = [];

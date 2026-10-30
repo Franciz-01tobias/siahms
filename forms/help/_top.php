@@ -36,7 +36,11 @@ if (!isset($helpTopic) || !isset($topics[$helpTopic])) {
 }
 $topic = $topics[$helpTopic];
 
-/** A section's number, from the registry. '' when the registry does not know it. */
+/**
+ * A section's number, from the registry. '' when the registry does not know it.
+ *
+ * @param string $id  the section's key in the topic's 'sections' registry
+ */
 function helpNum(string $id): string
 {
     global $topic;
@@ -44,7 +48,13 @@ function helpNum(string $id): string
     return $n === false ? '' : (string)($n + 1);
 }
 
-/** Open a section: the hairline, the number badge, the heading and its lead. */
+/**
+ * Open a section: the hairline, the number badge, the heading and its lead.
+ *
+ * @param string $id  the section's key in the topic registry, also used as the HTML id (escaped)
+ * @param string $heading  the heading text, plain (escaped)
+ * @param string $lead  the introductory paragraph as trusted HTML (not escaped); '' for none
+ */
 function helpSection(string $id, string $heading, string $lead = ''): void
 {
     echo '<div class="help-section" id="' . htmlspecialchars($id) . '">'
@@ -54,6 +64,7 @@ function helpSection(string $id, string $heading, string $lead = ''): void
        . ($lead !== '' ? '<p>' . $lead . '</p>' : '')
        . '</div>';
 }
+/** Closes a section opened by helpSection(). */
 function helpSectionEnd(): void { echo '</div>'; }
 
 $current_page = 'help';
@@ -66,14 +77,14 @@ $translationNamespaces = ['common', 'forms'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($topic['title']); ?> — <?php echo htmlspecialchars(t('forms.title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('forms', t('forms.nav.help'), $topic['title'])); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../../assets/css/help.css?v=3">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../../assets/css/help.css?v=6">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
         body {
@@ -85,7 +96,7 @@ $translationNamespaces = ['common', 'forms'];
     </style>
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include __DIR__ . '/../includes/header.php'; ?>

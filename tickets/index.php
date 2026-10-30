@@ -32,11 +32,13 @@ $translationNamespaces = ['common', 'tickets'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('tickets.title')); ?> - <?php echo htmlspecialchars(t('tickets.nav.inbox')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
+    <title><?php echo htmlspecialchars(pageTitle('tickets', t('tickets.nav.inbox'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../checklists/ticket_checklist.css?v=4">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/ticket-fields.css?v=1">
+    <link rel="stylesheet" href="../assets/css/reading-pane.css?v=1">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <?php
@@ -54,6 +56,8 @@ $translationNamespaces = ['common', 'tickets'];
 </head>
 <body class="inbox-page">
     <?php include 'includes/header.php'; ?>
+    <?php require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('tickets.nav.inbox'), [actionRowNew('openNewTicketModal()', t('tickets.list.new_ticket_btn'))]); ?>
 
     <div class="main-container">
         <!-- Folder Navigation -->
@@ -89,9 +93,7 @@ $translationNamespaces = ['common', 'tickets'];
                     <span class="view-filter-chips" id="viewFilterChips"></span>
                 </div>
                 <div class="email-list-actions">
-                    <button class="icon-btn icon-btn-new" onclick="openNewTicketModal()" title="<?php echo htmlspecialchars(t('tickets.list.new_ticket_btn')); ?>" aria-label="<?php echo htmlspecialchars(t('tickets.list.new_ticket_btn')); ?>">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    </button>
+                    <?php /* New ticket is in the action row above the panes (#185). */ ?>
                     <button class="icon-btn" onclick="openSearchModal()" title="<?php echo htmlspecialchars(t('tickets.list.search_btn')); ?>" aria-label="<?php echo htmlspecialchars(t('tickets.list.search_btn')); ?>">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </button>
@@ -205,44 +207,30 @@ $translationNamespaces = ['common', 'tickets'];
                          you and gets out of the way. Filled live by the presence
                          poll, so it can appear (or clear) while you are drafting. */ ?>
                 <div class="composer-collision" id="composerCollisionWarning" hidden></div>
-                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="form-group">
-                        <label class="form-label"><?php echo htmlspecialchars(t('tickets.reply_modal.to')); ?></label>
+                <?php /* Laid out to give the message the room (Ed, 2.10.0): To / Cc with
+                         their labels BESIDE the boxes, no "Message" label, and the editor
+                         straight underneath. Templates and Signature live in the footer,
+                         bottom left - see there. */ ?>
+                <div class="form-row reply-addr-row">
+                    <div class="form-group reply-addr">
+                        <label class="form-label" for="emailTo"><?php echo htmlspecialchars(t('tickets.reply_modal.to')); ?></label>
                         <input type="text" class="form-input" id="emailTo" autocomplete="off" placeholder="<?php echo htmlspecialchars(t('tickets.reply_modal.to_placeholder')); ?>">
                     </div>
-                    <div class="form-group">
-                        <label class="form-label"><?php echo htmlspecialchars(t('tickets.reply_modal.cc')); ?></label>
+                    <div class="form-group reply-addr">
+                        <label class="form-label" for="emailCc"><?php echo htmlspecialchars(t('tickets.reply_modal.cc')); ?></label>
                         <input type="text" class="form-input" id="emailCc" autocomplete="off" placeholder="<?php echo htmlspecialchars(t('tickets.reply_modal.cc_placeholder')); ?>">
                     </div>
                 </div>
                 <input type="hidden" id="emailSubject">
-                <div class="form-group">
-                    <?php /* The templates control sits ON the message label rather than in the
-                             footer next to Cleanup: it is something you reach for BEFORE typing,
-                             so it belongs at the top of the editor, not beside Send. */ ?>
-                    <div class="reply-tpl-labelrow">
-                        <label class="form-label" style="margin: 0;"><?php echo htmlspecialchars(t('tickets.reply_modal.message')); ?></label>
-                        <div class="reply-tpl-wrap">
-                            <button type="button" class="btn btn-secondary reply-tpl-btn" id="replyTemplatesBtn" onclick="toggleReplyTemplateMenu(event)">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
-                                <?php echo htmlspecialchars(t('tickets.reply_modal.templates')); ?>
-                                <span class="reply-tpl-caret">▾</span>
-                            </button>
-                            <div class="reply-tpl-menu" id="replyTemplateMenu" style="display: none;"></div>
-                        </div>
-                        <div class="reply-tpl-wrap">
-                            <button type="button" class="btn btn-secondary reply-tpl-btn" id="signatureBtn" onclick="toggleSignatureMenu(event)">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3.5 0 3.5-10 7-10s3.5 10 7 10c1.5 0 2.5-.7 4-2"/><line x1="3" y1="21" x2="21" y2="21"/></svg>
-                                <?php echo htmlspecialchars(t("tickets.reply_modal.signature")); ?>
-                                <span class="reply-tpl-caret">▾</span>
-                            </button>
-                            <div class="reply-tpl-menu" id="signatureMenu" style="display: none;"></div>
-                        </div>
-                    </div>
+                <?php /* ⚠️ Keep #emailBody in a form-group of its own: mobile.css finds the
+                         editor's block with .form-group:has(#emailBody) to stretch it to fill
+                         the sheet on a phone. */ ?>
+                <div class="form-group reply-body-group">
                     <textarea id="emailBody"></textarea>
                 </div>
+                <?php /* No "Attachments" label (Ed, 2.10.0): the drop zone says what it is
+                         ("Drag files here or browse"), and the line it took goes to the editor. */ ?>
                 <div class="form-group">
-                    <label class="form-label"><?php echo htmlspecialchars(t('tickets.reply_modal.attachments')); ?></label>
                     <div class="attachment-dropzone" id="attachmentDropzone">
                         <input type="file" id="attachmentInput" multiple style="display: none;">
                         <div class="dropzone-content">
@@ -257,6 +245,28 @@ $translationNamespaces = ['common', 'tickets'];
                 ✨ <?php echo htmlspecialchars(t('tickets.reply_modal.cleaned_up')); ?> — <a href="#" id="replyCleanupUndoLink" style="color: #0078d4;"><?php echo htmlspecialchars(t('tickets.reply_modal.undo')); ?></a> <span id="replyCleanupUndoTimer" style="color: #999;"></span>
             </div>
             <div class="modal-footer">
+                <?php /* Templates and Signature, bottom LEFT (Ed, 2.10.0) - moved off the
+                         top of the editor so the message gets that height. Their menus
+                         open UPWARDS from here (.reply-footer-tools in inbox.css). The ids
+                         and handlers are unchanged, so inbox.js needed nothing. */ ?>
+                <div class="reply-footer-tools">
+                    <div class="reply-tpl-wrap">
+                        <button type="button" class="btn btn-secondary reply-tpl-btn" id="replyTemplatesBtn" onclick="toggleReplyTemplateMenu(event)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                            <?php echo htmlspecialchars(t('tickets.reply_modal.templates')); ?>
+                            <span class="reply-tpl-caret">▴</span>
+                        </button>
+                        <div class="reply-tpl-menu" id="replyTemplateMenu" style="display: none;"></div>
+                    </div>
+                    <div class="reply-tpl-wrap">
+                        <button type="button" class="btn btn-secondary reply-tpl-btn" id="signatureBtn" onclick="toggleSignatureMenu(event)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3.5 0 3.5-10 7-10s3.5 10 7 10c1.5 0 2.5-.7 4-2"/><line x1="3" y1="21" x2="21" y2="21"/></svg>
+                            <?php echo htmlspecialchars(t("tickets.reply_modal.signature")); ?>
+                            <span class="reply-tpl-caret">▴</span>
+                        </button>
+                        <div class="reply-tpl-menu" id="signatureMenu" style="display: none;"></div>
+                    </div>
+                </div>
                 <button class="btn btn-secondary" onclick="closeEmailModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
                 <button class="btn btn-cleanup" id="replyCleanupBtn" onclick="cleanupReplyDraft()" style="display:none;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="M12 3l1.9 5.8L20 10l-5 4.5L16.5 21 12 17.8 7.5 21 9 14.5 4 10l6.1-1.2z"/></svg>
@@ -474,7 +484,7 @@ $translationNamespaces = ['common', 'tickets'];
                         <small style="color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('tickets.new_ticket_modal.company_hint')); ?></small>
                     </div>
                 </div>
-                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px;">
                     <div class="form-group">
                         <label class="form-label"><?php echo htmlspecialchars(t('tickets.new_ticket_modal.department')); ?></label>
                         <select class="form-select" id="newTicketDepartment">
@@ -483,7 +493,7 @@ $translationNamespaces = ['common', 'tickets'];
                     </div>
                     <div class="form-group">
                         <label class="form-label"><?php echo htmlspecialchars(t('tickets.new_ticket_modal.type')); ?></label>
-                        <select class="form-select" id="newTicketType">
+                        <select class="form-select" id="newTicketType" onchange="loadNewTicketCustomFields()">
                             <option value=""><?php echo htmlspecialchars(t('tickets.new_ticket_modal.select_placeholder')); ?></option>
                         </select>
                     </div>
@@ -492,7 +502,20 @@ $translationNamespaces = ['common', 'tickets'];
                         <!-- Populated from the configured priorities in openNewTicketModal() (#40) -->
                         <select class="form-select" id="newTicketPriority"></select>
                     </div>
+                    <!-- Normal / Confidential (discussion #62). A department or mailbox set to
+                         confidential makes it Confidential anyway; this can only add to that. -->
+                    <div class="form-group" title="<?php echo htmlspecialchars(t('tickets.reading_pane.sensitivity_help')); ?>">
+                        <label class="form-label"><?php echo htmlspecialchars(t('tickets.reading_pane.field_sensitivity')); ?></label>
+                        <select class="form-select" id="newTicketSensitivity">
+                            <option value="normal"><?php echo htmlspecialchars(t('tickets.reading_pane.sensitivity_normal')); ?></option>
+                            <option value="confidential"><?php echo htmlspecialchars(t('tickets.reading_pane.sensitivity_confidential')); ?></option>
+                        </select>
+                    </div>
                 </div>
+                <?php /* Custom fields (#179) for the chosen type, filled in by
+                         loadNewTicketCustomFields(). Empty - and taking no room -
+                         when the type has none. */ ?>
+                <div class="tf-form-grid" id="newTicketCustomFields"></div>
                 <div class="form-group">
                     <label class="form-label"><?php echo htmlspecialchars(t('tickets.new_ticket_modal.description')); ?></label>
                     <textarea class="form-textarea" id="newTicketBody" rows="8" placeholder="<?php echo htmlspecialchars(t('tickets.new_ticket_modal.description_placeholder')); ?>"></textarea>
@@ -858,6 +881,24 @@ $translationNamespaces = ['common', 'tickets'];
         </div>
     </div>
 
+    <!-- Link-to-task modal: PHONE ONLY, behind the long-press menu. On desktop the
+         menu opens the ticket's inline strip picker instead; on a phone that strip
+         lives in the hidden Links sheet, so the picker opened out of sight. -->
+    <div class="modal" id="linkTaskModal">
+        <div class="modal-content" style="max-width: 620px;">
+            <div class="modal-header" id="linkTaskTitle"></div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <input type="text" class="form-input" id="linkTaskSearch" placeholder="<?php echo htmlspecialchars(t('tickets.tasks.search_placeholder')); ?>" autocomplete="off" oninput="linkTaskSearchDebounced()">
+                </div>
+                <div class="lp-list" id="linkTaskList"><div class="lp-empty">…</div></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeLinkTaskModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+            </div>
+        </div>
+    </div>
+
     <!-- Link-to-ticket modal (#38): pick a relationship type, then search the target ticket -->
     <div class="modal" id="linkTicketModal">
         <div class="modal-content" style="max-width: 620px;">
@@ -968,6 +1009,9 @@ $translationNamespaces = ['common', 'tickets'];
         // endpoint enforces this too — this flag only stops us offering a
         // button that cannot work.
         window.KB_WRITEUP_ENABLED = <?php echo analystCanAccessModule(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'knowledge') ? 'true' : 'false'; ?>;
+        // Domains on a ticket (3.0.0): Domains' data, so only for analysts who can open it.
+        window.TICKETS_SHOW_DOMAINS = <?php echo analystCanAccessModule(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'domains') ? 'true' : 'false'; ?>;
+        window.TICKETS_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'projects') ? 'true' : 'false'; ?>;
         window.KB_BASE = '../api/knowledge/';
         // What this analyst's ticket rows show (discussion #61). Resolved
         // server-side — their own choice over the install default — and already
@@ -993,31 +1037,52 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/schedule.js?v=1"></script>
     <script src="../checklists/search_scoring.js?v=1"></script>
-    <script src="../checklists/ticket_view.js?v=8"></script>
-    <script src="../assets/js/inbox.js?v=136"></script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../checklists/ticket_view.js?v=10"></script>
+    <script src="../assets/js/ticket-fields.js?v=2"></script>
+    <script src="../assets/js/inbox.js?v=154"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
     <script>
-    // Auto-check mailboxes every 60 seconds
+    // Auto-check mailboxes every 60 seconds - and refresh the inbox whenever
+    // ANYTHING new has arrived, however it came in.
     (function() {
         const POLL_INTERVAL = 60000;
         const btn = document.getElementById('mailCheckBtn');
         let polling = false;
+        let lastMarker = null;   // newest message id this inbox has seen; null until the first look
+
+        /* TRAP: "new mail from the check this page just ran" is not "something
+           new arrived". Chat messages (WhatsApp, Telegram, Slack, Teams,
+           Mattermost) reach the server by webhook, and mail collected by another
+           analyst's inbox is not reported to this page - so for both, an open
+           inbox showed nothing until someone pressed refresh. The marker is the
+           newest message id on any ticket this analyst can see
+           (api/tickets/get_inbox_activity.php); when it moves, refresh. */
+        async function newestMarker() {
+            try {
+                const r = await fetch('../api/tickets/get_inbox_activity.php');
+                const d = await r.json();
+                return d.success ? d.marker : null;
+            } catch (e) { return null; }
+        }
 
         // Show the icon on the inbox page
         if (btn) btn.style.display = '';
 
-        async function checkMailboxes() {
+        // auto: the timed poll, which the server skips when this mailbox was
+        // checked moments ago by somebody else's inbox (GH #183). Clicking the
+        // mail icon always checks.
+        async function checkMailboxes(auto) {
             if (polling) return;
             polling = true;
             if (btn) btn.classList.add('checking');
 
             try {
-                // Get active authenticated mailboxes
+                // Get active authenticated mailboxes. No mailboxes (or no right
+                // to list them) is not a reason to stop: chat messages still need
+                // the activity check below.
                 const mbRes = await fetch('../api/tickets/get_mailboxes.php');
                 const mbData = await mbRes.json();
-                if (!mbData.success) { polling = false; if (btn) btn.classList.remove('checking'); return; }
-
-                const active = mbData.mailboxes.filter(m => m.is_authenticated && m.is_active);
+                const active = mbData.success ? mbData.mailboxes.filter(m => m.is_authenticated && m.is_active) : [];
                 let totalNew = 0;
 
                 for (const mb of active) {
@@ -1025,17 +1090,21 @@ $translationNamespaces = ['common', 'tickets'];
                         const res = await fetch('../api/tickets/check_mailbox_email.php', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ mailbox_id: mb.id })
+                            body: JSON.stringify({ mailbox_id: mb.id, auto: auto === true })
                         });
                         const data = await res.json();
                         if (data.success) totalNew += data.details?.emails_saved || 0;
                     } catch (e) { /* skip */ }
                 }
 
-                // Refresh inbox if new emails arrived
-                if (totalNew > 0 && typeof refreshCurrentView === 'function') {
-                    refreshCurrentView();
-                    loadFolderCounts();
+                // Refresh if anything new arrived - from this check, a webhook,
+                // or another analyst's inbox. The first look only sets the baseline:
+                // the page has just loaded, so it is already up to date.
+                const marker = await newestMarker();
+                const moved = marker !== null && lastMarker !== null && marker > lastMarker;
+                if (marker !== null) lastMarker = Math.max(marker, lastMarker || 0);
+                if ((totalNew > 0 || moved) && typeof refreshCurrentView === 'function') {
+                    refreshCurrentView();   // the same as the refresh button: list and folder counts
                 }
             } catch (e) { /* skip */ }
 
@@ -1044,11 +1113,11 @@ $translationNamespaces = ['common', 'tickets'];
         }
 
         // Manual trigger
-        window.triggerMailCheck = checkMailboxes;
+        window.triggerMailCheck = () => checkMailboxes(false);
 
         // Run on load then every 60s
-        checkMailboxes();
-        setInterval(checkMailboxes, POLL_INTERVAL);
+        checkMailboxes(true);
+        setInterval(() => checkMailboxes(true), POLL_INTERVAL);
     })();
     </script>
 

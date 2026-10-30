@@ -15,8 +15,10 @@
     const API_BASE = '../../api/calendar/';
     let categories = [];
 
+    /** Translates a key, returning the key itself when translations are not loaded. */
     const T = (k) => (window.t ? window.t(k) : k);
 
+    /** Shows a stored date-time as "YYYY-MM-DD HH:MM" - blank when there is none. */
     function fmt(raw) { return raw ? String(raw).replace('T', ' ').slice(0, 16) : ''; }
 
     const COLUMNS = [
@@ -41,6 +43,7 @@
           value: e => e.created_at || '', display: e => fmt(e.created_at) },
     ];
 
+    /** Loads the calendar categories for the category column and its inline editor. */
     async function loadCategories() {
         try {
             const d = await fetch(API_BASE + 'get_categories.php').then(r => r.json());

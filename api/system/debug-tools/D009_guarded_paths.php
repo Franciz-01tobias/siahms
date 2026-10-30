@@ -60,9 +60,22 @@ if (!$__dbgAdmin) {
 if (!headers_sent()) header('Content-Type: text/plain; charset=utf-8');
 
 $sections = [];
+/**
+ * Adds one titled section ("=== TITLE ===" and its lines) to the report.
+ *
+ * @param array $s  the report so far, a list of section strings - appended to by reference
+ * @param string $title  the section heading, printed between === marks
+ * @param array $lines  the section's lines
+ */
 function addSection(array &$s, string $title, array $lines): void {
     $s[] = "=== {$title} ===\n" . rtrim(implode("\n", $lines), "\n");
 }
+/**
+ * Prints every section, separated by blank lines, and stops - the end of the report, and
+ * the early exit when a check cannot go on.
+ *
+ * @param array $sections  the report, a list of section strings as built by addSection()
+ */
 function emit_and_exit(array $sections): void {
     echo implode("\n\n", $sections) . "\n";
     exit;
@@ -73,7 +86,7 @@ $problems = [];
 $fixes    = [];
 
 // ---- 1. Where are we asking? -----------------------------------------------
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = requestScheme();
 $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $base   = $scheme . '://' . $host . (defined('BASE_URL') ? BASE_URL : '/');
 
@@ -81,6 +94,8 @@ $base   = $scheme . '://' . $host . (defined('BASE_URL') ? BASE_URL : '/');
  * Fetch a URL from this server. Returns [httpCode, transportError].
  * A transport error yields code 0, and every caller must treat that as
  * "unknown", never as "blocked".
+ *
+ * @param string $url  the full address on this server to request; redirects are not followed
  */
 function d009Fetch(string $url): array {
     $ch = curl_init($url);
@@ -169,6 +184,9 @@ $guarded = [
     // the document is attached to. The stored filename is random, but a random
     // name is not a permission.
     'uploads/documents'            => ['_d009probe.txt', 'Attached documents',        'deny'],
+    // The Files module's default storage root. Every file is a random .bin read
+    // only through api/files/download.php, which checks folder permissions first.
+    'uploads/files'                => ['_d009probe.txt', 'Files module storage',      'deny'],
     'lms/content'                  => ['_d009probe.php', 'Course content (no-exec)',  'noexec'],
     'system/uploads/branding'      => ['_d009probe.php', 'Branding uploads (no-exec)','noexec'],
 ];

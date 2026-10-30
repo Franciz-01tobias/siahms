@@ -20,6 +20,8 @@
  * onClaimed callback. That is the whole seam between them.
  *
  * ONE modal per page — it binds by element id, matching the single partial.
+ *
+ * @wiki Self-Service-Developer-Guide
  */
 (function (window, document) {
     'use strict';
@@ -27,6 +29,7 @@
     var cfg = {
         uploadUrl: 'upload_recording.php',
         maxSeconds: 300,
+        /** Default claim handler - does nothing until the page passes its own to init(). */
         onClaimed: function () {}
     };
 
@@ -41,24 +44,29 @@
     var recordTimer = null;
     var captureStream = null;
 
+    /** Shorthand for document.getElementById. */
     function el(id) { return document.getElementById(id); }
 
+    /** Translates a key through the shared i18n helper, or returns the key when it is not loaded. */
     function t(key, params) {
         return (window.t ? window.t(key, params) : key);
     }
 
+    /** HTML-escapes text through a text node. */
     function escapeHtml(text) {
         var d = document.createElement('div');
         d.textContent = text || '';
         return d.innerHTML;
     }
 
+    /** Formats seconds as m:ss. */
     function formatDuration(seconds) {
         var m = Math.floor(seconds / 60);
         var s = seconds % 60;
         return m + ':' + (s < 10 ? '0' : '') + s;
     }
 
+    /** Shows an error as a toast, or an alert when the toast helper is not loaded. */
     function notifyError(message) {
         // The app-wide toast when it is loaded (every portal page loads it via
         // footer.php); alert() only as a last resort, because an upload failure
@@ -83,10 +91,12 @@
         return !!recordedBlob;
     }
 
+    /** Whether the screen is being captured right now. */
     function isRecording() {
         return !!(mediaRecorder && mediaRecorder.state === 'recording');
     }
 
+    /** Opens the recording modal. */
     function open() {
         var modal = el('recordModal');
         if (!modal) return;
@@ -112,6 +122,10 @@
         modal.setAttribute('aria-hidden', 'true');
     }
 
+    /**
+     * Returns the first video format the browser can record - MP4 / H.264 preferred, then WebM - or
+     * empty to use its default.
+     */
     function pickRecorderMime() {
         // Modern Chrome/Edge produce MP4/H.264 directly. Firefox and older
         // Chrome fall back to WebM. A <video> plays either, so no server-side
@@ -131,6 +145,13 @@
         return '';
     }
 
+    /**
+     * Asks the browser to share a screen (plus the microphone when ticked, carrying on without it if
+     * refused) and starts recording.
+     *
+     * Stops by itself at the maximum length or when the browser's own "Stop sharing" is used; a
+     * refused permission is shown in the status line.
+     */
     async function start() {
         var wantMic = el('recMicToggle').checked;
 
@@ -164,9 +185,14 @@
             recordedMime = mime || 'video/webm';
             mediaRecorder = new MediaRecorder(captureStream, mime ? { mimeType: mime } : undefined);
 
+            /** Keeps each non-empty chunk the recorder hands over. */
             mediaRecorder.ondataavailable = function (e) {
                 if (e.data && e.data.size > 0) recordedChunks.push(e.data);
             };
+            /**
+             * Builds the recording from its chunks, releases the screen and microphone, stops the
+             * timer and shows the preview.
+             */
             mediaRecorder.onstop = function () {
                 recordedDuration = Math.floor((Date.now() - recordStart) / 1000);
                 recordedBlob = new Blob(recordedChunks, { type: recordedMime });
@@ -202,10 +228,12 @@
         }
     }
 
+    /** Stops the recording, if one is running. */
     function stop() {
         if (isRecording()) mediaRecorder.stop();
     }
 
+    /** Shows the recorded video with its length and the Use / Discard buttons. */
     function showPreview() {
         var preview = el('recPreview');
         preview.src = URL.createObjectURL(recordedBlob);
@@ -221,6 +249,7 @@
         status.textContent = t('self-service.recorder.recorded', { time: formatDuration(recordedDuration) });
     }
 
+    /** Throws away the captured recording and puts the modal back to ready. */
     function discard() {
         recordedBlob = null;
         recordedChunks = [];
@@ -287,6 +316,7 @@
         }
     }
 
+    /** Sets the upload URL, maximum length in seconds and claim callback for this page. */
     function init(options) {
         options = options || {};
         if (options.uploadUrl)  cfg.uploadUrl  = options.uploadUrl;

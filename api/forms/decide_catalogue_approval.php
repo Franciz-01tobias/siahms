@@ -18,9 +18,13 @@ require_once '../../includes/catalogue_approvals.php';
 
 header('Content-Type: application/json');
 if (!isset($_SESSION['analyst_id'])) { echo json_encode(['success' => false, 'error' => 'Not authenticated']); exit; }
-requireModuleAccessJson('forms');
 
 try {
+    // Forms access, or named as an approver (#180 Part 3). Deciding itself is still
+    // catalogueApprovalDecide()'s approver_id check - only your own requests.
+    if (!catalogueApproverCanEnter(connectToDatabase(), (int)$_SESSION['analyst_id'])) {
+        requireModuleAccessJson('forms');
+    }
     $data         = json_decode(file_get_contents('php://input'), true) ?: [];
     $submissionId = (int)($data['submission_id'] ?? 0);
     $decision     = (string)($data['decision'] ?? '');

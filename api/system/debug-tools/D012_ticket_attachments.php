@@ -68,12 +68,31 @@ const D012_COPY_MAX_BYTES = 67108864;   // 64 MB
 // ---- helpers -----------------------------------------------------------
 
 $sections = [];
+/**
+ * Adds one titled section ("=== TITLE ===" and its lines) to the report; $body is a
+ * string or an array of lines.
+ *
+ * @param mixed $sections  the report so far, a list of section strings - appended to by reference
+ * @param mixed $title  the section heading, printed between === marks
+ * @param mixed $body  the section text - a string, or an array of lines
+ */
 function addSection(&$sections, $title, $body) {
     if (is_array($body)) $body = implode("\n", $body);
     $sections[] = "=== {$title} ===\n" . rtrim($body, "\n");
 }
+/**
+ * Formats a boolean as YES or NO for the report.
+ *
+ * @param mixed $v  any value, judged as true or false
+ */
 function bool_str($v) { return $v ? 'YES' : 'NO'; }
 
+/**
+ * Prints every section, separated by blank lines, and stops - the end of the report, and
+ * the early exit when a check cannot go on.
+ *
+ * @param mixed $sections  the report, a list of section strings as built by addSection()
+ */
 function emit_and_exit($sections) {
     if (!headers_sent()) {
         header('Content-Type: text/plain; charset=utf-8');
@@ -83,7 +102,11 @@ function emit_and_exit($sections) {
     exit;
 }
 
-/** Human-readable byte count. Sizes here are read by people, not parsed. */
+/**
+ * Human-readable byte count. Sizes here are read by people, not parsed.
+ *
+ * @param mixed $n  a size in bytes; null or empty gives (not recorded)
+ */
 function d012_bytes($n) {
     if ($n === null || $n === '') return '(not recorded)';
     $n = (float) $n;
@@ -93,7 +116,12 @@ function d012_bytes($n) {
     return round($n / 1073741824, 2) . ' GB';
 }
 
-/** Mask nothing, but keep a runaway value from swamping the report. */
+/**
+ * Mask nothing, but keep a runaway value from swamping the report.
+ *
+ * @param mixed $s  the value to print
+ * @param mixed $max  the most bytes to keep before adding an ellipsis
+ */
 function d012_trim($s, $max = 120) {
     $s = (string) $s;
     return strlen($s) > $max ? substr($s, 0, $max) . '…' : $s;
@@ -121,6 +149,10 @@ function d012_trim($s, $max = 120) {
  * ⚠️ 4 AND 5 ARE THE ONES THAT MATTER MOST, because in both of them the file IS
  * on the server — which is exactly what somebody reporting this bug will tell you,
  * and exactly what makes it look like the software is lying to them.
+ *
+ * @param mixed $abs  the absolute path the file was expected at
+ * @param mixed $baseDir  the storage folder the stored value is relative to; null when unknown
+ * @param mixed $storedKey  the path or key exactly as stored in the database row
  */
 function d012_whyMissing($abs, $baseDir, $storedKey) {
     $out = [];

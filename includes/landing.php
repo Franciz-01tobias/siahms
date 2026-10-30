@@ -19,6 +19,8 @@
  * unrecognised falls back to the default.
  */
 
+require_once __DIR__ . '/session_security.php';   // requestIsHttps() — proxy-aware (GH #152)
+
 /** Cookie holding the analyst's own choice. Read pre-auth; see landingResolve(). */
 const LANDING_COOKIE = 'freeitsm_landing';
 
@@ -48,7 +50,11 @@ function landingTargets(): array
     ];
 }
 
-/** Is this a landing key we recognise? Everything from outside goes through here. */
+/**
+ * Is this a landing key we recognise? Everything from outside goes through here.
+ *
+ * @param mixed $key  untrusted input (cookie, preference or setting); valid only if it is 'analyst' or 'portal'
+ */
 function landingIsValid($key): bool
 {
     return is_string($key) && array_key_exists($key, landingTargets());
@@ -96,6 +102,8 @@ function landingResolve(PDO $conn): string
  * HttpOnly because nothing in the browser needs to read it — the decision is
  * made in PHP before a page exists. A year, because the whole point is that it
  * survives long enough to be useful on a machine somebody uses every day.
+ *
+ * @param ?string $key  'analyst' or 'portal' to remember, or null to clear the cookie
  */
 function landingSetCookie(?string $key): void
 {
@@ -106,7 +114,7 @@ function landingSetCookie(?string $key): void
     $params = [
         'expires'  => $key === null ? time() - 3600 : time() + 31536000,
         'path'     => '/',
-        'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'secure'   => requestIsHttps(),
         'httponly' => true,
         'samesite' => 'Lax',
     ];
@@ -163,6 +171,9 @@ function landingRefreshCookieFromPreference(PDO $conn, int $analystId): void
  * The preference row is the source of truth; the cookie is a cache of it that
  * exists purely so PHP can read the value before anyone has authenticated.
  * Saving the two together keeps them from drifting apart.
+ *
+ * @param string $key  the preference key just saved; anything but the landing key is ignored
+ * @param mixed $value  the value saved; an unrecognised one clears the cookie
  */
 function landingOnPreferenceSaved(string $key, $value): void
 {

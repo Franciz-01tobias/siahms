@@ -35,6 +35,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('reporting');
 
 $filter   = $_GET['filter']    ?? '';
 $value    = $_GET['value']     ?? '';
@@ -46,6 +47,10 @@ $format   = ($_GET['format'] ?? 'json') === 'csv' ? 'csv' : 'json';
  * Resolve a filter type + value into a SQL WHERE fragment + bound params.
  * All filter types are validated against this whitelist; nothing user-supplied
  * goes into the SQL string directly.
+ *
+ * @param string $filter  the drill-down type from the request, e.g. 'compliance', 'os', 'last_sync', 'kpi_stale'
+ * @param string $value  the clicked value for that type (untrusted - always bound, never put in the SQL)
+ * @param ?string $friendly  set by reference to a human label for the filter, shown above the device list
  */
 function buildFilter(string $filter, string $value, ?string &$friendly): array
 {

@@ -185,6 +185,8 @@ try {
 
 /**
  * Map SCORM status values to our normalised status
+ *
+ * @param string $val  a SCORM lesson_status / completion_status value as sent by the package, any case
  */
 function mapScormStatus(string $val): string {
     $val = strtolower(trim($val));

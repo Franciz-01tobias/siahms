@@ -60,6 +60,7 @@
  * page; the queries that do it are marked.
  */
 if (!function_exists('dbConnectionOptions')) {
+    /** Returns the PDO options every connection uses - the session time zone set to UTC. */
     function dbConnectionOptions(): array
     {
         return [

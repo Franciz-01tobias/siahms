@@ -29,7 +29,37 @@ require __DIR__ . '/_top.php';
     <p>When you choose a new language the page <strong>reloads</strong> so everything re-renders in your selection. Ticket content and other data you've entered are not translated — only the interface labels, menus and messages.</p>
 </div>
 
-<!-- 3. Notifications -->
+<!-- Module order (GH #187) -->
+<div class="help-section" id="module-order">
+    <div class="help-section-header"><?php echo helpSectionNum('module-order'); ?>
+        <div>
+            <h3>Module order</h3>
+            <p>Put the modules you use most first - on the <strong>Display</strong> tab.</p>
+        </div>
+    </div>
+    <p>The order you choose is used in three places: the <strong>waffle menu</strong>, the <strong>home page</strong>, and the <strong>Ctrl+K</strong> "Go to" list - so Ctrl+K then Enter takes you to whichever module you put first. Move a module by dragging its handle (on a phone, press and hold the handle), with its arrow buttons, or by selecting it and pressing <kbd>Alt</kbd> with the up or down arrow.</p>
+    <ul>
+        <li>It is yours alone, and follows you to any browser or device you sign in from.</li>
+        <li>It changes the order only. Which modules you can open is decided by your administrator, exactly as before.</li>
+        <li>A module you cannot open today keeps its place, so if you are given it later it appears where it always would have.</li>
+        <li>A module added in a later update joins the list on its own, in its usual place.</li>
+        <li><strong>Reset</strong> puts the standard order back.</li>
+    </ul>
+</div>
+
+<!-- Money (GH #189) -->
+<div class="help-section" id="money">
+    <div class="help-section-header"><?php echo helpSectionNum('money'); ?>
+        <div>
+            <h3>Money</h3>
+            <p>How amounts of money are written for you - <code>£1,234.56</code>, <code>1.234,56 €</code> or <code>Rp 1.500.000</code>.</p>
+        </div>
+    </div>
+    <p>Left on <strong>Use the system default</strong>, you see whatever your administrator chose in <strong>System - Currencies</strong>. Choose <strong>Choose my own</strong> to pick the separators, where the symbol goes, and the decimal places for every currency. Under <strong>Particular currencies</strong> you can give one currency a format of its own - euros the German way, say, while everything else stays as it is.</p>
+    <p>It changes only how amounts <em>look</em> on your screen. The currency of a contract, licence or project, and the amount itself, stay exactly as they are, and nobody else sees your choice. It is saved as soon as you change it.</p>
+</div>
+
+<!-- 3. Toasts -->
 <div class="help-section" id="toasts">
     <div class="help-section-header"><?php echo helpSectionNum('toasts'); ?>
         <div>
@@ -48,6 +78,36 @@ require __DIR__ . '/_top.php';
         </div>
     </div>
     <div class="help-note">If you set these before they became account settings, your old per-browser choices are migrated to your account automatically the first time you open this page.</div>
+</div>
+
+<!-- The notification bell (Notifications tab) -->
+<div class="help-section" id="bell">
+    <div class="help-section-header"><?php echo helpSectionNum('bell'); ?>
+        <div>
+            <h3>The notification bell</h3>
+            <p>The <strong>Notifications</strong> tab decides what reaches the bell in the header, and how you hear about it. Toasts, above, are a different thing: they confirm what you just did.</p>
+        </div>
+    </div>
+    <div class="help-cards">
+        <div class="help-card">
+            <h4>What reaches the bell</h4>
+            <p>One switch per kind of event - a ticket assigned to you, a reply, a task you were put on, a comment, and so on. Turning one off only changes your own bell. You are never told about something you did yourself.</p>
+        </div>
+        <div class="help-card">
+            <h4>Chime</h4>
+            <p>A short sound when something new arrives. <strong>No sound</strong> until you pick one; <strong>Play</strong> previews it.</p>
+        </div>
+        <div class="help-card">
+            <h4>Desktop notifications</h4>
+            <p>Each new item in the bell also appears as a notification on your computer - in Edge on Windows, a normal Windows notification - so you see it while working in another window. Clicking it opens the ticket or task.</p>
+            <p>Your browser asks whether to allow notifications from this site when you turn it on. If you say no, the switch goes back off and the page says how to allow them later. <strong>Test</strong> shows a sample.</p>
+        </div>
+        <div class="help-card">
+            <h4>Tasks assigned to you</h4>
+            <p><strong>Email me when a task is assigned to me</strong> sends an email whenever a task is created for you or handed to you from someone else, written in your own interface language. Nothing is sent for a task you assign to yourself. Off unless you turn it on.</p>
+        </div>
+    </div>
+    <div class="help-note"><strong>Desktop notifications need FreeITSM open in a tab.</strong> Minimised or behind other windows is fine; with the browser closed nothing arrives. Browsers also only allow them on a site opened over <strong>https</strong>. The task email needs a mailbox able to send - the same one password resets use - and each one appears in the send log as <em>Task assigned</em>.</div>
 </div>
 
 <!-- 4. Left panels -->
@@ -85,6 +145,30 @@ require __DIR__ . '/_top.php';
             <p>The search panel in Tickets, Change Management, Problem Management and Contracts can be dragged out of the way and left open, so by default only its <strong>✕</strong> or the <strong>Escape</strong> key closes it. That suits searching once and then clicking down the results looking for the right ticket.</p>
             <p>Turn on <strong>Close it when I click away</strong> if you would rather it got out of the way on its own. It then closes as soon as you click the folder list, the ticket list or the toolbar. Clicking the ticket you just found — or its properties — leaves it open, so changing something on the ticket the search gave you does not throw the search away.</p>
             <p><strong>Escape always closes it</strong>, whichever way this is set.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Tasks -->
+<div class="help-section" id="tasks">
+    <div class="help-section-header"><?php echo helpSectionNum('tasks'); ?>
+        <div>
+            <h3>Tasks</h3>
+            <p>Three choices about how the Tasks module works for you.</p>
+        </div>
+    </div>
+    <div class="help-cards">
+        <div class="help-card">
+            <h4>Opening a task</h4>
+            <p>In the <strong>side panel</strong>, which keeps the board visible, or in a <strong>large window</strong> with room for the description and comments. The expand button on a task changes the same setting.</p>
+        </div>
+        <div class="help-card">
+            <h4>Subtasks on the task calendar</h4>
+            <p>Parent tasks only, tasks and subtasks together, or subtasks alone. The calendar's own <strong>Show</strong> control changes the same setting.</p>
+        </div>
+        <div class="help-card">
+            <h4>Subtasks on the task board</h4>
+            <p>A task's subtasks are listed under its card on the board. Turn on <strong>Hide them once all are complete</strong> to stop listing them when every one is done; the card still shows its count.</p>
         </div>
     </div>
 </div>

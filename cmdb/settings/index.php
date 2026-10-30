@@ -35,9 +35,9 @@ $translationNamespaces = ['common', 'cmdb'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FreeITSM - <?php echo htmlspecialchars(t('cmdb.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('cmdb', t('cmdb.nav.settings'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -211,7 +211,7 @@ $translationNamespaces = ['common', 'cmdb'];
         .ai-suggestion .sug-meta { color: var(--text-muted,#6b7280); font-size: 12px; margin-top: 4px; }
     </style>
     <!-- Mobile layer: after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <!-- 🔑 data-mobile-page="settings" is the FOURTH part of opting a settings screen
      in, and the one that is silent when missing: the entire shared settings layer
@@ -526,7 +526,7 @@ $translationNamespaces = ['common', 'cmdb'];
                             <option value="to_from"></option>
                             <option value="from_to"></option>
                         </select>
-                        <p class="field-hint"><?php echo htmlspecialchars(t('cmdb.settings.rel_type_impact_hint')); ?></p>
+                        <small><?php echo htmlspecialchars(t('cmdb.settings.rel_type_impact_hint')); ?></small>
                     </div>
                     <div class="form-group">
                         <label for="relTypeDisplayOrder"><?php echo htmlspecialchars(t('cmdb.settings.rel_type_display_order')); ?></label>
@@ -617,9 +617,9 @@ $translationNamespaces = ['common', 'cmdb'];
         </div>
     </div>
 
-    <script src="../../assets/js/ai-settings.js?v=2"></script>
+    <script src="../../assets/js/ai-settings.js?v=4"></script>
     <script src="../options-editor.js?v=3"></script>
     <script src="settings.js?v=7"></script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

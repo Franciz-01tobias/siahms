@@ -1,4 +1,6 @@
 <?php
+/* 🔴 COMMAND LINE ONLY - see scripts/.htaccess. Over HTTP this would run for anyone, unauthenticated. */
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 /**
  * Verify one translated chunk against its English source. THE LOAD-BEARING PART.
  *
@@ -164,7 +166,13 @@ function i18nVerifyChunk(string $enPath, string $trPath): array
                 return $p ? implode(', ', $p) : 'none';
             };
             $errors[] = "$k: HTML tags lost or gained — English has [" . $fmt($em) . '] translation has [' . $fmt($tm) . ']';
-        } elseif (!i18nHtmlBalanced($trV)) {
+        } elseif (i18nHtmlBalanced($enV) && !i18nHtmlBalanced($trV)) {
+            /* Only when the English IS balanced. `yyyy/mm/dd/<random>.bin` in
+               files.settings.storage_root_desc is not HTML at all, but it reads
+               as an unclosed <random> tag - in the English and in every faithful
+               translation alike. Flagging that sent a translator off to invent
+               ‹random› to get past the gate (2026-10-18, de). The multiset check
+               above still demands the translation carry the same <random>. */
             $errors[] = "$k: HTML is not balanced — a tag is left open or closed out of order";
         } elseif (i18nHtmlTags($enV) !== i18nHtmlTags($trV)) {
             /* Same tags, same counts, balanced, different sequence. Legitimate
@@ -260,6 +268,8 @@ function i18nVerifySelfTest(): int
         'a.dashent'  => 'Leave it blank &mdash; nothing happens',
         'a.poss'     => 'the service&rsquo;s impact',
         'a.quoted'   => 'click &ldquo;Reset&rdquo; now',
+        // Not HTML, but reads as an unclosed tag - in the English too.
+        'a.pattern'  => 'Files are kept as yyyy/mm/dd/<random>.bin',
     ];
     i18nWriteTsv($enP, $en);
 
@@ -277,6 +287,7 @@ function i18nVerifySelfTest(): int
         'a.dashent' =>'Dejalo en blanco &mdash; no pasa nada',
         'a.poss'    =>'el impacto del servicio&rsquo;s',
         'a.quoted'  =>'pulsa &ldquo;Reset&rdquo; ahora',
+        'a.pattern' =>'Los archivos se guardan como yyyy/mm/dd/<random>.bin',
     ];
 
     /** Each case is the good translation with exactly one thing done to it. */
@@ -319,6 +330,12 @@ function i18nVerifySelfTest(): int
         /* ...but punctuation STYLE is the translator's: an extra character
            dash English does not have is not a defect. */
         'an extra literal dash'       => [$with(['a.greeting' => 'Hola {name} — tienes {n} tickets']), true],
+
+        /* ── a literal <random> that is not HTML (files.settings.storage_root_desc) ──
+           The English is "unbalanced" in exactly the same way, so a faithful
+           translation must pass - and one that drops the pattern must not. */
+        '<random> kept as in English' => [$base, true],
+        '<random> pattern dropped'    => [$with(['a.pattern' => 'Los archivos se guardan como yyyy/mm/dd/random.bin']), false],
     ];
 
     $pass = 0; $fail = 0;

@@ -95,6 +95,7 @@
     window.nowForInput = function () {
         var now = new Date();
         if (!window.USER_TIMEZONE) {
+            /** Pads a number to two digits with a leading zero. */
             var pad = function (n) { return String(n).padStart(2, '0'); };
             return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
                  + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
@@ -132,6 +133,7 @@
         var d = window.parseUTCDate(dbStr);
         if (!d || isNaN(d.getTime())) return '';
         if (!window.USER_TIMEZONE) {
+            /** Pads a number to two digits with a leading zero. */
             var pad = function (n) { return String(n).padStart(2, '0'); };
             return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
                  + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
@@ -179,6 +181,7 @@
         weekdaysShort: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     };
 
+    /** Returns window.DATE_FORMAT, or the built-in FALLBACK when the page did not publish one. */
     function cfg() {
         var c = window.DATE_FORMAT;
         if (!c || !c.dateTemplate) return FALLBACK;
@@ -198,6 +201,7 @@
     // whatever the browser's own locale is. The digits are then assembled by our
     // own renderer, which is what makes the output identical to PHP's.
     var PART_FMT = null;
+    /** Returns {year, month, day, hour, minute} for a Date as seen in the analyst's display zone (window.USER_TIMEZONE). */
     function partsInZone(d) {
         var opts = {
             year: 'numeric', month: '2-digit', day: '2-digit',
@@ -236,12 +240,16 @@
         return day === 0 ? 7 : day;
     }
 
+    /** Pads a number to two digits with a leading zero. */
     function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
     // The single JS-side renderer — mirrors DateFmt::render(). One regex pass
     // with the longest tokens first, so MONTH is not eaten by MON nor YYYY by
     // YY, and so a substituted month name is never rescanned for tokens.
     var TOKENS = /MONTH|YYYY|MON|DD|MM|YY|mi|HH|D|h|A/g;
+    /**
+     * Renders date parts through a token template (DD, MON, YYYY, HH, mi...) using the analyst's localised month and weekday names.
+     */
     function render(p, template) {
         var c = cfg();
         var hour12 = p.hour % 12; if (hour12 === 0) hour12 = 12;
@@ -271,16 +279,21 @@
 
     // --- UTC-instant formatters (server-stamped timestamps) ------------------
 
+    /**
+     * Formats a UTC timestamp (DB string or Date) as a date in the analyst's zone and chosen date format; '' for empty input.
+     */
     window.fmtDate = function (value) {
         var d = toDate(value); if (!d) return '';
         return render(partsInZone(d), cfg().dateTemplate);
     };
 
+    /** Formats a UTC timestamp as a time in the analyst's zone and chosen time format; '' for empty input. */
     window.fmtTime = function (value) {
         var d = toDate(value); if (!d) return '';
         return render(partsInZone(d), cfg().timeTemplate);
     };
 
+    /** Formats a UTC timestamp as date then time in the analyst's zone and chosen formats; '' for empty input. */
     window.fmtDateTime = function (value) {
         var d = toDate(value); if (!d) return '';
         var p = partsInZone(d);
@@ -311,28 +324,33 @@
     // at a call site. See the parseNaiveDate note above for which is which —
     // these must NEVER be pointed at a server-stamped UTC timestamp.
 
+    /** Coerces a naive wall-clock value (DB string or Date) to a Date via parseNaiveDate, or null when empty or invalid. */
     function naive(value) {
         if (value === null || value === undefined || value === '') return null;
         var d = (value instanceof Date) ? value : window.parseNaiveDate(value);
         return (d && !isNaN(d.getTime())) ? d : null;
     }
 
+    /** Formats a naive wall-clock value as a date in the chosen date format, with no zone conversion. */
     window.fmtNaiveDate = function (value) {
         var d = naive(value); if (!d) return '';
         return render(partsNaive(d), cfg().dateTemplate);
     };
 
+    /** Formats a naive wall-clock value as a time in the chosen time format, with no zone conversion. */
     window.fmtNaiveTime = function (value) {
         var d = naive(value); if (!d) return '';
         return render(partsNaive(d), cfg().timeTemplate);
     };
 
+    /** Formats a naive wall-clock value as date then time in the chosen formats, with no zone conversion. */
     window.fmtNaiveDateTime = function (value) {
         var d = naive(value); if (!d) return '';
         var p = partsNaive(d);
         return render(p, cfg().dateTemplate) + ' ' + render(p, cfg().timeTemplate);
     };
 
+    /** Formats a naive wall-clock value as a compact day and month ('25 Aug'), with no zone conversion. */
     window.fmtNaiveDayMonth = function (value) {
         var d = naive(value); if (!d) return '';
         return render(partsNaive(d), cfg().dayMonthTemplate);
@@ -369,6 +387,7 @@
         return render(partsInZone(d), template);
     };
 
+    /** Renders a naive wall-clock value through a caller-chosen token template - the naive twin of fmtTemplate. */
     window.fmtNaiveTemplate = function (value, template) {
         var d = naive(value); if (!d) return '';
         return render(partsNaive(d), template);

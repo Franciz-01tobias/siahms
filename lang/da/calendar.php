@@ -171,6 +171,7 @@ return [
         'categories_heading' => 'Begivenhedskategorier',
         'categories_intro' => 'Kategorier er rygraden i kalenderens organisering. Hver kategori har et navn og en farve, så begivenheder kan genkendes med det samme. Sidepanelet viser alle tilgængelige kategorier med afkrydsningsfelter &mdash; fjern fluebenet ved en kategori for at skjule de begivenheder fra kalenderen.',
         'categories_certificates' => '<strong>Certifikater</strong> &mdash; hold styr på udløbsdatoer for SSL/TLS-certifikater, code signing-certifikater og andre legitimationsoplysninger, der skal fornyes med jævne mellemrum',
+        'categories_projects' => '<strong>Projekter</strong> &mdash; udfyldt af Projekter-modulet: hvert aktivt projekts måldato for afslutning og slutningen af hver åben etape, fase eller sprint, holdt i takt med planen',
         'categories_contracts' => '<strong>Kontrakter</strong> &mdash; registrér fornyelsesdatoer for leverandørkontrakter, licensudløb og SLA-gennemgange, så intet udløber uventet',
         'categories_maintenance' => '<strong>Vedligeholdelse</strong> &mdash; planlæg vedligeholdelsesvinduer for servere, netværksudstyr og infrastruktur. Dit team og interessenter kan se præcis, hvornår der forventes nedetid',
         'categories_meetings' => '<strong>Møder</strong> &mdash; registrér team-standups, CAB-møder, leverandøropkald og andre gentagne aftaler, der er relevante for it-driften',

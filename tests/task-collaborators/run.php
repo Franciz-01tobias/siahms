@@ -307,6 +307,10 @@ ok('a comment is ON by default, like a note on a ticket',
     $types['task.comment_added']['default'] === true);
 
 // ── Teardown ────────────────────────────────────────────────────────────────
+// #181's history outlives its tasks on purpose (no foreign keys) - remove it first.
+$conn->exec("DELETE e FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.title LIKE 'zz-collab-89%'");
+// ...and the notifications the test analysts were sent about them.
+$conn->exec("DELETE n FROM notifications n JOIN tasks t ON t.id = n.entity_id WHERE n.entity_type = 'task' AND t.title LIKE 'zz-collab-89%'");
 $conn->exec("DELETE FROM tasks WHERE title LIKE 'zz-collab-89%'");
 $conn->exec("DELETE FROM analysts WHERE username IN ('zz-owner89', 'zz-helper89', 'zz-helper89b', 'zz-stranger89')");
 

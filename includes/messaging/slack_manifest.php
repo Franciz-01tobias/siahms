@@ -100,6 +100,9 @@ function slackBuildManifest(string $webhookUrl, string $appName = 'FreeITSM'): a
  * The manifest as the JSON string a person pastes into Slack.
  * Pretty-printed because a human reads it before pasting, and unescaped slashes
  * because an escaped URL (https:\/\/…) looks broken and invites "fixing".
+ *
+ * @param string $webhookUrl  the channel's own public webhook URL
+ * @param string $appName  what the app will be called in Slack (trimmed to 35 characters; empty gives FreeITSM)
  */
 function slackManifestJson(string $webhookUrl, string $appName = 'FreeITSM'): string
 {
@@ -117,6 +120,7 @@ function slackManifestJson(string $webhookUrl, string $appName = 'FreeITSM'): st
  * so here turns a baffling "Your URL didn't respond with the value of the
  * challenge parameter" in Slack's UI into a sentence that names the problem.
  *
+ * @param string $webhookUrl  the public webhook URL that Slack will be given
  * @return string '' when it looks usable, otherwise the reason it will not work
  */
 function slackWebhookUrlProblem(string $webhookUrl): string

@@ -6,7 +6,7 @@
  *   php scripts/cron_token.php sla          print just the SLA one
  *   php scripts/cron_token.php --url        print the full HTTP URL for each
  *
- * ⚠️ WHY THIS EXISTS. The four *_cron_token values are encrypted at rest — they end in
+ * ⚠️ WHY THIS EXISTS. The *_cron_token values are encrypted at rest — they end in
  * _token, so isEncryptedSettingKey() covers them and Database Verify encrypts them in
  * place. Every worker decrypts correctly, so the jobs keep running, but the setup docs
  * used to say "read it with SELECT setting_value FROM system_settings", and that now
@@ -32,6 +32,14 @@ const CRON_TOKENS = [
     'webhook'     => ['webhook_cron_token',     'cron/webhook_deliveries.php'],
     'workflow'    => ['workflow_cron_token',    'cron/workflow_scheduled.php'],
     'integration' => ['integration_cron_token', 'cron/integration_poll.php'],
+    'domains'     => ['domain_cron_token',      'cron/domains.php'],
+    // #182: never seeded before, so this job's web address never worked.
+    'lms'         => ['lms_reminder_cron_token', 'cron/lms_reminders.php'],
+    // These three share another job's secret rather than having their own; listed
+    // so --url prints an address for every job that has one.
+    'recurrence'  => ['workflow_cron_token',    'cron/task_recurrence.php'],
+    'attachments' => ['webhook_cron_token',     'cron/attachment_extract.php'],
+    'calendar'    => ['webhook_cron_token',     'cron/calendar_sync_pull.php'],
 ];
 
 $args    = array_slice($argv, 1);

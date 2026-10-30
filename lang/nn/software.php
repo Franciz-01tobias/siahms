@@ -36,6 +36,7 @@ return [
         'col_seats' => 'Sete',
         'col_actions' => '',
         'add_app' => 'Legg til applikasjon',
+        'new_app' => 'Ny applikasjon',
         'edit_app' => 'Rediger applikasjon',
         'added_by_hand' => 'Lagt til for hand',
         'f_name' => 'Namn',
@@ -116,7 +117,7 @@ return [
         'widget_removed' => 'Widget fjerna',
     ],
     'library' => [
-        'page_title' => 'Servicedesk - Widgetbibliotek for programvare',
+        'page_title' => 'Widgetbibliotek for programvare',
         'back' => 'Dashbord',
         'heading' => 'Widgetbibliotek',
         'search' => 'Søk i widgetar...',

@@ -18,7 +18,11 @@ require_once '../../includes/oidc.php';
 $portal = ($_GET['portal'] ?? '') === 'self-service' ? 'self-service' : 'analyst';
 $_SESSION['oidc_portal'] = $portal;
 
-/** Bounce back to the right portal's login page with an error message. */
+/**
+ * Bounce back to the right portal's login page with an error message.
+ *
+ * @param string $msg  the error shown on the login page, in plain text
+ */
 function ssoBail(string $msg): void {
     $loginPath = (($_SESSION['oidc_portal'] ?? 'analyst') === 'self-service')
         ? 'self-service/login.php' : 'login.php';

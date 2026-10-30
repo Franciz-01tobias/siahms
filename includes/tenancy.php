@@ -48,6 +48,8 @@ if (!defined('TENANCY_FALLBACK_TENANT_ID')) {
  * Only the two errors that genuinely mean "the schema hasn't caught up" are
  * forgiven. Anything else denies and is logged, because a guard that cannot say
  * no under load is not a guard.
+ *
+ * @param Exception $e  the exception a tenancy guard's query threw
  */
 function tenancyDegradeAllowed(Exception $e): bool {
     if ($e instanceof PDOException && dbErrorIsMissingSchema($e)) {
@@ -262,6 +264,8 @@ function analystCanAccessTenant(PDO $conn, int $analystId, int $tenantId): bool 
  *   - Unknown ticket id → false (don't reveal another company's row).
  *   - Part-migrated table (no tenant_id column) → true, so it never blocks an
  *     install mid-rollout (isMultiTenant is false there anyway).
+ *
+ * @param mixed $ticketId  the ticket id, any form; cast to int, and 0 or less is false
  */
 function analystCanAccessTicket(PDO $conn, int $analystId, $ticketId): bool {
     if (!isMultiTenant($conn)) {
@@ -297,6 +301,8 @@ function analystCanAccessTicket(PDO $conn, int $analystId, $ticketId): bool {
  *
  * Same rules as analystCanAccessTicket(): single-company install → true; NULL
  * tenant is Default-owned; unknown id → false.
+ *
+ * @param mixed $userId  the portal user / requester (users.id), any form; cast to int, and 0 or less is false
  */
 function analystCanAccessUser(PDO $conn, int $analystId, $userId): bool {
     if (!isMultiTenant($conn)) {
@@ -325,6 +331,8 @@ function analystCanAccessUser(PDO $conn, int $analystId, $userId): bool {
  * Management twin of analystCanAccessTicket() — same rules (single-company → always
  * true; NULL tenant treated as Default-owned; unknown id → false; part-migrated
  * table → true).
+ *
+ * @param mixed $problemId  the problem (problems.id), any form; cast to int, and 0 or less is false
  */
 function analystCanAccessProblem(PDO $conn, int $analystId, $problemId): bool {
     if (!isMultiTenant($conn)) {
@@ -353,6 +361,8 @@ function analystCanAccessProblem(PDO $conn, int $analystId, $problemId): bool {
  * Management twin of analystCanAccessProblem() — same rules (single-company →
  * always true; NULL tenant treated as Default-owned; unknown id → false;
  * part-migrated table → true).
+ *
+ * @param mixed $changeId  the change (changes.id), any form; cast to int, and 0 or less is false
  */
 function analystCanAccessChange(PDO $conn, int $analystId, $changeId): bool {
     if (!isMultiTenant($conn)) {
@@ -377,6 +387,32 @@ function analystCanAccessChange(PDO $conn, int $analystId, $changeId): bool {
 }
 
 /**
+ * May this analyst access this *project* (by its company)? The same rules as a
+ * change: single-company -> yes; NULL company = the Default one; unknown id -> no.
+ * Added for documents on projects (3.3.0).
+ *
+ * @param mixed $projectId  the project id, any form; cast to int, and 0 or less is false
+ */
+function analystCanAccessProject(PDO $conn, int $analystId, $projectId): bool {
+    $projectId = (int) $projectId;
+    if ($projectId <= 0) return false;
+    // Members-only projects (3.3.0) - checked before the company, on every install.
+    require_once __DIR__ . '/projects/visibility.php';
+    try { if (!projectIdVisibleTo($conn, $analystId, $projectId)) return false; } catch (Throwable $e) { /* table not ready */ }
+    if (!isMultiTenant($conn)) return true;
+    try {
+        $stmt = $conn->prepare("SELECT tenant_id FROM projects WHERE id = ?");
+        $stmt->execute([$projectId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return false;
+        $tid = ($row['tenant_id'] === null) ? getDefaultTenantId($conn) : (int) $row['tenant_id'];
+        return analystCanAccessTenant($conn, $analystId, $tid);
+    } catch (Exception $e) {
+        return tenancyDegradeAllowed($e);
+    }
+}
+
+/**
  * May this analyst access this *CMDB configuration item* (by its owning
  * company)? The CMDB twin of analystCanAccessAsset() — same rules
  * (single-company → always true; NULL tenant treated as Default-owned; unknown
@@ -385,6 +421,8 @@ function analystCanAccessChange(PDO $conn, int $analystId, $changeId): bool {
  * A CI belongs to exactly one company (there are no shared CIs), so this is
  * also the gate for the same-company invariant on parent/child links,
  * relationships and object_ref properties: both ends must pass.
+ *
+ * @param mixed $objectId  the CMDB item (cmdb_objects.id), any form; cast to int, and 0 or less is false
  */
 function analystCanAccessCmdbObject(PDO $conn, int $analystId, $objectId): bool {
     if (!isMultiTenant($conn)) {
@@ -426,6 +464,8 @@ function analystCanAccessCmdbObject(PDO $conn, int $analystId, $objectId): bool 
  *
  * Single-company install → always true; unknown id → false; part-migrated table
  * → true.
+ *
+ * @param mixed $channelId  the messaging channel (messaging_channels.id), any form; cast to int, and 0 or less is false
  */
 function analystCanAccessChannel(PDO $conn, int $analystId, $channelId): bool {
     if (!isMultiTenant($conn)) {
@@ -457,6 +497,8 @@ function analystCanAccessChannel(PDO $conn, int $analystId, $channelId): bool {
  * Write-side counterpart to the guard above, for a company id supplied by the
  * client. NULL is allowed through — it means "shared intake", not a company.
  * Single-company install → always true (there is only one company to pick).
+ *
+ * @param mixed $tenantId  the company id the client sent; null, '' or 0 means shared / unassigned and is allowed
  */
 function analystCanAssignTenant(PDO $conn, int $analystId, $tenantId): bool {
     if (!isMultiTenant($conn)) {
@@ -469,10 +511,42 @@ function analystCanAssignTenant(PDO $conn, int $analystId, $tenantId): bool {
 }
 
 /**
+ * May this analyst access this *domain* (#154)? The Domains-module twin of
+ * analystCanAccessAsset() below: single-company → always true; NULL tenant =
+ * the Default company; unknown id → false; part-migrated table → true. A domain
+ * is SCOPED DATA, never shared between companies.
+ *
+ * @param mixed $domainId  the domain (domains.id), any form; cast to int, and 0 or less is false
+ */
+function analystCanAccessDomain(PDO $conn, int $analystId, $domainId): bool {
+    if (!isMultiTenant($conn)) {
+        return true;
+    }
+    $domainId = (int) $domainId;
+    if ($domainId <= 0) {
+        return false;
+    }
+    try {
+        $stmt = $conn->prepare("SELECT tenant_id FROM domains WHERE id = ?");
+        $stmt->execute([$domainId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return false;
+        }
+        $tid = ($row['tenant_id'] === null) ? getDefaultTenantId($conn) : (int) $row['tenant_id'];
+        return analystCanAccessTenant($conn, $analystId, $tid);
+    } catch (Exception $e) {
+        return tenancyDegradeAllowed($e);
+    }
+}
+
+/**
  * May this analyst access this *asset* (by its owning company)? The Asset
  * Management twin of analystCanAccessChange() — same rules (single-company →
  * always true; NULL tenant treated as Default-owned; unknown id → false;
  * part-migrated table → true).
+ *
+ * @param mixed $assetId  the asset id, any form; cast to int, and 0 or less is false
  */
 function analystCanAccessAsset(PDO $conn, int $analystId, $assetId): bool {
     if (!isMultiTenant($conn)) {
@@ -507,6 +581,8 @@ function analystCanAccessAsset(PDO $conn, int $analystId, $assetId): bool {
  * and subtasks are addressed by task id, and were reachable across companies
  * until each got the gate. That is exactly how the asset disks/software/history
  * endpoints were missed the first time round.
+ *
+ * @param mixed $taskId  the task id, any form; cast to int, and 0 or less is false
  */
 function analystCanAccessTask(PDO $conn, int $analystId, $taskId): bool {
     if (!isMultiTenant($conn)) {
@@ -595,7 +671,11 @@ function isActiveTenantAll(PDO $conn): bool {
     return !empty($_SESSION['active_tenant_all']);
 }
 
-/** Turn the consolidated view on or off. Needs a writable session. */
+/**
+ * Turn the consolidated view on or off. Needs a writable session.
+ *
+ * @param bool $on  true for the "All companies" view, false for one company
+ */
 function setActiveTenantAll(bool $on): void {
     $_SESSION['active_tenant_all'] = $on;
 }
@@ -622,6 +702,11 @@ function setActiveTenantAll(bool $on): void {
  * page load; at the three or four companies this feature exists for, that is
  * cheaper than the alternative of re-fetching every time a ticket is opened.
  *
+ * @param string $table  the config table, e.g. 'ticket_types' - a developer literal
+ * @param string $entityType  the key used in tenant_config_hidden, e.g. 'ticket_type'
+ * @param string $cols  the columns to select (default '*')
+ * @param string $activeWhere  an extra filter with no leading AND, e.g. 'is_active = 1'; '' for none
+ * @param string $orderBy  the ORDER BY body, no keyword
  * @return array<int, array<int, array>> company id => rows
  */
 function getTenantConfigRowsByCompany(
@@ -650,6 +735,13 @@ function getTenantConfigRowsByCompany(
  *               and merge the params into the statement's bound values.
  */
 /**
+ * Builds the SQL fragment that scopes ticket rows to the analyst's active
+ * company, or to every company they may see when the consolidated view is on.
+ *
+ * Returns ['', []] when multi-tenancy is dormant; the Default company also owns
+ * tickets with a NULL tenant_id.
+ *
+ * @param string $alias  the tickets table's alias in the calling query; '' for none
  * @param bool $forceSingle ignore the consolidated view and scope to the ONE
  *                          active company. For destructive endpoints — see the
  *                          note in api/tickets/empty_trash.php. Reading wider is
@@ -687,6 +779,8 @@ function ticketTenantFilter(PDO $conn, int $analystId, string $alias = 't', bool
  * the analyst's ACTIVE company, and the Default company also owns NULL-tenant
  * rows (so nothing is hidden at N=1 or from Default). Returns ['', []] at N=1.
  *
+ * @param string $alias  the table's alias in the calling query; '' for none
+ * @param string $col  the company column on that table (default 'tenant_id')
  * @return array [sqlFragment, params] — append to a WHERE/ON clause, merge params.
  */
 function activeTenantFilter(PDO $conn, int $analystId, string $alias = 't', string $col = 'tenant_id'): array {
@@ -745,6 +839,9 @@ function allAccessibleTenantsFilter(PDO $conn, int $analystId, string $qualified
  * Opted in so far: Tickets → Users (api/tickets/get_users.php) and the task
  * list (api/tasks/list.php) — the two a customer reported showing "the last
  * selected company" under All companies.
+ *
+ * @param string $alias  the table's alias in the calling query; '' for none
+ * @param string $col  the company column on that table (default 'tenant_id')
  */
 function activeTenantReadFilter(PDO $conn, int $analystId, string $alias = 't', string $col = 'tenant_id'): array {
     if (isMultiTenant($conn) && isActiveTenantAll($conn)) {
@@ -783,6 +880,8 @@ function analystHasAllTenantAccess(PDO $conn, int $analystId): bool {
  * switching, such as the New asset form's Company picker loading that company's
  * types and locations. 🔴 An id the analyst cannot reach is IGNORED, not
  * honoured, so the worst a crafted request gets is the active company's lists.
+ *
+ * @param string $param  the query-string parameter that names the company (default 'for_tenant') - untrusted
  */
 function requestedTenantId(PDO $conn, int $analystId, string $param = 'for_tenant'): int {
     $raw = isset($_GET[$param]) ? (int)$_GET[$param] : 0;
@@ -816,6 +915,9 @@ function tenantScopeSqlFor(PDO $conn, int $tenantId, string $qualified): array {
  * missing table answers false here. On any other error we answer true, which sends the
  * caller into its own try/catch, where the query fails and tenancyDegradeAllowed()
  * denies. Uncached in that case, so a blip does not pin the answer.
+ *
+ * @param string $table  the table name - a developer literal (backticks are stripped)
+ * @param string $column  the column to look for
  */
 function tenancyColumnExists(PDO $conn, string $table, string $column): bool {
     static $cache = [];
@@ -861,6 +963,7 @@ function tenancyColumnExists(PDO $conn, string $table, string $column): bool {
  * N=1), and on an install that has not run Database Verify yet, where the column
  * does not exist and every article is shared by definition.
  *
+ * @param string $alias  the knowledge_articles alias in the calling query; '' for none
  * @return array [sqlFragment, params]
  */
 function knowledgeTenantFilterForCompany(PDO $conn, ?int $tenantId, string $alias = 'a'): array {
@@ -884,6 +987,7 @@ function knowledgeTenantFilterForCompany(PDO $conn, ?int $tenantId, string $alia
  * from every company rather than only from Default (see
  * knowledgeTenantFilterForCompany above for why).
  *
+ * @param string $alias  the knowledge_articles alias in the calling query; '' for none
  * @return array [sqlFragment, params]
  */
 function knowledgeTenantFilter(PDO $conn, int $analystId, string $alias = 'a'): array {
@@ -898,6 +1002,8 @@ function knowledgeTenantFilter(PDO $conn, int $analystId, string $alias = 'a'): 
  *
  * Permissive when multi-tenancy is off or the column does not exist yet, so a
  * single-company or un-migrated install behaves exactly as before.
+ *
+ * @param mixed $articleId  the Knowledge article (knowledge_articles.id)
  */
 function analystCanAccessArticle(PDO $conn, int $analystId, $articleId): bool {
     if (!isMultiTenant($conn)) return true;
@@ -939,6 +1045,7 @@ function analystCanAccessArticle(PDO $conn, int $analystId, $articleId): bool {
  * the per-address override list. That list exists to route inbound MAIL, and an
  * address being on it doesn't establish that the person belongs to the company.
  *
+ * @param string $email  the new account's email address
  * @return int|null a tenant id, or NULL meaning "company not known".
  */
 function resolveTenantForNewUser(PDO $conn, string $email): ?int {
@@ -1120,6 +1227,8 @@ function resolveTicketTenantForChannel(PDO $conn, $channelId, string $fromIdenti
  *
  * Returns the tenant id, or null if the address maps to no company (unknown
  * domain, or a freemail address) → caller falls back to local login.
+ *
+ * @param string $email  the email address typed at sign-in
  */
 function resolveTenantIdForAddress(PDO $conn, string $email): ?int {
     $addr = strtolower(trim($email));
@@ -1195,6 +1304,8 @@ function getCustomFreemailDomains(PDO $conn): array {
  *
  * Matches the built-in list (freemailBuiltinDomains) plus any admin-added
  * custom domains (getCustomFreemailDomains).
+ *
+ * @param string $domain  a bare domain such as 'gmail.com' (any case)
  */
 function isFreemailDomain(PDO $conn, string $domain): bool {
     $d = strtolower(trim($domain));
@@ -1207,6 +1318,8 @@ function isFreemailDomain(PDO $conn, string $domain): bool {
  * Normalise a user-entered email domain for storage/matching: lower-cased,
  * trimmed, with any leading "@", scheme or "www." stripped. Returns '' if what
  * remains isn't a plausible domain.
+ *
+ * @param string $raw  the domain as typed - may carry '@', 'https://', 'www.', a path or a whole address
  */
 function normaliseEmailDomain(string $raw): string {
     $d = strtolower(trim($raw));
@@ -1232,6 +1345,8 @@ function normaliseEmailDomain(string $raw): string {
  * which matches on the exact sender address — unlike domains, freemail
  * addresses are allowed here (that's the whole point: route an individual
  * personal address even when its domain can't be mapped).
+ *
+ * @param string $raw  the address as typed - may carry 'mailto:' or angle brackets
  */
 function normaliseEmailAddress(string $raw): string {
     $a = strtolower(trim($raw));

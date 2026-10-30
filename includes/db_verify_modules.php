@@ -30,7 +30,17 @@ $DB_VERIFY_TABLE_OVERRIDES = [
     // where they are administered. NOT prefixed, because "document_*" would also
     // swallow directory_sync's tables if that prefix rule ever loosened.
     'documents'      => 'system',
+    // Not a table: the .htaccess repair across the upload folders (GH #115).
+    'upload folders' => 'system',
     'document_links' => 'system',
+    // Feature Bingo's "Not for us" list - administered in System.
+    'feature_bingo_dismissed' => 'system',
+    // System -> Preference templates (discussion #124).
+    'preference_templates'    => 'system',
+    // The self-service portal's people and their bell sit with the requesters
+    // (`users` => tickets), not in "other" (#62).
+    'manager_grants'       => 'tickets',
+    'portal_notifications' => 'tickets',
 ];
 
 /**
@@ -46,6 +56,7 @@ $DB_VERIFY_MODULE_PREFIXES = [
     'apikeys'          => 'system',
     'api_rate'         => 'system',
     'auth_providers'   => 'system',
+    'sso_'             => 'system',   // SSO groups -> teams (3.5.0)
     'tenant'           => 'system',
     'team'             => 'system',
     'department'       => 'system',
@@ -55,6 +66,9 @@ $DB_VERIFY_MODULE_PREFIXES = [
     'ip_login_bans'    => 'system',
     'user_preferences' => 'system',
     'user_sso'         => 'system',
+    'cost_centre'      => 'system',   // GH #160 - System -> Cost Centres
+    'lease'            => 'assets',   // Assets -> Leases (3.5.0): leases, lease_schedules, lease_assets, lease_outcomes
+    'photo_album'      => 'system',   // System -> Photo Album
     // --- Tickets (and everything that feeds the inbox) ---
     'users_assets'     => 'assets',   // must precede the 'users' fallthrough
     'ticket'           => 'tickets',
@@ -79,6 +93,8 @@ $DB_VERIFY_MODULE_PREFIXES = [
     'knowledge_'       => 'knowledge',
     'lms_'             => 'lms',
     'wiki_'            => 'wiki',
+    // --- Projects (3.2.0) - before 'process', which it does not overlap but sits beside ---
+    'project'          => 'projects',
     // --- Mappers ---
     'process'          => 'process-mapper',
     'network_'         => 'network-mapper',
@@ -89,6 +105,9 @@ $DB_VERIFY_MODULE_PREFIXES = [
     'contract'         => 'contracts',
     'payment_schedules'=> 'contracts',
     'supplier'         => 'contracts',
+    'domain_'          => 'domains',    // domains, domain_statuses, domain_audit… (tenant_domains is caught by 'tenant' first)
+    'domains'          => 'domains',
+    'files_'           => 'files',      // files_folders, files_items, files_audit…
     // --- Automation ---
     'workflow'         => 'workflow',
     'webhook_'         => 'workflow',
@@ -117,10 +136,13 @@ function dbVerifyModuleLabels(): array {
         'software'       => 'Software',
         'forms'          => 'Forms',
         'contracts'      => 'Contracts',
+        'domains'        => 'Domains',
+        'files'          => 'Files',
         'wiki'           => 'Wiki',
         'lms'            => 'Learning',
         'process-mapper' => 'Process mapper',
         'tasks'          => 'Tasks',
+        'projects'       => 'Projects',
         'cmdb'           => 'CMDB',
         'network-mapper' => 'Network mapper',
         'workflow'       => 'Workflows',
@@ -130,7 +152,11 @@ function dbVerifyModuleLabels(): array {
     ];
 }
 
-/** Which module a table belongs to. Never throws; unknown tables → 'other'. */
+/**
+ * Which module a table belongs to. Never throws; unknown tables → 'other'.
+ *
+ * @param string $table  a database table name, e.g. 'ticket_audit'
+ */
 function dbVerifyModuleForTable(string $table): string {
     global $DB_VERIFY_TABLE_OVERRIDES, $DB_VERIFY_MODULE_PREFIXES;
     if (isset($DB_VERIFY_TABLE_OVERRIDES[$table])) {

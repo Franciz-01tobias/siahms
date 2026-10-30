@@ -190,7 +190,11 @@ try {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 
-/** The DN one level up. '' once there is nothing left. */
+/**
+ * The DN one level up. '' once there is nothing left.
+ *
+ * @param string $dn  an LDAP distinguished name, e.g. OU=Staff,DC=example,DC=com
+ */
 function ouBrowseParent(string $dn): string
 {
     // Split on the first unescaped comma. A DN component may legitimately
@@ -200,7 +204,11 @@ function ouBrowseParent(string $dn): string
     return isset($parts[1]) ? trim($parts[1]) : '';
 }
 
-/** The readable half of a DN's first component: "OU=Staff,…" → "Staff". */
+/**
+ * The readable half of a DN's first component: "OU=Staff,…" → "Staff".
+ *
+ * @param string $dn  an LDAP distinguished name, e.g. OU=Staff,DC=example,DC=com
+ */
 function ouBrowseRdnValue(string $dn): string
 {
     $first = preg_split('/(?<!\\\\),/', $dn, 2)[0];
@@ -215,6 +223,9 @@ function ouBrowseRdnValue(string $dn): string
  * genuinely called "System" deeper in their own tree is theirs, not ours to
  * hide. Being wrong here hides part of somebody's directory, so the list is
  * deliberately short and only covers what AD creates itself.
+ *
+ * @param string $dn  the distinguished name of a container found by the search
+ * @param string $root  the base DN being browsed; only containers directly under it are judged
  */
 function ouBrowseIsPlumbing(string $dn, string $root): bool
 {

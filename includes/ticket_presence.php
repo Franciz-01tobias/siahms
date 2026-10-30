@@ -72,6 +72,8 @@ function presenceSchemaReady(PDO $conn): bool {
  *
  * $composing is the state worth warning about — the reply, forward or note
  * composer being open — as opposed to merely having the ticket on screen.
+ *
+ * @param bool $composing  true while the reply, forward or note composer is open; false when only viewing
  */
 function presenceHeartbeat(PDO $conn, int $ticketId, int $analystId, bool $composing): void {
     if (!presenceSchemaReady($conn) || $ticketId <= 0 || $analystId <= 0) return;
@@ -156,7 +158,11 @@ function presencePurge(PDO $conn): void {
     } catch (Exception $e) { /* housekeeping only */ }
 }
 
-/** "Sarah Williams" -> "SW". Mirrors the header avatar in includes/waffle-menu.php. */
+/**
+ * "Sarah Williams" -> "SW". Mirrors the header avatar in includes/waffle-menu.php.
+ *
+ * @param string $fullName  the analyst's display name; blank gives '?'
+ */
 function presenceInitials(string $fullName): string {
     $parts = preg_split('/\s+/', trim($fullName), -1, PREG_SPLIT_NO_EMPTY);
     if (!$parts) return '?';

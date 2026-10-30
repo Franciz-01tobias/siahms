@@ -24,15 +24,15 @@ $translationNamespaces = ['common', 'cmdb'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FreeITSM - <?php echo htmlspecialchars(t('cmdb.title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('cmdb')); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
     <style>
-        body { --accent: var(--cmdb-accent); overflow: hidden; height: 100vh; background: var(--app-bg, #f5f5f5); }
+        body { --accent: var(--cmdb-accent); --accent-hover: var(--cmdb-accent-hover); --on-accent: var(--cmdb-on-accent); overflow: hidden; height: 100vh; background: var(--app-bg, #f5f5f5); }
         .browse-container { display: flex; height: calc(100vh - 60px); }
 
         .browse-sidebar {
@@ -248,10 +248,20 @@ $translationNamespaces = ['common', 'cmdb'];
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules
          win on ties (Mobile-Friendly-Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="cmdb" data-mobile-page="cmdb-browse">
     <?php include 'includes/header.php'; ?>
+    <?php /* The action row (#185) is what was the list's own header: the class
+             name is its title (browse.js rewrites #mainTitle when a class is
+             picked), then the filter box and New. New stays disabled until a
+             class is picked - an object cannot exist without one. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('cmdb.list.select_class'),
+              [array_merge(actionRowNew('openNewObjectModal()', t('cmdb.list.new_object'), false, 'newObjectBtn'), ['disabled' => true])],
+              ['title_id' => 'mainTitle',
+               'extra' => '<input type="text" class="action-row-search" id="searchInput" placeholder="'
+                        . htmlspecialchars(t('cmdb.list.filter_placeholder')) . '" oninput="onSearchInput(event)">']); ?>
 
     <div class="browse-container">
         <aside class="browse-sidebar">
@@ -262,13 +272,6 @@ $translationNamespaces = ['common', 'cmdb'];
         </aside>
 
         <main class="browse-main">
-            <div class="main-header">
-                <h2 id="mainTitle"><?php echo htmlspecialchars(t('cmdb.list.select_class')); ?></h2>
-                <div class="actions">
-                    <input type="text" id="searchInput" placeholder="<?php echo htmlspecialchars(t('cmdb.list.filter_placeholder')); ?>" oninput="onSearchInput(event)">
-                    <button class="add-btn" id="newObjectBtn" onclick="openNewObjectModal()" disabled><?php echo htmlspecialchars(t('cmdb.list.new')); ?></button>
-                </div>
-            </div>
             <div class="object-list" id="objectList">
                 <div class="empty-state">
                     <?php /* 🔴 "Pick a class ON THE LEFT" stops being true on a phone:
@@ -322,9 +325,9 @@ $translationNamespaces = ['common', 'cmdb'];
         </div>
     </div>
 
-    <script src="browse.js?v=4"></script>
+    <script src="browse.js?v=5"></script>
     <!-- The mobile layer's JS. Without it the module nav has no hamburger and
          sits off-screen — a CSS-only opt-in is not an opt-in (Techniques §25). -->
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

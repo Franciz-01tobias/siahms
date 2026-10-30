@@ -103,6 +103,12 @@ const RECENT_TRAIL_MODULES = [
     'cmdb_object'       => 'cmdb',
     'knowledge_article' => 'knowledge',
     'contract'          => 'contracts',
+    'domain'            => 'domains',
+    'project'           => 'projects',
+    'person'            => 'people',
+    'company'           => 'people',
+    'supplier'          => 'people',
+    'supplier_contact'  => 'people',
 ];
 
 /**
@@ -117,6 +123,9 @@ const RECENT_TRAIL_MODULES = [
  * work to do — a ticket must still open if the trail table is missing, or is
  * mid-verification, or the install has not run Database Verification since
  * upgrading. Every failure here is swallowed on purpose.
+ *
+ * @param string $type  the record type, a RECENT_TRAIL_MODULES key such as 'ticket' or 'asset'
+ * @param int $id  the record's id
  */
 function entityVisit(string $type, int $id, ?PDO $conn = null): void
 {
@@ -142,6 +151,9 @@ function entityVisit(string $type, int $id, ?PDO $conn = null): void
  * missed every ticket you opened while you were in it — which is precisely the
  * work the trail exists to lead you back to. api/system/recent_trail_visit.php
  * is the other half, and it calls this.
+ *
+ * @param string $type  the record type, a RECENT_TRAIL_MODULES key; anything else is ignored
+ * @param int $id  the record's id; 0 or less is ignored
  */
 function recentTrailWrite(string $type, int $id, ?PDO $conn = null): void
 {
@@ -349,7 +361,12 @@ function entityRecentTrail(PDO $conn, int $analystId): array
     return $groups;
 }
 
-/** Are two visits close enough in time to belong to the same sitting? */
+/**
+ * Are two visits close enough in time to belong to the same sitting?
+ *
+ * @param string $earlier  the earlier visit time, a UTC 'Y-m-d H:i:s' string
+ * @param string $later  the later visit time, a UTC 'Y-m-d H:i:s' string
+ */
 function recentTrailWithinGap(string $earlier, string $later): bool
 {
     $a = strtotime($earlier . ' UTC');
@@ -375,7 +392,7 @@ function recentTrailWithinGap(string $earlier, string $later): bool
  * ⚠️ cmdb_object has no preview at all (previews cover seven types, links cover
  * eight), so there was never a resolver here to reuse for that one.
  *
- * @param array<int,array> $rows
+ * @param array<int,array> $rows  analyst_recent_trail rows - entity_type and entity_id are read
  * @return array<string,string> "type:id" => label, for the visible ones only.
  */
 function recentTrailLabels(PDO $conn, int $analystId, array $rows): array
@@ -411,7 +428,12 @@ function recentTrailLabels(PDO $conn, int $analystId, array $rows): array
     return $out;
 }
 
-/** One query for the labels of one type, then the record gate on each. */
+/**
+ * One query for the labels of one type, then the record gate on each.
+ *
+ * @param string $type  the record type, a RECENT_TRAIL_MODULES key such as 'ticket'
+ * @param array $ids  the distinct record ids of that type to label
+ */
 function recentTrailLabelsForType(PDO $conn, int $analystId, string $type, array $ids): array
 {
     if (!$ids) {
@@ -458,13 +480,54 @@ function recentTrailLabelsForType(PDO $conn, int $analystId, string $type, array
             $gate = fn($id) => analystCanAccessCmdbObject($conn, $analystId, $id);
             break;
 
+        case 'domain':
+            $sql  = "SELECT id, COALESCE(NULLIF(display_name, ''), domain_name) AS label FROM domains WHERE id IN ($in)";
+            $gate = fn($id) => analystCanAccessDomain($conn, $analystId, $id);
+            break;
+
+        case 'project':
+            // Projects (3.2.0): the name, gated like the project page itself - its company.
+            $sql  = "SELECT id, name AS label FROM projects WHERE id IN ($in)";
+            $gate = function ($id) use ($conn, $analystId) {
+                $st = $conn->prepare("SELECT tenant_id FROM projects WHERE id = ?");
+                $st->execute([(int)$id]);
+                $t = $st->fetchColumn();
+                if ($t === false) return false;
+                if (isMultiTenant($conn) && !analystCanAccessTenant($conn, $analystId, $t === null ? (int)getDefaultTenantId($conn) : (int)$t)) return false;
+                require_once __DIR__ . '/projects/visibility.php';   // members-only (3.3.0)
+                return projectIdVisibleTo($conn, $analystId, (int)$id);
+            };
+            break;
+
+        case 'person':
+            $sql  = "SELECT id, COALESCE(NULLIF(preferred_name, ''), NULLIF(display_name, ''), email, username) AS label FROM users WHERE id IN ($in)";
+            $gate = fn($id) => analystCanAccessUser($conn, $analystId, $id);
+            break;
+
+        case 'company':
+            $sql  = "SELECT id, name AS label FROM tenants WHERE id IN ($in)";
+            $gate = fn($id) => !isMultiTenant($conn) || analystCanAccessTenant($conn, $analystId, (int)$id);
+            break;
+
+        // Install-wide records owned by Contracts (#153 step 3): the page needs
+        // Contracts as well as People, so the trail does too.
+        case 'supplier':
+            $sql  = "SELECT id, COALESCE(NULLIF(trading_name, ''), legal_name) AS label FROM suppliers WHERE id IN ($in)";
+            $gate = fn($id) => analystCanAccessModule($conn, $analystId, 'contracts');
+            break;
+
+        case 'supplier_contact':
+            $sql  = "SELECT id, TRIM(CONCAT(first_name, ' ', surname)) AS label FROM contacts WHERE id IN ($in)";
+            $gate = fn($id) => analystCanAccessModule($conn, $analystId, 'contracts');
+            break;
+
         case 'contract':
-            // ⚠️ No record gate: contracts carry no tenant_id, so the module gate
-            // already applied is the whole of the check. Same as the preview, and
-            // for the same reason — see includes/contract_assets.php.
+            // Supplier contracts are install-wide; a CUSTOMER contract is gated by
+            // its customer's company (#153).
+            require_once __DIR__ . '/contract_party.php';
             $sql = "SELECT id, TRIM(CONCAT(COALESCE(contract_number,''), ' ', COALESCE(title,''))) AS label
                       FROM contracts WHERE id IN ($in)";
-            $gate = fn($id) => true;
+            $gate = fn($id) => contractCanView($conn, $analystId, (int)$id);
             break;
 
         case 'knowledge_article':

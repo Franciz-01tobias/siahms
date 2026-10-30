@@ -113,7 +113,7 @@ JS;
 // The house style for every help guide in the product lives in help.css; the
 // portal loads it through $pageHead, the hook for a page that needs one extra
 // stylesheet. All this page adds is the portal's own accent.
-$pageHead    = '<link rel="stylesheet" href="../assets/css/help.css?v=3">';
+$pageHead    = '<link rel="stylesheet" href="../assets/css/help.css?v=6">';
 $pageStyles  = <<<'CSS'
 body {
     --accent:       var(--ss-accent);
@@ -138,12 +138,18 @@ $helpNav = ['s1', 's2', 'kb', 'st', 's3', 'cat', 's4', 's5', 'tr', 's6', 's7'];
 // typed into the heading. Two sections used to carry an empty number because
 // they were inserted later and the surrounding ones were never renumbered —
 // this makes that impossible, and it no longer depends on JavaScript running.
-$secNum = function ($id) use ($helpNav) {
+// By reference: the Team tickets section joins the list after header.php, once
+// it is known whether this person manages anybody.
+$secNum = function ($id) use (&$helpNav) {
     $i = array_search($id, $helpNav, true);
     return $i === false ? '' : $i + 1;
 };
 
 require __DIR__ . '/includes/header.php';
+// Team tickets - for managers only (discussion #62). Everybody else would be
+// reading about a tab they do not have; the same test as the tab itself.
+$ssHelpIsManager = $portalNavCap('is_manager');
+if ($ssHelpIsManager) array_splice($helpNav, array_search('s7', $helpNav, true), 0, ['team']);   // before Tips, where the section sits
 ?>
     <div class="help-container">
         <nav class="help-sidebar">
@@ -201,6 +207,7 @@ require __DIR__ . '/includes/header.php';
                 <li><?php echo t('self-service.help.kb_li1'); ?></li>
                 <li><?php echo t('self-service.help.kb_li2'); ?></li>
                 <li><?php echo t('self-service.help.kb_li3'); ?></li>
+                <li><?php echo t('self-service.help.kb_li4'); ?></li>
             </ol>
             <p><?php echo t('self-service.help.kb_p2'); ?></p>
             <div class="help-note"><?php echo t('self-service.help.kb_tip'); ?></div>
@@ -230,6 +237,7 @@ require __DIR__ . '/includes/header.php';
                 <li><?php echo t('self-service.help.s3_li4'); ?></li>
                 <li><?php echo t('self-service.help.s3_li5'); ?></li>
                 <li><?php echo t('self-service.help.s3_li_category'); ?></li>
+                <li><?php echo t('self-service.help.s3_li_confidential'); ?></li>
             </ul>
             <p><?php echo t('self-service.help.s3_p2'); ?></p>
             <p class="help-note"><?php echo t('self-service.help.s3_tip'); ?></p>
@@ -289,6 +297,7 @@ require __DIR__ . '/includes/header.php';
                 <li><?php echo t('self-service.help.s5_li5'); ?></li>
                 <li><?php echo t('self-service.help.s5_li6'); ?></li>
                 <li><?php echo t('self-service.help.s5_li7'); ?></li>
+                <li><?php echo t('self-service.help.s5_li_seen'); ?></li>
             </ul>
             <p><?php echo t('self-service.help.s5_p3'); ?></p>
         </div>
@@ -326,6 +335,26 @@ require __DIR__ . '/includes/header.php';
             </ul>
             <p class="help-note"><?php echo t('self-service.help.s6_tip'); ?></p>
         </div>
+
+        <?php if ($ssHelpIsManager): ?>
+        <!-- Team tickets (managers only) -->
+        <div class="help-section" id="team">
+            <div class="help-section-header">
+                <span class="help-section-num"><?php echo $secNum('team'); ?></span>
+                <div><h3><?php echo htmlspecialchars(t('self-service.help.team_title')); ?></h3></div>
+            </div>
+            <p><?php echo t('self-service.help.team_p1'); ?></p>
+            <ul>
+                <li><?php echo t('self-service.help.team_li_who'); ?></li>
+                <li><?php echo t('self-service.help.team_li_banner'); ?></li>
+                <li><?php echo t('self-service.help.team_li_conf'); ?></li>
+                <li><?php echo t('self-service.help.team_li_filter'); ?></li>
+                <li><?php echo t('self-service.help.team_li_told'); ?></li>
+                <li><?php echo t('self-service.help.team_li_seen'); ?></li>
+            </ul>
+            <p class="help-note"><?php echo t('self-service.help.team_tip'); ?></p>
+        </div>
+        <?php endif; ?>
 
         <!-- 7. Tips -->
         <div class="help-section" id="s7">

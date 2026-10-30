@@ -133,6 +133,13 @@ try {
 
 /**
  * Send email via SMTP
+ *
+ * @param mixed $settings  the email settings keyed by name (smtp_host, smtp_port, smtp_username, smtp_from_email, ...)
+ * @param mixed $toEmail  the recipient address
+ * @param mixed $subject  the email subject
+ * @param mixed $htmlBody  the email body as HTML
+ * @param mixed $pdfData  the PDF to attach, base64-encoded; null sends no attachment
+ * @param mixed $pdfFilename  the attachment's file name; only used with $pdfData
  */
 function sendSmtpEmail($settings, $toEmail, $subject, $htmlBody, $pdfData = null, $pdfFilename = null) {
     $host = $settings['smtp_host'] ?? '';
@@ -191,6 +198,13 @@ function sendSmtpEmail($settings, $toEmail, $subject, $htmlBody, $pdfData = null
 
 /**
  * Send email via Microsoft 365 mailbox using Graph API
+ *
+ * @param mixed $mailboxId  the target_mailboxes id to send from; empty fails with "No mailbox selected"
+ * @param mixed $toEmail  the recipient address
+ * @param mixed $subject  the email subject
+ * @param mixed $htmlBody  the email body as HTML
+ * @param mixed $pdfData  the PDF to attach, base64-encoded; null sends no attachment
+ * @param mixed $pdfFilename  the attachment's file name; only used with $pdfData
  */
 function sendMailboxEmail($conn, $mailboxId, $toEmail, $subject, $htmlBody, $pdfData = null, $pdfFilename = null) {
     if (empty($mailboxId)) {
@@ -282,6 +296,9 @@ function sendMailboxEmail($conn, $mailboxId, $toEmail, $subject, $htmlBody, $pdf
 
 /**
  * Get valid access token (refresh if expired)
+ *
+ * @param mixed $mailbox  the target_mailboxes row, decrypted (id and the azure_* columns are used for a refresh)
+ * @param mixed $tokenData  the mailbox's decoded token_data: access_token, refresh_token, expires_at (Unix time)
  */
 function getValidAccessToken($conn, $mailbox, $tokenData) {
     if (!$tokenData || !isset($tokenData['access_token'])) {
@@ -308,6 +325,9 @@ function getValidAccessToken($conn, $mailbox, $tokenData) {
 
 /**
  * Refresh the access token using mailbox configuration
+ *
+ * @param mixed $mailbox  the target_mailboxes row, decrypted - azure_tenant_id, azure_client_id/secret, oauth_scopes
+ * @param mixed $refreshToken  the OAuth refresh token to trade for a new access token
  */
 function refreshAccessToken($mailbox, $refreshToken) {
     $tokenUrl = 'https://login.microsoftonline.com/' . $mailbox['azure_tenant_id'] . '/oauth2/v2.0/token';
@@ -353,6 +373,9 @@ function refreshAccessToken($mailbox, $refreshToken) {
 
 /**
  * Save token data to database
+ *
+ * @param mixed $mailboxId  the target_mailboxes id to update
+ * @param mixed $tokenData  the token array to store (encrypted) in token_data, as built by refreshAccessToken()
  */
 function saveTokenData($conn, $mailboxId, $tokenData) {
     // Encrypted at rest — see ENCRYPTED_MAILBOX_COLUMNS; decryptMailboxRow() reverses it.

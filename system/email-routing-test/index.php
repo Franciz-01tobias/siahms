@@ -27,9 +27,9 @@ $translationNamespaces = ['common', 'system'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.routing_test.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.routing_test.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* inbox.css gives body height:100vh + overflow:hidden but no flex
            column, so flex:1 children can't bound their height. Make body a
@@ -103,7 +103,7 @@ $translationNamespaces = ['common', 'system'];
         [data-theme-mode="dark"] .rt-step.fired .rt-s-name { color: #86efac; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="email-routing-test">
     <?php include '../includes/header.php'; ?>
@@ -276,6 +276,6 @@ $translationNamespaces = ['common', 'system'];
 
     loadMailboxes();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

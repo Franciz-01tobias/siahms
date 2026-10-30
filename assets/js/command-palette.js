@@ -14,6 +14,8 @@
  *
  * Entity search goes to api/system/global_search.php, which applies the same
  * module + company scoping server-side.
+ *
+ * @wiki Command-Palette-Developer-Guide
  */
 (function () {
     'use strict';
@@ -40,6 +42,9 @@
         contract: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>',
         ci: '<path d="M2 22V8l10-6 10 6v14"></path><path d="M2 12h20"></path><line x1="12" y1="2" x2="12" y2="22"></line>',
         asset: '<rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>',
+        domain: '<path d="M20.9 13.5A10 10 0 1 0 12 22"></path><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10"></path><path d="M12 2a15.3 15.3 0 0 0-4 10 15.3 15.3 0 0 0 4 10"></path><rect x="15" y="17" width="7" height="5" rx="1"></rect><path d="M16.5 17v-1.5a2 2 0 0 1 4 0V17"></path>',
+        person: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
+        company: '<path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path>',
         command: '<polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>',
         search: '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>'
     };
@@ -52,6 +57,11 @@
     // documents panel uses, so the two read as the same thing.
     ICONS.document = ICONS.contract;
     ICONS.document_content = ICONS.contract;
+    // Suppliers and their contacts in People (#153 step 3): a van, and a person.
+    ICONS.supplier = '<rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle>';
+    ICONS.supplier_contact = ICONS.person;
+    // Projects (3.2.0): the staggered bars of its module tile.
+    ICONS.project = '<rect x="3" y="4" width="10" height="4" rx="1"></rect><rect x="7" y="10" width="11" height="4" rx="1"></rect><rect x="11" y="16" width="10" height="4" rx="1"></rect>';
     // Built lazily: the palette is constructed on first open, by which point
     // window.translations is certainly in place.
     function typeLabel(type) {
@@ -61,6 +71,12 @@
             problem:          cp('type_problem', 'Problem'),
             knowledge:        cp('type_article', 'Article'),
             contract:         cp('type_contract', 'Contract'),
+            domain:           cp('type_domain', 'Domain'),
+            project:          cp('type_project', 'Project'),
+            person:           cp('type_person', 'Person'),
+            company:          cp('type_company', 'Company'),
+            supplier:         cp('type_supplier', 'Supplier'),
+            supplier_contact: cp('type_supplier_contact', 'Supplier contact'),
             ci:               cp('type_ci', 'Config item'),
             asset:            cp('type_asset', 'Asset'),
             ticket_content:   cp('type_ticket', 'Ticket'),
@@ -75,6 +91,7 @@
         {
             get label() { return cp('cmd_theme', 'Toggle dark mode'); },
             keywords: 'theme light dark appearance',
+            /** Flips between the dark and default themes through setTheme(), which saves the choice and reloads. */
             run: function () {
                 var cur = document.documentElement.getAttribute('data-theme');
                 var next = cur === 'dark' ? 'default' : 'dark';
@@ -85,6 +102,7 @@
         {
             get label() { return cp('cmd_signout', 'Sign out'); },
             keywords: 'logout log out leave',
+            /** Signs the analyst out. */
             run: function () { window.location.href = BASE + 'analyst_logout.php'; }
         }
     ];
@@ -95,12 +113,14 @@
     var searchTimer = null;
     var searchSeq = 0;     // guards against out-of-order async responses
 
+    /** HTML-escapes a value for building the palette's markup. */
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
 
+    /** Creates the palette overlay (search box, results list, key hints) on first open and wires its events. */
     function build() {
         overlay = document.createElement('div');
         overlay.className = 'cmdp-overlay';
@@ -131,6 +151,7 @@
         input.addEventListener('keydown', onKeydown);
     }
 
+    /** Shows the palette with an empty query (modules and actions) and focuses the search box. */
     function open() {
         if (!overlay) build();
         overlay.classList.add('active');
@@ -140,6 +161,7 @@
         requestAnimationFrame(function () { input.focus(); });
     }
 
+    /** Hides the palette and cancels any search still waiting to run. */
     function close() {
         if (!overlay) return;
         overlay.classList.remove('active');
@@ -147,6 +169,7 @@
         if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
     }
 
+    /** Whether the palette is currently showing. */
     function isOpen() { return overlay && overlay.classList.contains('active'); }
 
     // Substring match with a light prefix boost, so "tas" ranks "Tasks" above a
@@ -158,6 +181,7 @@
         return i === 0 ? 2 : 1;
     }
 
+    /** The modules whose name matches the query, prefix matches first; every module when the query is empty. */
     function matchedModules(q) {
         if (!q) return MODULES.slice();
         return MODULES
@@ -167,6 +191,7 @@
             .map(function (x) { return x.m; });
     }
 
+    /** The quick actions whose label or keywords match the query; all of them when the query is empty. */
     function matchedCommands(q) {
         if (!q) return COMMANDS.slice();
         return COMMANDS.filter(function (c) {
@@ -216,7 +241,7 @@
             // be returning results perfectly and the palette will show nothing,
             // with no error anywhere — which is exactly what happened when
             // documents were added server-side (#76).
-            ['ticket', 'change', 'problem', 'knowledge', 'contract', 'asset', 'ci', 'document', 'ticket_content', 'article_content', 'document_content'].forEach(function (type) {
+            ['ticket', 'change', 'problem', 'knowledge', 'person', 'company', 'supplier', 'supplier_contact', 'contract', 'domain', 'project', 'asset', 'ci', 'document', 'ticket_content', 'article_content', 'document_content'].forEach(function (type) {
                 var group = serverResults.filter(function (r) { return r.type === type; });
                 if (!group.length) return;
                 html += '<div class="cmdp-group-label">' + esc(pluralType(type)) + '</div>';
@@ -277,6 +302,7 @@
         paintActive();
     }
 
+    /** The group heading for a search result type, e.g. 'Tickets' or 'Found inside tickets'. */
     function pluralType(type) {
         return {
             ticket: cp('group_ticket', 'Tickets'),
@@ -284,6 +310,12 @@
             problem: cp('group_problem', 'Problems'),
             knowledge: cp('group_knowledge', 'Knowledge'),
             contract: cp('group_contract', 'Contracts'),
+            domain: cp('group_domain', 'Domains'),
+            project: cp('group_project', 'Projects'),
+            person: cp('group_person', 'People'),
+            company: cp('group_company', 'Companies'),
+            supplier: cp('group_supplier', 'Suppliers'),
+            supplier_contact: cp('group_supplier_contact', 'Supplier contacts'),
             asset: cp('group_asset', 'Assets'),
             ci: cp('group_ci', 'Configuration items'),
             document: cp('group_document', 'Documents'),
@@ -297,6 +329,11 @@
         }[type] || type;
     }
 
+    /**
+     * Builds the markup for one result row - icon, title, optional subtitle, extra button and type tag.
+     *
+     * Title, subtitle and tag must already be escaped by the caller.
+     */
     function row(idx, iconSvg, title, sub, tag, extra) {
         return '<div class="cmdp-item" data-ix="' + idx + '">' +
             '<div class="cmdp-item-icon">' + iconSvg + '</div>' +
@@ -309,11 +346,13 @@
         '</div>';
     }
 
+    /** Makes the row at this index the highlighted one. */
     function setActive(ix) {
         activeIx = ix;
         paintActive();
     }
 
+    /** Highlights the active row and scrolls it into view. */
     function paintActive() {
         items.forEach(function (it, i) {
             if (i === activeIx) {
@@ -325,12 +364,14 @@
         });
     }
 
+    /** Moves the highlight up or down by delta rows, wrapping round at either end. */
     function move(delta) {
         if (!items.length) return;
         activeIx = (activeIx + delta + items.length) % items.length;
         paintActive();
     }
 
+    /** Arrow keys move the highlight, Enter opens the highlighted row and Escape closes the palette. */
     function onKeydown(e) {
         if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
@@ -344,6 +385,9 @@
         }
     }
 
+    /**
+     * Redraws the module and action matches at once, then runs the server search 180ms after typing stops (two characters or more).
+     */
     function onInput() {
         var q = input.value.trim();
         render();                     // instant client-side view (modules + actions)
@@ -356,6 +400,11 @@
         searchTimer = setTimeout(function () { doSearch(q); }, 180);
     }
 
+    /**
+     * Asks api/system/global_search.php for matches and redraws with them.
+     *
+     * A response is dropped if a newer search has started or the query has changed since it was sent.
+     */
     function doSearch(q) {
         var seq = ++searchSeq;
         fetch(BASE + 'api/system/global_search.php?q=' + encodeURIComponent(q), {

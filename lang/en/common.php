@@ -6,6 +6,58 @@
  * Other locales mirror this file structure under lang/<locale>/common.php.
  */
 return [
+    'inventory_source' => 'Source',
+    // Every currency dropdown and every amount (includes/money.php +
+    // assets/js/money.js, GH #189). Published to the browser by
+    // Money::scriptTag(), so a page needs no namespace for them.
+    'currency' => [
+        'favourites' => 'Favourites',
+        'all'        => 'All currencies',
+        'none'       => 'None',
+        'retired'    => '{code} - {name} (no longer issued)',
+        'unknown'    => '{code} - not a recognised currency',
+        'sep'        => 'Separators',
+        'symbol'     => 'Symbol',
+        'decimals'   => 'Decimal places',
+        'dec_std'    => 'As the currency ({n})',
+        'dec_0'      => 'None',
+        'dec_2'      => 'Two',
+    ],
+    // The shared "put these in order" control (assets/js/reorder-list.js, GH #187):
+    // module order in Preferences, card order in Watchtower settings.
+    // The action row under every module header (includes/action_row.php, #185).
+    // One word on the button; the tooltip names the thing.
+    'action_row' => [
+        'new' => 'New',
+    ],
+    // Custom ticket fields (#179) as the inbox and the portal draw them
+    // (assets/js/ticket-fields.js).
+    'ticket_fields' => [
+        'not_set'   => 'Not set',
+        'yes'       => 'Yes',
+        'no'        => 'No',
+        'heading'   => 'More details',
+        'saved'     => 'Saved',
+        'required'  => 'Fill in {name}',
+    ],
+    // The optional module sidebar (#124, includes/app_sidebar.php).
+    'sidebar' => [
+        'label'     => 'Modules',
+        'customise' => 'Choose what is on the sidebar',
+        // Beside the icon once names show (#124); the line above is its tooltip.
+        'customise_short' => 'Choose',
+        'pin'       => 'Pin',
+        'unpin'     => 'Unpin',
+        'pin_tip'   => 'Keep the sidebar open with names',
+        'unpin_tip' => 'Open the sidebar only when you point at it',
+    ],
+    'reorder' => [
+        'drag'     => 'Drag to move',
+        'up'       => 'Move {name} up',
+        'down'     => 'Move {name} down',
+        'position' => '{name}, {n} of {total}. Alt and the arrow keys move it.',
+        'moved'    => '{name} moved to position {n} of {total}',
+    ],
     // Shared "add this calendar to your phone" dialogue
     // (includes/subscribe_modal.php + assets/js/subscribe.js). Only the strings
     // that are genuinely identical for every feed live here; each caller passes
@@ -64,11 +116,22 @@ return [
         'provider_azure'        => 'Azure OpenAI (your own deployment)',
         'azure_note'            => 'Requests go to a deployment in your own Azure subscription rather than to a shared service, so prompts never leave your tenant. Copy all three values from the Azure portal, under your resource\'s Deployments.',
         'azure_endpoint'        => 'Azure endpoint',
-        'azure_endpoint_help'   => 'The resource address from the Azure portal. A trailing slash, or a "/openai" on the end, makes no difference.',
+        'azure_endpoint_help'   => 'The resource address from the Azure portal. Pasting the deployment\'s whole Target URI is fine too - only the resource part is used.',
         'azure_deployment'      => 'Deployment name',
         'azure_deployment_help' => 'The name YOU gave the deployment, which need not match the model it runs. This replaces the model box — on a deployment endpoint the deployment decides the model.',
         'azure_api_version'     => 'API version',
-        'azure_api_version_help'=> 'Shown beside the deployment in the Azure portal. Leave it blank to use 2024-02-01.',
+        'azure_api_version_help'=> 'The api-version at the end of the deployment\'s Target URI - not the date beside the model, which is the model\'s own version. Leave it blank to use 2024-02-01, or enter v1 for Azure\'s newer route.',
+        // A custom OpenAI-compatible endpoint (GH #192): Ollama, LM Studio, vLLM...
+        'provider_compatible'      => 'OpenAI-compatible (custom endpoint)',
+        'compatible_note'          => 'For a model server you run yourself - Ollama, LM Studio, vLLM, LocalAI - or any other service that speaks the OpenAI API. Requests go only to the address below; if it fails, nothing is sent anywhere else. The request comes from the FreeITSM server, so "localhost" means that server (in Docker, the FreeITSM container), not the machine running the model.',
+        'compatible_base_url'      => 'Base URL',
+        'compatible_base_url_help' => 'The server\'s OpenAI-compatible address, usually ending in /v1 - for Ollama, http://llm-host:11434/v1. FreeITSM adds /chat/completions itself.',
+        'compatible_model_help'    => 'The model\'s exact name on that server, for example llama3.1:8b (Ollama: ollama list).',
+        'api_key_optional_help'    => 'Optional. Leave blank if the server needs no key. Stored encrypted.',
+        'api_key_clear'            => 'Remove the saved key',
+        'test_tools_supported'     => 'Tool calling works with this model, so every AI feature can use it.',
+        'test_tools_not_used'      => 'The model answered but did not call the test tool. The war room bot and the Projects assistant need tool calling and may not work well with it.',
+        'test_tools_unsupported'   => 'Tool calling did not work with this model. Everything else can use it, but the war room bot and the Projects assistant need tool calling.',
         'model'               => 'Model',
         'model_placeholder'   => 'Type or pick a model…',
         'model_set'           => 'Model',
@@ -86,6 +149,7 @@ return [
         'testing'             => 'Testing…',
         'test_ok'             => 'Connection OK',
         'test_failed'         => 'Test failed',
+        'debug_link'          => 'See exactly what was sent and what came back (debug tool D014)',
         'saved'               => 'Saved',
         'save_failed'         => 'Failed to save',
     ],
@@ -166,6 +230,12 @@ return [
         'type_problem'   => 'Problem',
         'type_article'   => 'Article',
         'type_contract'  => 'Contract',
+        'type_domain'    => 'Domain',
+        'type_project'   => 'Project',
+        'type_person'    => 'Person',
+        'type_company'   => 'Company',
+        'type_supplier'  => 'Supplier',
+        'type_supplier_contact' => 'Supplier contact',
         'type_ci'        => 'Config item',
         'type_asset'     => 'Asset',
         'type_document'  => 'Document',
@@ -176,6 +246,12 @@ return [
         'group_problem'   => 'Problems',
         'group_knowledge' => 'Knowledge',
         'group_contract'  => 'Contracts',
+        'group_domain'    => 'Domains',
+        'group_project'   => 'Projects',
+        'group_person'    => 'People',
+        'group_company'   => 'Companies',
+        'group_supplier'  => 'Suppliers',
+        'group_supplier_contact' => 'Supplier contacts',
         'group_asset'     => 'Assets',
         'group_ci'        => 'Configuration items',
         'group_document'  => 'Documents',
@@ -194,11 +270,16 @@ return [
     ],
 
     // Waffle module-switcher panel (shared header)
+    // A Read only grant (#180): the analyst can see this module but not change it.
+    'module_read_only'       => 'You have read-only access to this module.',
+    'module_read_only_badge' => 'Read only',
+
     'waffle' => [
         'title' => 'ITSM Modules',
         // The recent trail (#124). "Recent" rather than "History": history is a
         // record of what happened, and this is a way back to it.
         'tab_modules'  => 'Modules',
+        'form_approvals' => 'Form approvals',   // a catalogue approver without the Forms module (#180)
         'tab_recent'   => 'Recent',
         'trail_search' => 'Search your trail',
         'trail_loading' => 'Loading…',
@@ -225,12 +306,17 @@ return [
         'software'       => ['name' => 'Software',    'description' => 'Browse software inventory and licensing'],
         'forms'          => ['name' => 'Forms',       'description' => 'Design custom forms and view submissions'],
         'contracts'      => ['name' => 'Contracts',   'description' => 'Manage suppliers, contacts and contracts'],
+        'domains'        => ['name' => 'Domains',     'description' => 'Track domain names, renewals, DNS, email security and certificates'],
+        'files'          => ['name' => 'Files',       'description' => 'Share files and folders securely, with a record of who opened what and when'],
+        'people'         => ['name' => 'People',      'description' => 'Everything about a person or a company, from every module, on one page'],
         'service-status' => ['name' => 'Status',      'description' => 'Monitor service health and track incidents'],
         'war-room'       => ['name' => 'War room',    'description' => 'Fallback chat for when Teams or Slack is unavailable'],
         'wiki'           => ['name' => 'Wiki',        'description' => 'Browse auto-generated codebase documentation'],
         'lms'            => ['name' => 'LMS',         'description' => 'Learning Management System with SCORM course player'],
         'process-mapper' => ['name' => 'Processes',   'description' => 'Visual flowchart and process mapping tool'],
+        'checklists'     => ['name' => 'Checklists',  'description' => 'Step-by-step checklists and SOPs you can run against a ticket or task'],
         'tasks'          => ['name' => 'Tasks',       'description' => 'Kanban board and list view for tracking tasks'],
+        'projects'       => ['name' => 'Projects',    'description' => 'Plan and run IT projects, built on your tasks and linked to everything else'],
         'cmdb'           => ['name' => 'CMDB',        'description' => 'Configuration Management Database'],
         'network-mapper' => ['name' => 'Network',     'description' => 'Design and document network diagrams'],
         'workflow'       => ['name' => 'Workflows',   'description' => 'Cross-module automation — triggers, conditions, actions'],
@@ -287,6 +373,15 @@ return [
         'find_none'       => 'No documents match, that you can see and that are not already here.',
         // Shown against each candidate, because attaching WIDENS who can read it.
         'currently_on'    => 'currently on {where}',
+        // The Help Centre - knowledge articles only (GH #177).
+        'hc_customer'     => 'Customers who can read this article in the Help Centre can download the documents marked Shown.',
+        'hc_internal'     => 'Customers cannot read this article, so none of its documents are in the Help Centre.',
+        'hc_verify'       => 'Run System → Database Verification to choose which documents customers can download.',
+        'hc_how'          => 'How this works',
+        'hc_shown'        => 'Shown in Help Centre',
+        'hc_hidden'       => 'Hidden from Help Centre',
+        'hc_show'         => 'Show',
+        'hc_hide'         => 'Hide',
     ],
 
     'notifications' => [
@@ -308,6 +403,7 @@ return [
         'clear_failed'      => 'Could not clear notifications.',
         'clear_nothing'     => 'Nothing to clear — all of these are unread.',
         'empty'       => 'Nothing new.',
+        'desktop_more' => 'And {n} more new notifications',
         'loading'     => 'Loading…',
         'load_failed' => 'Could not load notifications.',
         'someone'     => 'Someone',
@@ -338,6 +434,39 @@ return [
                 'assigned'  => 'Assigned to you by {actor}',
                 'created'   => '{actor} created a task for you',
                 'completed' => '{actor} completed a task',
+                // These had no wording, so the bell showed the task's title and nothing
+                // else - and nothing at all when no person did it (a repeat, a workflow).
+                'status_changed'        => '{actor} moved it to {to}',
+                'status_changed_plain'  => '{actor} changed the status',
+                'due_date_changed'      => '{actor} changed the due date to {to}',
+                'due_date_changed_plain'=> '{actor} changed the due date',
+                'comment_added'         => '{actor} added a comment',
+                'collaborator_added'    => '{actor} added you to it',
+                'collaborator_removed'  => '{actor} took you off it',
+            ],
+            'domain' => [
+                'expiring'     => 'A domain you own is due for renewal',
+                'ssl_expiring' => 'A certificate on your domain is expiring',
+                'changed'      => 'Something changed on a domain you own',
+            ],
+            'project' => [
+                'health_changed'     => 'The health of a project you manage changed',
+                'tolerance_breached' => 'A project you manage went beyond a tolerance',
+                'stage_due'          => 'A stage of a project you manage ends soon',
+                'stage_closed'       => 'A stage of a project you manage closed',
+                'milestone_due'      => 'A milestone of a project you manage is coming up',
+                'milestone_missed'   => 'A milestone of a project you manage was missed',
+                'milestone_reached'  => 'A milestone of a project you manage was reached',
+                'raid_escalated'     => 'Something on a project you manage was escalated',
+                'change_raised'      => 'A change request was raised on a project you manage',
+                'change_decided'     => 'A change request on a project you manage was decided',
+                'proposal_submitted' => 'A project proposal is waiting for your approval',
+                'proposal_decided'   => 'A project you proposed was approved or rejected',
+                'benefit_review_due' => 'A project benefit is due for review',
+                'signoff_requested'  => 'Your sign-off is needed at a project gate',
+                'tasks_overdue'      => 'Overdue tasks on a project you manage',
+                'approval_stalled'   => 'Something on a project is still waiting for your decision',
+                'report_drafted'     => 'A scheduled report on a project you manage is drafted',
             ],
         ],
         // Labels for the per-type switches on the Preferences page. Same nesting
@@ -367,6 +496,30 @@ return [
                 'comment_added'       => 'Someone comments on a task I am on',
                 'status_changed'      => 'Someone changes the status of a task I am on',
                 'due_date_changed'    => 'Someone changes the due date of a task I am on',
+            ],
+            'domain' => [
+                'expiring'     => 'A domain I own is approaching its expiry date',
+                'ssl_expiring' => 'A certificate on a domain I own is approaching expiry',
+                'changed'      => 'Name servers, registrar, locks or mail records change on a domain I own',
+            ],
+            'project' => [
+                'health_changed'     => 'The health of a project I manage changes',
+                'tolerance_breached' => 'A project I manage goes beyond a time or risk tolerance',
+                'stage_due'          => 'A stage of a project I manage ends in 7 days, and the day before',
+                'stage_closed'       => 'A stage of a project I manage closes',
+                'milestone_due'      => 'A milestone of a project I manage is 7 days away, and the day before',
+                'milestone_missed'   => 'A milestone of a project I manage passes without being reached',
+                'milestone_reached'  => 'A milestone of a project I manage is marked reached',
+                'raid_escalated'     => 'Somebody escalates a risk, issue, dependency or decision on a project I manage',
+                'change_raised'      => 'Somebody raises a change request on a project I manage',
+                'change_decided'     => 'Somebody approves or rejects a change request on a project I manage',
+                'proposal_submitted' => 'A project is proposed and I am one of the people who approve proposals',
+                'proposal_decided'   => 'A project I proposed is approved or rejected',
+                'benefit_review_due' => 'A benefit I own, or of a project I manage, is due for review',
+                'signoff_requested'  => 'I am named to sign something off at a project stage gate',
+                'tasks_overdue'      => 'A project I manage has overdue tasks (weekly or daily, as Projects - Settings says)',
+                'approval_stalled'   => 'A proposal, change request, sign-off or report I decide has been waiting for days',
+                'report_drafted'     => 'A project I manage has a scheduled report drafted for me to check',
             ],
         ],
     ],
@@ -529,8 +682,14 @@ return [
         'held_by_many'       => '{name} and {n} other(s)',
         'warranty'           => 'Warranty',
         'supplier'           => 'Supplier',
+        'customer'           => 'Customer',
         'renewal'            => 'Renews',
         'notice'             => 'Notice by',
+        'expires'            => 'Expires',
+        'grade'              => 'Security grade',
+        'registrar'          => 'Registrar',
+        'owner'              => 'Owner',
+        'certificate'        => 'Certificate expires',
         'open'               => 'Open',
         'loading'            => 'Loading…',
         'aria'               => 'Preview this record',

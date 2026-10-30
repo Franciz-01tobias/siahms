@@ -169,6 +169,8 @@ class HandoverTemplates
      * columns are dropped, and anything missing falls back to its default. The
      * result is always renderable, which is why renderBlocks() does no checking
      * of its own.
+     *
+     * @param mixed $input  the blocks as sent or stored - a list of {type, enabled, text, columns} or its JSON; anything else gives the defaults
      */
     public static function sanitiseBlocks($input): array
     {
@@ -228,6 +230,10 @@ class HandoverTemplates
     //  Storage
     // ======================================================================
 
+    /**
+     * Every handover template (id, name, default, active, updated), the default first;
+     * empty before the table exists.
+     */
     public static function listAll(PDO $conn): array
     {
         try {
@@ -246,6 +252,11 @@ class HandoverTemplates
         return $rows;
     }
 
+    /**
+     * Loads one handover template with its blocks cleaned, or null when it does not exist.
+     *
+     * @param int $id  the asset_handover_templates row
+     */
     public static function load(PDO $conn, int $id): ?array
     {
         self::customColumns($conn);   // see effective() — sanitiseBlocks needs it warm
@@ -266,6 +277,8 @@ class HandoverTemplates
      * Falls back to the shipped default rather than failing: a handover document
      * must be printable on an install that has never opened the designer, and on
      * one where somebody deactivated every template.
+     *
+     * @param ?int $id  the template asked for; null, 0, missing or inactive falls back to the default
      */
     public static function effective(PDO $conn, ?int $id = null): array
     {
@@ -297,6 +310,11 @@ class HandoverTemplates
         return ['id' => 0, 'name' => 'Default', 'blocks' => self::defaultBlocks()];
     }
 
+    /**
+     * Adds or updates a handover template and returns its id; can also make it the default.
+     *
+     * @param array $in  id (0 or absent = new), name (required), blocks, is_active, is_default
+     */
     public static function save(PDO $conn, array $in): int
     {
         $name = trim((string)($in['name'] ?? ''));
@@ -327,13 +345,22 @@ class HandoverTemplates
         return $id;
     }
 
-    /** Exactly one default. Cleared for everyone else in the same breath. */
+    /**
+     * Exactly one default. Cleared for everyone else in the same breath.
+     *
+     * @param int $id  the template to make the one default (it is also made active)
+     */
     public static function makeDefault(PDO $conn, int $id): void
     {
         $conn->prepare("UPDATE asset_handover_templates SET is_default = 0")->execute();
         $conn->prepare("UPDATE asset_handover_templates SET is_default = 1, is_active = 1 WHERE id = ?")->execute([$id]);
     }
 
+    /**
+     * Deletes a handover template.
+     *
+     * @param int $id  the template to delete
+     */
     public static function delete(PDO $conn, int $id): void
     {
         $conn->prepare("DELETE FROM asset_handover_templates WHERE id = ?")->execute([$id]);
@@ -343,7 +370,13 @@ class HandoverTemplates
     //  Rendering
     // ======================================================================
 
-    /** The values merge codes resolve to, for this person on this day. */
+    /**
+     * The values merge codes resolve to, for this person on this day.
+     *
+     * @param array $user  the person receiving the kit, with name, email and id
+     * @param array $assets  the assets being handed over; only counted here
+     * @param ?string $analystName  the analyst producing the document, for {{analyst.name}}
+     */
     public static function mergeValues(array $user, array $assets, ?string $analystName): array
     {
         return [
@@ -363,6 +396,9 @@ class HandoverTemplates
      * escape the caller's own markup; substituting into un-escaped text would let
      * a display name containing markup reach a document that is emailed out.
      * Values are escaped individually, then dropped into already-escaped text.
+     *
+     * @param string $text  the template text as typed - plain text, escaped here
+     * @param array $values  [merge code => value] from mergeValues(); values are escaped here too
      */
     private static function mergeText(string $text, array $values): string
     {
@@ -378,6 +414,11 @@ class HandoverTemplates
      * Returns markup for the inside of the sheet — the page (or the email) supplies
      * the wrapper and the stylesheet, so the same renderer serves the printable
      * page, the designer preview and the emailed copy without three layouts.
+     *
+     * @param array $blocks  the template's blocks, already cleaned by sanitiseBlocks()
+     * @param array $user  the person receiving the kit, with name, email and id
+     * @param array $assets  the asset rows to list, as AssetsService::assetsForUser() returns them
+     * @param array $opts  analyst_name, logo_path (an image URL) and labels (translated headings by key)
      */
     public static function renderBlocks(array $blocks, array $user, array $assets, array $opts = []): string
     {
@@ -463,6 +504,13 @@ class HandoverTemplates
         return $html;
     }
 
+    /**
+     * The HTML table of the handed-over assets, with the chosen columns including custom asset fields.
+     *
+     * @param array $assets  the asset rows to list, with any custom field values under 'custom'
+     * @param array $cols  [column key => bool] - which columns are switched on
+     * @param callable $L  fn(string key, string fallback): string - a translated label, or the fallback
+     */
     private static function renderAssetTable(array $assets, array $cols, callable $L): string
     {
         $defs = [
@@ -471,7 +519,9 @@ class HandoverTemplates
             'model'    => ['label' => $L('col_model', 'Make and model'), 'get' => fn($a) => trim(($a['manufacturer'] ?? '') . ' ' . ($a['model'] ?? '')) ?: '—'],
             'serial'   => ['label' => $L('col_serial', 'Serial number'), 'get' => fn($a) => $a['service_tag'] ?? '—', 'mono' => true],
             'tag'      => ['label' => $L('col_tag', 'Asset tag'),        'get' => fn($a) => $a['asset_tag'] ?? '—', 'mono' => true],
-            'assigned' => ['label' => $L('col_assigned', 'Assigned'),    'get' => fn($a) => !empty($a['assigned_datetime']) ? date('j M Y', strtotime($a['assigned_datetime'])) : '—'],
+            // fmt_local: assigned_datetime is a UTC instant, and near midnight the
+            // server's zone and the reader's disagree about which DAY it was.
+            'assigned' => ['label' => $L('col_assigned', 'Assigned'),    'get' => fn($a) => !empty($a['assigned_datetime']) ? fmt_local($a['assigned_datetime'], 'j M Y') : '—'],
             'location' => ['label' => $L('col_location', 'Location'),    'get' => fn($a) => $a['location'] ?? '—'],
             'status'   => ['label' => $L('col_status', 'Status'),        'get' => fn($a) => $a['asset_status'] ?? '—'],
             'notes'    => ['label' => $L('col_notes', 'Notes'),          'get' => fn($a) => $a['notes'] ?? '—'],

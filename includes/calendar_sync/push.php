@@ -22,6 +22,8 @@
  */
 
 require_once __DIR__ . '/calendar_sync.php';
+require_once __DIR__ . '/../session_security.php'; // requestScheme() — proxy-aware (GH #152)
+require_once __DIR__ . '/../ticket_sensitivity.php';  // a confidential ticket's subject stays home (#62)
 
 /**
  * Make the calendar match the ticket.
@@ -45,7 +47,8 @@ function calendarSyncReconcileTicket(PDO $conn, int $ticketId, bool $gone = fals
                         t.work_start_datetime, t.work_end_datetime, t.work_all_day,
                         t.deleted_datetime, ts.name AS status_name, tp.name AS priority_name,
                         COALESCE(ts.is_closed, 0) AS is_closed,
-                        u.display_name AS requester_name
+                        u.display_name AS requester_name,
+                        " . ticketSensitivitySelectSql($conn) . " AS sensitivity
                    FROM tickets t
                    LEFT JOIN ticket_statuses   ts ON ts.id = t.status_id
                    LEFT JOIN ticket_priorities tp ON tp.id = t.priority_id
@@ -301,6 +304,9 @@ function calendarSyncReconcileTask(PDO $conn, int $taskId, bool $gone = false): 
 /**
  * One task, as a calendar event of the given kind. Null when the task has
  * nothing to say for that kind.
+ *
+ * @param array $t  the task row as calendarSyncReconcileTask() loads it - title, due_date, work_*, status, priority and team names
+ * @param string $kind  'due' for the due-date banner, anything else for the work window
  */
 function calendarSyncEventFromTask(array $t, string $kind): ?array
 {
@@ -314,7 +320,7 @@ function calendarSyncEventFromTask(array $t, string $kind): ?array
     // ⚠️ `?task=`, not `?id=`. assets/js/tasks.js reads exactly that parameter,
     // so the wrong name opens the board and quietly does nothing.
     $url = ($host && $base !== '')
-        ? ((!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off' ? 'https' : 'http')
+        ? (requestScheme()
             . '://' . $host . $base . '/tasks/?task=' . (int)$t['id'])
         : '';
 
@@ -371,7 +377,11 @@ function calendarSyncEventFromTask(array $t, string $kind): ?array
     ];
 }
 
-/** Remove one mapped event from the calendar it was written to, and forget it. */
+/**
+ * Remove one mapped event from the calendar it was written to, and forget it.
+ *
+ * @param array $row  one calendar_sync_events row - connection_id, analyst_id, remote_calendar, remote_event_id
+ */
 function calendarSyncRemoveRow(PDO $conn, array $row): void
 {
     try {
@@ -417,19 +427,31 @@ function calendarSyncRemoveAllForAnalyst(PDO $conn, int $analystId): void
     }
 }
 
-/** The canonical event shape (see CalendarSyncProvider) for one ticket row. */
+/**
+ * The canonical event shape (see CalendarSyncProvider) for one ticket row.
+ *
+ * @param array $t  the ticket row as calendarSyncReconcileTicket() loads it - work_*, subject, sensitivity, requester, status and priority names
+ */
 function calendarSyncEventFromTicket(array $t): array
 {
     $end = $t['work_end_datetime'];
     if (!$end || strtotime($end) <= strtotime($t['work_start_datetime'])) {
         // The same default the calendar screen and the feed resolve, so all three
-        // agree about what an unspecified duration means.
-        $end = date('Y-m-d H:i:s',
-            strtotime($t['work_start_datetime']) + TicketsService::SCHEDULE_DEFAULT_MINUTES * 60);
+        // agree about what an unspecified duration means. Guarded like the task
+        // path below: a confidential-flag change can reconcile from a page that
+        // never loaded the tickets service.
+        $minutes = class_exists('TicketsService') ? TicketsService::SCHEDULE_DEFAULT_MINUTES : 60;
+        $end = date('Y-m-d H:i:s', strtotime($t['work_start_datetime']) + $minutes * 60);
     }
 
+    // 🔴 A confidential ticket's subject and requester do not go into a calendar
+    // (discussion #62): it is Microsoft's or a CalDAV server's copy, shown on
+    // phones and shared diaries. The number, the time, status and priority do -
+    // the same allow-list a webhook gets - so the day still reads as booked.
+    $confidential = ticketSensitivityNormalise($t['sensitivity'] ?? '') === 'confidential';
+
     $bits = [];
-    if (!empty($t['requester_name'])) $bits[] = 'Requester: ' . $t['requester_name'];
+    if (!$confidential && !empty($t['requester_name'])) $bits[] = 'Requester: ' . $t['requester_name'];
     if (!empty($t['status_name']))    $bits[] = 'Status: '    . $t['status_name'];
     if (!empty($t['priority_name']))  $bits[] = 'Priority: '  . $t['priority_name'];
 
@@ -438,12 +460,12 @@ function calendarSyncEventFromTicket(array $t): array
     // Only offer a link when we can build an absolute one. A relative URL in a
     // calendar event is worse than none — it looks clickable and goes nowhere.
     $url = ($host && $base !== '')
-        ? ((!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off' ? 'https' : 'http')
+        ? (requestScheme()
             . '://' . $host . $base . '/tickets/?ticket_id=' . (int)$t['id'])
         : '';
 
     return [
-        'subject'  => trim(($t['ticket_number'] ?? '') . ' — ' . ($t['subject'] ?? '')),
+        'subject'  => trim(($t['ticket_number'] ?? '') . ' — ' . ($confidential ? TICKET_CONFIDENTIAL_SUBJECT : ($t['subject'] ?? ''))),
         'body'     => implode("\n", $bits),
         'start'    => $t['work_start_datetime'],
         'end'      => $end,
@@ -455,6 +477,12 @@ function calendarSyncEventFromTicket(array $t): array
     ];
 }
 
+/**
+ * Stores a sync error (cut to 500 characters) on the analyst's enrolment, creating an 'off' enrolment row when there is none; never throws.
+ *
+ * @param string $message  the error to show the analyst; cut to 500 characters
+ * @writes calendar_enrolments(last_error) - shown on the analyst's calendar settings
+ */
 function calendarSyncRecordError(PDO $conn, int $analystId, string $message): void
 {
     try {
@@ -467,6 +495,10 @@ function calendarSyncRecordError(PDO $conn, int $analystId, string $message): vo
     }
 }
 
+/**
+ * Clears the analyst's sync error and stamps the time of the last good sync; never throws.
+ * @writes calendar_enrolments(last_error, last_sync_datetime)
+ */
 function calendarSyncClearError(PDO $conn, int $analystId): void
 {
     try {

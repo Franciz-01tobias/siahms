@@ -37,6 +37,7 @@
  */
 
 require_once __DIR__ . '/../tenant_settings.php';
+require_once __DIR__ . '/ticket_fields.php';   // custom fields required at closing (#179)
 
 final class MandatoryFieldsService
 {
@@ -106,6 +107,7 @@ final class MandatoryFieldsService
      * Split and validate an address list. Invalid entries are dropped, so the
      * saved list and the one actually mailed can never disagree.
      *
+     * @param string $raw  email addresses as typed, separated by spaces, commas or semicolons
      * @return string[]
      */
     public static function parseAddresses(string $raw): array
@@ -123,14 +125,23 @@ final class MandatoryFieldsService
     /**
      * The required fields this ticket has left empty.
      *
+     * Custom fields (#179) come after the built-in ones, keyed `cf:<key>` with
+     * their own name as the label. They are required by the field itself -
+     * "Required when closing" on Tickets -> Settings -> Custom fields - so they
+     * count even when no built-in field is ticked here, and they follow this
+     * tab's warn / warn and email / refuse setting like everything else.
+     *
      * @param array $row the ticket as it will be after the save - `tickets`
      *                   column names, any other keys ignored
+     * @param ?array $pendingCustom custom field answers written by the same
+     *                   save, [field_key => value], which count
      * @return array<string,string> key => English label, in tab order
      */
-    public static function missing(PDO $conn, ?int $tenantId, array $row): array
+    public static function missing(PDO $conn, ?int $tenantId, array $row, ?array $pendingCustom = null): array
     {
         $cfg = self::settings($conn, $tenantId);
-        if (!$cfg['fields']) return [];
+        $custom = TicketFieldsService::missingOnClose($conn, $row, $pendingCustom);
+        if (!$cfg['fields']) return $custom;
 
         $out = [];
         foreach (self::FIELDS as $key => [$column, $label]) {
@@ -141,10 +152,14 @@ final class MandatoryFieldsService
                 $out[$key] = $label;
             }
         }
-        return $out;
+        return $out + $custom;
     }
 
-    /** Can this field be filled in on a ticket belonging to this company? */
+    /**
+     * Can this field be filled in on a ticket belonging to this company?
+     *
+     * @param string $key  a FIELDS key, e.g. 'category' or 'team'
+     */
     public static function fieldAvailable(PDO $conn, ?int $tenantId, string $key): bool
     {
         switch ($key) {
@@ -228,6 +243,8 @@ final class MandatoryFieldsService
      * analysts, so a workflow (actor 0) cannot write there - which is why the
      * workflow engine's own "add note" action writes to ticket_audit with a NULL
      * analyst, and this follows it. UTC at rest (GH #126).
+     *
+     * @param string $note  the note text
      */
     public static function writeNote(PDO $conn, ActorContext $ctx, int $ticketId, string $note): void
     {
@@ -255,6 +272,13 @@ final class MandatoryFieldsService
         return "Closed by {$who} via {$via}.";
     }
 
+    /**
+     * Emails the chosen people that a ticket was closed with mandatory fields empty, listing them.
+     *
+     * @param array $to  the email addresses to tell, from parseAddresses()
+     * @param array $missing  [field key => English label] of the fields left empty
+     * @param string $closedBy  who closed it, from closedByLine()
+     */
     private static function notify(PDO $conn, int $ticketId, array $to, array $missing, string $closedBy): void
     {
         require_once __DIR__ . '/../template_email.php';

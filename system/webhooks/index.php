@@ -149,6 +149,11 @@ $byWorkflow = $conn->query(
       GROUP BY d.workflow_id, w.name ORDER BY total DESC LIMIT 8"
 )->fetchAll(PDO::FETCH_ASSOC);
 
+/**
+ * A delivery latency in seconds as translated text (under a second, seconds, minutes or hours); a dash when there is none.
+ *
+ * @param mixed $s  the latency in seconds; null for none
+ */
 function whLatency($s) {
     if ($s === null) return '—';
     $s = (float)$s;
@@ -158,6 +163,8 @@ function whLatency($s) {
     return t('system.webhooks.lat_hours', ['n' => round($s / 3600, 1)]);
 }
 // Success-rate cell: delivered vs terminal (delivered + dead); in-flight ignored.
+// @param mixed $delivered  how many deliveries were delivered
+// @param mixed $dead  how many gave up (dead); in-flight ones are not counted
 function whRate($delivered, $dead) {
     $term = (int)$delivered + (int)$dead;
     if ($term === 0) return '<span class="pct">—</span>';
@@ -169,11 +176,16 @@ function whRate($delivered, $dead) {
 
 // Exact commands for this install.
 $scriptPath = realpath(__DIR__ . '/../../cron/webhook_deliveries.php') ?: 'cron/webhook_deliveries.php';
-$scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme     = requestScheme();
 $httpUrl    = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL
             . 'cron/webhook_deliveries.php?token=' . urlencode($cronToken);
 $cliCmd     = 'php ' . $scriptPath;
 
+/**
+ * An age in seconds as translated "n seconds/minutes/hours/days ago" text; empty when there is none.
+ *
+ * @param mixed $s  the age in seconds; null for none
+ */
 function whAgo($s) {
     if ($s === null) return '';
     if ($s < 90)    return t('system.webhooks.ago_seconds', ['n' => $s]);
@@ -188,9 +200,9 @@ function whAgo($s) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('system.webhooks.browser_title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.webhooks.browser_title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <style>
@@ -347,7 +359,7 @@ function whAgo($s) {
         [data-theme-mode="dark"] .rate .track { background: #2c333d; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> block (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
 </head>
@@ -436,7 +448,7 @@ function whAgo($s) {
 
         <!-- ============ DATA PROTECTION ============ -->
         <div class="card">
-            <h3><?php echo htmlspecialchars(t('system.webhooks.dp_title')); ?></h3>
+            <h3 id="data-protection"><?php echo htmlspecialchars(t('system.webhooks.dp_title')); ?></h3>
             <p class="desc"><?php echo htmlspecialchars(t('system.webhooks.dp_desc')); ?></p>
 
             <?php if ($encryptionOn): ?>
@@ -747,6 +759,6 @@ function whAgo($s) {
     document.getElementById('payloadModal').onclick = e => { if (e.target.id === 'payloadModal') e.target.style.display = 'none'; };
     load();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

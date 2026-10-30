@@ -36,6 +36,7 @@ return [
         'col_seats' => 'Miejsca',
         'col_actions' => '',
         'add_app' => 'Dodaj aplikację',
+        'new_app' => 'Nowa aplikacja',
         'edit_app' => 'Edytuj aplikację',
         'added_by_hand' => 'Dodano ręcznie',
         'f_name' => 'Nazwa',
@@ -116,7 +117,7 @@ return [
         'widget_removed' => 'Usunięto widżet',
     ],
     'library' => [
-        'page_title' => 'Service Desk - Biblioteka widżetów oprogramowania',
+        'page_title' => 'Biblioteka widżetów oprogramowania',
         'back' => 'Pulpit',
         'heading' => 'Biblioteka widżetów',
         'search' => 'Szukaj widżetów...',

@@ -27,14 +27,14 @@ $translationNamespaces = ['common', 'service-status'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('service-status.help.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('service-status', t('service-status.nav.help'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../assets/css/help.css?v=3">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/help.css?v=6">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
         body {
@@ -54,7 +54,7 @@ $translationNamespaces = ['common', 'service-status'];
         .help-dot.major-outage { background: var(--danger-accent, #ef4444); }
     </style>
     <!-- Mobile: LAYER 16h — the guide body is already responsive; this adds the app shell. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -287,6 +287,12 @@ $translationNamespaces = ['common', 'service-status'];
                     <p><?php echo t('service-status.help.corr_p3'); ?></p>
                     <p class="help-note"><?php echo t('service-status.help.corr_note'); ?></p>
 
+                    <h4><?php echo htmlspecialchars(t('service-status.help.planned_heading')); ?></h4>
+                    <p><?php echo htmlspecialchars(t('service-status.help.planned_p1')); ?></p>
+                    <p><?php echo htmlspecialchars(t('service-status.help.planned_p2')); ?></p>
+                    <p><?php echo htmlspecialchars(t('service-status.help.planned_p3')); ?></p>
+                    <p class="help-note"><?php echo htmlspecialchars(t('service-status.help.planned_note')); ?></p>
+
                     <p class="help-note"><?php echo htmlspecialchars(t('service-status.help.history_tip')); ?></p>
                 </div>
 
@@ -427,6 +433,6 @@ $translationNamespaces = ['common', 'service-status'];
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

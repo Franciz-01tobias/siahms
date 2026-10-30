@@ -35,6 +35,8 @@ function webchatGenerateKey(): string
  * The message shown to a visitor when the widget is closed (out of office hours). Uses
  * the admin's custom offline message if set, else a sensible default — so a closed widget
  * is never silent, even if no message was configured.
+ *
+ * @param array $widget  the widget row (webchatLoadByChannel/ByKey); its offline_message is used if set
  */
 function webchatOfflineMessage(array $widget): string
 {
@@ -57,7 +59,11 @@ function webchatBaseUrl(PDO $conn): string
     return rtrim($base . $root, '/');
 }
 
-/** The <script> embed snippet a customer pastes just before </body> on their site. */
+/**
+ * The <script> embed snippet a customer pastes just before </body> on their site.
+ *
+ * @param string $widgetKey  the widget's public key, written into the snippet
+ */
 function webchatEmbedSnippet(PDO $conn, string $widgetKey): string
 {
     $src = webchatBaseUrl($conn) . '/api/webchat/widget.js';
@@ -72,7 +78,11 @@ function webchatEmbedSnippet(PDO $conn, string $widgetKey): string
         . "</script>";
 }
 
-/** Load a widget row joined to its channel, keyed by channel id. Null if missing. */
+/**
+ * Load a widget row joined to its channel, keyed by channel id. Null if missing.
+ *
+ * @param int $channelId  the messaging_channels id of the web chat channel
+ */
 function webchatLoadByChannel(PDO $conn, int $channelId): ?array
 {
     try {
@@ -90,7 +100,11 @@ function webchatLoadByChannel(PDO $conn, int $channelId): ?array
     return $row ?: null;
 }
 
-/** Load a widget row joined to its channel, keyed by public widget key. Null if missing. */
+/**
+ * Load a widget row joined to its channel, keyed by public widget key. Null if missing.
+ *
+ * @param string $widgetKey  the public widget key - untrusted
+ */
 function webchatLoadByKey(PDO $conn, string $widgetKey): ?array
 {
     try {
@@ -111,6 +125,8 @@ function webchatLoadByKey(PDO $conn, string $widgetKey): ?array
 /**
  * Parse the stored allowed_origins blob into a clean list of origins. Accepts one
  * per line (or comma-separated), trims trailing slashes, drops blanks/comments.
+ *
+ * @param ?string $raw  the stored allowed_origins text: one origin per line or comma-separated, '#' for comments
  */
 function webchatParseOrigins(?string $raw): array
 {
@@ -132,6 +148,9 @@ function webchatParseOrigins(?string $raw): array
 /**
  * Is the request origin permitted for this widget? An empty allowlist means "any"
  * (testing only). Matching is exact on scheme+host (+port), trailing slash ignored.
+ *
+ * @param array $allowed  the allowlist from webchatParseOrigins(); empty allows any origin
+ * @param ?string $origin  the request's Origin, e.g. 'https://example.com'; null or '' is refused when a list exists
  */
 function webchatOriginAllowed(array $allowed, ?string $origin): bool
 {
@@ -148,6 +167,9 @@ function webchatOriginAllowed(array $allowed, ?string $origin): bool
 /**
  * Find-or-create the requester for a web chat conversation, keyed by the real email
  * the visitor gave. Returns the user id, or null if the users table is unavailable.
+ *
+ * @param string $email  the email the visitor gave - unverified; '' gives null
+ * @param string $name  the name the visitor gave; fills display_name only when it is empty
  */
 function webchatGetOrCreateUser(PDO $conn, string $email, string $name): ?int
 {
@@ -174,7 +196,11 @@ function webchatGetOrCreateUser(PDO $conn, string $email, string $name): ?int
     }
 }
 
-/** The visitor's display name for a conversation (name → email → generic). */
+/**
+ * The visitor's display name for a conversation (name → email → generic).
+ *
+ * @param array $conversation  a webchat_conversations row (visitor_name, visitor_email)
+ */
 function webchatVisitorName(array $conversation): string
 {
     $email = trim((string) ($conversation['visitor_email'] ?? ''));
@@ -186,6 +212,10 @@ function webchatVisitorName(array $conversation): string
  * Open a ticket for a web chat conversation and pin the conversation to it (one
  * conversation == one ticket). Returns the new ticket id. Shared by the live-ingest
  * path and the deflect-mode escalation path so ticket creation lives in one place.
+ *
+ * @param array $conversation  the webchat_conversations row, pinned to the new ticket
+ * @param array $channel  the widget/channel row (its tenant_id sets the ticket's company)
+ * @param string $subject  the ticket subject, from buildChannelSubject()
  */
 function webchatOpenTicket(PDO $conn, array $conversation, array $channel, string $subject): int
 {
@@ -194,8 +224,8 @@ function webchatOpenTicket(PDO $conn, array $conversation, array $channel, strin
     $email  = trim((string) ($conversation['visitor_email'] ?? ''));
     $name   = trim((string) ($conversation['visitor_name'] ?? ''));
     $userId       = webchatGetOrCreateUser($conn, $email, $name);
-    $ticketNumber = messagingGenerateTicketNumber($conn);
     $tenantId     = ($channel['tenant_id'] ?? null) !== null ? (int) $channel['tenant_id'] : null;
+    $ticketNumber = messagingGenerateTicketNumber($conn, $tenantId);
     $originId     = getChannelOriginId($conn, 'webchat');
 
     $sql = "INSERT INTO tickets (
@@ -211,6 +241,10 @@ function webchatOpenTicket(PDO $conn, array $conversation, array $channel, strin
             )";
     $conn->prepare($sql)->execute([$ticketNumber, $subject, $userId, $tenantId, $originId]);
     $ticketId = (int) $conn->lastInsertId();
+    // Confidential defaults (discussion #62). Nothing to apply yet - no department
+    // or mailbox - but every ticket-creating path calls it; see ticket_sensitivity.php.
+    require_once __DIR__ . '/../ticket_sensitivity.php';
+    ticketSensitivityApplyDefaults($conn, $ticketId);
 
     $conn->prepare("UPDATE webchat_conversations SET ticket_id = ?, last_activity_datetime = UTC_TIMESTAMP() WHERE id = ?")
          ->execute([$ticketId, (int) $conversation['id']]);
@@ -222,6 +256,11 @@ function webchatOpenTicket(PDO $conn, array $conversation, array $channel, strin
  * Store one inbound visitor message against a ticket in the shared `emails` table
  * (channel='webchat'), so the reading-pane thread and reply path work unchanged.
  * Returns the new email id.
+ *
+ * @param array $conversation  the webchat_conversations row (visitor details and token)
+ * @param array $channel  the widget/channel row (id and name)
+ * @param string $body  the visitor's message as plain text; blank is stored as '[empty message]'
+ * @param bool $isInitial  true for the ticket's opening message, which also gets the subject
  */
 function webchatInsertInbound(PDO $conn, int $ticketId, array $conversation, array $channel, string $body, bool $isInitial): int
 {
@@ -270,6 +309,10 @@ function webchatInsertInbound(PDO $conn, int $ticketId, array $conversation, arr
  * (direction='Outbound', channel='webchat'), so the analyst sees it in the thread and
  * the widget's reply-poll picks it up. Used to post the AI's answers alongside the
  * ticket in assist mode. Returns the new email id.
+ *
+ * @param array $channel  the widget/channel row (id and name)
+ * @param string $body  the message text
+ * @param string $fromName  the sender name shown in the thread, e.g. the assistant's name
  */
 function webchatInsertOutbound(PDO $conn, int $ticketId, array $channel, string $body, string $fromName): int
 {
@@ -295,6 +338,11 @@ function webchatInsertOutbound(PDO $conn, int $ticketId, array $channel, string 
  * Ingest one inbound visitor message for a web chat conversation. On the first
  * message it opens a ticket and pins the conversation to it; afterwards it appends.
  * Returns the ticket id. (Thin orchestration over webchatOpenTicket + webchatInsertInbound.)
+ *
+ * @param array $conversation  the webchat_conversations row; its ticket_id decides open or append
+ * @param array $channel  the widget/channel row
+ * @param string $body  the visitor's message - untrusted plain text
+ * @param ?int $emailId  out: set to the stored inbound emails.id
  */
 function webchatIngestMessage(PDO $conn, array $conversation, array $channel, string $body, ?int &$emailId = null): int
 {
@@ -338,6 +386,8 @@ function webchatIngestMessage(PDO $conn, array $conversation, array $channel, st
  * always open. Otherwise the calendar's weekday hours + holidays are evaluated in the
  * calendar's own timezone. A misconfigured calendar (missing, bad tz, no hours rows)
  * fails open — availability should never hard-block a visitor from making contact.
+ *
+ * @param ?int $calendarId  the widget's business-hours calendar (SLA calendar) id; null means always open
  */
 function webchatIsOpenNow(PDO $conn, ?int $calendarId): bool
 {
@@ -380,6 +430,11 @@ function webchatIsOpenNow(PDO $conn, ?int $calendarId): bool
  * Append a message to a conversation's pre-ticket transcript (webchat_messages).
  * sender is 'visitor'|'ai'|'agent'|'system'. $sourceEmailId links a mirrored analyst
  * reply back to its `emails` row so it's only mirrored once. Returns the new id.
+ *
+ * @param int $conversationId  the webchat_conversations id
+ * @param string $sender  'visitor', 'ai', 'agent' or 'system'
+ * @param string $body  the message text
+ * @param ?int $sourceEmailId  the emails.id a mirrored analyst reply came from; null otherwise
  */
 function webchatAddMessage(PDO $conn, int $conversationId, string $sender, string $body, ?int $sourceEmailId = null): int
 {
@@ -394,7 +449,12 @@ function webchatAddMessage(PDO $conn, int $conversationId, string $sender, strin
     return $id;
 }
 
-/** Read a conversation's transcript messages after $afterId (ascending). */
+/**
+ * Read a conversation's transcript messages after $afterId (ascending).
+ *
+ * @param int $conversationId  the webchat_conversations id
+ * @param int $afterId  the last webchat_messages id the caller holds; 0 for the start (at most 200 returned)
+ */
 function webchatGetMessages(PDO $conn, int $conversationId, int $afterId = 0): array
 {
     $st = $conn->prepare(
@@ -411,6 +471,8 @@ function webchatGetMessages(PDO $conn, int $conversationId, int $afterId = 0): a
  * The full chat transcript as plain text — "Visitor: …" / "Assistant: …" / "Agent: …".
  * Used as the opening message when a deflect conversation is escalated to a ticket, and
  * as the .txt attachment on an email escalation.
+ *
+ * @param int $conversationId  the webchat_conversations id
  */
 function webchatTranscriptText(PDO $conn, int $conversationId): string
 {
@@ -428,6 +490,8 @@ function webchatTranscriptText(PDO $conn, int $conversationId): string
  * into the transcript, so an AI-enabled widget — which reads webchat_messages, not the
  * emails table — shows them to the visitor. Deduped by source_email_id, so AI answers
  * already recorded with their source email (and previously mirrored replies) are skipped.
+ *
+ * @param array $conversation  the webchat_conversations row; nothing happens until it has a ticket_id
  */
 function webchatMirrorAgentReplies(PDO $conn, array $conversation): void
 {
@@ -461,6 +525,11 @@ function webchatMirrorAgentReplies(PDO $conn, array $conversation): void
  * if already ticketed. For $mode 'agent' the opening message is the full transcript; for
  * 'email' the opening body is $aiSummary (or a fallback) and the full transcript is
  * attached as a .txt. Returns the ticket id.
+ *
+ * @param array $conversation  the webchat_conversations row; one already ticketed returns its ticket id
+ * @param array $channel  the widget/channel row
+ * @param string $mode  'agent' (opening message is the transcript) or 'email' (the summary, transcript attached)
+ * @param ?string $aiSummary  the AI summary for 'email' mode; null or '' falls back to the transcript
  */
 function webchatPromoteToTicket(PDO $conn, array $conversation, array $channel, string $mode, ?string $aiSummary = null): int
 {

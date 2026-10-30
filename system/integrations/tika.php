@@ -39,9 +39,9 @@ $meta = integrationsProviderMeta('tika');
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Apache Tika</title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.integrations.title'), 'Apache Tika')); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/integrations.css?v=1">
     <style>
         body {
@@ -98,7 +98,7 @@ $meta = integrationsProviderMeta('tika');
         .tika-formats ul { margin:6px 0 0; padding-left:18px; color:var(--text-dim,#6b7280); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="integrations-tika">
     <?php include '../includes/header.php'; ?>
@@ -230,6 +230,6 @@ $meta = integrationsProviderMeta('tika');
 
         load();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -1,5 +1,15 @@
 <?php
 /**
+ * The asset handover document's stylesheets, kept as PHP strings.
+ *
+ * handoverDocumentCss() styles the document itself and is shared by the printable page, the
+ * designer's live preview and the emailed copy; handoverPrintCss() adds the print-only
+ * rules.
+ *
+ * @wiki Asset-Handover-Developer-Guide
+ */
+
+/**
  * The handover document's stylesheet, in one place (discussion #56).
  *
  * Shared by the printable page, the designer's live preview and the emailed

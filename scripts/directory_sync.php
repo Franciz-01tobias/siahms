@@ -22,6 +22,7 @@ if (PHP_SAPI !== 'cli') {
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/directory_sync.php';
+require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $opts     = getopt('', ['provider::', 'all', 'preview', 'quiet']);
 $preview  = isset($opts['preview']);
@@ -56,6 +57,12 @@ if (isset($opts['all'])) {
 if (!$providers) {
     exit("No matching provider with sync enabled.\n");
 }
+
+// #182: a --preview writes nothing, so it is recorded as SKIPPED - a dry run is
+// never evidence that the job works, and can never clear a failure. A single
+// --provider run is a manual run of that one source.
+$runId = $preview ? null : JobRun::start($conn, 'directory_sync', isset($opts['all']) ? 'cron' : 'manual');
+if ($preview) JobRun::skipped($conn, 'directory_sync', 'manual', 'Dry run (--preview): nothing written.');
 
 require_once __DIR__ . '/../includes/encryption.php';
 
@@ -103,8 +110,13 @@ foreach ($providers as $p) {
 
     // A stopped run is not a failure to be retried blindly — it is a refusal
     // that wants a human. Distinct exit codes so a cron wrapper can tell.
+    if (!$preview) {
+        JobRun::source($conn, $runId, 'directory_sync', 'provider:' . (int)$p['id'], (string)($p['display_name'] ?: ('provider ' . $p['id'])),
+            !in_array($run['status'] ?? '', ['failed', 'stopped'], true), $run['message'] ?? null);
+    }
     if (($run['status'] ?? '') === 'failed')  $exit = 1;
     if (($run['status'] ?? '') === 'stopped') $exit = 2;
 }
 
+JobRun::finish($conn, $runId);
 exit($exit);

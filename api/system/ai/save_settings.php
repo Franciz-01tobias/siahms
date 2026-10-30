@@ -42,7 +42,8 @@ try {
         'model'      => $data['model']       ?? '',
         'api_key'    => $data['api_key']     ?? '',
     ];
-    foreach (['azure_endpoint', 'azure_deployment', 'azure_api_version'] as $f) {
+    $payload['clear_api_key'] = !empty($data['clear_api_key']);
+    foreach (['azure_endpoint', 'azure_deployment', 'azure_api_version', 'compatible_base_url'] as $f) {
         if (array_key_exists($f, $data)) {
             $payload[$f] = is_scalar($data[$f]) ? (string)$data[$f] : '';
         }

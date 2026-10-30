@@ -33,19 +33,27 @@ $translationNamespaces = ['common', 'change-management'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('change-management.page.table')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('changes', t('change-management.nav.table'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/change-management.css?v=6">
     <link rel="stylesheet" href="../assets/css/data-table.css?v=4">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
 </head>
+<?php $cmLevel = analystModuleLevel(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'changes'); ?>
 <body>
     <?php include 'includes/header.php'; ?>
+    <?php /* The action row (#185): New change was at the foot of the list's
+             sidebar and missing from the Calendar and Table views. Read only
+             access (#180) gets the row without New. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('change-management.nav.changes'),
+              $cmLevel !== 'read' ? [actionRowNew(BASE_URL . 'change-management/new/', t('change-management.sidebar.new_change_tip'), true)] : [],
+              ['accent' => 'cm']); ?>
 
     <div class="dt-page">
         <?php include '../includes/data-table-skeleton.php'; ?>
@@ -53,6 +61,6 @@ $translationNamespaces = ['common', 'change-management'];
 
     <script src="../assets/js/data-table.js?v=6"></script>
     <script src="../assets/js/change-table.js?v=6"></script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

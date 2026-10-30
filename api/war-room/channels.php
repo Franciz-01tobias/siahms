@@ -31,7 +31,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     exit;
 }
 
-/** Who may reshape this channel: its creator, or someone with war_room.manage. */
+/**
+ * Who may reshape this channel: its creator, or someone with war_room.manage.
+ *
+ * @param array $channel  the channel row as loaded by warRoomChannel() - only created_by is read here
+ */
 function warRoomMayManage(PDO $conn, int $analystId, array $channel): bool
 {
     if ((int) ($channel['created_by'] ?? 0) === $analystId) return true;

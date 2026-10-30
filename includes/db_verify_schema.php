@@ -50,6 +50,10 @@ return [
         'failed_login_count'     => 'INT NOT NULL DEFAULT 0',
         'locked_until'           => 'DATETIME NULL',
         'auth_provider_id'       => 'INT NULL',
+        // 1 = take the sign-in method from their teams (GH #41); auth_provider_id then
+        // holds the result, copied in by includes/analyst_signin.php. Defaults to 0 so
+        // nobody's sign-in changes on upgrade.
+        'auth_follow_team'       => 'TINYINT(1) NOT NULL DEFAULT 0',
         'can_access_all_tenants' => 'TINYINT(1) NOT NULL DEFAULT 1',
         // Only administrators may enter the System module. New analysts default to
         // non-admin; existing analysts are grandfathered to admin on first upgrade
@@ -199,10 +203,25 @@ return [
         'sync_last_count'        => 'INT NULL',
         'enabled'                => 'TINYINT(1) NOT NULL DEFAULT 1',
         'auto_create_users'      => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'auto_create_analysts'   => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'analyst_fallback_mode'  => "ENUM('confirm','redirect','block') NOT NULL DEFAULT 'confirm'",
         'require_verified_email' => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'profile_sync_mode'      => "ENUM('always','initial','never') NOT NULL DEFAULT 'never'",
         'default_modules'        => 'VARCHAR(500) NULL',
+        // 3.5.0: companies an auto-created analyst can see - all | provider | none. See ssoApplyJitCompanies().
+        'jit_company_access'     => "VARCHAR(10) NOT NULL DEFAULT 'all'",
+        // SSO claim mapping (3.5.0, OIDC only) - see includes/sso_claims.php.
+        'oidc_group_claim'       => 'VARCHAR(100) NULL',
+        'oidc_analyst_group'     => 'VARCHAR(255) NULL',
+        'oidc_admin_group'       => 'VARCHAR(255) NULL',
+        'oidc_groups_last_seen'  => 'TEXT NULL',
         'sort_order'             => 'INT NOT NULL DEFAULT 0',
         'tenant_id'              => 'INT NULL',
+        // GH #147 - portal email-first routing. Domains one per line; an
+        // address on one goes straight to this provider. NULL = none.
+        'portal_email_domains'   => 'TEXT NULL',
+        // DEFAULT 1 so an upgrade keeps every portal button where it was.
+        'portal_show_button'     => 'TINYINT(1) NOT NULL DEFAULT 1',
         'created_datetime'       => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'last_modified_datetime' => 'DATETIME NULL',
     ],
@@ -223,6 +242,9 @@ return [
         'description'       => 'VARCHAR(255) NULL',
         'is_active'         => 'TINYINT(1) NULL DEFAULT 1',
         'display_order'     => 'INT NULL DEFAULT 0',
+        // 'confidential' = every ticket in, or moved into, this department becomes
+        // confidential (discussion #62). Only ever raises; see ticket_sensitivity.php.
+        'default_sensitivity' => "VARCHAR(20) NOT NULL DEFAULT 'normal'",
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
@@ -241,6 +263,10 @@ return [
         // 'most' (union) mode a team defaulting to all would blow away every member's
         // individual restrictions. Grants are in team_modules.
         'can_access_all_modules' => 'TINYINT(1) NOT NULL DEFAULT 0',
+        // Default sign-in method for members set to "Follow team" (GH #41).
+        // NULL = not set, 'local' = password, 'provider' = auth_provider_id.
+        'auth_method'       => 'VARCHAR(10) NULL',
+        'auth_provider_id'  => 'INT NULL',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
@@ -252,6 +278,23 @@ return [
         'team_id'           => 'INT NOT NULL',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+    ],
+
+    // SSO groups -> teams, and the groups seen at sign-in (3.5.0). includes/sso_claims.php.
+    'sso_group_teams' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'provider_id'      => 'INT NOT NULL',
+        'group_name'       => 'VARCHAR(255) NOT NULL',
+        'team_id'          => 'INT NOT NULL',
+        'created_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'sso_groups_seen' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'provider_id'         => 'INT NOT NULL',
+        'group_name'          => 'VARCHAR(255) NOT NULL',
+        'first_seen_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+        'last_seen_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+        'label'               => 'VARCHAR(100) NULL',   // the admin's name for the group
     ],
 
     'department_teams' => [
@@ -268,6 +311,7 @@ return [
         'id'          => 'INT NOT NULL AUTO_INCREMENT',
         'team_id'     => 'INT NOT NULL',
         'module_key'  => 'VARCHAR(50) NOT NULL',
+        'access_level' => "VARCHAR(10) NOT NULL DEFAULT 'full'",   // full | read (#180) - see analystModuleLevel()
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
 
@@ -275,6 +319,7 @@ return [
         'id'          => 'INT NOT NULL AUTO_INCREMENT',
         'analyst_id'  => 'INT NOT NULL',
         'module_key'  => 'VARCHAR(50) NOT NULL',
+        'access_level' => "VARCHAR(10) NOT NULL DEFAULT 'full'",   // full | read (#180) - see analystModuleLevel()
     ],
 
     // RBAC Layer 2 — per-module settings permissions (see docs/design/rbac.md).
@@ -289,6 +334,9 @@ return [
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+        // 3.5.0 (PR #174): the analyst whose REST-API-managed role this is; NULL =
+        // an ordinary role. See includes/services/analysts.php.
+        'managed_for_analyst_id' => 'INT NULL',
     ],
 
     'rbac_role_capabilities' => [
@@ -335,6 +383,52 @@ return [
         'preference_key'    => 'VARCHAR(100) NOT NULL',
         'preference_value'  => 'TEXT NULL',
         'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    // --- Custom ticket fields (discussion #179) ------------------------------
+    // Tickets -> Settings -> Custom fields. A field is defined once, linked to
+    // some ticket types (or all of them), and answered per ticket. The values
+    // run on the same engine as custom asset fields (includes/typed_fields.php).
+    'ticket_fields' => [
+        'id'                 => 'INT NOT NULL AUTO_INCREMENT',
+        'field_key'          => 'VARCHAR(100) NOT NULL',
+        'label'              => 'VARCHAR(150) NOT NULL',
+        'field_type'         => 'VARCHAR(20) NOT NULL',
+        'config'             => 'LONGTEXT NULL',
+        'help_text'          => 'VARCHAR(500) NULL',
+        'all_types'          => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'required_on_create' => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'required_on_close'  => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'ask_requester'      => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'display_order'      => 'INT NOT NULL DEFAULT 0',
+        'tenant_id'          => 'INT NULL',
+        'is_deleted'         => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'created_datetime'   => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    'ticket_field_options' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'field_id'          => 'INT NOT NULL',
+        'option_value'      => 'VARCHAR(255) NOT NULL',
+        'display_order'     => 'INT NOT NULL DEFAULT 0',
+    ],
+
+    'ticket_field_types' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'field_id'          => 'INT NOT NULL',
+        'ticket_type_id'    => 'INT NOT NULL',
+    ],
+
+    'ticket_field_values' => [
+        'id'            => 'INT NOT NULL AUTO_INCREMENT',
+        'ticket_id'     => 'INT NOT NULL',
+        'field_id'      => 'INT NOT NULL',
+        'seq'           => 'INT NOT NULL DEFAULT 0',
+        'value_text'    => 'TEXT NULL',
+        'value_number'  => 'DECIMAL(20,4) NULL',
+        'value_date'    => 'DATETIME NULL',
+        'value_boolean' => 'TINYINT(1) NULL',
+        'value_ref_id'  => 'INT NULL',
     ],
 
     'ticket_types' => [
@@ -485,6 +579,7 @@ return [
         // land in triage, the same meaning NULL carries on `tickets`. Scoped-data
         // shape, not config: NULL is "not yet known", never "shared".
         'tenant_id'       => 'INT NULL',
+        'cost_centre_id'  => 'INT NULL',   // GH #160: the cost centre it is charged to - see includes/cost_centre_assign.php
         'created_at'      => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
 
         // --- the person, as opposed to the login (directory sync slice 1) ---
@@ -660,6 +755,31 @@ return [
         'notes'          => 'TEXT NULL',
     ],
 
+    // --- Background job health (#182) --------------------------------------
+    // One row per run of any background job (includes/job_runs.php); see freeitsm.sql.
+    'job_runs' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'job_key'           => 'VARCHAR(40) NOT NULL',
+        'trigger_kind'      => 'VARCHAR(10) NOT NULL',
+        'outcome'           => "VARCHAR(10) NOT NULL DEFAULT 'running'",
+        'started_datetime'  => 'DATETIME NOT NULL',
+        'finished_datetime' => 'DATETIME NULL',
+        'duration_ms'       => 'INT NULL',
+        'counts_json'       => 'TEXT NULL',
+        'summary'           => 'VARCHAR(500) NULL',
+        'analyst_id'        => 'INT NULL',
+    ],
+    'job_run_sources' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'run_id'           => 'INT NOT NULL',
+        'job_key'          => 'VARCHAR(40) NOT NULL',
+        'source_key'       => 'VARCHAR(80) NOT NULL',
+        'source_label'     => 'VARCHAR(190) NULL',
+        'ok'               => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'message'          => 'VARCHAR(500) NULL',
+        'created_datetime' => 'DATETIME NOT NULL',
+    ],
+
     // --- Ticket numbering (GH #71) ------------------------------------------
     // ⚠️ ticket_number_counters has NO auto-increment id: counter_key is the
     // primary key, which is what lets the read-and-increment be one statement.
@@ -744,6 +864,9 @@ return [
         'snoozed_at'            => 'DATETIME NULL',
         'snoozed_by'            => 'INT NULL',
         'snooze_reason'         => 'VARCHAR(255) NULL',
+        // 'normal' or 'confidential' (discussion #62). Confidential keeps a ticket
+        // from the requester's managers; see includes/ticket_sensitivity.php.
+        'sensitivity'           => "VARCHAR(20) NOT NULL DEFAULT 'normal'",
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
 
@@ -774,6 +897,37 @@ return [
         'new_value'         => 'VARCHAR(500) NULL',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+    ],
+
+    // Management lines (discussion #62, step 3): who a portal user may see the
+    // tickets of, as a MANAGER. One row per line; exclusions always win. See
+    // includes/managers.php. uq_manager_grant (db_verify_indexes.php) stops the
+    // same line being added twice.
+    'manager_grants' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'manager_user_id'       => 'INT NOT NULL',
+        'grant_type'            => 'VARCHAR(20) NOT NULL',         // everyone | user | group | department | reports
+        'target_id'             => 'INT NOT NULL DEFAULT 0',       // users.id or knowledge_user_groups.id
+        'target_value'          => "VARCHAR(150) NOT NULL DEFAULT ''", // department name, or 'all' for reports
+        'is_exclusion'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    // Who has looked at a ticket (discussion #62, step 2). ONE ROW PER VIEWER PER
+    // DAY - opening a ticket twenty times is one row with view_count 20 - which is
+    // what uq_ticket_views_day (db_verify_indexes.php) makes true. Kept apart from
+    // ticket_audit because its actor can only be an analyst, and a manager reading
+    // in the portal is not one. See includes/ticket_views.php.
+    'ticket_views' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'ticket_id'             => 'INT NOT NULL',
+        'viewer_type'           => 'VARCHAR(10) NOT NULL',   // 'analyst' or 'user' (portal)
+        'viewer_id'             => 'INT NOT NULL',
+        'view_date'             => 'DATE NOT NULL',          // UTC day
+        'first_viewed_datetime' => 'DATETIME NOT NULL',
+        'last_viewed_datetime'  => 'DATETIME NOT NULL',
+        'view_count'            => 'INT NOT NULL DEFAULT 1',
     ],
 
     'ticket_notes' => [
@@ -808,6 +962,9 @@ return [
         // ({COMPANY}). NULL means "derive one from the name" — see
         // TicketNumbering::companyCode().
         'ticket_code'      => 'VARCHAR(12) NULL',
+        // The company's own logo (System -> Companies), shown on the Files
+        // desktop. NULL falls back to the organisation logo.
+        'logo_path'        => 'VARCHAR(255) NULL',
         'is_default'       => 'TINYINT(1) NOT NULL DEFAULT 0',
         'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
@@ -888,6 +1045,19 @@ return [
         'tenant_id'        => 'INT NULL',
         'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    // Which requester a chat belongs to, on ONE channel (Telegram, PR #159).
+    // Keyed per channel, not per chat id - see freeitsm.sql for why.
+    'messaging_identity_links' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'channel_id'       => 'INT NOT NULL',
+        'channel_type'     => 'VARCHAR(20) NOT NULL',
+        'external_id'      => 'VARCHAR(190) NOT NULL',
+        'user_id'          => 'INT NOT NULL',
+        'phone'            => 'VARCHAR(40) NULL',
+        'locale'           => 'VARCHAR(10) NULL',
+        'linked_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
     // Embed config for one website chat widget. Drives a messaging_channels row
@@ -1094,6 +1264,14 @@ return [
         'last_error_datetime'     => 'DATETIME NULL',
         'created_datetime'        => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'last_checked_datetime'   => 'DATETIME NULL',
+        // 'confidential' = every ticket arriving here is confidential (discussion #62).
+        // Needed on its own: emailed tickets get no department, so an HR mailbox
+        // is the only thing that can protect a grievance the moment it lands.
+        'default_sensitivity'     => "VARCHAR(20) NOT NULL DEFAULT 'normal'",
+        // This mailbox's own rules for emails over the attachment size limits (GH
+        // #170) - JSON, see includes/attachment_limits.php. NULL = use the defaults
+        // in Tickets -> Settings -> Mailboxes.
+        'oversize_policy'         => 'TEXT NULL',
     ],
 
     'emails' => [
@@ -1323,6 +1501,13 @@ return [
         'parent_id'         => 'INT NOT NULL',
         'linked_by_id'      => 'INT NULL',
         'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        // Knowledge articles only (GH #177): may portal users download this
+        // document from the Help Centre? On the LINK, not the document, so the
+        // same file can be shown on one article and held back on another.
+        // TRAP: keep the column DEFAULT 0. Adding it gives every EXISTING link 0, so
+        //   nothing attached before 3.7.0 goes public on upgrade; new article links
+        //   are written with 1 by documentLinkHelpCentreDefault().
+        'show_in_help_centre' => 'TINYINT(1) NOT NULL DEFAULT 0',
     ],
 
     // Who fetched which document, and when. One row per download, written at the
@@ -1583,6 +1768,9 @@ return [
         'comment'            => 'TEXT NULL',
         'analyst_id'         => 'INT NULL',
         'created_at'         => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        // PR #166 - which chat a rating request was asked in (NULL = emailed).
+        'channel_id'         => 'INT NULL',
+        'channel_from'       => 'VARCHAR(255) NULL',
     ],
 
     'ticket_rota_shifts' => [
@@ -1616,6 +1804,15 @@ return [
         'updated_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
+    // Generated asset tag counters (PR #164) - ticket_number_counters' shape,
+    // and the same ⚠️: counter_key is the PK, declared in db_verify.php's
+    // $primaryKeys map, not here.
+    'asset_tag_counters' => [
+        'counter_key'       => 'VARCHAR(64) NOT NULL',
+        'next_value'        => 'BIGINT NOT NULL DEFAULT 1',
+        'updated_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    ],
+
     'assets' => [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
         'hostname'          => 'VARCHAR(50) NULL',
@@ -1643,8 +1840,10 @@ return [
         'purchase_date'     => 'DATE NULL',
         'purchase_cost'     => 'DECIMAL(12,2) NULL',
         'supplier_id'       => 'INT NULL',
+        'cost_centre_id'  => 'INT NULL',   // GH #160: the cost centre it is charged to - see includes/cost_centre_assign.php
         'order_number'      => 'VARCHAR(100) NULL',
         'warranty_expiry'   => 'DATE NULL',
+        'lease_start'       => 'DATE NULL',   // when a leased asset's lease began (3.5.0)
         'lease_expiry'      => 'DATE NULL',
         // Multi-tenancy: the company this asset belongs to (NULL = Default).
         'tenant_id'         => 'INT NULL',
@@ -1736,11 +1935,35 @@ return [
     'asset_history' => [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
         'asset_id'          => 'INT NOT NULL',
-        'analyst_id'        => 'INT NOT NULL',
+        'analyst_id'        => 'INT NULL',
         'field_name'        => 'VARCHAR(100) NOT NULL',
         'old_value'         => 'VARCHAR(500) NULL',
         'new_value'         => 'VARCHAR(500) NULL',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    // REST inventory (#194 Part B). Which analyst - an integration's service account -
+    // owns a source name in a company: the first to write it. A rotated key acts as
+    // the same analyst, so it keeps the source.
+    'asset_inventory_source_owners' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'        => 'INT NOT NULL',
+        'source'           => 'VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL',
+        'owner_analyst_id' => 'INT NOT NULL',
+        'created_datetime' => 'DATETIME NOT NULL',
+    ],
+    // Which asset each (source, the tool's own device reference) is linked to.
+    'asset_inventory_sources' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'asset_id'          => 'INT NOT NULL',
+        'tenant_id'         => 'INT NOT NULL',
+        'source'            => 'VARCHAR(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL',
+        'source_device_ref' => 'VARCHAR(128) COLLATE utf8mb4_bin NOT NULL',
+    ],
+    'asset_inventory_sections' => [
+        'id'=>'INT NOT NULL AUTO_INCREMENT', 'inventory_source_id'=>'INT NOT NULL',
+        'section_name'=>'VARCHAR(32) NOT NULL', 'observed_at'=>'DATETIME NOT NULL', 'imported_at'=>'DATETIME NOT NULL',
+        'imported_by_id'=>'INT NOT NULL', 'fingerprint'=>'CHAR(64) NOT NULL',
     ],
 
     'asset_disks' => [
@@ -1752,7 +1975,10 @@ return [
         'size_bytes'    => 'BIGINT NULL',
         'free_bytes'    => 'BIGINT NULL',
         'used_percent'  => 'DECIMAL(5,1) NULL',
-        'source'        => "VARCHAR(20) NOT NULL DEFAULT 'agent'",
+        'source'        => "VARCHAR(64) NOT NULL DEFAULT 'agent'",
+        'observed_at'=>'DATETIME NULL',
+        'imported_at'=>'DATETIME NULL',
+        'external_id'=>'VARCHAR(128) COLLATE utf8mb4_bin NULL',
     ],
 
     // The physical drives themselves, as opposed to the lettered volumes above.
@@ -1816,6 +2042,10 @@ return [
         'subnet_mask'   => 'VARCHAR(45) NULL',
         'gateway'       => 'VARCHAR(45) NULL',
         'dhcp_enabled'  => 'TINYINT(1) NULL',
+        'observed_at'=>'DATETIME NULL',
+        'imported_at'=>'DATETIME NULL',
+        'external_id'=>'VARCHAR(128) COLLATE utf8mb4_bin NULL',
+        'source'=>"VARCHAR(64) NOT NULL DEFAULT 'agent'",
     ],
 
     'asset_devices' => [
@@ -2054,6 +2284,99 @@ return [
         'raw_data'              => 'LONGTEXT NULL',
     ],
 
+    // Proxmox VE servers (several per install). Passwords are encrypted at rest.
+    'proxmox_connections' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'name'                  => 'VARCHAR(100) NOT NULL',
+        'host'                  => 'VARCHAR(255) NOT NULL',
+        'username'              => 'VARCHAR(100) NOT NULL',
+        'password_enc'          => 'LONGTEXT NULL',
+        'verify_ssl'            => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'is_active'             => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'sync_interval_minutes' => 'INT NOT NULL DEFAULT 60',
+        'last_sync_datetime'    => 'DATETIME NULL',
+        'last_sync_status'      => 'VARCHAR(20) NULL',
+        'last_sync_message'     => 'TEXT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    'proxmox_nodes' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'     => 'INT NOT NULL',
+        'node_name'         => 'VARCHAR(100) NOT NULL',
+        'cluster_name'      => 'VARCHAR(100) NULL',
+        'status'            => 'VARCHAR(20) NULL',
+        'cpu_cores'         => 'INT NULL',
+        'memory_mb'         => 'INT NULL',
+        'last_seen_datetime'=> 'DATETIME NULL',
+    ],
+
+    'proxmox_vms' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'     => 'INT NOT NULL',
+        'vmid'              => 'INT NOT NULL',
+        'vm_type'           => 'VARCHAR(10) NOT NULL',
+        'node_name'         => 'VARCHAR(100) NULL',
+        'cluster_name'      => 'VARCHAR(100) NULL',
+        'name'              => 'VARCHAR(255) NULL',
+        'status'            => 'VARCHAR(20) NULL',
+        'vcpus'             => 'INT NULL',
+        'memory_mb'         => 'INT NULL',
+        'disk_gb'           => 'DECIMAL(10,2) NULL',
+        'os_type'           => 'VARCHAR(50) NULL',
+        'ip_addresses'      => 'TEXT NULL',
+        'mac_addresses'     => 'TEXT NULL',
+        'details_json'      => 'LONGTEXT NULL',
+        'last_seen_datetime'=> 'DATETIME NULL',
+    ],
+
+    // VMware Cloud Director servers (several per install). Passwords are encrypted at rest.
+    'vcloud_connections' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'name'                  => 'VARCHAR(100) NOT NULL',
+        'host'                  => 'VARCHAR(255) NOT NULL',
+        'org'                   => 'VARCHAR(100) NOT NULL',
+        'username'              => 'VARCHAR(100) NOT NULL',
+        'password_enc'          => 'LONGTEXT NULL',
+        'api_version'           => "VARCHAR(10) NOT NULL DEFAULT '38.0'",
+        'verify_ssl'            => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'is_active'             => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'sync_interval_minutes' => 'INT NOT NULL DEFAULT 60',
+        'last_sync_datetime'    => 'DATETIME NULL',
+        'last_sync_status'      => 'VARCHAR(20) NULL',
+        'last_sync_message'     => 'TEXT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    'vcloud_vms' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'     => 'INT NOT NULL',
+        'vm_uuid'           => 'VARCHAR(64) NOT NULL',
+        'name'              => 'VARCHAR(255) NULL',
+        'org_vdc'           => 'VARCHAR(255) NULL',
+        'vapp_name'         => 'VARCHAR(255) NULL',
+        'status'            => 'VARCHAR(20) NULL',
+        'vcpus'             => 'INT NULL',
+        'memory_mb'         => 'INT NULL',
+        'disk_gb'           => 'DECIMAL(10,2) NULL',
+        'ip_addresses'      => 'TEXT NULL',
+        'mac_addresses'     => 'TEXT NULL',
+        'details_json'      => 'LONGTEXT NULL',
+        'last_seen_datetime'=> 'DATETIME NULL',
+    ],
+
+    'vcloud_edge_gateways' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'     => 'INT NOT NULL',
+        'gateway_id'        => 'VARCHAR(64) NOT NULL',
+        'name'              => 'VARCHAR(255) NULL',
+        'org_vdc'           => 'VARCHAR(255) NULL',
+        'status'            => 'VARCHAR(20) NULL',
+        'uplink_ips'        => 'TEXT NULL',
+        'details_json'      => 'LONGTEXT NULL',
+        'last_seen_datetime'=> 'DATETIME NULL',
+    ],
+
     'intune_devices' => [
         'id'                            => 'INT NOT NULL AUTO_INCREMENT',
         'intune_id'                     => 'VARCHAR(64) NOT NULL',
@@ -2123,6 +2446,9 @@ return [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
         'name'              => 'VARCHAR(50) NOT NULL',
         'colour'            => 'VARCHAR(20) NULL',
+        // review | emergency (#180). Emergency = may go ahead before its approval, which
+        // is decided afterwards. Pre-authorisation comes from templates, never a type.
+        'approval_route'    => "VARCHAR(20) NOT NULL DEFAULT 'review'",
         'is_default'        => 'TINYINT(1) NOT NULL DEFAULT 0',
         'display_order'     => 'INT NOT NULL DEFAULT 0',
         'is_active'         => 'TINYINT(1) NOT NULL DEFAULT 1',
@@ -2132,6 +2458,9 @@ return [
     'change_statuses' => [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
         'name'              => 'VARCHAR(50) NOT NULL',
+        // draft|awaiting|approved|implementing|done|stopped; NULL = not classified yet.
+        // The approval rules ask about the stage, never the name - see includes/changes/approvals.php.
+        'stage'             => 'VARCHAR(20) NULL',
         'is_closed'         => 'TINYINT(1) NOT NULL DEFAULT 0',
         'colour'            => 'VARCHAR(20) NULL',
         'is_default'        => 'TINYINT(1) NOT NULL DEFAULT 0',
@@ -2194,6 +2523,8 @@ return [
         'assigned_to_id'                => 'INT NULL',
         'approver_id'                   => 'INT NULL',
         'approval_datetime'             => 'DATETIME NULL',
+        'approval_id'                   => 'INT NULL',   // the current approval round, open or approved (#180); NULL = none
+        'template_version_id'           => 'INT NULL',   // the approved template version it was raised from (#180 §8)
         'work_start_datetime'           => 'DATETIME NULL',
         'work_end_datetime'             => 'DATETIME NULL',
         'outage_start_datetime'         => 'DATETIME NULL',
@@ -2232,6 +2563,62 @@ return [
         'file_type'             => 'VARCHAR(100) NULL',
         'uploaded_by_id'        => 'INT NULL',
         'uploaded_datetime'     => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        // sha256 of the file as uploaded, so the evidence export can show that the
+        // file in the change is the file that was attached. NULL = uploaded before #180.
+        'sha256'                => 'CHAR(64) NULL',
+        'client_reference'    => 'VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL',
+    ],
+
+    // One row per approval round (#180 Part 1). A round opens when a change is
+    // submitted, keeps a snapshot of exactly what was submitted, and closes as
+    // approved, rejected, withdrawn or superseded - never deleted, never reopened.
+    // See includes/changes/approvals.php.
+    'change_approvals' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'change_id'         => 'INT NOT NULL',             // FK RESTRICT: a change with rounds is evidence
+        'round_no'          => 'INT NOT NULL',             // 1, 2, 3... per change
+        'route'             => 'VARCHAR(20) NOT NULL',     // cab | approver | manual | emergency | override | pre_authorised | legacy
+        'state'             => 'VARCHAR(20) NOT NULL',     // open | approved | rejected | withdrawn | superseded
+        'is_independent'    => 'TINYINT(1) NULL',          // NULL until decided; 0 = one of the change's own people decided
+        'content_hash'      => 'CHAR(64) NULL',            // sha256 of the material fields at submission
+        'snapshot'          => 'LONGTEXT NULL',            // JSON: material values, long fields by revision id
+        'opened_by_id'      => 'INT NULL',
+        'opened_datetime'   => 'DATETIME NOT NULL',
+        'decided_by_id'     => 'INT NULL',
+        'decided_datetime'  => 'DATETIME NULL',
+        'decision_note'     => 'TEXT NULL',
+        'closed_reason'     => 'VARCHAR(255) NULL',        // why withdrawn / superseded, in words
+    ],
+
+    // Every vote ever cast, never updated. change_cab_members.vote is "this member's vote
+    // in the current round"; this is the history.
+    'change_approval_votes' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'approval_id'       => 'INT NOT NULL',
+        'analyst_id'        => 'INT NULL',                 // SET NULL: a vote outlives its voter
+        'is_required'       => 'TINYINT(1) NOT NULL',
+        'is_counted'        => 'TINYINT(1) NOT NULL',      // 0 = one of the change's own people (Enforce, independence on)
+        'vote'              => 'VARCHAR(20) NOT NULL',     // Approve | Reject | Abstain
+        'comment'           => 'TEXT NULL',
+        'content_hash'      => 'CHAR(64) NULL',            // the version the voter's page showed, sent by the browser
+        'was_current'       => 'TINYINT(1) NULL',          // 0 = cast from an out-of-date page; NULL = not stated (API)
+        'voted_datetime'    => 'DATETIME NOT NULL',
+    ],
+
+    // Every saved version of a change's long-text fields, in full (#180 Part 2).
+    // Written only by ChangesService, in the same transaction as the save; never
+    // updated or deleted by any endpoint. See includes/changes/revisions.php.
+    'change_text_revisions' => [
+        'id'                => 'BIGINT NOT NULL AUTO_INCREMENT',
+        'change_id'         => 'INT NOT NULL',
+        'field_key'         => 'VARCHAR(40) NOT NULL',     // test_plan, ... ; 'comment' for a deleted comment
+        'content'           => 'LONGTEXT NULL',            // the WHOLE value after this save; NULL = cleared
+        'content_format'    => 'VARCHAR(10) NOT NULL',     // html | text
+        'content_hash'      => 'CHAR(64) NOT NULL',        // sha256 of content ('' for NULL)
+        'is_baseline'       => 'TINYINT(1) NOT NULL DEFAULT 0',   // 1 = "as found when history began"
+        'editor_id'         => 'INT NULL',                 // NULL for a baseline
+        'source'            => 'VARCHAR(10) NOT NULL',     // ui | api | system | upgrade | deleted
+        'created_datetime'  => 'DATETIME NOT NULL',        // UTC
     ],
 
     'change_audit' => [
@@ -2318,6 +2705,35 @@ return [
         'display_order'             => 'INT NOT NULL DEFAULT 0',
         'created_by_id'             => 'INT NULL',
         'created_datetime'          => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        // Approved standard-change templates (#180 §8) - see includes/changes/templates.php.
+        // The columns above are the WORKING DRAFT; approved versions live in change_template_versions.
+        'scope_use'                 => 'TEXT NULL',      // "Use this template for..."
+        'scope_not'                 => 'TEXT NULL',      // "Do not use it for..."
+        'open_fields'               => "VARCHAR(255) NOT NULL DEFAULT 'description'",   // completed per change
+        'current_version_id'        => 'INT NULL',       // the approved version in use
+        'retired_datetime'          => 'DATETIME NULL',
+    ],
+
+    // Every version of a template submitted for approval (#180 §8). Immutable once approved.
+    'change_template_versions' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'template_id'       => 'INT NOT NULL',
+        'version_no'        => 'INT NOT NULL',
+        'state'             => 'VARCHAR(20) NOT NULL',     // draft (awaiting approval) | approved | superseded | retired
+        'content'           => 'LONGTEXT NOT NULL',        // JSON: every field, scope, per-change fields, who may use it
+        'content_hash'      => 'CHAR(64) NOT NULL',        // sha256 of the FIXED fields
+        'created_by_id'     => 'INT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL',
+        'approved_by_id'    => 'INT NULL',
+        'approved_datetime' => 'DATETIME NULL',
+        'approval_note'     => 'TEXT NULL',
+    ],
+
+    // Who may use a template (#180 §8): no rows = everyone with Change Management.
+    'change_template_teams' => [
+        'id'          => 'INT NOT NULL AUTO_INCREMENT',
+        'template_id' => 'INT NOT NULL',
+        'team_id'     => 'INT NOT NULL',
     ],
 
     'change_notifications' => [
@@ -2560,6 +2976,31 @@ return [
     'notifications' => [
         'id'               => 'INT NOT NULL AUTO_INCREMENT',
         'analyst_id'       => 'INT NOT NULL',
+        'event_type'       => 'VARCHAR(64) NOT NULL',
+        'entity_type'      => 'VARCHAR(32) NOT NULL',
+        'entity_id'        => 'INT NOT NULL',
+        'entity_ref'       => 'VARCHAR(64) NULL',
+        'title'            => 'VARCHAR(255) NULL',
+        'body'             => 'VARCHAR(500) NULL',
+        'actor_name'       => 'VARCHAR(100) NULL',
+        'event_count'      => 'INT NOT NULL DEFAULT 1',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'read_datetime'    => 'DATETIME NULL',
+    ],
+
+    // The self-service portal's bell (discussion #62) - `notifications` for portal
+    // users. A sibling table rather than a column: see database/freeitsm.sql.
+    // Feature Bingo: cards marked "Not for us" (the cards are code).
+    'feature_bingo_dismissed' => [
+        'card_id'                 => 'VARCHAR(100) NOT NULL',
+        'dismissed_by_analyst_id' => 'INT NULL',
+        'dismissed_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    'portal_notifications' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'user_id'          => 'INT NOT NULL',
         'event_type'       => 'VARCHAR(64) NOT NULL',
         'entity_type'      => 'VARCHAR(32) NOT NULL',
         'entity_id'        => 'INT NOT NULL',
@@ -2827,6 +3268,76 @@ return [
         'display_order'         => 'INT NOT NULL DEFAULT 0',
         'created_datetime'      => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+    ],
+
+    // ---- LMS competency tests (3.0.0) ----
+    // The question bank. answers_json is [{"text":..., "marks":n}] - a choice
+    // question has one answer worth 1, a graded one four worth e.g. 5/3/1/0.
+    // status: draft (written, not yet checked) | approved | hidden.
+    'lms_ct_questions' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'skill'                 => 'VARCHAR(120) NOT NULL',
+        'difficulty'            => 'VARCHAR(20) NOT NULL',
+        'format'                => 'VARCHAR(20) NOT NULL',
+        'question_text'         => 'TEXT NOT NULL',
+        'answers_json'          => 'TEXT NOT NULL',
+        'explanation'           => 'TEXT NULL',
+        'status'                => "VARCHAR(20) NOT NULL DEFAULT 'draft'",
+        'source'                => "VARCHAR(20) NOT NULL DEFAULT 'ai'",
+        'role_context'          => 'VARCHAR(255) NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'      => 'DATETIME NULL',
+    ],
+    'lms_ct_tests' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'title'                 => 'VARCHAR(200) NOT NULL',
+        'role_description'      => 'TEXT NULL',
+        'time_limit_minutes'    => 'INT NULL',
+        'pass_mark'             => 'INT NULL',
+        'is_archived'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'      => 'DATETIME NULL',
+    ],
+    'lms_ct_test_skills' => [
+        'id'             => 'INT NOT NULL AUTO_INCREMENT',
+        'test_id'        => 'INT NOT NULL',
+        'skill'          => 'VARCHAR(120) NOT NULL',
+        'difficulty'     => 'VARCHAR(20) NOT NULL',
+        'format'         => 'VARCHAR(20) NOT NULL',
+        'question_count' => 'INT NOT NULL DEFAULT 5',
+        'sort_order'     => 'INT NOT NULL DEFAULT 0',
+    ],
+    'lms_ct_test_questions' => [
+        'id'          => 'INT NOT NULL AUTO_INCREMENT',
+        'test_id'     => 'INT NOT NULL',
+        'question_id' => 'INT NOT NULL',
+        'sort_order'  => 'INT NOT NULL DEFAULT 0',
+    ],
+    // One candidate's attempt. snapshot_json freezes exactly what they were
+    // shown (questions, answers in their shuffled order, marks), so editing or
+    // hiding a bank question later never changes a result. The link's token is
+    // stored only as a SHA-256 hash.
+    'lms_ct_sittings' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'test_id'               => 'INT NULL',
+        'candidate_name'        => 'VARCHAR(200) NOT NULL',
+        'candidate_email'       => 'VARCHAR(255) NULL',
+        'token_hash'            => 'CHAR(64) NOT NULL',
+        'snapshot_json'         => 'LONGTEXT NOT NULL',
+        'responses_json'        => 'TEXT NULL',
+        'time_limit_minutes'    => 'INT NULL',
+        'expires_datetime'      => 'DATETIME NOT NULL',
+        'started_datetime'      => 'DATETIME NULL',
+        'submitted_datetime'    => 'DATETIME NULL',
+        'finish_reason'         => 'VARCHAR(20) NULL',
+        'score_percent'         => 'DECIMAL(5,1) NULL',
+        'skills_json'           => 'TEXT NULL',
+        'notes'                 => 'TEXT NULL',
+        'is_cancelled'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
     'processes' => [
@@ -3256,8 +3767,10 @@ return [
         'system_component'  => 'TINYINT(1) NOT NULL DEFAULT 0',
         'created_at'        => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'last_seen'         => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
-        'source'            => "VARCHAR(20) NOT NULL DEFAULT 'agent'",
+        'source'            => "VARCHAR(64) NOT NULL DEFAULT 'agent'",
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+        'observed_at'=>'DATETIME NULL',
+        'imported_at'=>'DATETIME NULL',
     ],
 
     'software_licences' => [
@@ -3367,6 +3880,9 @@ return [
         'due_date'            => 'DATE NULL',
         'assigned_analyst_id' => 'INT NULL',
         'assigned_team_id'    => 'INT NULL',
+        // Contractors (3.3.0) - includes/task_contractors.php.
+        'assigned_supplier_id' => 'INT NULL',
+        'assigned_contact_id' => 'INT NULL',
         'parent_task_id'      => 'INT NULL',
         'ticket_id'           => 'INT NULL',
         'change_id'           => 'INT NULL',
@@ -3401,7 +3917,75 @@ return [
         // majority of tasks, which do not repeat.
         'recurrence_id'        => 'INT NULL',
         'recurrence_master_id' => 'INT NULL',
+        // Repeating task evidence (#181) - see freeitsm.sql for each one.
+        'scheduled_date'         => 'DATE NULL',
+        // GH #190 phase 4: the period it checks, and the due date it was created with (set once).
+        'period_start'           => 'DATE NULL',
+        'period_end'             => 'DATE NULL',
+        'original_due_date'      => 'DATE NULL',
+        'previous_occurrence_id' => 'INT NULL',
+        'created_via'            => 'VARCHAR(20) NULL',
+        'completed_by_id'        => 'INT NULL',
+        'skipped_datetime'       => 'DATETIME NULL',
+        // Projects (3.2.0): a project's work items ARE tasks, so a task names the
+        // project and the stage/phase it belongs to. NULL on every other task.
+        'project_id'          => 'INT NULL',
+        'project_stage_id'    => 'INT NULL',
+        // 3.3.0: how long the work is expected to take, in hours. Read by the
+        // Projects capacity view and estimate-vs-logged; NULL = not estimated.
+        'estimate_hours'      => 'DECIMAL(7,2) NULL',
+        // GH #184: the task's place within its project stage (the Plan tab's
+        // order). NOT board_position, which is the task's place in its Tasks-board
+        // status column - sharing it meant moving a card on the board reshuffled the
+        // plan. NULL = after the numbered ones, in board order; cleared whenever the
+        // task changes stage, so it never arrives somewhere carrying another lane's number.
+        'project_position'    => 'INT NULL',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+    ],
+
+    // Repeating task evidence (#181): the record that outlives what it describes.
+    // No foreign keys, deliberately - see the block comment in freeitsm.sql.
+    'task_events' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id'          => 'INT NOT NULL',
+        'recurrence_id'    => 'INT NULL',
+        'event_type'       => 'VARCHAR(30) NOT NULL',
+        'analyst_id'       => 'INT NULL',
+        'actor_kind'       => "VARCHAR(12) NOT NULL DEFAULT 'analyst'",
+        'actor_name'       => 'VARCHAR(150) NULL',
+        'from_value'       => 'VARCHAR(255) NULL',
+        'to_value'         => 'VARCHAR(255) NULL',
+        'detail_json'      => 'TEXT NULL',
+        'job_run_id'       => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL',
+    ],
+    'task_recurrence_versions' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'recurrence_id'    => 'INT NOT NULL',
+        'version_no'       => 'INT NOT NULL',
+        'change_kind'      => 'VARCHAR(20) NOT NULL',
+        'rule_json'        => 'TEXT NOT NULL',
+        'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'title'            => 'VARCHAR(255) NULL',
+        'master_task_id'   => 'INT NULL',
+        'tenant_id'        => 'INT NULL',
+        'analyst_id'       => 'INT NULL',
+        'actor_name'       => 'VARCHAR(150) NULL',
+        'created_datetime' => 'DATETIME NOT NULL',
+    ],
+    'task_removed_records' => [
+        'id'                     => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id'                => 'INT NOT NULL',
+        'recurrence_id'          => 'INT NULL',
+        'previous_occurrence_id' => 'INT NULL',
+        'tenant_id'              => 'INT NULL',
+        'title'                  => 'VARCHAR(255) NULL',
+        'scheduled_date'         => 'DATE NULL',
+        'due_date'               => 'DATE NULL',
+        'removed_by_id'          => 'INT NULL',
+        'removed_by_name'        => 'VARCHAR(150) NULL',
+        'removed_datetime'       => 'DATETIME NOT NULL',
+        'snapshot_json'          => 'LONGTEXT NOT NULL',
     ],
 
     /**
@@ -3441,6 +4025,10 @@ return [
         'copy_tags'           => 'TINYINT(1) NOT NULL DEFAULT 1',
         'copy_links'          => 'TINYINT(1) NOT NULL DEFAULT 0',
         'copy_attachments'    => 'TINYINT(1) NOT NULL DEFAULT 0',
+        // GH #190 phase 4: the period each occurrence checks, and its due offset.
+        'period_mode'         => "VARCHAR(16) NOT NULL DEFAULT 'none'",
+        'due_offset_mode'     => "VARCHAR(16) NOT NULL DEFAULT 'same_day'",
+        'due_offset_days'     => 'INT NOT NULL DEFAULT 0',
         // schedule mode only: the date the worker should next produce one for.
         'next_due_date'       => 'DATE NULL',
         'is_active'           => 'TINYINT(1) NOT NULL DEFAULT 1',
@@ -3691,6 +4279,12 @@ return [
         // re-pairing a form must never rewrite what last year's responses
         // belonged to. Same snapshot rule as approver_id above.
         'collection_id'     => 'INT NULL',
+        // GH #190: made inside a task occurrence - its task, that task's company,
+        // the retry key, and the correction that replaced it.
+        'task_id'           => 'INT NULL',
+        'tenant_id'         => 'INT NULL',
+        'client_reference'  => 'VARCHAR(64) NULL',
+        'superseded_by_id'  => 'INT NULL',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
 
@@ -3884,10 +4478,21 @@ return [
 
     'contracts' => [
         'id'                        => 'INT NOT NULL AUTO_INCREMENT',
+        // The company that OWNS the contract (3.5.0) - scoped data, like assets:
+        // NULL = the Default company, never "shared". Who it is WITH is the
+        // separate party below. See includes/contract_party.php.
+        'tenant_id'                 => 'INT NULL',
         'contract_number'           => 'VARCHAR(50) NOT NULL',
         'title'                     => 'VARCHAR(255) NOT NULL',
         'description'               => 'LONGTEXT NULL',
         'supplier_id'               => 'INT NULL',
+        // Who the contract is WITH (#153). 'supplier' = we buy (supplier_id), as every
+        // contract was before; 'customer' = we sell, to a company and/or a person.
+        // Who may SEE a contract is decided by its owning company (tenant_id) since
+        // 3.5.0; until then a customer contract was hidden by its customer's company.
+        'party_type'                => "VARCHAR(10) NOT NULL DEFAULT 'supplier'",
+        'customer_tenant_id'        => 'INT NULL',
+        'customer_user_id'          => 'INT NULL',
         'contract_owner_id'         => 'INT NULL',
         'contract_status_id'        => 'INT NULL',
         'contract_start'            => 'DATE NULL',
@@ -3898,6 +4503,8 @@ return [
         'currency'                  => 'VARCHAR(3) NULL',
         'payment_schedule_id'       => 'INT NULL',
         'cost_centre'               => 'VARCHAR(100) NULL',
+        // 'cost_centre' above is the free text from before 3.5.0, shown until a cost centre is chosen.
+        'cost_centre_id'  => 'INT NULL',   // GH #160: the cost centre it is charged to - see includes/cost_centre_assign.php
         'dms_link'                  => 'VARCHAR(500) NULL',
         'terms_status'              => 'VARCHAR(20) NULL',
         'personal_data_transferred' => 'TINYINT(1) NULL',
@@ -3912,6 +4519,10 @@ return [
     // RFP Builder (feature of the Contracts module)
     'rfps' => [
         'id'                       => 'INT NOT NULL AUTO_INCREMENT',
+        // The company that owns the RFP (3.5.0) - scoped data, NULL = Default.
+        // Everything below an RFP (documents, requirements, sections, scores)
+        // follows its RFP. See includes/rfp_scope.php.
+        'tenant_id'                => 'INT NULL',
         'name'                     => 'VARCHAR(200) NOT NULL',
         'status'                   => "VARCHAR(50) NOT NULL DEFAULT 'draft'",
         'contract_id'              => 'INT NULL',
@@ -4131,6 +4742,30 @@ return [
         'impact_level_id'   => 'INT NULL',
     ],
 
+    // Planned maintenance (3.2.0) - not an incident until it starts; see
+    // includes/service_status_planned.php and database/freeitsm.sql.
+    'status_planned' => [
+        'id'                     => 'INT NOT NULL AUTO_INCREMENT',
+        'title'                  => 'VARCHAR(255) NOT NULL',
+        'comment'                => 'TEXT NULL',
+        'planned_start_datetime' => 'DATETIME NOT NULL',
+        'planned_end_datetime'   => 'DATETIME NULL',
+        'state'                  => "VARCHAR(12) NOT NULL DEFAULT 'scheduled'",
+        'incident_id'            => 'INT NULL',
+        'project_id'             => 'INT NULL',
+        'created_by_id'          => 'INT NULL',
+        'created_datetime'       => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'       => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'                => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'status_planned_services' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'planned_id'        => 'INT NOT NULL',
+        'service_id'        => 'INT NOT NULL',
+        'impact_level_id'   => 'INT NULL',
+        'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
     'status_incidents' => [
         'id'                    => 'INT NOT NULL AUTO_INCREMENT',
         'title'                 => 'VARCHAR(255) NOT NULL',
@@ -4288,6 +4923,33 @@ return [
         'created_datetime'   => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
         'updated_datetime'   => 'DATETIME NULL',
         'last_used_datetime' => 'DATETIME NULL',
+    ],
+    // Report Packs: a multi-page report designed in Reporting and exported as a PDF.
+    // The whole design (page setup, theme, header/footer/cover, criteria and every
+    // block with its options) is ONE JSON document, read and written whole by the
+    // designer - see includes/report_packs/. NULL never occurs: a new pack is saved
+    // with a starter design.
+    'report_packs' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'name'             => 'VARCHAR(200) NOT NULL',
+        'description'      => 'VARCHAR(500) NULL',
+        'owner_id'         => 'INT NULL',
+        'design'           => 'LONGTEXT NOT NULL',
+        'created_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NULL',
+        'updated_by'       => 'INT NULL',
+    ],
+    // Who else may open a pack. target_type is 'analyst' / 'team' (target_id) or
+    // 'department' (target_value = the free-text analysts.department, which has no
+    // table of its own). can_edit 0 = open and export, 1 = also change it.
+    'report_pack_shares' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'pack_id'          => 'INT NOT NULL',
+        'target_type'      => 'VARCHAR(20) NOT NULL',
+        'target_id'        => 'INT NULL',
+        'target_value'     => 'VARCHAR(255) NULL',
+        'can_edit'         => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'created_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
     ],
     'ticket_assets' => [
         'id'                    => 'INT NOT NULL AUTO_INCREMENT',
@@ -4536,6 +5198,7 @@ return [
         'created_by_id'    => 'INT DEFAULT NULL',
         'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+        'version_no'       => 'INT NOT NULL DEFAULT 0',          // #181: newest checklist_template_versions row
         'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
     'checklist_template_items' => [
@@ -4549,6 +5212,7 @@ return [
         'requires_input'    => 'TINYINT(1) NOT NULL DEFAULT 0',
         'input_placeholder' => 'VARCHAR(255) DEFAULT NULL',
         'default_value'     => 'VARCHAR(255) DEFAULT NULL',
+        'result_mode'       => "VARCHAR(10) NOT NULL DEFAULT 'none'",   // #181: 'pass_fail' asks for a result on tasks
         'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
     ],
@@ -4577,5 +5241,978 @@ return [
         'response_value'      => 'TEXT DEFAULT NULL',
         'sort_order'          => 'INT NOT NULL DEFAULT 1',
         'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer
+    ],
+
+    // Checklists on TASKS (discussion #138, round three) - the same shape as the
+    // two ticket tables above, keyed on a task instead. Only used while
+    // Tasks → Settings → Checklists is switched on.
+    // GH #190: forms a task occurrence needs, with the shared draft and the
+    // submission that met it. No foreign keys - it is evidence (see freeitsm.sql).
+    'task_forms' => [
+        'id' => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id' => 'INT NOT NULL',
+        'form_id' => 'INT NOT NULL',
+        'title' => 'VARCHAR(255) NOT NULL',
+        'is_required' => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'requirement_mode' => "ENUM('warn','block') NOT NULL DEFAULT 'block'",
+        'submission_id' => 'INT NULL',
+        'draft_json' => 'LONGTEXT NULL',
+        'draft_by_id' => 'INT NULL',
+        'draft_by_name' => 'VARCHAR(150) NULL',
+        'draft_datetime' => 'DATETIME NULL',
+        'revision' => 'INT NOT NULL DEFAULT 0',
+        'sort_order' => 'INT NOT NULL DEFAULT 0',
+        'added_by_id' => 'INT NULL',
+        'added_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo' => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
+    // GH #190 phase 2: Knowledge procedures on a task occurrence, and the frozen
+    // text each was completed against (deduplicated by hash). No foreign keys.
+    'task_procedures' => [
+        'id' => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id' => 'INT NOT NULL',
+        'article_id' => 'INT NOT NULL',
+        'title' => 'VARCHAR(255) NOT NULL',
+        'sort_order' => 'INT NOT NULL DEFAULT 0',
+        'added_by_id' => 'INT NULL',
+        'added_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'snapshot_id' => 'INT NULL',
+        'article_version' => 'INT NULL',
+        'frozen_datetime' => 'DATETIME NULL',
+        'is_demo' => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'task_procedure_snapshots' => [
+        'id' => 'INT NOT NULL AUTO_INCREMENT',
+        'content_hash' => 'CHAR(64) NOT NULL',
+        'article_id' => 'INT NOT NULL',
+        'title' => 'VARCHAR(255) NOT NULL',
+        'body' => 'LONGTEXT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    // GH #190 phase 3: tickets and tasks raised from, or linked to, an occurrence.
+    'task_follow_ups' => [
+        'id' => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id' => 'INT NOT NULL',
+        'kind' => 'VARCHAR(10) NOT NULL',
+        'record_id' => 'INT NOT NULL',
+        'created_here' => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'source_kind' => 'VARCHAR(10) NULL',
+        'source_id' => 'INT NULL',
+        'note' => 'TEXT NULL',
+        'client_reference' => 'VARCHAR(64) NULL',
+        'created_by_id' => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo' => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
+    'task_checklists' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id'           => 'INT NOT NULL',
+        'template_id'       => 'INT DEFAULT NULL',
+        'title'             => 'VARCHAR(255) NOT NULL',
+        'closure_mode'      => "ENUM('warn','block') NOT NULL DEFAULT 'warn'",
+        'sort_order'        => 'INT NOT NULL DEFAULT 0',
+        'created_by_id'     => 'INT DEFAULT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'template_version'  => 'INT NULL',                       // #181: which template version it was copied from
+        'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'task_checklist_items' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'task_checklist_id'   => 'INT NOT NULL',
+        'title'               => 'VARCHAR(255) NOT NULL',
+        'description' => 'TEXT NULL',   // GH #190: the template step's description, copied
+        'suggested_role'      => 'VARCHAR(100) DEFAULT NULL',
+        'is_mandatory'        => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'is_completed'        => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'completed_by_id'     => 'INT DEFAULT NULL',
+        'completed_by_name'   => 'VARCHAR(150) DEFAULT NULL',
+        'completed_datetime'  => 'DATETIME DEFAULT NULL',
+        'requires_input'      => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'input_placeholder'   => 'VARCHAR(255) DEFAULT NULL',
+        'response_value'      => 'TEXT DEFAULT NULL',
+        'sort_order'          => 'INT NOT NULL DEFAULT 1',
+        // #181: Pass / Fail / Not applicable, opt-in per template step.
+        'result_mode'         => "VARCHAR(10) NOT NULL DEFAULT 'none'",
+        'result'              => 'VARCHAR(10) NULL',
+        'exception_note'      => 'TEXT NULL',
+        'is_demo'             => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
+    // #181: the step history and the template versions - see freeitsm.sql. No FKs, on purpose.
+    'task_checklist_item_events' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id'           => 'INT NOT NULL',
+        'task_checklist_id' => 'INT NOT NULL',
+        'item_id'           => 'INT NOT NULL',
+        'checklist_title'   => 'VARCHAR(255) NULL',
+        'item_title'        => 'VARCHAR(255) NULL',
+        'action'            => 'VARCHAR(20) NOT NULL',
+        'before_json'       => 'TEXT NULL',
+        'after_json'        => 'TEXT NULL',
+        'after_completion'  => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'analyst_id'        => 'INT NULL',
+        'actor_name'        => 'VARCHAR(150) NULL',
+        'created_datetime'  => 'DATETIME NOT NULL',
+    ],
+    'checklist_template_versions' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'template_id'      => 'INT NOT NULL',
+        'version_no'       => 'INT NOT NULL',
+        'snapshot_json'    => 'LONGTEXT NOT NULL',
+        'analyst_id'       => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL',
+    ],
+
+    // Domains module (GitHub #154) — see the matching block in freeitsm.sql for
+    // what each table is for. FKs live in api/system/db_verify.php.
+    'domain_statuses' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'name'             => 'VARCHAR(100) NOT NULL',
+        'colour'           => 'VARCHAR(7) NULL',
+        'alerts_enabled'   => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'display_order'    => 'INT NOT NULL DEFAULT 0',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+    ],
+    'domain_registrar_accounts' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'         => 'INT NULL',
+        'supplier_id'       => 'INT NULL',
+        'account_name'      => 'VARCHAR(150) NOT NULL',
+        'account_reference' => 'VARCHAR(150) NULL',
+        'login_url'         => 'VARCHAR(500) NULL',
+        'owner_analyst_id'  => 'INT NULL',
+        'two_factor_holder' => 'VARCHAR(255) NULL',
+        'notes'             => 'TEXT NULL',
+        'created_by'        => 'INT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'domains' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'             => 'INT NULL',
+        'domain_name'           => 'VARCHAR(253) NOT NULL',
+        'display_name'          => 'VARCHAR(253) NULL',
+        'status_id'             => 'INT NULL',
+        'purpose'               => "VARCHAR(20) NOT NULL DEFAULT 'primary'",
+        'registrar_supplier_id' => 'INT NULL',
+        'registrar_account_id'  => 'INT NULL',
+        'registrar_name'        => 'VARCHAR(255) NULL',
+        'registration_date'     => 'DATE NULL',
+        'expiry_date'           => 'DATE NULL',
+        'last_renewed_date'     => 'DATE NULL',
+        'registry_updated_date' => 'DATE NULL',
+        'renewal_mode'          => "VARCHAR(20) NOT NULL DEFAULT 'unknown'",
+        'transfer_lock'         => 'TINYINT(1) NULL',
+        'registry_lock'         => 'TINYINT(1) NULL',
+        'dnssec'                => 'TINYINT(1) NULL',
+        'registry_statuses'     => 'VARCHAR(500) NULL',
+        'auth_code'             => 'TEXT NULL',
+        'registrant_name'       => 'VARCHAR(255) NULL',
+        'owner_analyst_id'      => 'INT NULL',
+        'tech_contact_id'       => 'INT NULL',
+        // The person at the customer this domain is for (#153/#154). The domain's own
+        // company (tenant_id) stays its company - there is deliberately no second
+        // "customer company" column beside it.
+        'customer_user_id'      => 'INT NULL',
+        // #162: the customer may instead be a supplier (an organisation), optionally
+        // one of its contacts; and the technical contact may be one of your own
+        // analysts rather than a supplier contact. One of each kind is set, never two.
+        'customer_supplier_id'  => 'INT NULL',
+        'customer_contact_id'   => 'INT NULL',
+        'tech_analyst_id'       => 'INT NULL',
+        'nameservers'           => 'TEXT NULL',
+        'dns_provider'          => 'VARCHAR(255) NULL',
+        'hosting_provider'      => 'VARCHAR(255) NULL',
+        'ssl_hosts'             => 'VARCHAR(500) NULL',
+        'dkim_selectors'        => 'VARCHAR(255) NULL',
+        'cost'                  => 'DECIMAL(10,2) NULL',
+        'currency'              => 'VARCHAR(3) NULL',
+        'billing_years'         => 'TINYINT NOT NULL DEFAULT 1',
+        'cost_centre'           => 'VARCHAR(100) NULL',
+        // GH #188: the real cost centre (System -> Cost centres), as contracts and
+        // assets have had since GH #160. 'cost_centre' above is the old free text,
+        // linked to the matching CODE once by Database Verification and otherwise
+        // shown as "previously recorded" until somebody chooses one.
+        'cost_centre_id'        => 'INT NULL',
+        'contract_id'           => 'INT NULL',
+        'tags'                  => 'VARCHAR(500) NULL',
+        'notes'                 => 'TEXT NULL',
+        'monitoring_enabled'    => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'lookup_source'         => 'VARCHAR(10) NULL',
+        'last_lookup_datetime'  => 'DATETIME NULL',
+        'last_lookup_error'     => 'VARCHAR(255) NULL',
+        'last_check_datetime'   => 'DATETIME NULL',
+        'ssl_expiry_date'       => 'DATE NULL',
+        'ssl_issuer'            => 'VARCHAR(255) NULL',
+        'security_score'        => 'TINYINT NULL',
+        'security_grade'        => 'VARCHAR(2) NULL',
+        'check_results'         => 'LONGTEXT NULL',
+        'watch_baseline'        => 'LONGTEXT NULL',
+        'created_by'            => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'      => 'DATETIME NULL',
+        'is_demo'               => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'domain_audit' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'        => 'INT NOT NULL',
+        'analyst_id'       => 'INT NULL',
+        'field_name'       => 'VARCHAR(100) NOT NULL',
+        'old_value'        => 'VARCHAR(1000) NULL',
+        'new_value'        => 'VARCHAR(1000) NULL',
+        'source'           => "VARCHAR(20) NOT NULL DEFAULT 'app'",
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'domain_alerts_sent' => [
+        'id'            => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'     => 'INT NOT NULL',
+        'alert_kind'    => 'VARCHAR(30) NOT NULL',
+        'fingerprint'   => 'VARCHAR(100) NOT NULL',
+        'sent_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'domain_lookalikes' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'           => 'INT NOT NULL',
+        'lookalike'           => 'VARCHAR(253) NOT NULL',
+        'technique'           => 'VARCHAR(30) NOT NULL',
+        'has_a'               => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'has_mx'              => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'first_seen_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'last_seen_datetime'  => 'DATETIME NULL',
+        'dismissed'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Domains joined to the rest of FreeITSM (3.0.0): four links and the record
+    // of the status incidents a domain raised. Keys and FKs are in
+    // db_verify_indexes.php and api/system/db_verify.php.
+    'domain_cmdb_objects' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'             => 'INT NOT NULL',
+        'cmdb_object_id'        => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'domain_status_services' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'             => 'INT NOT NULL',
+        'service_id'            => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'ticket_domains' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'ticket_id'             => 'INT NOT NULL',
+        'domain_id'             => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'domain_knowledge_articles' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'             => 'INT NOT NULL',
+        'article_id'            => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'domain_status_incidents' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'         => 'INT NOT NULL',
+        'incident_id'       => 'INT NOT NULL',
+        'trigger_kind'      => 'VARCHAR(30) NOT NULL',
+        'fingerprint'       => 'VARCHAR(100) NOT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'resolved_datetime' => 'DATETIME NULL',
+    ],
+    'domain_certificates' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'           => 'INT NOT NULL',
+        'crtsh_id'            => 'BIGINT NOT NULL',
+        'common_name'         => 'VARCHAR(255) NULL',
+        'name_value'          => 'TEXT NULL',
+        'issuer'              => 'VARCHAR(500) NULL',
+        'not_before'          => 'DATETIME NULL',
+        'not_after'           => 'DATETIME NULL',
+        'first_seen_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'acknowledged'        => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
+    // Cost centres (GH #160, stage 1). Always one company's (tenant_id NOT NULL);
+    // the code is TEXT so "0010" stays "0010", unique per company ignoring case.
+    'cost_centres' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'        => 'INT NOT NULL',
+        'code'             => 'VARCHAR(50) NOT NULL',
+        'name'             => 'VARCHAR(150) NOT NULL',
+        'description'      => 'VARCHAR(500) NULL',
+        'parent_id'        => 'INT NULL',
+        'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+    ],
+
+    // ---- Preference templates (discussion #124) - includes/preference_templates.php ----
+    'preference_templates' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'name'             => 'VARCHAR(100) NOT NULL',
+        'description'      => 'VARCHAR(255) NULL',
+        'settings'         => 'LONGTEXT NOT NULL',
+        'for_new_analysts' => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NULL',
+    ],
+
+    // ---- Leases (3.5.0) - Assets -> Leases; see includes/leases.php ----
+    // What became of a leased asset (Assets -> Settings -> Leasing). kind:
+    // 'active' = still on lease, counts towards Due back; 'closed' = finished.
+    'lease_outcomes' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'name'             => 'VARCHAR(100) NOT NULL',
+        'kind'             => "VARCHAR(10) NOT NULL DEFAULT 'active'",
+        'is_default'       => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'display_order'    => 'INT NOT NULL DEFAULT 0',
+        'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'created_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    // The agreement. Scoped data like assets: NULL tenant = the Default company.
+    'leases' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'        => 'INT NULL',
+        'name'             => 'VARCHAR(200) NOT NULL',
+        'reference'        => 'VARCHAR(100) NULL',
+        'supplier_id'      => 'INT NULL',
+        'cost_centre_id'   => 'INT NULL',
+        'contract_id'      => 'INT NULL',
+        'notice_days'      => 'INT NULL',
+        'notes'            => 'TEXT NULL',
+        'created_by'       => 'INT NULL',
+        'created_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    // A group of kit on one agreement with its own dates and cost.
+    'lease_schedules' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'lease_id'         => 'INT NOT NULL',
+        'name'             => 'VARCHAR(200) NULL',
+        'reference'        => 'VARCHAR(100) NULL',
+        'start_date'       => 'DATE NULL',
+        'end_date'         => 'DATE NULL',
+        'cost'             => 'DECIMAL(18,2) NULL',
+        'cost_period'      => "VARCHAR(10) NOT NULL DEFAULT 'month'",
+        'currency'         => 'VARCHAR(3) NULL',
+        'order_number'     => 'VARCHAR(100) NULL',
+        'notes'            => 'TEXT NULL',
+        'display_order'    => 'INT NOT NULL DEFAULT 0',
+        'created_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    // An asset on a schedule; its own start/end when they differ from the schedule's.
+    'lease_assets' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'schedule_id'      => 'INT NOT NULL',
+        'asset_id'         => 'INT NOT NULL',
+        'outcome_id'       => 'INT NULL',
+        'start_date'       => 'DATE NULL',
+        'end_date'         => 'DATE NULL',
+        'outcome_date'     => 'DATE NULL',
+        'notes'            => 'VARCHAR(500) NULL',
+        'created_by'       => 'INT NULL',
+        'created_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    // System -> Photo Album: webcam photos as ASCII art. Only the art is stored,
+    // never the photo. Personal to each analyst.
+    'photo_album' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'analyst_id'       => 'INT NOT NULL',
+        'title'            => 'VARCHAR(150) NOT NULL',
+        'style'            => "VARCHAR(20) NOT NULL DEFAULT 'braille'",
+        'palette'          => "VARCHAR(20) NOT NULL DEFAULT 'green'",
+        'width_chars'      => 'SMALLINT NOT NULL',
+        'height_chars'     => 'SMALLINT NOT NULL',
+        'art'              => 'MEDIUMTEXT NOT NULL',
+        'colours'          => 'MEDIUMTEXT NULL',
+        'thumbnail'        => 'MEDIUMTEXT NOT NULL',
+        'created_datetime' => 'DATETIME NOT NULL',
+    ],
+
+    // ---- Projects (3.2.0) - see docs/design/projects.md -------------------
+    // A container over ordinary tasks (tasks.project_id), scoped like tickets.
+    'projects' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'        => 'INT NULL',
+        'name'             => 'VARCHAR(200) NOT NULL',
+        'summary'          => 'TEXT NULL',
+        'goal'             => 'VARCHAR(500) NULL',
+        // A LENS, not a schema: switching method converts and deletes nothing.
+        'methodology'      => "VARCHAR(20) NOT NULL DEFAULT 'simple'",
+        'status'           => "VARCHAR(20) NOT NULL DEFAULT 'proposed'",
+        'health'           => "VARCHAR(10) NOT NULL DEFAULT 'auto'",
+        'health_note'      => 'VARCHAR(500) NULL',
+        // 3.3.0: how much the project matters next to the others. The four keys
+        // are fixed; the words shown for them are project_priority_labels.
+        'priority'         => "VARCHAR(10) NOT NULL DEFAULT 'medium'",
+        'owner_analyst_id' => 'INT NULL',
+        'start_date'       => 'DATE NULL',
+        'target_end_date'  => 'DATE NULL',
+        'actual_end_date'  => 'DATE NULL',
+        'colour'           => "VARCHAR(20) NOT NULL DEFAULT 'coral'",
+        'icon'             => "VARCHAR(30) NOT NULL DEFAULT 'rocket'",
+        'business_case'    => 'TEXT NULL',
+        'tailoring'        => 'VARCHAR(500) NULL',
+        'created_by_id'    => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'closed_datetime'  => 'DATETIME NULL',
+        // What the alert scan last saw - see includes/projects/alerts.php.
+        'alert_health'     => 'VARCHAR(10) NULL',
+        'alert_exceptions' => 'VARCHAR(100) NULL',
+        // Budget currency, stamped at creation - see includes/projects/budget.php.
+        'currency'         => 'CHAR(3) NULL',
+        // Intake and approval (3.3.0) - includes/projects/intake.php.
+        'estimated_cost'     => 'DECIMAL(18,2) NULL',
+        'estimated_benefit'  => 'TEXT NULL',
+        'approval_status'    => 'VARCHAR(10) NULL',
+        'approval_by_id'     => 'INT NULL',
+        'approval_datetime'  => 'DATETIME NULL',
+        'approval_notes'     => 'TEXT NULL',
+        'form_submission_id' => 'INT NULL',
+        'proposed_by_name'   => 'VARCHAR(200) NULL',
+        'proposed_by_email'  => 'VARCHAR(255) NULL',
+        // Members-only projects (3.3.0) - includes/projects/visibility.php.
+        'visibility'         => "VARCHAR(10) NOT NULL DEFAULT 'everyone'",
+        // Scheduled report drafts (3.3.0) - ProjectReportsService::runSchedules().
+        'report_schedule'      => "VARCHAR(12) NOT NULL DEFAULT 'off'",
+        'report_schedule_kind' => "VARCHAR(20) NOT NULL DEFAULT 'highlight'",
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Phases, stages and sprints in ONE table - the same thing through different methods.
+    'project_stages' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'kind'             => "VARCHAR(10) NOT NULL DEFAULT 'phase'",
+        'name'             => 'VARCHAR(150) NOT NULL',
+        'goal'             => 'VARCHAR(500) NULL',
+        'start_date'       => 'DATE NULL',
+        'end_date'         => 'DATE NULL',
+        'position'         => 'INT NOT NULL DEFAULT 0',
+        'status'           => "VARCHAR(10) NOT NULL DEFAULT 'planned'",
+        'gate_decision'         => 'VARCHAR(20) NULL',
+        'gate_notes'            => 'TEXT NULL',
+        'gate_decided_by'       => 'INT NULL',
+        'gate_decided_datetime' => 'DATETIME NULL',
+        'gate_kind'        => "VARCHAR(10) NOT NULL DEFAULT 'standard'",   // 3.3.0 standard | golive
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_audit' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'analyst_id'       => 'INT NULL',
+        'field_name'       => 'VARCHAR(100) NOT NULL',
+        'old_value'        => 'VARCHAR(1000) NULL',
+        'new_value'        => 'VARCHAR(1000) NULL',
+        'source'           => "VARCHAR(20) NOT NULL DEFAULT 'app'",
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Projects joined to the rest of FreeITSM (3.2.0) - one join table per kind.
+    'project_assets' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'asset_id'              => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_changes' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'change_id'             => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_tickets' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'ticket_id'             => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_contracts' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'contract_id'           => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_cmdb_objects' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'cmdb_object_id'        => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_knowledge_articles' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'article_id'            => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Projects 3.3.0: problems a project fixes.
+    'project_problems' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'problem_id'            => 'INT NOT NULL',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Projects phase 2 (3.2.0): roles, members, scope, RACI, RAID, tolerances.
+    'project_roles' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'name'             => 'VARCHAR(100) NOT NULL',
+        'description'      => 'VARCHAR(255) NULL',
+        'display_order'    => 'INT NOT NULL DEFAULT 0',
+        'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_members' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'analyst_id'            => 'INT NULL',
+        'team_id'               => 'INT NULL',
+        'user_id'               => 'INT NULL',
+        'role_id'               => 'INT NULL',
+        // A contractor on the team (3.3.0): a supplier, and optionally one of its contacts.
+        'supplier_id'           => 'INT NULL',
+        'contact_id'            => 'INT NULL',
+        'notes'                 => 'VARCHAR(255) NULL',
+        // Stakeholder map (3.3.0).
+        'power'                 => 'TINYINT NULL',
+        'interest'              => 'TINYINT NULL',
+        'stance'                => 'VARCHAR(10) NULL',
+        'keep_informed'         => 'VARCHAR(255) NULL',
+        'position'              => 'INT NOT NULL DEFAULT 0',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'               => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_items' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'          => 'INT NOT NULL',
+        'parent_id'           => 'INT NULL',
+        'title'               => 'VARCHAR(255) NOT NULL',
+        'description'         => 'TEXT NULL',
+        'acceptance_criteria' => 'TEXT NULL',
+        'moscow'              => 'VARCHAR(10) NULL',
+        'stage_id'            => 'INT NULL',
+        'status'              => "VARCHAR(20) NOT NULL DEFAULT 'proposed'",
+        'position'            => 'INT NOT NULL DEFAULT 0',
+        'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'             => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_raci' => [
+        'id'         => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id' => 'INT NOT NULL',
+        'item_id'    => 'INT NOT NULL',
+        'member_id'  => 'INT NOT NULL',
+        'letter'     => 'CHAR(1) NOT NULL',
+        'is_demo'    => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_raid' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'type'             => 'VARCHAR(12) NOT NULL',
+        'title'            => 'VARCHAR(255) NOT NULL',
+        'description'      => 'TEXT NULL',
+        'probability'      => 'TINYINT NULL',
+        'impact'           => 'TINYINT NULL',
+        'response'         => 'VARCHAR(12) NULL',
+        'response_plan'    => 'TEXT NULL',
+        'owner_analyst_id' => 'INT NULL',
+        'status'           => "VARCHAR(10) NOT NULL DEFAULT 'open'",
+        'due_date'         => 'DATE NULL',
+        'ticket_id'        => 'INT NULL',
+        'knowledge_article_id' => 'INT NULL',
+        // 3.3.0: escalation (any open entry) and the decision log.
+        'escalated_datetime' => 'DATETIME NULL',
+        'escalated_by_id'  => 'INT NULL',
+        'escalation_note'  => 'VARCHAR(500) NULL',
+        'decided_by'       => 'VARCHAR(150) NULL',
+        'decided_date'     => 'DATE NULL',
+        'rationale'        => 'TEXT NULL',
+        'raised_by_id'     => 'INT NULL',
+        'raised_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'closed_datetime'  => 'DATETIME NULL',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Follow-up actions on a RAID entry (3.3.0) - project tasks, joined.
+    'project_raid_tasks' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'raid_id'          => 'INT NOT NULL',
+        'task_id'          => 'INT NOT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_tolerances' => [
+        'id'         => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id' => 'INT NOT NULL',
+        'stage_id'   => 'INT NULL',
+        'dimension'  => 'VARCHAR(12) NOT NULL',
+        'value'      => 'INT NOT NULL',
+        'is_demo'    => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Budget (3.2.0) - includes/projects/budget.php.
+    'project_budget_lines' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'title'            => 'VARCHAR(200) NOT NULL',
+        'category'         => "VARCHAR(20) NOT NULL DEFAULT 'other'",
+        'planned_amount'   => 'DECIMAL(18,2) NULL',
+        'actual_amount'    => 'DECIMAL(18,2) NULL',
+        'contract_id'      => 'INT NULL',
+        'cost_centre_id'   => 'INT NULL',
+        'notes'            => 'VARCHAR(500) NULL',
+        // 3.3.0: budget over time and the forecast.
+        'planned_date'     => 'DATE NULL',
+        'spent_date'       => 'DATE NULL',
+        'forecast_amount'  => 'DECIMAL(18,2) NULL',
+        'position'         => 'INT NOT NULL DEFAULT 0',
+        'created_by_id'    => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // AI project manager (3.2.0): briefings and reports - see includes/projects/ai.php.
+    'project_reports' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'        => 'INT NOT NULL',
+        'kind'              => 'VARCHAR(20) NOT NULL',
+        'title'             => 'VARCHAR(200) NOT NULL',
+        'body'              => 'MEDIUMTEXT NULL',
+        'status'            => "VARCHAR(10) NOT NULL DEFAULT 'draft'",
+        'ai_drafted'        => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'ai_edited'         => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'ai_model'          => 'VARCHAR(120) NULL',
+        'created_by_id'     => 'INT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_by_id'     => 'INT NULL',
+        'updated_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'approved_by_id'    => 'INT NULL',
+        'approved_datetime' => 'DATETIME NULL',
+        // 3.3.0: sending an approved report.
+        'sent_datetime'     => 'DATETIME NULL',
+        'sent_by_id'        => 'INT NULL',
+        'sent_to'           => 'TEXT NULL',
+        'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_labour_rates' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'scope'            => 'VARCHAR(10) NOT NULL',
+        'ref_id'           => 'INT NULL',
+        'hourly_rate'      => 'DECIMAL(12,2) NOT NULL',
+        'effective_from'   => 'DATE NOT NULL',
+        'created_by_id'    => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Asset targets (3.2.0): live progress measured from Assets.
+    'project_asset_targets' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'name'                  => 'VARCHAR(150) NOT NULL',
+        'scope'                 => "VARCHAR(10) NOT NULL DEFAULT 'filter'",
+        'scope_type_id'         => 'INT NULL',
+        'scope_field'           => 'VARCHAR(30) NULL',
+        'scope_value'           => 'VARCHAR(100) NULL',
+        'done_field'            => 'VARCHAR(30) NOT NULL',
+        'done_op'               => 'VARCHAR(20) NOT NULL',
+        'done_value'            => 'VARCHAR(100) NULL',
+        'target_date'           => 'DATE NULL',
+        'position'              => 'INT NOT NULL DEFAULT 0',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'      => 'DATETIME NULL',
+        'is_demo'               => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_asset_target_snapshots' => [
+        'id'        => 'INT NOT NULL AUTO_INCREMENT',
+        'target_id' => 'INT NOT NULL',
+        'snap_date' => 'DATE NOT NULL',
+        'done'      => 'INT NOT NULL DEFAULT 0',
+        'total'     => 'INT NOT NULL DEFAULT 0',
+        'is_demo'   => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Project templates saved from a project (3.2.0); built-ins live in code.
+    'project_templates' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'name'                  => 'VARCHAR(150) NOT NULL',
+        'description'           => 'VARCHAR(500) NULL',
+        'content'               => 'MEDIUMTEXT NOT NULL',
+        'is_active'             => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'      => 'DATETIME NULL',
+        'is_demo'               => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Milestones (3.3.0): the dates a project promises - includes/projects/milestones.php.
+    'project_milestones' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'            => 'INT NOT NULL',
+        'stage_id'              => 'INT NULL',
+        'name'                  => 'VARCHAR(150) NOT NULL',
+        'due_date'              => 'DATE NOT NULL',
+        'done_date'             => 'DATE NULL',
+        'done_by_analyst_id'    => 'INT NULL',
+        'notes'                 => 'VARCHAR(500) NULL',
+        'position'              => 'INT NOT NULL DEFAULT 0',
+        'created_by_analyst_id' => 'INT NULL',
+        'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'      => 'DATETIME NULL',
+        'is_demo'               => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Change control (3.3.0) - includes/projects/control.php.
+    'project_baselines' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'        => 'INT NOT NULL',
+        'number'            => 'INT NOT NULL',
+        'label'             => 'VARCHAR(150) NULL',
+        'reason'            => "VARCHAR(12) NOT NULL DEFAULT 'manual'",
+        'stage_id'          => 'INT NULL',
+        'change_request_id' => 'INT NULL',
+        'start_date'        => 'DATE NULL',
+        'target_end_date'   => 'DATE NULL',
+        'budget_planned'    => 'DECIMAL(14,2) NULL',
+        'currency'          => 'CHAR(3) NULL',
+        'task_count'        => 'INT NOT NULL DEFAULT 0',
+        'estimate_hours'    => 'DECIMAL(9,2) NULL',
+        'must_count'        => 'INT NOT NULL DEFAULT 0',
+        'snapshot'          => 'MEDIUMTEXT NULL',
+        'created_by_id'     => 'INT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_change_requests' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'number'           => 'INT NOT NULL',
+        'title'            => 'VARCHAR(200) NOT NULL',
+        'description'      => 'TEXT NULL',
+        'reason'           => 'TEXT NULL',
+        'impact_days'      => 'INT NULL',
+        'impact_cost'      => 'DECIMAL(14,2) NULL',
+        'impact_scope'     => 'VARCHAR(1000) NULL',
+        'status'           => "VARCHAR(12) NOT NULL DEFAULT 'proposed'",
+        'raised_by_id'     => 'INT NULL',
+        'raised_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'decided_by_id'    => 'INT NULL',
+        'decided_datetime' => 'DATETIME NULL',
+        'decision_notes'   => 'TEXT NULL',
+        'applied'          => 'TEXT NULL',
+        'baseline_id'      => 'INT NULL',
+        'updated_datetime' => 'DATETIME NULL',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Benefits realisation (3.3.0) - includes/projects/benefits.php.
+    'project_benefits' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'title'            => 'VARCHAR(200) NOT NULL',
+        'measure'          => 'VARCHAR(255) NULL',
+        'unit'             => 'VARCHAR(30) NULL',
+        'direction'        => "VARCHAR(4) NOT NULL DEFAULT 'up'",
+        'baseline_value'   => 'DECIMAL(18,2) NULL',
+        'target_value'     => 'DECIMAL(18,2) NULL',
+        'target_date'      => 'DATE NULL',
+        'owner_analyst_id' => 'INT NULL',
+        'review_date'      => 'DATE NULL',
+        'review_months'    => 'INT NULL',
+        'status'           => "VARCHAR(10) NOT NULL DEFAULT 'open'",
+        'notes'            => 'TEXT NULL',
+        'position'         => 'INT NOT NULL DEFAULT 0',
+        'created_by_id'    => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NULL',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Task flow (3.3.0) - includes/projects/flow.php.
+    'project_task_flow' => [
+        'project_id' => 'INT NOT NULL',
+        'day'        => 'DATE NOT NULL',
+        'status_id'  => 'INT NOT NULL',
+        'task_count' => 'INT NOT NULL DEFAULT 0',
+        // ⚠️ No id: the PK (project_id, day, status_id) is in db_verify.php's $primaryKeys.
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Task dependencies (3.3.0) - includes/projects/dependencies.php.
+    'task_dependencies' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'task_id'          => 'INT NOT NULL',
+        'depends_on_id'    => 'INT NOT NULL',
+        'lag_days'         => 'INT NOT NULL DEFAULT 0',
+        'created_by_id'    => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // Gate checklists (3.3.0) - includes/projects/gatecheck.php.
+    'project_gate_items' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'stage_id'         => 'INT NOT NULL',
+        'kind'             => "VARCHAR(10) NOT NULL DEFAULT 'check'",
+        'title'            => 'VARCHAR(200) NOT NULL',
+        'analyst_id'       => 'INT NULL',
+        'change_id'        => 'INT NULL',
+        'document_id'      => 'INT NULL',
+        'done_by_id'       => 'INT NULL',
+        'done_datetime'    => 'DATETIME NULL',
+        'notes'            => 'VARCHAR(500) NULL',
+        'position'         => 'INT NOT NULL DEFAULT 0',
+        'created_by_id'    => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_benefit_measures' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'benefit_id'       => 'INT NOT NULL',
+        'value'            => 'DECIMAL(18,2) NOT NULL',
+        'measured_date'    => 'DATE NOT NULL',
+        'note'             => 'VARCHAR(500) NULL',
+        'recorded_by_id'   => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    // The AI project assistant (3.3.0) - includes/projects/assistant_chat.php.
+    'project_ai_threads' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'project_id'       => 'INT NOT NULL',
+        'analyst_id'       => 'INT NULL',
+        'summary'          => 'MEDIUMTEXT NULL',
+        'summary_upto_id'  => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'project_ai_messages' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'thread_id'        => 'INT NOT NULL',
+        'role'             => 'VARCHAR(10) NOT NULL',
+        'kind'             => "VARCHAR(10) NOT NULL DEFAULT 'chat'",
+        'content'          => 'MEDIUMTEXT NULL',
+        'proposals'        => 'MEDIUMTEXT NULL',
+        'looked_at'        => 'TEXT NULL',
+        'analyst_id'       => 'INT NULL',
+        'model'            => 'VARCHAR(120) NULL',
+        'tokens_in'        => 'INT NULL',
+        'tokens_out'       => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'          => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
+    // ---- Files: secure file and folder sharing (files/) --------------------
+    // PESSIMISTIC: nothing is visible until files_permissions grants it. Bytes
+    // live on disk as <storage root>/yyyy/mm/dd/<random>.bin. See includes/files/.
+    'files_folders' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'parent_id'           => 'INT NULL',
+        'name'                => 'VARCHAR(255) NOT NULL',
+        'inherit_permissions' => 'TINYINT(1) NOT NULL DEFAULT 1',
+        // Viewer watermark: NULL = as the parent folder, 0 off, 1 on.
+        'watermark'           => 'TINYINT(1) NULL',
+        'created_by'          => 'INT NULL',
+        'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_by'          => 'INT NULL',
+        'updated_datetime'    => 'DATETIME NULL',
+        'deleted_by'          => 'INT NULL',
+        'deleted_datetime'    => 'DATETIME NULL',
+    ],
+    'files_items' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'folder_id'           => 'INT NOT NULL',
+        'name'                => 'VARCHAR(255) NOT NULL',
+        'current_version_id'  => 'INT NULL',
+        'size_bytes'          => 'BIGINT NOT NULL DEFAULT 0',
+        'mime_type'           => 'VARCHAR(150) NULL',
+        'created_by'          => 'INT NULL',
+        'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_by'          => 'INT NULL',
+        'updated_datetime'    => 'DATETIME NULL',
+        'deleted_by'          => 'INT NULL',
+        'deleted_datetime'    => 'DATETIME NULL',
+    ],
+    // A copied file SHARES its source's storage_path - a purge must check
+    // nothing else points at a .bin before deleting it.
+    'files_versions' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'item_id'             => 'INT NOT NULL',
+        'version_no'          => 'INT NOT NULL DEFAULT 1',
+        'storage_path'        => 'VARCHAR(255) NOT NULL',
+        'size_bytes'          => 'BIGINT NOT NULL DEFAULT 0',
+        'mime_type'           => 'VARCHAR(150) NULL',
+        'sha256'              => 'CHAR(64) NULL',
+        'uploaded_by'         => 'INT NULL',
+        'uploaded_datetime'   => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    // Grants only, no Deny. level 1 View .. 5 Full control (FilesAcl::LEVEL_*).
+    'files_permissions' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'folder_id'           => 'INT NOT NULL',
+        'principal_type'      => 'VARCHAR(10) NOT NULL',
+        'principal_id'        => 'INT NOT NULL',
+        'level'               => 'TINYINT NOT NULL DEFAULT 1',
+        'granted_by'          => 'INT NULL',
+        'granted_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    // Every action, reads and refusals included. No FKs: it outlives what it names.
+    'files_audit' => [
+        'id'                  => 'BIGINT NOT NULL AUTO_INCREMENT',
+        'analyst_id'          => 'INT NULL',
+        'analyst_name'        => 'VARCHAR(150) NULL',
+        'action'              => 'VARCHAR(40) NOT NULL',
+        'folder_id'           => 'INT NULL',
+        'item_id'             => 'INT NULL',
+        'version_id'          => 'INT NULL',
+        'target_path'         => 'VARCHAR(1000) NULL',
+        'detail'              => 'TEXT NULL',
+        'ip_address'          => 'VARCHAR(45) NULL',
+        'user_agent'          => 'VARCHAR(255) NULL',
+        'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    // A shortcut lives in a folder (folder_id) OR on one person's desktop
+    // (analyst_id). It grants nothing - the target's permissions decide.
+    'files_shortcuts' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'folder_id'           => 'INT NULL',
+        'analyst_id'          => 'INT NULL',
+        'target_type'         => 'VARCHAR(10) NOT NULL',
+        'target_id'           => 'INT NOT NULL',
+        'name'                => 'VARCHAR(255) NOT NULL',
+        'created_by'          => 'INT NULL',
+        'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+    'files_uploads' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'token'               => 'CHAR(32) NOT NULL',
+        'analyst_id'          => 'INT NOT NULL',
+        'folder_id'           => 'INT NOT NULL',
+        'item_id'             => 'INT NULL',
+        'file_name'           => 'VARCHAR(255) NOT NULL',
+        'size_bytes'          => 'BIGINT NOT NULL DEFAULT 0',
+        'received_bytes'      => 'BIGINT NOT NULL DEFAULT 0',
+        'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'    => 'DATETIME NULL',
     ],
 ];

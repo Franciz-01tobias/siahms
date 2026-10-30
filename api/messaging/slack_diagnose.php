@@ -66,6 +66,16 @@ if (!$isAdminSlackPath && !analystCanAccessChannel($conn, (int) $_SESSION['analy
 }
 
 $checks = [];
+/**
+ * Appends one result row (key, label, status, detail and an optional fix) to the global
+ * $checks list the diagnosis returns.
+ *
+ * @param string $key  a stable id for the check, used by the page
+ * @param string $label  the check's name as shown
+ * @param string $status  'ok', 'warn', 'fail' or 'skip'
+ * @param string $detail  what was found, in plain words
+ * @param string $fix  what to do about it; empty when there is nothing to do
+ */
 function addCheck(string $key, string $label, string $status, string $detail, string $fix = ''): void
 {
     global $checks;

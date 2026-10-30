@@ -573,6 +573,35 @@
 
 /* ------------------------------------------------------------------ narrow */
 
+/* ------------------------------------------------------------------ tabs */
+/* One guide per product inside a section (system/help/sso-groups.php): a row of
+   buttons, one panel showing. Panels without JavaScript all show, stacked. */
+.help-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px var(--help-indent);
+             border-bottom: 1px solid var(--border, #ddd); }
+.help-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+                    padding: 10px 14px; font-size: 14px; cursor: pointer; color: var(--text-muted, #666); }
+.help-tabs button:hover { color: var(--accent); }
+.help-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.help-tab-panel { margin-left: var(--help-indent); font-size: 14px; color: var(--text-muted, #555); line-height: 1.7; }   /* body copy, as .help-section > ul */
+.help-tab-panel[hidden] { display: none; }
+
+/* ------------------------------------------------------------- checklist */
+/* Tick-as-you-go steps. Ticks are remembered in this browser only. */
+.help-checklist { list-style: none; margin: 0 0 14px; padding: 0; }
+.help-checklist li { margin: 0 0 8px; }
+.help-check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
+              border: 1px solid var(--border, #ddd); border-radius: 8px; background: var(--surface, #fff); }
+.help-check:hover { border-color: var(--accent); }
+.help-check input { margin: 3px 0 0; width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+.help-check-body { flex: 1; min-width: 0; line-height: 1.5; }
+.help-check-title { display: block; margin-bottom: 2px; font-weight: 700; }
+.help-check-body .help-muted { font-size: 13px; }
+.help-check.done { background: var(--accent-soft); }
+.help-check.done .help-check-title { text-decoration: line-through; opacity: 0.7; }
+.help-progress { display: flex; align-items: center; gap: 12px; margin: 0 0 16px var(--help-indent); font-size: 13px; color: var(--text-muted, #666); }
+.help-progress-bar { flex: 1; max-width: 320px; height: 8px; border-radius: 4px; background: var(--border, #ddd); overflow: hidden; }
+.help-progress-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.help-ext::after { content: " \2197"; font-size: 0.85em; }
 @media (max-width: 900px) {
     /* The heading model holds at every width — the indent just gets smaller,
        along with the badge that sets it, so level 2 still lines up under the

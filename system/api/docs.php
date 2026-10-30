@@ -21,7 +21,7 @@ require_once __DIR__ . '/../includes/page_gate.php';
 $path_prefix = '../../';
 $translationNamespaces = ['common', 'system'];
 
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = requestScheme();
 $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 'api/v1';
 
 // Endpoint catalogue: SINGLE SOURCE OF TRUTH, shared with the OpenAPI generator
@@ -36,9 +36,9 @@ $__extrasJson = $__spec ? json_encode($__spec['extras']) : '{}';
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - API documentation</title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', 'API documentation')); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* Module accent: System = blue-grey. */
         body {
@@ -184,7 +184,7 @@ $__extrasJson = $__spec ? json_encode($__spec['extras']) : '{}';
         [data-theme-mode="dark"] .err-2 { color: #81c784; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
 </head>
@@ -224,7 +224,7 @@ $__extrasJson = $__spec ? json_encode($__spec['extras']) : '{}';
         'Changes': 'REST-API-Changes', 'Change comments, history & CAB': 'REST-API-Changes',
         'Knowledge base': 'REST-API-Knowledge', 'Tasks': 'REST-API-Tasks', 'CMDB': 'REST-API-CMDB',
         'Contracts': 'REST-API-Contracts', 'Suppliers & contacts': 'REST-API-Contracts',
-        'Calendar': 'REST-API-Calendar', 'Software': 'REST-API-Software',
+        'Calendar': 'REST-API-Calendar', 'Software': 'REST-API-Software', 'Domains': 'REST-API-Domains',
         'Service status': 'REST-API-Service-Status', 'Morning checks': 'REST-API-Morning-Checks',
         'Forms': 'REST-API-Forms', 'Workflows': 'REST-API-Workflow',
         'Network Mapper': 'REST-API-Network-Mapper', 'Requesters': 'REST-API-Tickets',
@@ -705,6 +705,6 @@ $__extrasJson = $__spec ? json_encode($__spec['extras']) : '{}';
     // --- Boot -------------------------------------------------------------------------
     route();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

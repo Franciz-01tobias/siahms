@@ -18,7 +18,14 @@ try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         // Roles with a capability count and an assignment count (analysts + teams),
         // so the list can show at a glance how big and how widely-used each is.
-        $sql = "SELECT r.id, r.name, r.description, r.is_active,
+        // managed_for: the analyst whose REST-API-managed role this is (3.5.0, PR
+        // #174) - shown read-only. NULL before Database Verification adds the column.
+        $managed = "NULL AS managed_for_analyst_id, NULL AS managed_for_name";
+        try {
+            $conn->query("SELECT managed_for_analyst_id FROM rbac_roles LIMIT 0");
+            $managed = "r.managed_for_analyst_id, (SELECT a.full_name FROM analysts a WHERE a.id = r.managed_for_analyst_id) AS managed_for_name";
+        } catch (Throwable $e) {}
+        $sql = "SELECT r.id, r.name, r.description, r.is_active, $managed,
                        (SELECT COUNT(*) FROM rbac_role_capabilities rc WHERE rc.role_id = r.id) AS capability_count,
                        (SELECT COUNT(*) FROM rbac_analyst_roles ar WHERE ar.role_id = r.id) AS analyst_count,
                        (SELECT COUNT(*) FROM rbac_team_roles tr WHERE tr.role_id = r.id) AS team_count

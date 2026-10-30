@@ -83,6 +83,8 @@ function apiV1PermissionCatalog(): array {
             'label'   => 'Asset inventory',
             'actions' => [
                 'read' => 'Read agent-collected inventory: volumes, physical drives, network adapters, devices, software',
+                'create' => 'Submit inventory observations as a named source (no core asset edits or heartbeat)',
+                'delete' => 'Unlink a source from an asset, removing the rows that source reported there',
             ],
         ],
         'problems' => [
@@ -123,6 +125,13 @@ function apiV1PermissionCatalog(): array {
                 'delete' => 'Permanently delete a change and its attachments/comments/history',
             ],
         ],
+        'change_attachments' => [
+            'label' => 'Change evidence attachments',
+            'actions' => [
+                'read' => 'List and download Change evidence attachments',
+                'create' => 'Upload evidence only (no change edits, approval or deletion)',
+            ],
+        ],
         'change_comments' => [
             'label'   => 'Change comments',
             'actions' => [
@@ -143,6 +152,19 @@ function apiV1PermissionCatalog(): array {
                 'read'   => 'See the CAB roster, votes and approval progress',
                 'manage' => 'Set the CAB member roster for a change',
                 'vote'   => 'Cast a CAB vote as the analyst this key acts as',
+            ],
+        ],
+        'change_approvals' => [
+            'label'   => 'Change approvals',
+            'actions' => [
+                'read'   => 'Read every approval round of a change, with its snapshot and votes',
+                'decide' => 'Approve or reject a change as its named approver (the analyst this key acts as)',
+            ],
+        ],
+        'change_revisions' => [
+            'label'   => 'Change text history',
+            'actions' => [
+                'read' => 'Read every saved version of a change\'s long-text fields, in full',
             ],
         ],
         'knowledge' => [
@@ -176,6 +198,15 @@ function apiV1PermissionCatalog(): array {
             'actions' => [
                 'read'   => 'Read the comments on a task',
                 'create' => 'Add a comment to a task',
+            ],
+        ],
+        // GH #190 phase 5. Reading the ANSWERS also follows the in-app rule: the key's
+        // analyst needs Forms access or "Read the form answers on tasks you can see".
+        'task_forms' => [
+            'label'   => 'Task forms',
+            'actions' => [
+                'read'   => 'List the forms a task needs, with who submitted them (answers where the key\'s analyst may read them)',
+                'create' => 'Submit a form for a task, linked to that task (the key\'s analyst needs Forms access)',
             ],
         ],
         'cmdb_classes' => [
@@ -215,6 +246,33 @@ function apiV1PermissionCatalog(): array {
                 'create' => 'Create contracts',
                 'update' => 'Update contract fields (dates, value, supplier, governance, active flag)',
                 'delete' => 'Permanently delete a contract and its term values',
+            ],
+        ],
+        'domains' => [
+            'label'   => 'Domains',
+            'actions' => [
+                'read'   => 'List and view domains, their check findings and history, statuses and registrar accounts (company-scoped). Never auth codes.',
+                'create' => 'Add domains to the register',
+                'update' => 'Change domain fields, and run a registry lookup or the health checks',
+                'delete' => 'Permanently delete a domain and its history',
+            ],
+        ],
+        'cost_centres' => [
+            'label'   => 'Cost centres',
+            'actions' => [
+                'read'   => 'List and view cost centres (company-scoped)',
+                'create' => 'Add cost centres (sync needs this as well as update)',
+                'update' => 'Change cost centres, and sync a whole list from an accounting system',
+                'delete' => 'Delete a cost centre that has nothing below it',
+            ],
+        ],
+        'projects' => [
+            'label'   => 'Projects',
+            'actions' => [
+                'read'   => 'List and view projects (company-scoped) with their health, progress, stages, scope, RAID log, budget, tasks, connections and history',
+                'create' => 'Create projects, from scratch or from a template',
+                'update' => 'Change projects and their stages, gate decisions, scope, RAID log and budget lines - within the project rules of the key\'s analyst',
+                'delete' => 'Delete a project (its tasks are kept, detached) - only where the key\'s analyst may',
             ],
         ],
         'contract_terms' => [
@@ -317,6 +375,12 @@ function apiV1PermissionCatalog(): array {
                 'delete' => 'Delete a submission and its answers',
             ],
         ],
+        'mcp' => [
+            'label'   => 'MCP server',
+            'actions' => [
+                'read' => 'Connect an AI assistant through the MCP server (api/mcp/) - read-only tools, each limited to what the key\'s analyst may open and the key\'s companies',
+            ],
+        ],
         'workflows' => [
             'label'   => 'Workflows',
             'actions' => [
@@ -331,6 +395,14 @@ function apiV1PermissionCatalog(): array {
             'label'   => 'Workflow executions',
             'actions' => [
                 'read' => 'Read the engine\'s run history: status, payload snapshot, per-step log',
+            ],
+        ],
+        'job_health' => [
+            'label'   => 'Background job health',
+            'actions' => [
+                // #182. Never runs a job; never returns secrets. Install-wide, so the key
+                // and its analyst must reach every company - see api/v1/resources/jobs.php.
+                'read' => 'Read the health of every background job, for outside monitoring (all-company keys only)',
             ],
         ],
         'network_diagrams' => [
@@ -353,7 +425,18 @@ function apiV1PermissionCatalog(): array {
         'analysts' => [
             'label'   => 'Analysts',
             'actions' => [
-                'read' => 'List analysts (for assignment lookups)',
+                'read'   => 'List analysts (for assignment lookups) and view one analyst',
+                // 3.5.0 (PR #174). Writes also need the key to act as an administrator
+                // and to see all companies - see api/v1/resources/analysts.php.
+                'create' => 'Create analysts (administrator keys for all companies only)',
+                'update' => 'Change an analyst\'s name, email, sign-in provider or active flag (administrator keys for all companies only)',
+            ],
+        ],
+        'analyst_access' => [
+            'label'   => 'Analyst access',
+            'actions' => [
+                'read'   => 'View an analyst\'s admin flag, modules, companies and API-managed capabilities',
+                'manage' => 'Set an analyst\'s admin flag, modules, companies and API-managed capabilities (administrator keys for all companies only)',
             ],
         ],
         'companies' => [
@@ -375,6 +458,8 @@ function apiV1PermissionCatalog(): array {
  * Validate + normalise a raw permissions structure (from the admin UI or a
  * stored JSON blob) against the catalog. Unknown resources/actions are
  * dropped; the result is always ['resource' => ['action', ...]].
+ *
+ * @param mixed $raw  untrusted permissions map, ['resource' => ['action', ...]]; anything not an array gives []
  */
 function apiV1NormalisePermissions($raw): array {
     if (!is_array($raw)) {

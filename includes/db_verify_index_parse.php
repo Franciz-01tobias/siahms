@@ -24,6 +24,8 @@
  * nowhere to put it. dbVerifyIndexTypeOf() below reads either shape, so a
  * generated list from before the change still audits and applies correctly
  * rather than silently becoming the wrong kind of index.
+ *
+ * @param string $sql  the full text of database/freeitsm.sql
  */
 function dbVerifyParseIndexesFromSql(string $sql): array {
     preg_match_all('/CREATE TABLE(?: IF NOT EXISTS)?\s+`([a-zA-Z0-9_]+)`\s*\((.*?)\n\)\s*ENGINE/s', $sql, $blocks, PREG_SET_ORDER);
@@ -50,6 +52,9 @@ function dbVerifyParseIndexesFromSql(string $sql): array {
  * consequence of guessing is not an error — `true ? 'UNIQUE KEY' : 'KEY'`
  * would happily read the string 'key' as truthy and build a UNIQUE index on a
  * column that has duplicates, which fails loudly, or worse the reverse.
+ *
+ * @param mixed $type  a list entry's type: bool (old format, true = unique) or 'unique'/'fulltext'/'key';
+ *     anything else reads as 'key'
  */
 function dbVerifyIndexTypeOf($type): string {
     if (is_bool($type)) return $type ? 'unique' : 'key';
@@ -63,6 +68,9 @@ function dbVerifyIndexTypeOf($type): string {
  *
  * Skips silently if freeitsm.sql isn't present (a trimmed deployment may not ship
  * it) — we never cry drift when we can't see the source of truth.
+ *
+ * @param ?string $sqlPath  path to freeitsm.sql; null means database/freeitsm.sql in this install
+ * @param ?string $listPath  path to the generated index list; null means includes/db_verify_indexes.php
  */
 function dbVerifyIndexListSelfCheck(?string $sqlPath = null, ?string $listPath = null): array {
     $sqlPath  = $sqlPath  ?? __DIR__ . '/../database/freeitsm.sql';

@@ -77,6 +77,10 @@ function assetDiskHideRulesFor(PDO $conn, int $analystId, int $assetId): array {
  * from PDO as a string on one side and may be an int on the other. `==` would
  * make NULL and 0 equal, and a 0-byte drive is a real thing here — that is
  * precisely the Microsoft Virtual Disk this feature was built for.
+ *
+ * @param array $rules  the rules from assetDiskHideRulesFor() - each {id, asset_id, model, size_bytes}
+ * @param ?string $model  the drive's model as the agent reported it; null when it reported none
+ * @param mixed $sizeBytes  the drive's size in bytes (string from PDO or int); null when unknown
  */
 function assetDiskIsHidden(array $rules, ?string $model, $sizeBytes): bool {
     $sizeKey = $sizeBytes === null ? null : (string)$sizeBytes;
@@ -97,6 +101,8 @@ function assetDiskIsHidden(array $rules, ?string $model, $sizeBytes): bool {
  * another company has — the exact leak this codebase has shipped once before,
  * by scoping the list and forgetting the count.
  *
+ * @param ?string $model  the drive's model to match exactly (null matches only drives with no model)
+ * @param mixed $sizeBytes  the drive's size in bytes to match exactly (null matches only drives with no size)
  * @return array{drives:int,assets:int}
  */
 function assetDiskMatchCount(PDO $conn, int $analystId, ?string $model, $sizeBytes): array {

@@ -52,6 +52,7 @@ require __DIR__ . '/_top.php';
         <tr><td><strong>Display order</strong></td><td>Sorts the team list and every team dropdown in the app. Lower numbers first; ties fall back to name.</td></tr>
         <tr><td><strong>Active</strong></td><td>On by default. See the warning at the end of this page about what deactivating does <em>not</em> do.</td></tr>
         <tr><td><strong>Access all modules</strong></td><td><strong>Off</strong> by default for a new team. On means members can open every module.</td></tr>
+        <tr><td><strong>Sign-in method</strong></td><td><strong>Not set</strong> by default. Set it and members who <em>follow their team</em> sign in this way. See Sign-in method below.</td></tr>
     </table></div>
     <p>Once the team exists, use the buttons on its row to fill it out: <strong>Manage departments</strong>, <strong>Manage members</strong>, and — on a multi-company install — <strong>Manage company access</strong>.</p>
 </div>
@@ -60,15 +61,16 @@ require __DIR__ . '/_top.php';
 <div class="help-section" id="departments">
     <div class="help-section-header"><?php echo helpSectionNum('departments'); ?>
         <div>
-            <h3>Departments — the setting that decides who sees which tickets</h3>
-            <p>This is the whole point of teams, and the thing most likely to catch you out. Ticket visibility works like this:</p>
+            <h3>Departments — which ticket folders a team member gets</h3>
+            <p>A team's departments decide the <strong>department folders</strong> its members see in the Tickets folder list, and what the folder numbers count:</p>
         </div>
     </div>
     <div class="help-steps">
-        <div class="help-step"><span class="help-step-num">1</span><div>An analyst in <strong>no team</strong> sees <strong>every</strong> active department.</div></div>
-        <div class="help-step"><span class="help-step-num">2</span><div>An analyst in <strong>one or more teams</strong> sees only the departments linked to those teams — the union of them.</div></div>
+        <div class="help-step"><span class="help-step-num">1</span><div>An analyst in <strong>no team</strong> gets a folder for <strong>every</strong> active department.</div></div>
+        <div class="help-step"><span class="help-step-num">2</span><div>An analyst in <strong>one or more teams</strong> gets folders only for the departments linked to those teams — the union of them. Their numbers count those departments, <strong>plus every ticket with no department</strong>, plus anything assigned to them.</div></div>
     </div>
-    <div class="help-note warn"><strong>A team with no departments hides everything from its members.</strong> The moment you put someone into their first team, they stop seeing all departments and start seeing only that team's — and if the team has none linked, that's zero departments and an empty ticket list. Link the departments <em>before</em> you add the members.</div>
+    <div class="help-note warn"><strong>A team with members but no departments</strong> leaves those members counting only tickets with no department, plus their own. That is fine on an install that has no departments yet; anywhere else it is usually a mistake, so <strong>System → Teams</strong> flags such a team with a <strong>Check</strong> badge and a note at the top. Link the departments <em>before</em> you add the members.</div>
+    <div class="help-note"><strong>Teams organise the folder list; they are not a lock.</strong> An analyst can still open a ticket from another department in a company they can access. To keep tickets from someone, use <strong>company access</strong> (System → Analysts or Teams), or make the ticket <strong>confidential</strong>.</div>
     <p>The picker lists <em>all</em> departments, including inactive ones (labelled as such), deliberately — so that saving the form doesn't silently drop a link to a department that happens to be switched off.</p>
     <div class="help-note">The same links can be edited from the other side, under Tickets &rarr; Settings &rarr; Departments. It's one relationship, two doors.</div>
 </div>
@@ -114,6 +116,24 @@ require __DIR__ . '/_top.php';
         </ul>
         If a module disappears from someone's waffle right after a team change, this is the reason.
     </div>
+</div>
+
+<!-- Sign-in method (GH #41) -->
+<div class="help-section" id="signin">
+    <div class="help-section-header"><?php echo helpSectionNum('signin'); ?>
+        <div>
+            <h3>Sign-in method</h3>
+            <p>Set a sign-in method on a team once, and new people pick it up just by joining the team. It only applies to analysts whose own <strong>Sign-in method</strong> on System &rarr; Analysts is <strong>Follow team</strong>, which is the default for anyone you add from now on. Analysts who already existed keep exactly what they had until you change them.</p>
+        </div>
+    </div>
+    <div class="help-table"><table>
+        <tr><th>The analyst's teams</th><th>What happens</th></tr>
+        <tr><td>One team sets a method, or several teams set the <em>same</em> one</td><td>They sign in that way, and move automatically if you change the team's method.</td></tr>
+        <tr><td>Their teams set <em>different</em> methods</td><td><strong>Nothing changes</strong> — they keep signing in the way they did. The team list shows <em>N sign-in conflicts</em>, and their row on System &rarr; Analysts shows a <em>Sign-in conflict</em> badge — click it for an explanation — until you choose one on their record.</td></tr>
+        <tr><td>None of their teams sets a method</td><td>They keep what they had.</td></tr>
+    </table></div>
+    <div class="help-note warn"><strong>Moving someone between teams can change how they sign in.</strong> So can switching a team off, deleting it, or changing its method. After each of those saves, a message says how many analysts changed. Before you put a team on a single sign-on provider, make sure its members' email addresses match their accounts at that provider.</div>
+    <div class="help-note">Each analyst still has exactly <strong>one</strong> way in. Being in two teams never gives someone two sign-in methods. It only raises the question of which one, and FreeITSM leaves that to you rather than guessing.</div>
 </div>
 
 <!-- 7. Deleting a team -->

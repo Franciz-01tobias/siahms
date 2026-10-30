@@ -20,7 +20,12 @@ require_once '../../includes/admin_api_guard.php';   // administrators only
 
 header('Content-Type: application/json');
 
-/** Write one system_settings row. */
+/**
+ * Write one system_settings row.
+ *
+ * @param string $key  the setting_key to write, e.g. TIKA_SETTING_URL
+ * @param string $value  the value to store
+ */
 function tikaSettingPut(PDO $conn, string $key, string $value): void {
     $conn->prepare(
         "INSERT INTO system_settings (setting_key, setting_value)

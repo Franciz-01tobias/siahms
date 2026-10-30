@@ -171,6 +171,7 @@ return [
         'categories_heading' => 'Terminkategorien',
         'categories_intro' => 'Kategorien sind das Rückgrat der Kalenderorganisation. Jede Kategorie hat einen Namen und eine Farbe, sodass Termine auf einen Blick sofort erkennbar sind. Die Seitenleiste zeigt alle verfügbaren Kategorien mit Kontrollkästchen &mdash; deaktivieren Sie eine Kategorie, um diese Termine aus dem Kalender auszublenden.',
         'categories_certificates' => '<strong>Zertifikate</strong> &mdash; verfolgen Sie Ablaufdaten von SSL/TLS-Zertifikaten, Code-Signing-Zertifikaten und anderen Anmeldedaten, die regelmäßig erneuert werden müssen',
+        'categories_projects' => '<strong>Projekte</strong> &mdash; befüllt vom Modul Projekte: das Zieldatum jedes laufenden Projekts und das Ende jeder offenen Phase, jedes offenen Abschnitts oder Sprints, stets im Einklang mit dem Plan',
         'categories_contracts' => '<strong>Verträge</strong> &mdash; erfassen Sie Verlängerungsdaten von Lieferantenverträgen, Lizenzabläufe und SLA-Überprüfungstermine, damit nichts unerwartet ausläuft',
         'categories_maintenance' => '<strong>Wartung</strong> &mdash; planen Sie geplante Wartungsfenster für Server, Netzwerkgeräte und Infrastruktur. Ihr Team und die Beteiligten können genau sehen, wann mit Ausfallzeiten zu rechnen ist',
         'categories_meetings' => '<strong>Besprechungen</strong> &mdash; erfassen Sie Team-Stand-ups, CAB-Meetings, Lieferantengespräche und andere wiederkehrende Termine, die für den IT-Betrieb relevant sind',

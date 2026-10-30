@@ -34,9 +34,9 @@ try {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('watchtower.title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('watchtower')); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -414,7 +414,7 @@ try {
            inline, which reads on both grounds (the tint is the same hue as the
            text), so there is nothing left here to flip for dark mode. */
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -447,6 +447,45 @@ try {
                 </button>
             </div>
         </div>
+
+        <?php
+        // Background jobs (#182): a card shown ONLY while a job needs attention, and only
+        // to somebody allowed to see job health. Outside the grid on purpose - it is not
+        // one of the cards a person arranges or hides; it appears because something
+        // stopped, and goes when it is fixed. Worked out now, when the page is opened, so
+        // it does not depend on any job running to say a job has stopped.
+        $wtJobs = null;
+        try {
+            require_once '../includes/job_health.php';
+            $wtConn = connectToDatabase();
+            if (jobHealthMayView($wtConn, (int)$_SESSION['analyst_id'])) {
+                $wtJobs = jobHealthSummary($wtConn);
+                if ($wtJobs['healthy']) $wtJobs = null;
+            }
+        } catch (Throwable $e) { $wtJobs = null; /* never break the dashboard */ }
+        if ($wtJobs): ?>
+        <div class="wt-card wt-jobs-card" id="wtJobs" style="margin-bottom:16px;">
+            <div class="wt-card-header">
+                <div class="wt-card-header-left">
+                    <div class="wt-card-icon" style="background:#ca5010;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <div class="wt-card-name"><a href="../reporting/logs/?tab=jobs"><?php echo htmlspecialchars(t('reporting.jobs.card_title')); ?></a></div>
+                </div>
+                <div class="wt-status-dot <?php echo $wtJobs['unhealthy'][0]['severity'] >= 4 ? 'red' : 'amber'; ?>"></div>
+            </div>
+            <div class="wt-card-body" style="font-size:13px;">
+                <div><?php echo htmlspecialchars(t('reporting.jobs.card_body', ['n' => count($wtJobs['unhealthy'])])); ?></div>
+                <ul style="margin:6px 0 8px; padding-left:18px;">
+                    <?php foreach ($wtJobs['unhealthy'] as $j): ?>
+                    <li><strong><?php echo htmlspecialchars($j['name']); ?></strong> - <?php echo htmlspecialchars(t('reporting.jobs.status_' . $j['status'])); ?>
+                        <span style="color:var(--text-muted,#666);">(<?php echo htmlspecialchars($j['affects']); ?>)</span></li>
+                    <?php endforeach; ?>
+                </ul>
+                <a href="../reporting/logs/?tab=jobs"><?php echo htmlspecialchars(t('reporting.jobs.card_link')); ?></a>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <div class="wt-grid">
             <!-- Morning Checks -->
@@ -550,6 +589,21 @@ try {
                 <div class="wt-card-body"><div class="wt-card-loading"><div class="wt-spinner"></div></div></div>
             </div>
 
+            <!-- Domains (#154): registrations and certificates about to lapse,
+                 and domains left without a transfer lock. -->
+            <div class="wt-card" id="wtDomains">
+                <div class="wt-card-header">
+                    <div class="wt-card-header-left">
+                        <div class="wt-card-icon" style="background:#4d7c0f;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20.9 13.5A10 10 0 1 0 12 22"></path><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10"></path><path d="M12 2a15.3 15.3 0 0 0-4 10 15.3 15.3 0 0 0 4 10"></path><rect x="15" y="17" width="7" height="5" rx="1"></rect><path d="M16.5 17v-1.5a2 2 0 0 1 4 0V17"></path></svg>
+                        </div>
+                        <div class="wt-card-name"><a href="../domains/"><?php echo htmlspecialchars(t('watchtower.cards.domains')); ?></a></div>
+                    </div>
+                    <div class="wt-status-dot" id="wtDmDot"></div>
+                </div>
+                <div class="wt-card-body"><div class="wt-card-loading"><div class="wt-spinner"></div></div></div>
+            </div>
+
             <!-- Knowledge -->
             <div class="wt-card" id="wtKnowledge">
                 <div class="wt-card-header">
@@ -592,6 +646,21 @@ try {
                 <div class="wt-card-body"><div class="wt-card-loading"><div class="wt-spinner"></div></div></div>
             </div>
 
+            <!-- Projects (3.2.0): live projects off track or at risk, by name, and
+                 stages ending this week. Hidden from anybody without Projects. -->
+            <div class="wt-card" id="wtProjects">
+                <div class="wt-card-header">
+                    <div class="wt-card-header-left">
+                        <div class="wt-card-icon" style="background:linear-gradient(135deg, #f43f5e, #7c3aed);">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
+                        </div>
+                        <div class="wt-card-name"><a href="../projects/"><?php echo htmlspecialchars(t('watchtower.cards.projects')); ?></a></div>
+                    </div>
+                    <div class="wt-status-dot" id="wtPjDot"></div>
+                </div>
+                <div class="wt-card-body"><div class="wt-card-loading"><div class="wt-spinner"></div></div></div>
+            </div>
+
             <!-- Workflows — hidden entirely if the engine's tables aren't there yet -->
             <div class="wt-card" id="wtWorkflows" style="display:none;">
                 <div class="wt-card-header">
@@ -607,6 +676,24 @@ try {
             </div>
         </div>
     </div>
+
+    <?php
+    // The install's card order (Watchtower -> Settings -> Cards, GH #187). The
+    // cards are MOVED, not restyled with CSS order, so the keyboard and a screen
+    // reader meet them in the order they are seen. Hidden and unavailable cards
+    // move too, so each keeps its place for when it shows again. This runs
+    // before the page first paints and never again: the five-minute refresh only
+    // fills cards in, it does not redraw the grid.
+    $wtOrderIds = [];
+    try { foreach (wtCardOrder(connectToDatabase()) as $k) $wtOrderIds[] = wtCardRegistry()[$k]['element']; } catch (Throwable $e) { /* default order stands */ }
+    ?>
+    <script>
+    (function () {
+        const grid = document.querySelector('.wt-grid');
+        if (!grid) return;
+        <?php echo json_encode($wtOrderIds); ?>.forEach(id => { const el = document.getElementById(id); if (el) grid.appendChild(el); });
+    })();
+    </script>
 
     <script>
     let refreshTimer = null;
@@ -647,13 +734,9 @@ try {
         return /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : null;
     }
 
-    // Card keys map to the element ids the page already uses.
-    const WT_CARD_ELEMENTS = {
-        morning_checks: 'wtMorningChecks', tickets: 'wtTickets', changes: 'wtChanges',
-        calendar: 'wtCalendar', service_status: 'wtServiceStatus', contracts: 'wtContracts',
-        software: 'wtSoftware',
-        knowledge: 'wtKnowledge', assets: 'wtAssets', tasks: 'wtTasks', workflows: 'wtWorkflows',
-    };
+    // Card keys map to the element ids the page already uses - from the one card
+    // list, wtCardRegistry() (GH #187), so a new card is not a second edit here.
+    const WT_CARD_ELEMENTS = <?php echo json_encode(array_map(fn($c) => $c['element'], wtCardRegistry())); ?>;
 
     function applyCardVisibility(cards) {
         Object.entries(WT_CARD_ELEMENTS).forEach(([key, id]) => {
@@ -768,7 +851,7 @@ try {
     function renderChanges(d) {
         const ch = d.changes;
 
-        if (ch.unapproved > 0) {
+        if (ch.unapproved > 0 || ch.emergency_unapproved > 0) {
             setDot('wtChDot', 'amber');
         } else {
             setDot('wtChDot', 'green');
@@ -790,6 +873,9 @@ try {
         if (ch.unapproved > 0) {
             html += attentionItem('amber', window.t('watchtower.changes.awaiting', { count: ch.unapproved }));
         }
+        if (ch.emergency_unapproved > 0) {
+            html += attentionItem('amber', window.t('watchtower.changes.emergency_unapproved', { count: ch.emergency_unapproved }));
+        }
         if (ch.in_progress_today > 0) {
             html += attentionItem('blue', window.t('watchtower.changes.in_progress', { count: ch.in_progress_today }));
         }
@@ -802,7 +888,7 @@ try {
         if (ch.upcoming_7d > 0) {
             html += attentionItem('neutral', window.t('watchtower.changes.scheduled', { count: ch.upcoming_7d }));
         }
-        if (ch.unapproved === 0 && ch.in_progress_today === 0 && ch.upcoming_7d === 0 && !ch.overrunning) {
+        if (ch.unapproved === 0 && !ch.emergency_unapproved && ch.in_progress_today === 0 && ch.upcoming_7d === 0 && !ch.overrunning) {
             html += attentionItem('green', window.t('watchtower.changes.all_clear'));
         }
         html += '</div>';
@@ -952,6 +1038,77 @@ try {
         html += '</div>';
 
         setBody('wtSoftware', html);
+    }
+
+    // Domains (#154). Red for anything lapsed or lapsing within 30 days, amber
+    // for 90 days, certificates, missing transfer locks and weak grades.
+    function renderDomains(d) {
+        const dm = d.domains;
+        const card = document.getElementById('wtDomains');
+        if (!dm || dm.allowed === false) { if (card) card.style.display = 'none'; return; }
+        const T = (k, p) => window.t('watchtower.domains.' + k, p);
+        if (!dm.show) {
+            setDot('wtDmDot', 'green');
+            setBody('wtDomains', '<div class="wt-attention">' + attentionItem('green', T('none')) + '</div>');
+            return;
+        }
+        const atRisk = dm.services_at_risk || 0;
+        const red = dm.expired + dm.expiring_30d + atRisk;
+        const amber = dm.expiring_90d + dm.ssl_expiring + dm.unlocked + dm.weak;
+        setDot('wtDmDot', red > 0 ? 'red' : (amber > 0 ? 'amber' : 'green'));
+
+        // Each figure only under its own setting (Domains -> Settings -> Alerts):
+        // renewals and certificates are two choices since 3.0.0. An older
+        // payload without the flags shows everything, as it always did.
+        const showExp = dm.show_expiry !== false, showCert = dm.show_cert !== false;
+        let html = '<div class="wt-metrics">';
+        if (showExp)  html += metric(dm.expiring_30d, T('metric_30d'), dm.expiring_30d > 0 ? '#ef4444' : '#94a3b8');
+        if (showExp)  html += metric(dm.expiring_90d, T('metric_90d'), dm.expiring_90d > 0 ? '#f59e0b' : '#94a3b8');
+        if (showCert) html += metric(dm.ssl_expiring, T('metric_ssl'), dm.ssl_expiring > 0 ? '#f59e0b' : '#94a3b8');
+        html += '</div><div class="wt-attention">';
+        if (atRisk > 0)          html += attentionItem('red', T('services_at_risk', { count: atRisk }));
+        if (dm.expired > 0)      html += attentionItem('red', T('expired', { count: dm.expired }));
+        if (dm.expiring_30d > 0) html += attentionItem('red', T('expiring', { count: dm.expiring_30d }));
+        if (dm.unlocked > 0)     html += attentionItem('amber', T('unlocked', { count: dm.unlocked }));
+        if (dm.weak > 0)         html += attentionItem('amber', T('weak', { count: dm.weak }));
+        if (red === 0 && amber === 0) html += attentionItem('green', T('all_clear', { count: dm.total }));
+        html += '</div>';
+        setBody('wtDomains', html);
+    }
+
+    // Projects (3.2.0). Red when any live project is off track; amber for one
+    // at risk, beyond a tolerance, or with a stage ending in the next 7 days.
+    // The off-track ones are named and linked - the name is the useful part.
+    function renderProjects(d) {
+        const pj = d.projects;
+        const card = document.getElementById('wtProjects');
+        if (!pj || pj.allowed === false) { if (card) card.style.display = 'none'; return; }
+        const T = (k, p) => window.t('watchtower.projects.' + k, p);
+        if (!pj.show || pj.live === 0) {
+            setDot('wtPjDot', 'green');
+            setBody('wtProjects', '<div class="wt-attention">' + attentionItem('green', T('none')) + '</div>');
+            return;
+        }
+        const week = pj.stages_week + (pj.milestones_week || 0), missed = pj.milestones_missed || 0;
+        setDot('wtPjDot', pj.red > 0 ? 'red' : ((pj.amber + pj.breaches + week + missed) > 0 ? 'amber' : 'green'));
+        let html = '<div class="wt-metrics">';
+        html += metric(pj.red, T('metric_red'), pj.red > 0 ? '#ef4444' : '#94a3b8');
+        html += metric(pj.amber, T('metric_amber'), pj.amber > 0 ? '#f59e0b' : '#94a3b8');
+        html += metric(week, T('metric_week'), week > 0 ? '#f59e0b' : '#94a3b8');
+        html += '</div><div class="wt-attention">';
+        (pj.off_track || []).forEach(p => {
+            const link = '<a href="../projects/view.php?id=' + encodeURIComponent(p.id) + '" class="wt-attention-bold" style="color:inherit;">' + escapeHtml(p.name) + '</a>';
+            html += attentionItem('red', T('off_track', { name: link }));
+        });
+        const more = pj.red - (pj.off_track || []).length;
+        if (more > 0) html += attentionItem('red', T('more_off_track', { count: more }));
+        if (pj.breaches > 0) html += attentionItem('amber', T('breaches', { count: pj.breaches }));
+        if (missed > 0) html += attentionItem('amber', T('milestones_missed', { count: missed }));
+        if (pj.stages_week > 0) html += attentionItem('amber', T('stages_week', { count: pj.stages_week }));
+        if (pj.milestones_week > 0) html += attentionItem('amber', T('milestones_week', { count: pj.milestones_week }));
+        if (pj.red === 0 && pj.amber === 0 && pj.breaches === 0 && week === 0 && missed === 0) html += attentionItem('green', T('all_clear', { count: pj.live }));
+        html += '</div>';
+        setBody('wtProjects', html);
     }
 
     function renderKnowledge(d) {
@@ -1213,9 +1370,11 @@ try {
                 renderServiceStatus(d);
                 renderContracts(d);
                 renderSoftware(d);
+                renderDomains(d);
                 renderKnowledge(d);
                 renderAssets(d);
                 renderTasks(d);
+                renderProjects(d);
                 renderWorkflows(d);
 
                 // 🔴 LAST. applyCardVisibility() and renderWorkflows() both set
@@ -1242,6 +1401,6 @@ try {
     // Auto-refresh every 5 minutes
     refreshTimer = setInterval(loadDashboard, 5 * 60 * 1000);
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

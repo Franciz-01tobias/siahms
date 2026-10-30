@@ -99,10 +99,11 @@ function mailboxHealthProblems(array $mb, array $context = []): array
         if (!empty($mb['is_active']) && $authStatus !== 'unauthenticated') {
             $add($problems, 'never_checked', 'warning',
                 'Never checked for mail',
-                'This mailbox is set up but has not been checked once. If the scheduled task that collects mail is not running, nothing will arrive from here.');
+                'This mailbox is set up but has not been checked once. Mail is collected while somebody has the ticket inbox open, so nothing arrives from here until then.');
         }
     } else {
-        // 24h is deliberately generous — this is meant to catch "the cron died",
+        // 24h is deliberately generous — this is meant to catch "nobody has had
+        // the inbox open" (there is no mail cron yet: Mail-Collection-Developer-Guide),
         // not to nag an install that checks a low-traffic mailbox twice a day.
         $age = time() - strtotime((string)$mb['last_checked_datetime']);
         if ($age > 86400 && !empty($mb['is_active'])) {
@@ -110,7 +111,7 @@ function mailboxHealthProblems(array $mb, array $context = []): array
             $add($problems, 'stale', 'warning',
                 'Not checked for ' . $days . ' day' . ($days === 1 ? '' : 's'),
                 'The last check was ' . date('j M Y H:i', strtotime((string)$mb['last_checked_datetime']))
-                . '. If mail is expected more often than that, the scheduled task may have stopped.');
+                . '. Mail is collected only while somebody has the ticket inbox open, so if mail is expected more often than that, check the inbox is in use.');
         }
     }
 

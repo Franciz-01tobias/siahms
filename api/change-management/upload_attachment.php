@@ -24,6 +24,7 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/uploads.php';
+require_once '../../includes/services/changes.php';
 
 header('Content-Type: application/json');
 
@@ -32,6 +33,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('changes');
+requireModuleWriteJson('changes');   // Read only access (#180) changes nothing here
 
 $analystId = (int)$_SESSION['analyst_id'];
 $changeId  = (int)($_POST['change_id'] ?? 0);
@@ -56,39 +58,12 @@ try {
         exit;
     }
 
-    $stored = uploadStoreFile(
-        $_FILES['file'],
-        dirname(dirname(__DIR__)) . '/change-management/attachments/' . $changeId
-    );
-
-    // file_path stays relative to the attachments root, as get_attachment.php and
-    // delete_attachment.php both expect. It now names OUR generated file; the
-    // name the person recognises lives in file_name.
-    $relativePath = $changeId . '/' . $stored['stored_name'];
-
-    try {
-        $stmt = $conn->prepare(
-            "INSERT INTO change_attachments
-                (change_id, file_name, file_path, file_size, file_type, uploaded_by_id, uploaded_datetime)
-             VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())"
-        );
-        $stmt->execute([
-            $changeId,
-            $stored['original_name'],
-            $relativePath,
-            $stored['size'],
-            $stored['mime'],
-            $analystId,
-        ]);
-    } catch (Exception $dbEx) {
-        // Never leave bytes on disk with no row pointing at them.
-        @unlink($stored['path']);
-        throw $dbEx;
-    }
+    $result = ChangesService::uploadAttachment($conn, ActorContext::fromSession($conn), $changeId, $_FILES['file']);
+    $attachmentId = $result['id'];
 
     echo json_encode([
         'success'       => true,
-        'attachment_id' => $conn->lastInsertId(),
+        'attachment_id' => $attachmentId,
         'message'       => 'File uploaded successfully',
     ]);
 

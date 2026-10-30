@@ -68,9 +68,9 @@ $sample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current()));
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.dateformat.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.dateformat.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         body {
             /* System's DARK accent is a LIGHT colour, so --on-accent must be pinned
@@ -160,7 +160,7 @@ $sample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current()));
         [data-theme-mode="dark"] .fmt-option.is-selected { background: var(--surface-2, #232830); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="date-formats">
     <?php include '../includes/header.php'; ?>
@@ -171,7 +171,7 @@ $sample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current()));
 
         <form id="dateFormatForm">
             <div class="settings-card">
-                <h3><?php echo htmlspecialchars(t('system.dateformat.date_heading')); ?></h3>
+                <h3 id="date-format"><?php echo htmlspecialchars(t('system.dateformat.date_heading')); ?></h3>
                 <p class="card-desc"><?php echo htmlspecialchars(t('system.dateformat.date_desc')); ?></p>
                 <div class="fmt-list">
                     <?php foreach (DateFmt::DATE_TEMPLATES as $key => $tpl): ?>
@@ -186,7 +186,7 @@ $sample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current()));
             </div>
 
             <div class="settings-card">
-                <h3><?php echo htmlspecialchars(t('system.dateformat.time_heading')); ?></h3>
+                <h3 id="time-format"><?php echo htmlspecialchars(t('system.dateformat.time_heading')); ?></h3>
                 <p class="card-desc"><?php echo htmlspecialchars(t('system.dateformat.time_desc')); ?></p>
                 <div class="fmt-list">
                     <?php foreach (DateFmt::TIME_TEMPLATES as $key => $tpl): ?>
@@ -292,6 +292,6 @@ $sample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current()));
         btn.disabled = false;
     });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

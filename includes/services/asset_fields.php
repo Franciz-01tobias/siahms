@@ -102,6 +102,7 @@ class AssetFieldsService
      * as smart TVs: the other seven do not show empty IP / MAC / Netflix fields,
      * they do not have those fields at all.
      *
+     * @param ?int $assetTypeId  the asset's type, whose attached sets are included; null when it has no type
      * @return array Sets in display order, each with `via` = 'type' | 'asset'.
      *               A set attached BOTH ways appears once, marked 'type'.
      */
@@ -155,6 +156,8 @@ class AssetFieldsService
      * whether it is required, required wins — the stricter reading is the safe
      * one, and a field that is mandatory for laptops should not become optional
      * because a second set also happens to include it.
+     *
+     * @param ?int $assetTypeId  the asset's type, whose attached sets are included; null when it has no type
      */
     public static function fieldsForAsset(PDO $conn, int $assetId, ?int $assetTypeId): array
     {
@@ -165,7 +168,11 @@ class AssetFieldsService
         return self::fieldsForSets($conn, array_column($sets, 'id'));
     }
 
-    /** Canonical definitions for a list of set ids, keyed by field_key. */
+    /**
+     * Canonical definitions for a list of set ids, keyed by field_key.
+     *
+     * @param array $setIds  asset_field_sets ids; duplicates and non-integers are tidied
+     */
     public static function fieldsForSets(PDO $conn, array $setIds): array
     {
         $setIds = array_values(array_unique(array_map('intval', $setIds)));
@@ -200,7 +207,11 @@ class AssetFieldsService
         return $defs;
     }
 
-    /** One catalogue row (joined to its set membership) -> a canonical definition. */
+    /**
+     * One catalogue row (joined to its set membership) -> a canonical definition.
+     *
+     * @param array $r  one asset_fields row joined to its asset_field_set_fields and asset_field_sets row
+     */
     private static function toDef(array $r): array
     {
         $config = [];
@@ -239,6 +250,8 @@ class AssetFieldsService
     /**
      * Values for ONE asset, as [field_key => value]. Convenience over the
      * batched reader — for a LIST, call readForAssets() once instead.
+     *
+     * @param array $defs  field definitions keyed by field_key, as from fieldsForAsset()
      */
     public static function valuesForAsset(PDO $conn, int $assetId, array $defs): array
     {
@@ -252,6 +265,9 @@ class AssetFieldsService
      * ⚠️ $defs must cover every field any of these assets could hold — pass the
      * whole visible catalogue, not one asset's fields, or values belonging to a
      * field outside the list are silently dropped.
+     *
+     * @param array $assetIds  the assets whose values to read
+     * @param array $defs  field definitions keyed by field_key covering every field any of them may hold
      */
     public static function readForAssets(PDO $conn, array $assetIds, array $defs): array
     {
@@ -272,6 +288,8 @@ class AssetFieldsService
      * History is written per changed field so a custom field is as auditable as
      * a built-in one; an estate where core edits are logged and custom ones
      * vanish is worse than no audit at all.
+     *
+     * @param array $values  [field_key => value] from the request; keys that do not apply to the asset are refused
      */
     public static function saveValues(PDO $conn, ActorContext $ctx, int $assetId, array $values): array
     {
@@ -321,6 +339,9 @@ class AssetFieldsService
      * hold a printer with asset tag PR0001 — the same reasoning that keeps
      * hostname uniqueness per company in application code rather than in an
      * index.
+     *
+     * @param array $defs  the asset's field definitions keyed by field_key
+     * @param array $values  [field_key => value] about to be saved; blank values are never checked
      */
     private static function assertUnique(PDO $conn, int $assetId, array $defs, array $values): void
     {
@@ -367,6 +388,10 @@ class AssetFieldsService
      * field_name is stored as `field:<field_key>` — the column is VARCHAR(100)
      * and the key is the stable identifier, so history stays readable after a
      * label is renamed.
+     *
+     * @param array $defs  the asset's field definitions keyed by field_key; only these keys are compared
+     * @param array $before  [field_key => value] before the save
+     * @param array $after  [field_key => value] after the save
      */
     private static function logChanges(
         PDO $conn, ActorContext $ctx, int $assetId, array $defs, array $before, array $after): void
@@ -391,7 +416,11 @@ class AssetFieldsService
         }
     }
 
-    /** A value as it should read in the history table. NULL stays NULL — "not set". */
+    /**
+     * A value as it should read in the history table. NULL stays NULL — "not set".
+     *
+     * @param mixed $v  a stored field value; bools become '1'/'0', text is cut to 500 characters
+     */
     private static function historyText($v): ?string
     {
         if ($v === null) {
@@ -407,7 +436,11 @@ class AssetFieldsService
     //  Per-asset set attachment (the pilot case)
     // ====================================================================
 
-    /** Attach a set to ONE asset. Idempotent. */
+    /**
+     * Attach a set to ONE asset. Idempotent.
+     *
+     * @param int $setId  the asset_field_sets row to attach
+     */
     public static function attachSetToAsset(PDO $conn, ActorContext $ctx, int $assetId, int $setId): void
     {
         self::loadAsset($conn, $assetId);
@@ -428,6 +461,8 @@ class AssetFieldsService
      * all still there. Deleting on detach would make an accidental click
      * unrecoverable, and the rows are harmless — readValues() only returns
      * values for fields that currently apply.
+     *
+     * @param int $setId  the asset_field_sets row to detach
      */
     public static function detachSetFromAsset(PDO $conn, int $assetId, int $setId): void
     {
@@ -451,6 +486,9 @@ class AssetFieldsService
      * FormsService fixed it: changing it strands every answer under a column the
      * new type never reads. Presentational variants are modes inside `config`
      * (multiline, decimals, date_mode), which stay editable forever.
+     *
+     * @param array $in  the request fields: id (0 = new), label, field_type, field_key, config, help_text, is_unique,
+     *     is_searchable, show_in_list, options
      */
     public static function saveField(PDO $conn, ActorContext $ctx, array $in): array
     {
@@ -529,6 +567,8 @@ class AssetFieldsService
      * would take every answer ever recorded with it, and the foreign key is
      * deliberately RESTRICT so that mistake is impossible even from the
      * database side.
+     *
+     * @param int $id  the asset_fields row to retire
      */
     public static function deleteField(PDO $conn, int $id): void
     {
@@ -537,7 +577,11 @@ class AssetFieldsService
         $conn->prepare("DELETE FROM asset_field_set_fields WHERE field_id = ?")->execute([$id]);
     }
 
-    /** Create or update a field set. */
+    /**
+     * Create or update a field set.
+     *
+     * @param array $in  the request fields: id (0 = new), name, description, display_order
+     */
     public static function saveSet(PDO $conn, ActorContext $ctx, array $in): array
     {
         $id   = (int)($in['id'] ?? 0);
@@ -566,6 +610,8 @@ class AssetFieldsService
      * The VALUES survive — the same reasoning as detachSetFromAsset(). Deleting
      * a set is a statement about which fields to show, never about the answers
      * already given.
+     *
+     * @param int $id  the asset_field_sets row to retire
      */
     public static function deleteSet(PDO $conn, int $id): void
     {
@@ -580,6 +626,9 @@ class AssetFieldsService
      *
      * Whole-list replace rather than add/remove calls, so one drag-reorder is
      * one request and the order can never end up half-applied.
+     *
+     * @param int $setId  the asset_field_sets row whose field list is replaced
+     * @param array $rows  the new list in order, each {field_id, sort_order?, is_required?, default_value?}
      */
     public static function setSetFields(PDO $conn, int $setId, array $rows): void
     {
@@ -620,7 +669,12 @@ class AssetFieldsService
         }
     }
 
-    /** Replace which sets are attached to an asset type. */
+    /**
+     * Replace which sets are attached to an asset type.
+     *
+     * @param int $assetTypeId  the asset type whose attached sets are replaced
+     * @param array $setIds  the asset_field_sets ids to attach, in display order
+     */
     public static function setTypeSets(PDO $conn, int $assetTypeId, array $setIds): void
     {
         $owns = !$conn->inTransaction();
@@ -655,6 +709,12 @@ class AssetFieldsService
 
     // ---- admin helpers ---------------------------------------------------
 
+    /**
+     * Validates a custom field type; a link field must also name a valid ref_kind.
+     *
+     * @param string $type  the field type asked for; must be one of self::TYPES
+     * @param array $config  the field's config; a 'ref' field must carry a valid ref_kind
+     */
     private static function assertType(string $type, array $config): string
     {
         if (!in_array($type, self::TYPES, true)) {
@@ -671,7 +731,11 @@ class AssetFieldsService
         return $type;
     }
 
-    /** A stable machine key from a label: lowercase, underscores, no leading digit. */
+    /**
+     * A stable machine key from a label: lowercase, underscores, no leading digit.
+     *
+     * @param string $seed  the field_key asked for, or the label when none was given
+     */
     private static function makeKey(PDO $conn, string $seed): string
     {
         $key = strtolower(trim($seed));
@@ -688,6 +752,8 @@ class AssetFieldsService
      * MySQL treats NULLs as distinct, so two GLOBAL fields could both claim
      * `serial_number` while the index looked like it was guarding them. Exactly
      * the trap documented on assets.asset_tag.
+     *
+     * @param string $key  the field_key the new field would take
      */
     private static function assertKeyFree(PDO $conn, string $key, ?int $tenantId): void
     {
@@ -719,6 +785,16 @@ class AssetFieldsService
         return (int)$active;
     }
 
+    /**
+     * Replaces a dropdown field's option list, skipping blanks and duplicates; a field that
+     * is not a dropdown loses its options.
+     *
+     * Leaves the list alone when no options were sent.
+     *
+     * @param int $fieldId  the asset_fields row whose options are replaced
+     * @param string $type  the field's type; anything but 'dropdown' clears its options
+     * @param mixed $options  the options from the request, each a string or {option_value, colour}; null leaves them alone
+     */
     private static function saveOptions(PDO $conn, int $fieldId, string $type, $options): void
     {
         if ($options === null || !is_array($options)) {
@@ -746,6 +822,11 @@ class AssetFieldsService
         }
     }
 
+    /**
+     * True when any asset has a value stored for the field.
+     *
+     * @param int $fieldId  the asset_fields row to check
+     */
     private static function fieldHasValues(PDO $conn, int $fieldId): bool
     {
         $stmt = $conn->prepare("SELECT 1 FROM asset_field_values WHERE field_id = ? LIMIT 1");
@@ -753,6 +834,11 @@ class AssetFieldsService
         return $stmt->fetchColumn() !== false;
     }
 
+    /**
+     * Loads one custom field that has not been deleted; throws not found otherwise.
+     *
+     * @param int $id  the asset_fields row to load
+     */
     private static function loadField(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare("SELECT * FROM asset_fields WHERE id = ? AND is_deleted = 0");
@@ -764,6 +850,11 @@ class AssetFieldsService
         return $row;
     }
 
+    /**
+     * Trimmed text, or null when blank.
+     *
+     * @param mixed $v  the value from the request
+     */
     private static function nullIfBlank($v): ?string
     {
         $v = ($v === null) ? '' : trim((string)$v);
@@ -810,6 +901,7 @@ class AssetFieldsService
         return $rows;
     }
 
+    /** Loads an asset's id, type and company; throws not found when it does not exist. */
     private static function loadAsset(PDO $conn, int $assetId): array
     {
         $stmt = $conn->prepare("SELECT id, asset_type_id, tenant_id FROM assets WHERE id = ?");
@@ -821,6 +913,11 @@ class AssetFieldsService
         return $row;
     }
 
+    /**
+     * Loads one field set that has not been deleted; throws not found otherwise.
+     *
+     * @param int $setId  the asset_field_sets row to load
+     */
     private static function loadSet(PDO $conn, int $setId): array
     {
         $stmt = $conn->prepare("SELECT id, name FROM asset_field_sets WHERE id = ? AND is_deleted = 0");
@@ -832,6 +929,7 @@ class AssetFieldsService
         return $row;
     }
 
+    /** The company id of an asset, or null. */
     private static function tenantOfAsset(PDO $conn, int $assetId): ?int
     {
         $stmt = $conn->prepare("SELECT tenant_id FROM assets WHERE id = ?");

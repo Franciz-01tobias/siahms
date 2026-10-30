@@ -16,6 +16,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('tickets');
 
 $ticketId = $_GET['ticket_id'] ?? null;
 
@@ -133,13 +134,10 @@ try {
     $windowOpen = false;
     $channelProvider = '';
     if ($ticketChannel !== 'email') {
-        // Channels with no provider service window at all: web chat is self-hosted,
-        // and Slack simply has no such rule — you can reply to an old thread.
-        //
-        // ⚠️ This list MUST match the one in api/messaging/send_message.php. If the
-        // two disagree the composer greys out a reply the API would have accepted
-        // (or offers one it will refuse), and it reads as a broken integration.
-        if (in_array($ticketChannel, ['webchat', 'slack'], true)) {
+        // Only WhatsApp has a provider reply window. The list lives in ONE place,
+        // channelHasServiceWindow(), shared with send_message.php and
+        // send_attachment.php - so the composer and the API cannot disagree.
+        if (!channelHasServiceWindow($ticketChannel)) {
             $windowOpen = true;
         } else {
             $ts = $conn->prepare("SELECT last_inbound_at FROM tickets WHERE id = ?");
@@ -174,6 +172,8 @@ try {
 /**
  * Strip quoted/nested thread content from an email body
  * Relies on our own visible marker text, with generic blockquote fallback
+ *
+ * @param mixed $body  an email's HTML body, which may still carry the quoted earlier thread
  */
 function stripQuotedThread($body) {
     $stripped = null;

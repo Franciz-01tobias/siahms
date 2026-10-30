@@ -20,6 +20,8 @@
 
 /**
  * "That table doesn't exist." MySQL: SQLSTATE 42S02, driver code 1146.
+ *
+ * @param PDOException $e  the exception a query threw
  */
 function dbErrorIsMissingTable(PDOException $e): bool
 {
@@ -29,6 +31,8 @@ function dbErrorIsMissingTable(PDOException $e): bool
 
 /**
  * "That column doesn't exist." MySQL: SQLSTATE 42S22, driver code 1054.
+ *
+ * @param PDOException $e  the exception a query threw
  */
 function dbErrorIsUnknownColumn(PDOException $e): bool
 {
@@ -38,6 +42,8 @@ function dbErrorIsUnknownColumn(PDOException $e): bool
 
 /**
  * Either of the above — the two shapes a part-migrated install actually takes.
+ *
+ * @param PDOException $e  the exception a query threw
  */
 function dbErrorIsMissingSchema(PDOException $e): bool
 {

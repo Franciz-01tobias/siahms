@@ -364,7 +364,7 @@ class WorkflowTemplates
                         'type' => 'create_ticket',
                         'args' => [
                             'subject' => 'Contract renewal due: {{contract.title}} ({{contract.number}})',
-                            'body'    => "This contract ends on {{contract.end_date}} — {{contract.days_remaining}} days away.\n\nSupplier: {{contract.supplier_name}}\n\nDecide whether to renew, renegotiate or let it lapse, and action it before the end date.",
+                            'body'    => "This contract ends on {{contract.end_date}} — {{contract.days_remaining}} days away.\n\nWith: {{contract.party_name}}\n\nDecide whether to renew, renegotiate or let it lapse, and action it before the end date.",
                         ],
                     ],
                 ],
@@ -697,6 +697,8 @@ class WorkflowTemplates
 
     /**
      * One template by key, or null.
+     *
+     * @param string $key  the template's key in all(), e.g. 'ticket_deleted_audit_trail'
      */
     public static function get(string $key): ?array
     {
@@ -746,6 +748,8 @@ class WorkflowTemplates
      * Never throws on an unresolvable value — an install that has renamed
      * every priority should still get the workflow, with an honest list of
      * what it needs to fill in.
+     *
+     * @param array $tpl  one template from all() (name, description, trigger_event, conditions, actions)
      */
     public static function resolve(array $tpl): array
     {
@@ -785,6 +789,11 @@ class WorkflowTemplates
     /**
      * Resolve one template value. Literals pass straight through; markers are
      * expanded (or recorded as unresolved and blanked).
+     *
+     * @param mixed $val  a condition value or action arg: a literal, or a ['$lookup' => ..., 'names' => [...]]
+     *     or ['$configure' => reason] marker
+     * @param string $where  where the value sits, in words, for the unresolved list, e.g. 'Action 1 (...) · Assign to'
+     * @param array $unresolved  by reference; a [where, reason] entry is added for each value left blank
      */
     private static function resolveValue($val, string $where, array &$unresolved)
     {
@@ -828,6 +837,8 @@ class WorkflowTemplates
 
     /**
      * ['A', 'B', 'C'] → "A, B or C" — for the unresolved-reason sentences.
+     *
+     * @param array $names  the names to list, quoted in the result
      */
     private static function humanList(array $names): string
     {

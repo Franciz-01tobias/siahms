@@ -112,6 +112,15 @@ final class KnowledgeViewer
     private bool $unrestricted;
     private string $unrestrictedReason;
 
+    /**
+     * Private: viewers are built through the named constructors, so every caller states who is reading.
+     *
+     * @param string $level  the audience rung - 'internal', 'customer' or 'public'; anything else becomes 'internal'
+     * @param ?int $userId  the portal user reading, or null when the reader is not a portal user
+     * @param ?array $companyScope  null for no company limit, [] for shared articles only, or the company ids allowed
+     * @param bool $unrestricted  true only for forSystem() - skips every permission filter
+     * @param string $unrestrictedReason  why the filters are skipped; '' unless $unrestricted
+     */
     private function __construct(
         string $level,
         ?int $analystId,
@@ -201,6 +210,8 @@ final class KnowledgeViewer
      * "every key acts as an analyst" — so a key inherits its analyst's reach and
      * needs no principal model of its own. The API comes along for free
      * PROVIDED it reads through this file like everything else.
+     *
+     * @param array $apiKey  the authenticated api_keys row (analyst_id, company_scope)
      */
     public static function forApiKey(PDO $conn, array $apiKey): self
     {
@@ -222,7 +233,11 @@ final class KnowledgeViewer
         return new self(Audience::INTERNAL, $analystId > 0 ? $analystId : null, null, $scope);
     }
 
-    /** A signed-in self-service portal user. */
+    /**
+     * A signed-in self-service portal user.
+     *
+     * @param ?int $userId  the portal user's users.id; null or 0 for no named user
+     */
     public static function forPortalUser(PDO $conn, ?int $userId, ?int $tenantId): self
     {
         return new self(Audience::CUSTOMER, null, $userId > 0 ? $userId : null, self::scopeForOneCompany($conn, $tenantId));
@@ -250,6 +265,8 @@ final class KnowledgeViewer
      * constructor that DERIVES the rung from who is actually asking, because a
      * level accepted from request data is a privilege escalation waiting to be
      * found. Deleting this method is the last step of the migration.
+     *
+     * @param string $level  the audience rung the caller states - 'internal', 'customer' or 'public'
      */
     public static function fromLegacyAudienceString(PDO $conn, ?int $tenantId, string $level): self
     {
@@ -264,6 +281,8 @@ final class KnowledgeViewer
      * $reason is required and is not decoration: it makes every bypass in the
      * codebase findable with one grep, and forces the author to name the
      * justification at the point of use rather than in a commit message.
+     *
+     * @param string $reason  why this caller may see every article, e.g. 'search indexer'; blank throws
      */
     public static function forSystem(string $reason): self
     {
@@ -273,12 +292,19 @@ final class KnowledgeViewer
         return new self(Audience::INTERNAL, null, null, null, true, $reason);
     }
 
+    /** The audience rung this viewer reads at. */
     public function level(): string             { return $this->level; }
+    /** The analyst reading, or null for a portal user, a visitor or a system reader. */
     public function analystId(): ?int           { return $this->analystId; }
+    /** The self-service user reading, or null when the reader is not a portal user. */
     public function userId(): ?int              { return $this->userId; }
+    /** The company ids the viewer may read from, or null for no company limit. */
     public function companyScope(): ?array      { return $this->companyScope; }
+    /** True for a forSystem() reader, which skips all filtering. */
     public function isUnrestricted(): bool      { return $this->unrestricted; }
+    /** The reason given to forSystem() for skipping all filtering; empty for every other viewer. */
     public function unrestrictedReason(): string { return $this->unrestrictedReason; }
+    /** True for an analyst reading (internal level and not an unrestricted system reader). */
     public function isAnalyst(): bool           { return $this->level === Audience::INTERNAL && !$this->unrestricted; }
 }
 
@@ -312,6 +338,10 @@ final class KnowledgeViewer
  *       would have had to opt OUT of the security filter to get the rows it
  *       needs. That is precisely the shape of mistake this file exists to
  *       prevent, so they are separate knobs.
+ *
+ * @param KnowledgeViewer $viewer  who is reading
+ * @param string $alias  the knowledge_articles alias in the calling query; '' when it has none
+ * @param array $opts  lifecycle ('live', 'published', 'unarchived', 'archived', 'any'); no_admin_floor (true skips the floor)
  */
 function knowledgeVisibilitySql(PDO $conn, KnowledgeViewer $viewer, string $alias = 'a', array $opts = []): array
 {
@@ -397,6 +427,10 @@ function knowledgeVisibilitySql(PDO $conn, KnowledgeViewer $viewer, string $alia
  * "let the caller's own 404 handle it" is only safe if every caller HAS a 404,
  * and that is not a property this function can check. Denying is correct and is
  * indistinguishable to a legitimate reader, who gets not-found either way.
+ *
+ * @param KnowledgeViewer $viewer  who is reading
+ * @param mixed $articleId  the knowledge article id (cast to int; 0 or less gives false)
+ * @param array $opts  passed to knowledgeVisibilitySql() - see there for lifecycle
  */
 function knowledgeCanRead(PDO $conn, KnowledgeViewer $viewer, $articleId, array $opts = []): bool
 {
@@ -445,6 +479,8 @@ function knowledgeCanRead(PDO $conn, KnowledgeViewer $viewer, $articleId, array 
  *
  * Only an ANALYST can hold it. A portal user or a web-chat visitor never does,
  * whatever else is true of them.
+ *
+ * @param KnowledgeViewer $viewer  who is reading; only an analyst viewer can hold the floor
  */
 function knowledgeViewerHasAdminFloor(PDO $conn, KnowledgeViewer $viewer): bool
 {
@@ -457,7 +493,12 @@ function knowledgeViewerHasAdminFloor(PDO $conn, KnowledgeViewer $viewer): bool
     }
 }
 
-/** Record that the floor let somebody past an access list they were not on. */
+/**
+ * Record that the floor let somebody past an access list they were not on.
+ *
+ * @param KnowledgeViewer $viewer  the analyst viewer who was let in by the floor
+ * @param int $articleId  the knowledge article they opened
+ */
 function knowledgeAuditAdminOverride(PDO $conn, KnowledgeViewer $viewer, int $articleId): void
 {
     knowledgeAuditLog($conn, 'article', $articleId, 'admin_override',
@@ -491,6 +532,10 @@ function knowledgeAuditAdminOverride(PDO $conn, KnowledgeViewer $viewer, int $ar
  *     It is a branch INSIDE this function, which is why it must ship with the
  *     first version rather than being layered on later.
  *   • the knowledge.admin floor — always passes, and writes an audit row.
+ *
+ * @param KnowledgeViewer $viewer  who is reading
+ * @param string $alias  the knowledge_articles alias in the calling query; '' when it has none
+ * @param array $opts  no_admin_floor (true) leaves out the administrator floor; other keys are ignored here
  */
 function knowledgeAclSql(PDO $conn, KnowledgeViewer $viewer, string $alias = "a", array $opts = []): array
 {
@@ -604,6 +649,12 @@ function knowledgeAclSql(PDO $conn, KnowledgeViewer $viewer, string $alias = "a"
  * ⚠️ A Restricted node with NO rows admits NOBODY. That is correct rather than a
  * bug — it is "restricted to nobody" — and it is precisely the state the
  * administrator floor exists to recover from.
+ *
+ * @param string $type  'folder' or 'article'
+ * @param int $id  the folder or article id
+ * @param int $isRestricted  1 for a Restricted node (grants admit), 0 for an Open one (denies exclude)
+ * @param array $acl  the access rows from knowledgeAclIndex(), [type][object_id]['principal:id' => true]
+ * @param array $principals  the viewer's 'type:id' strings from knowledgeViewerPrincipals()
  */
 function knowledgeNodePermits(string $type, int $id, int $isRestricted, array $acl, array $principals): bool
 {
@@ -627,6 +678,12 @@ function knowledgeNodePermits(string $type, int $id, int $isRestricted, array $a
  * A cycle (which the parent FK does not prevent) terminates the walk rather than
  * hanging: a folder that is its own ancestor is corrupt, and the safe reading of
  * corrupt is "not readable".
+ *
+ * @param int $folderId  the knowledge_folders id to check
+ * @param array $folders  the folder tree from knowledgeFolderIndex(), [id => [parent, restricted, inherit]]
+ * @param array $acl  the access rows from knowledgeAclIndex()
+ * @param array $principals  the viewer's 'type:id' strings from knowledgeViewerPrincipals()
+ * @param string $mode  'containers' (every ancestor must permit) or 'filing' (the nearest rule-bearing node decides)
  */
 function knowledgeFolderReadable(int $folderId, array $folders, array $acl, array $principals, string $mode): bool
 {
@@ -658,6 +715,8 @@ function knowledgeFolderReadable(int $folderId, array $folders, array $acl, arra
  * ⚠️ the expiry is applied HERE, at read time, so the three engineers who were
  * given a folder for a week lose it by the clock rather than by somebody
  * remembering to take it away.
+ *
+ * @param KnowledgeViewer $viewer  who is reading
  */
 function knowledgeViewerPrincipals(PDO $conn, KnowledgeViewer $viewer): array
 {
@@ -712,19 +771,30 @@ final class KnowledgeAclCache
 {
     private static array $store = [];
 
-    /** @return mixed|null null = not cached (distinct from a cached null) */
+    /**
+     * The cached value for $key, or null when nothing is cached.
+     *
+     * @param string $key  the cache slot - 'mode', 'any', 'acl' or 'folders'
+     * @return mixed|null null = not cached (distinct from a cached null)
+     */
     public static function get(string $key)
     {
         return array_key_exists($key, self::$store) ? self::$store[$key] : null;
     }
 
-    /** Stores and returns the value, so callers can `return set(...)`. */
+    /**
+     * Stores and returns the value, so callers can `return set(...)`.
+     *
+     * @param string $key  the cache slot - 'mode', 'any', 'acl' or 'folders'
+     * @param mixed $value  the value to keep for the rest of the request
+     */
     public static function set(string $key, $value)
     {
         self::$store[$key] = $value;
         return $value;
     }
 
+    /** Empties the per-request cache. */
     public static function clear(): void { self::$store = []; }
 }
 

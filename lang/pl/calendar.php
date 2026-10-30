@@ -171,6 +171,7 @@ return [
         'categories_heading' => 'Kategorie wydarzeń',
         'categories_intro' => 'Kategorie są podstawą organizacji kalendarza. Każda kategoria ma nazwę i kolor, dzięki czemu wydarzenia są od razu rozpoznawalne na pierwszy rzut oka. Pasek boczny pokazuje wszystkie dostępne kategorie z polami wyboru &mdash; odznacz kategorię, aby ukryć te wydarzenia z kalendarza.',
         'categories_certificates' => '<strong>Certyfikaty</strong> &mdash; śledź daty wygaśnięcia certyfikatów SSL/TLS, certyfikatów podpisywania kodu i innych poświadczeń wymagających okresowego odnawiania',
+        'categories_projects' => '<strong>Projekty</strong> &mdash; wypełniane przez moduł Projekty: docelowa data zakończenia każdego aktywnego projektu oraz koniec każdego otwartego etapu, fazy lub sprintu, utrzymywane zgodnie z planem',
         'categories_contracts' => '<strong>Umowy</strong> &mdash; rejestruj daty odnowienia umów z dostawcami, wygaśnięcia licencji i kamienie milowe przeglądów SLA, aby nic nie wygasło niespodziewanie',
         'categories_maintenance' => '<strong>Serwis</strong> &mdash; planuj zaplanowane okna serwisowe dla serwerów, sprzętu sieciowego i infrastruktury. Twój zespół i interesariusze widzą dokładnie, kiedy spodziewana jest przerwa w działaniu',
         'categories_meetings' => '<strong>Spotkania</strong> &mdash; zapisuj codzienne spotkania zespołu, spotkania CAB, rozmowy z dostawcami i inne cykliczne spotkania istotne dla operacji IT',

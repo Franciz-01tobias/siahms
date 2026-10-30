@@ -102,6 +102,8 @@ function inboxDisplayDefaults(): array
  * Unknown fields are dropped, unknown styles fall back to that field's default,
  * and a missing field takes its default — so a config saved by a future version
  * with more fields still renders correctly on an older one, and vice versa.
+ *
+ * @param mixed $raw  a saved config - a JSON string or an array of field => style; anything else gives the defaults
  */
 function inboxDisplayNormalise($raw): array
 {

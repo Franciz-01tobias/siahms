@@ -39,6 +39,8 @@
  * Skips key/constraint lines (PRIMARY KEY, KEY, UNIQUE KEY, INDEX, CONSTRAINT,
  * FOREIGN KEY) and `--` comments, which is everything inside a CREATE TABLE
  * that isn't a column.
+ *
+ * @param string $sql  the full text of database/freeitsm.sql
  */
 function dbVerifyParseColumnsFromSql(string $sql): array {
     preg_match_all(
@@ -75,6 +77,8 @@ function dbVerifyParseColumnsFromSql(string $sql): array {
  * ON UPDATE, and back-tick/whitespace/case differences. Those vary harmlessly
  * between the two files today, and a guard that fires on them is worse than no
  * guard at all.
+ *
+ * @param string $def  a column definition after the name, e.g. "varchar(100) NOT NULL DEFAULT ''"
  */
 function dbVerifyNormaliseColumnType(string $def): string {
     $d = strtoupper(trim($def));
@@ -98,6 +102,10 @@ function dbVerifyNormaliseColumnType(string $def): string {
  *
  * $maxPerKind caps each category so one systemic mistake can't produce a
  * hundred-line card.
+ *
+ * @param ?string $sqlPath  path to freeitsm.sql; null means database/freeitsm.sql in this install
+ * @param ?string $schemaPath  path to the schema file; null means includes/db_verify_schema.php
+ * @param int $maxPerKind  most problems listed per category before the rest are summarised
  */
 function dbVerifyColumnSelfCheck(?string $sqlPath = null, ?string $schemaPath = null, int $maxPerKind = 6): array {
     $sqlPath    = $sqlPath    ?? __DIR__ . '/../database/freeitsm.sql';

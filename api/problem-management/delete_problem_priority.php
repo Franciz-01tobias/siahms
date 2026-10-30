@@ -1,4 +1,13 @@
 <?php
+/**
+ * API: delete a problem priority (Problems -> Settings).
+ *
+ * Refused while any problem still uses it - set it inactive instead. Fires the
+ * problem_priority 'deleted' workflow event.
+ *
+ * @input  id  the priority (JSON body)
+ * @output {success}
+ */
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';

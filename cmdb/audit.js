@@ -18,14 +18,17 @@ const CHECK_ORDER = [
     'stale'
 ];
 
+/** Escapes text for safe use in HTML. */
 function esc(s) {
     return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** Translates a key under cmdb.audit. */
 function tr(key, params) { return window.t('cmdb.audit.' + key, params || {}); }
 
+/** Fetches the CMDB audit from AUDIT_API and renders it, or shows the error in the page. */
 async function loadAudit() {
     const body = document.getElementById('auditBody');
     try {
@@ -38,6 +41,7 @@ async function loadAudit() {
     }
 }
 
+/** Draws the audit - objects examined and total findings, then one card per check in CHECK_ORDER. */
 function render(audit) {
     const byKey = {};
     (audit.checks || []).forEach(c => { byKey[c.key] = c; });
@@ -58,6 +62,9 @@ function render(audit) {
         summary + `<div class="audit-grid">${ordered.map(card).join('')}</div>`;
 }
 
+/**
+ * Returns one check's card - clean, or its findings as links to the objects; the install-level "no impact edges" check links to settings instead.
+ */
 function card(c) {
     const isClean = c.count === 0;
     const cls = isClean ? 'is-clean' : 'sev-' + c.severity;

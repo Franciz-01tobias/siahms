@@ -46,10 +46,10 @@ $query   = trim($_GET['q'] ?? '');   // lets you link someone straight to a sear
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Help</title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../../assets/css/help.css?v=3">
+    <title><?php echo htmlspecialchars(pageTitle('system', 'Help')); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../../assets/css/help.css?v=6">
     <style>
         /* Pin the shared --accent (header/inbox.css primitives) to the System accent. */
         body {
@@ -114,7 +114,7 @@ $query   = trim($_GET['q'] ?? '');   // lets you link someone straight to a sear
 
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
 </head>
@@ -225,6 +225,6 @@ $query   = trim($_GET['q'] ?? '');   // lets you link someone straight to a sear
         apply();   // honours any ?q= in the URL
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -63,7 +63,11 @@ try {
     echo json_encode(['success' => true, 'groups' => [], 'unavailable' => true]);
 }
 
-/** 'YYYY-MM-DD HH:MM:SS' as stored (UTC) → an ISO instant the browser can read. */
+/**
+ * 'YYYY-MM-DD HH:MM:SS' as stored (UTC) → an ISO instant the browser can read.
+ *
+ * @param string $stored  a UTC date and time as stored, 'YYYY-MM-DD HH:MM:SS'
+ */
 function recentTrailIso(string $stored): string
 {
     return str_replace(' ', 'T', trim($stored)) . 'Z';

@@ -20,7 +20,14 @@ if (!isset($_SESSION['analyst_id'])) {
     header('Location: ../auth/login.php');
     exit;
 }
-requireModuleAccess('forms');
+// Forms access, or named as an approver (#180 Part 3): an approver no longer needs the
+// whole Forms module to decide the requests sent to them.
+require_once '../includes/catalogue_approvals.php';
+$caConn = connectToDatabase();
+if (!catalogueApproverCanEnter($caConn, (int)$_SESSION['analyst_id'])) {
+    requireModuleAccess('forms');   // the ordinary bounce
+}
+$caFullAccess = analystCanAccessModule($caConn, (int)$_SESSION['analyst_id'], 'forms');
 
 $current_page = 'approvals';
 $path_prefix = '../';
@@ -32,11 +39,11 @@ $translationNamespaces = ['common', 'forms'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('forms.approval.inbox_title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
+    <title><?php echo htmlspecialchars(pageTitle('forms', t('forms.nav.approvals'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <!-- inbox.css carries the shared header/nav styles (.header, .nav-btn); forms.css
          the module chrome. Same set forms/index.php loads. -->
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/forms.css">
     <style>
         .ca-container { display: flex; height: calc(100vh - 48px); background: var(--app-bg, #f5f5f5); }
@@ -94,7 +101,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -106,10 +113,12 @@ $translationNamespaces = ['common', 'forms'];
                 <span><?php echo htmlspecialchars(t('forms.approval.filter_mine')); ?></span>
                 <span class="cnt" id="cntMine">0</span>
             </div>
+            <?php if ($caFullAccess): /* every pending request and its answers - Forms users only (#180) */ ?>
             <div class="ca-filter" data-filter="all" onclick="setFilter('all')">
                 <span><?php echo htmlspecialchars(t('forms.approval.filter_all')); ?></span>
                 <span class="cnt" id="cntAll">0</span>
             </div>
+            <?php endif; ?>
             <div class="ca-filter" data-filter="decided" onclick="setFilter('decided')">
                 <span><?php echo htmlspecialchars(t('forms.approval.filter_decided')); ?></span>
                 <span class="cnt" id="cntDecided">0</span>
@@ -162,7 +171,7 @@ $translationNamespaces = ['common', 'forms'];
                     return;
                 }
                 document.getElementById('cntMine').textContent = data.counts.mine;
-                document.getElementById('cntAll').textContent = data.counts.all;
+                if (document.getElementById('cntAll')) document.getElementById('cntAll').textContent = data.counts.all;
                 document.getElementById('cntDecided').textContent = data.counts.decided;
                 renderApprovals(data.items);
             } catch (e) {
@@ -323,6 +332,6 @@ $translationNamespaces = ['common', 'forms'];
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

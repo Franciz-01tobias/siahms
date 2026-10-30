@@ -71,7 +71,12 @@ $tabs = [
 $activeTab = in_array($_GET['tab'] ?? '', ['connection','signin','import','mapping','history'], true)
     ? $_GET['tab'] : 'connection';
 
-/** Print a value into an input safely. */
+/**
+ * Print a value into an input safely.
+ *
+ * @param mixed $row  the provider row being edited (an auth_providers row)
+ * @param string $k  the column to print
+ */
 function v($row, string $k): string { return htmlspecialchars((string)($row[$k] ?? '')); }
 ?>
 <!DOCTYPE html>
@@ -80,9 +85,9 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars($p['display_name']); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.sso.title'), $p['display_name'])); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -295,7 +300,7 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
         @media (max-width: 700px) { .prov-wrap { padding: 14px 12px 50px; } }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="sso-provider">
 <?php include '../includes/header.php'; ?>
@@ -405,8 +410,18 @@ function v($row, string $k): string { return htmlspecialchars((string)($row[$k] 
                     <input type="text" id="fGroupBaseDn"  value="<?php echo v($p, 'ldap_group_base_dn'); ?>" placeholder="<?php echo htmlspecialchars(t('system.sso.field_ldap_group_base_dn_placeholder')); ?>">
                 </div>
             </div>
+            <?php /* Two separate switches since discussion #155: one for the
+                     portal, one for analysts. (Profile sync and the "no analyst
+                     account" fallback are OIDC-only, so they are not offered
+                     here - LDAP has its own directory sync, and a password form
+                     has no redirect to fall back from.) Before Database
+                     Verification adds auto_create_analysts, the old single
+                     switch still decides, so that is what the box shows. */ ?>
             <div class="fld">
-                <label class="chk"><input type="checkbox" id="fAutoCreate"<?php echo (int)$p['auto_create_users'] === 1 ? ' checked' : ''; ?>> <?php echo htmlspecialchars(t('system.sso.field_auto_create')); ?></label>
+                <label class="chk"><input type="checkbox" id="fAutoCreate"<?php echo (int)$p['auto_create_users'] === 1 ? ' checked' : ''; ?>> <?php echo htmlspecialchars(t('system.sso.cb_autocreate_users')); ?></label>
+            </div>
+            <div class="fld">
+                <label class="chk"><input type="checkbox" id="fAutoCreateAnalysts"<?php echo (int)($p['auto_create_analysts'] ?? $p['auto_create_users']) === 1 ? ' checked' : ''; ?>> <?php echo htmlspecialchars(t('system.sso.cb_autocreate_analysts')); ?></label>
             </div>
         </div>
 
@@ -625,6 +640,7 @@ function payload() {
         display_name: $('fDisplayName').value.trim(),
         enabled: $('fEnabled').checked ? 1 : 0,
         auto_create_users: $('fAutoCreate').checked ? 1 : 0,
+        auto_create_analysts: $('fAutoCreateAnalysts').checked ? 1 : 0,
         tenant_id: $('fTenantId') ? ($('fTenantId').value || null) : null,
         ldap_host: $('fHost').value.trim(),
         ldap_port: parseInt($('fPort').value, 10) || 389,
@@ -1120,6 +1136,6 @@ if (<?php echo json_encode($activeTab); ?> === 'history') loadRuns();
 // The typed-DN warning must be right on arrival, not only after a click.
 ouManualNote();
 </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

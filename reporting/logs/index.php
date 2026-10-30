@@ -12,6 +12,12 @@ I18n::initFromSession();
 Tz::init();
 requireModuleAccess('reporting');
 
+// Background jobs (#182) is a tab only for those who may see job health - its
+// messages name the install's directories, servers and tracker connections.
+require_once '../../includes/job_health.php';
+$jobsVisible = jobHealthMayView(connectToDatabase(), (int)$_SESSION['analyst_id']);
+$openJobs = $jobsVisible && (($_GET['tab'] ?? '') === 'jobs');
+
 $current_page = 'logs';
 $path_prefix = '../../';
 $translationNamespaces = ['common', 'reporting'];
@@ -22,9 +28,9 @@ $translationNamespaces = ['common', 'reporting'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('reporting.logs.heading')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('reporting', t('reporting.nav.logs_title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -368,10 +374,40 @@ $translationNamespaces = ['common', 'reporting'];
         [data-theme-mode="dark"] .logs-table tbody tr:hover {
             background: var(--rep-accent-soft, #3a2416);
         }
+
+        /* ---- Background jobs (#182) ------------------------------------- */
+        .jobs-meta { font-size: 13px; color: var(--text-muted, #666); padding: 12px 15px 0; }
+        .jobs-section-title { font-size: 15px; font-weight: 600; color: var(--text, #333); padding: 16px 15px 8px; margin: 0; }
+        .jobs-table td { vertical-align: top; }
+        .jobs-table tbody tr { cursor: default; }
+        .jobs-table tbody tr.job-row-clickable { cursor: pointer; }
+        .job-name { font-weight: 600; }
+        .job-affects { font-size: 12px; color: var(--text-muted, #666); margin-top: 2px; }
+        .job-pill { padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: 500; white-space: nowrap; display: inline-block; }
+        .job-pill.healthy, .job-pill.ok { background: var(--success-bg, #d4edda); color: var(--success-text, #155724); }
+        .job-pill.failing, .job-pill.stuck, .job-pill.failed, .job-pill.unknown { background: var(--danger-bg, #f8d7da); color: var(--danger-text, #721c24); }
+        .job-pill.overdue, .job-pill.never_seen, .job-pill.partial { background: var(--warning-bg, #fff3cd); color: var(--warning-text, #856404); }
+        .job-pill.not_needed, .job-pill.not_used, .job-pill.skipped, .job-pill.running { background: var(--surface-2, #f0f0f0); color: var(--text-muted, #666); }
+        .job-problem { font-size: 12px; margin-top: 4px; color: var(--text, #444); }
+        .job-problem code { font-size: 11px; background: var(--surface-2, #f0f0f0); padding: 1px 5px; border-radius: 3px; }
+        .job-sources { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
+        .job-sub { font-size: 12px; color: var(--text-muted, #666); }
+        .jobs-filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 15px 10px; }
+        .jobs-filters select { padding: 6px 8px; border: 1px solid var(--border, #ddd); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333); font-size: 13px; }
+        .jobs-pager { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 12px; }
+        .jobs-pager button, .job-edit-btn { padding: 5px 12px; border: 1px solid var(--border, #ddd); background: var(--surface, #fff); border-radius: 4px; cursor: pointer; font-size: 13px; color: var(--text, #333); }
+        .jobs-pager button:disabled { opacity: .5; cursor: not-allowed; }
+        .job-detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 12px; font-size: 13px; }
+        .job-detail dt { color: var(--text-muted, #666); }
+        .job-detail dd { margin: 0; }
+        .job-form label { display: block; font-size: 13px; margin: 10px 0 4px; color: var(--text, #333); }
+        .job-form input[type=number] { width: 120px; padding: 6px 8px; border: 1px solid var(--border, #ddd); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333); }
+        .job-form .hint { font-size: 12px; color: var(--text-muted, #666); margin-top: 4px; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border, #ddd); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> block, or a rule at
          equal specificity loses on document order (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="reporting" data-mobile-page="rep-logs">
     <?php include '../includes/header.php'; ?>
@@ -399,8 +435,11 @@ $translationNamespaces = ['common', 'reporting'];
             </div>
 
             <div class="log-tabs">
-                <button class="log-tab active" onclick="switchLogType('login')"><?php echo htmlspecialchars(t('reporting.logs.tab_login')); ?></button>
+                <button class="log-tab<?php echo $openJobs ? '' : ' active'; ?>" onclick="switchLogType('login')"><?php echo htmlspecialchars(t('reporting.logs.tab_login')); ?></button>
                 <button class="log-tab" onclick="switchLogType('email_import')"><?php echo htmlspecialchars(t('reporting.logs.tab_email_import')); ?></button>
+                <?php if ($jobsVisible): ?>
+                <button class="log-tab<?php echo $openJobs ? ' active' : ''; ?>" onclick="switchLogType('jobs')"><?php echo htmlspecialchars(t('reporting.jobs.tab')); ?></button>
+                <?php endif; ?>
             </div>
 
             <div class="logs-content">
@@ -419,9 +458,18 @@ $translationNamespaces = ['common', 'reporting'];
         </div>
     </div>
 
+    <!-- Background jobs (#182): one run's detail, and a job's expectations -->
+    <div class="modal-overlay" id="jobModal">
+        <div class="modal-content">
+            <div class="modal-header"><h3 id="jobModalTitle"></h3></div>
+            <div class="modal-body job-detail" id="jobModalBody"></div>
+            <div class="modal-footer" id="jobModalFooter"></div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '../../api/reporting/';
-        let currentLogType = 'login';
+        let currentLogType = <?php echo json_encode($openJobs ? 'jobs' : 'login'); ?>;
         let currentOffset = 0;
         const limit = 50;
         let totalLogs = 0;
@@ -449,6 +497,7 @@ $translationNamespaces = ['common', 'reporting'];
         }
 
         async function loadLogs() {
+            if (currentLogType === 'jobs') return loadJobs();
             const container = document.getElementById('logsTableContainer');
             container.innerHTML = `<div class="loading"><div class="spinner"></div><div>${escapeHtml(t('reporting.logs.loading'))}</div></div>`;
             clearPagination();
@@ -664,14 +713,220 @@ $translationNamespaces = ['common', 'reporting'];
             document.getElementById('jsonModal').classList.remove('active');
         }
 
+        // ================================================================
+        //  Background jobs (#182) - health first, then the run history.
+        //  Worked out by the server when the tab is opened; nothing here
+        //  runs a job. See includes/job_health.php for the rules.
+        // ================================================================
+        let jobsData = null;
+        const jobsHist = { job: '', outcome: '', trigger: '', days: '30', offset: 0, limit: 50, total: 0 };
+        const JT = (k, p) => t('reporting.jobs.' + k, p);
+
+        function fmtUtc(s) { return s ? fmtDateTime(parseUTCDate(s)) : '-'; }
+
+        function jobProblemHtml(j, p) {
+            const trig = p.other_trigger ? JT('trigger_' + p.other_trigger) : '';
+            switch (p.code) {
+                case 'stuck':
+                    return `<div class="job-problem">${escapeHtml(JT('problem_stuck', { since: fmtUtc(p.since) }))}</div>`;
+                case 'failing':
+                    return `<div class="job-problem">${escapeHtml(JT('problem_failing', { since: fmtUtc(p.since) }))}${p.message ? '<br><span class="job-sub">' + escapeHtml(p.message) + '</span>' : ''}</div>`;
+                case 'overdue':
+                    return `<div class="job-problem">${escapeHtml(JT('problem_overdue', { since: fmtUtc(p.since) }))}${p.other_runs ? '<br><span class="job-sub">' + escapeHtml(JT('problem_other_runs', { trigger: trig })) + '</span>' : ''}</div>`;
+                case 'never_seen':
+                    return `<div class="job-problem">${escapeHtml(JT(p.other_runs ? 'problem_never_seen_other' : 'problem_never_seen', { trigger: trig }))}<br><span class="job-sub">${escapeHtml(JT('schedule_hint'))} <code>${escapeHtml(j.command)}</code></span></div>`;
+                case 'partial':
+                    return `<div class="job-problem">${escapeHtml(JT('problem_partial'))}${p.sources && p.sources.length
+                        ? '<ul class="job-sources">' + p.sources.map(s => `<li><strong>${escapeHtml(s.label || s.key)}</strong>${s.message ? ' - ' + escapeHtml(s.message) : ''} <span class="job-sub">(${escapeHtml(fmtUtc(s.at))})</span></li>`).join('') + '</ul>'
+                        : (p.message ? '<br><span class="job-sub">' + escapeHtml(p.message) + '</span>' : '')}</div>`;
+                case 'unknown':
+                    // #182 review: something needed to judge the job could not be read.
+                    return `<div class="job-problem">${escapeHtml(JT('problem_unknown', { what: JT('unknown_' + String(p.what || 'history').replace(/ /g, '_')) }))}<br><span class="job-sub">${escapeHtml(JT('problem_unknown_hint'))}</span></div>`;
+            }
+            return '';
+        }
+
+        function intervalText(min) {
+            if (min === 1440) return JT('every_day');
+            if (min === 60) return JT('every_hour');
+            if (min % 1440 === 0) return JT('every_days', { n: min / 1440 });
+            if (min % 60 === 0) return JT('every_hours', { n: min / 60 });
+            return JT('every_minutes', { n: min });
+        }
+
+        async function loadJobs() {
+            const container = document.getElementById('logsTableContainer');
+            container.innerHTML = `<div class="loading"><div class="spinner"></div><div>${escapeHtml(t('reporting.logs.loading'))}</div></div>`;
+            clearPagination();
+            try {
+                const res = await fetch(API_BASE + 'job_health.php?view=health');
+                jobsData = await res.json();
+                if (!jobsData.success) throw new Error(jobsData.error || 'error');
+                renderJobs();
+                loadJobRuns();
+            } catch (e) {
+                container.innerHTML = `<div class="empty-state">${escapeHtml(t('reporting.logs.load_error', { error: e.message }))}</div>`;
+            }
+        }
+
+        function renderJobs() {
+            const d = jobsData;
+            const order = { stuck: 0, failing: 1, overdue: 2, never_seen: 3, partial: 4, healthy: 5, not_used: 6, not_needed: 7 };
+            const jobs = d.jobs.slice().sort((a, b) => (order[a.status] - order[b.status]) || a.name.localeCompare(b.name));
+            const options = d.jobs.map(j => `<option value="${escapeHtml(j.key)}"${jobsHist.job === j.key ? ' selected' : ''}>${escapeHtml(j.name)}</option>`).join('');
+            document.getElementById('logsTableContainer').innerHTML = `
+                <div class="jobs-meta">${escapeHtml(JT('meta', { checked: fmtUtc(d.checked_utc), months: d.retention_months, since: fmtUtc(d.recording_since) }))}</div>
+                <h3 class="jobs-section-title">${escapeHtml(JT('health_heading'))}</h3>
+                <table class="logs-table jobs-table" data-log-type="jobs">
+                    <thead><tr>
+                        <th>${escapeHtml(JT('col_job'))}</th>
+                        <th>${escapeHtml(JT('col_health'))}</th>
+                        <th>${escapeHtml(JT('col_last_scheduled'))}</th>
+                        <th>${escapeHtml(JT('col_last_run'))}</th>
+                        <th>${escapeHtml(JT('col_expected'))}</th>
+                        ${d.can_configure ? '<th></th>' : ''}
+                    </tr></thead>
+                    <tbody>${jobs.map(j => `
+                        <tr>
+                            <td><div class="job-name">${escapeHtml(j.name)}</div><div class="job-affects">${escapeHtml(j.affects)}</div></td>
+                            <td><span class="job-pill ${escapeHtml(j.status)}">${escapeHtml(JT('status_' + j.status))}</span>
+                                ${(j.problems || []).map(p => jobProblemHtml(j, p)).join('')}
+                                ${j.not_used ? `<div class="job-sub">${escapeHtml(JT('not_used_by', { who: j.not_used.by || '-', when: fmtUtc(j.not_used.at) }))}</div>` : ''}
+                                ${j.refused ? `<div class="job-sub">${escapeHtml(JT('refused', { reason: j.refused.reason, when: fmtUtc(j.refused.at) }))}</div>` : ''}</td>
+                            <td class="log-datetime">${escapeHtml(fmtUtc(j.last_scheduled_success))}</td>
+                            <td>${j.last_run ? `<span class="job-pill ${escapeHtml(j.last_run.outcome)}">${escapeHtml(JT('outcome_' + j.last_run.outcome))}</span>
+                                <div class="job-sub">${escapeHtml(JT('trigger_' + j.last_run.trigger))} · ${escapeHtml(fmtUtc(j.last_run.started))}</div>` : '<span class="job-sub">-</span>'}</td>
+                            <td class="job-sub">${escapeHtml(intervalText(j.interval))}${j.interval !== j.default_interval ? '<br>' + escapeHtml(JT('changed_from', { d: intervalText(j.default_interval) })) : ''}</td>
+                            ${d.can_configure ? `<td><button class="job-edit-btn" onclick="editJob('${escapeHtml(j.key)}')">${escapeHtml(JT('edit'))}</button></td>` : ''}
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+                <h3 class="jobs-section-title">${escapeHtml(JT('history_heading'))}</h3>
+                <div class="jobs-filters">
+                    <select onchange="jobsFilter('job', this.value)" aria-label="${escapeHtml(JT('col_job'))}"><option value="">${escapeHtml(JT('all_jobs'))}</option>${options}</select>
+                    <select onchange="jobsFilter('outcome', this.value)" aria-label="${escapeHtml(JT('col_outcome'))}">
+                        <option value="">${escapeHtml(JT('all_outcomes'))}</option>
+                        ${['ok', 'partial', 'failed', 'skipped', 'running'].map(o => `<option value="${o}"${jobsHist.outcome === o ? ' selected' : ''}>${escapeHtml(JT('outcome_' + o))}</option>`).join('')}
+                    </select>
+                    <select onchange="jobsFilter('trigger', this.value)" aria-label="${escapeHtml(JT('col_trigger'))}">
+                        <option value="">${escapeHtml(JT('all_triggers'))}</option>
+                        ${['cron', 'web', 'page', 'manual'].map(o => `<option value="${o}"${jobsHist.trigger === o ? ' selected' : ''}>${escapeHtml(JT('trigger_' + o))}</option>`).join('')}
+                    </select>
+                    <select onchange="jobsFilter('days', this.value)" aria-label="${escapeHtml(JT('period'))}">
+                        ${[['1', 'period_day'], ['7', 'period_week'], ['30', 'period_month'], ['365', 'period_year'], ['', 'period_all']].map(([v, k]) => `<option value="${v}"${jobsHist.days === v ? ' selected' : ''}>${escapeHtml(JT(k))}</option>`).join('')}
+                    </select>
+                </div>
+                <div id="jobRunsContainer"></div>`;
+        }
+
+        function jobsFilter(k, v) { jobsHist[k] = v; jobsHist.offset = 0; loadJobRuns(); }
+
+        async function loadJobRuns() {
+            const box = document.getElementById('jobRunsContainer');
+            if (!box) return;
+            const q = new URLSearchParams({ view: 'runs', job: jobsHist.job, outcome: jobsHist.outcome, trigger: jobsHist.trigger,
+                                            days: jobsHist.days, limit: jobsHist.limit, offset: jobsHist.offset });
+            const res = await fetch(API_BASE + 'job_health.php?' + q);
+            const d = await res.json();
+            if (!d.success) { box.innerHTML = `<div class="empty-state">${escapeHtml(d.error || '')}</div>`; return; }
+            jobsHist.total = d.total;
+            if (!d.runs.length) { box.innerHTML = `<div class="empty-state">${escapeHtml(JT('no_runs'))}</div>`; return; }
+            const page = Math.floor(jobsHist.offset / jobsHist.limit) + 1, pages = Math.ceil(d.total / jobsHist.limit);
+            box.innerHTML = `
+                <table class="logs-table jobs-table" data-log-type="job-runs">
+                    <thead><tr>
+                        <th>${escapeHtml(JT('col_started'))}</th><th>${escapeHtml(JT('col_job'))}</th><th>${escapeHtml(JT('col_trigger'))}</th>
+                        <th>${escapeHtml(JT('col_outcome'))}</th><th>${escapeHtml(JT('col_duration'))}</th><th>${escapeHtml(JT('col_summary'))}</th>
+                    </tr></thead>
+                    <tbody>${d.runs.map(r => `
+                        <tr class="job-row-clickable" onclick="showJobRun(${r.id})" title="${escapeHtml(JT('row_title'))}">
+                            <td class="log-datetime">${escapeHtml(fmtUtc(r.started_datetime))}</td>
+                            <td>${escapeHtml(r.job_name)}</td>
+                            <td class="job-sub">${escapeHtml(JT('trigger_' + r.trigger_kind))}${r.analyst_name ? '<br>' + escapeHtml(r.analyst_name) : ''}</td>
+                            <td><span class="job-pill ${escapeHtml(r.outcome)}">${escapeHtml(JT('outcome_' + r.outcome))}</span>${+r.failed_sources ? '<div class="job-sub">' + escapeHtml(JT('failed_sources', { n: r.failed_sources })) + '</div>' : ''}</td>
+                            <td class="job-sub">${r.duration_ms !== null ? escapeHtml(JT('ms', { n: r.duration_ms })) : '-'}</td>
+                            <td class="log-details">${escapeHtml(r.summary || '')}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+                <div class="jobs-pager">
+                    <button onclick="jobsPage(-1)" ${jobsHist.offset === 0 ? 'disabled' : ''}>${escapeHtml(t('reporting.logs.prev'))}</button>
+                    <span class="job-sub">${escapeHtml(t('reporting.logs.pagination', { current: page, total: pages, count: d.total }))}</span>
+                    <button onclick="jobsPage(1)" ${jobsHist.offset + jobsHist.limit >= d.total ? 'disabled' : ''}>${escapeHtml(t('reporting.logs.next'))}</button>
+                </div>`;
+        }
+
+        function jobsPage(dir) { jobsHist.offset = Math.max(0, jobsHist.offset + dir * jobsHist.limit); loadJobRuns(); }
+
+        function openJobModal(title, body, footer) {
+            document.getElementById('jobModalTitle').textContent = title;
+            document.getElementById('jobModalBody').innerHTML = body;
+            document.getElementById('jobModalFooter').innerHTML = footer;
+            document.getElementById('jobModal').classList.add('active');
+        }
+        function closeJobModal() { document.getElementById('jobModal').classList.remove('active'); }
+        const CLOSE_BTN = () => `<button class="btn btn-secondary" onclick="closeJobModal()">${escapeHtml(t('reporting.logs.close'))}</button>`;
+
+        async function showJobRun(id) {
+            const res = await fetch(API_BASE + 'job_health.php?view=run&id=' + id);
+            const d = await res.json();
+            if (!d.success) return;
+            const r = d.run;
+            const counts = Object.entries(r.counts || {}).map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(String(v))}`).join(', ');
+            const name = (jobsData.jobs.find(j => j.key === r.job_key) || {}).name || r.job_key;
+            openJobModal(name + ' #' + r.id, `
+                <dl>
+                    <dt>${escapeHtml(JT('col_outcome'))}</dt><dd><span class="job-pill ${escapeHtml(r.outcome)}">${escapeHtml(JT('outcome_' + r.outcome))}</span></dd>
+                    <dt>${escapeHtml(JT('col_trigger'))}</dt><dd>${escapeHtml(JT('trigger_' + r.trigger_kind))}${r.analyst_name ? ' - ' + escapeHtml(r.analyst_name) : ''}</dd>
+                    <dt>${escapeHtml(JT('col_started'))}</dt><dd>${escapeHtml(fmtUtc(r.started_datetime))}</dd>
+                    <dt>${escapeHtml(JT('col_finished'))}</dt><dd>${escapeHtml(fmtUtc(r.finished_datetime))}</dd>
+                    <dt>${escapeHtml(JT('col_summary'))}</dt><dd>${escapeHtml(r.summary || '-')}</dd>
+                    ${counts ? `<dt>${escapeHtml(JT('col_counts'))}</dt><dd>${counts}</dd>` : ''}
+                </dl>
+                ${d.sources.length ? `<table class="logs-table"><thead><tr><th>${escapeHtml(JT('col_source'))}</th><th>${escapeHtml(JT('col_outcome'))}</th><th>${escapeHtml(JT('col_message'))}</th></tr></thead><tbody>
+                    ${d.sources.map(s => `<tr><td>${escapeHtml(s.source_label || s.source_key)}</td><td><span class="job-pill ${+s.ok ? 'ok' : 'failed'}">${escapeHtml(JT(+s.ok ? 'outcome_ok' : 'outcome_failed'))}</span></td><td class="log-details">${escapeHtml(s.message || '')}</td></tr>`).join('')}
+                </tbody></table>` : ''}`, CLOSE_BTN());
+        }
+
+        function editJob(key) {
+            const j = jobsData.jobs.find(x => x.key === key);
+            if (!j) return;
+            openJobModal(j.name, `
+                <div class="job-form">
+                    <label for="jobInterval">${escapeHtml(JT('interval_label'))}</label>
+                    <input type="number" id="jobInterval" min="1" value="${j.interval !== j.default_interval ? j.interval : ''}" placeholder="${j.default_interval}">
+                    <div class="hint">${escapeHtml(JT('interval_hint', { d: intervalText(j.default_interval) }))}</div>
+                    <label><input type="checkbox" id="jobNotUsed" ${j.not_used ? 'checked' : ''}> ${escapeHtml(JT('not_used_label'))}</label>
+                    <div class="hint">${escapeHtml(JT('not_used_hint'))}</div>
+                </div>`,
+                `<button class="btn btn-secondary" onclick="closeJobModal()">${escapeHtml(JT('cancel'))}</button>
+                 <button class="btn btn-primary" onclick="saveJob('${escapeHtml(key)}')">${escapeHtml(JT('save'))}</button>`);
+        }
+
+        async function saveJob(key) {
+            const res = await fetch(API_BASE + 'job_health.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'config', job: key, interval: document.getElementById('jobInterval').value,
+                                       not_used: document.getElementById('jobNotUsed').checked })
+            });
+            const d = await res.json();
+            if (!d.success) { alert(d.error || ''); return; }
+            closeJobModal();
+            loadJobs();
+        }
+
+        document.getElementById('jobModal').addEventListener('click', function(e) {
+            if (e.target === this) closeJobModal();
+        });
+
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeJsonModal();
+            if (e.key === 'Escape') { closeJsonModal(); closeJobModal(); }
         });
 
         document.getElementById('jsonModal').addEventListener('click', function(e) {
             if (e.target === this) closeJsonModal();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

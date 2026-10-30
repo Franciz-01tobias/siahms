@@ -23,9 +23,12 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/encryption.php';   // decryptValue() for the cron token
 require_once __DIR__ . '/../includes/webhook_delivery.php';
+require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $isCli    = (PHP_SAPI === 'cli');
 $clientIp = $isCli ? null : ($_SERVER['REMOTE_ADDR'] ?? null);
+$trigger  = JobRun::scheduledTrigger();
+$runId    = null;
 
 try {
     $conn = connectToDatabase();
@@ -44,11 +47,13 @@ try {
         $expected = decryptValue($settings['webhook_cron_token'] ?? null);
         if (empty($expected)) {
             http_response_code(503);
+            JobRun::refused($conn, 'webhook_deliveries', 'token not set');
             echo "Cron token not set. Run Database Verification to seed webhook_cron_token.\n";
             exit;
         }
         if (!hash_equals((string)$expected, (string)($_GET['token'] ?? ''))) {
             http_response_code(403);
+            JobRun::refused($conn, 'webhook_deliveries', 'wrong token');
             echo "Forbidden\n";
             exit;
         }
@@ -61,6 +66,7 @@ try {
         $age = (int)$ageStmt->fetchColumn();
         if ($age >= 0 && $age < $minInterval) {
             http_response_code(429);
+            JobRun::skipped($conn, 'webhook_deliveries', $trigger, "Minimum interval: last run {$age}s ago, minimum {$minInterval}s.");
             echo "Rate limited. Last run {$age}s ago; minimum interval is {$minInterval}s.\n";
             exit;
         }
@@ -68,6 +74,8 @@ try {
     // Stamp this run's start time.
     $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('webhook_cron_last_run', UTC_TIMESTAMP())
                     ON DUPLICATE KEY UPDATE setting_value = UTC_TIMESTAMP()")->execute();
+
+    $runId = JobRun::start($conn, 'webhook_deliveries', $trigger);
 
     // ---- Deliver due rows ----
     $counts = webhookRunQueue($conn, 100);
@@ -82,9 +90,17 @@ try {
     $prune = $conn->prepare("DELETE FROM webhook_deliveries WHERE status IN ('delivered','dead') AND updated_datetime < UTC_TIMESTAMP() - INTERVAL ? DAY");
     $prune->execute([$retentionDays]);
 
+    // A delivery the receiver refused is the WEBHOOK's failure, retried on its own
+    // schedule - not the job's. The job worked if it ran the queue.
+    JobRun::finish($conn, $runId, 'ok', ['attempted' => $counts['attempted'], 'delivered' => $counts['delivered'],
+        'failed' => $counts['failed'], 'dead' => $counts['dead']],
+        "Attempted {$counts['attempted']}, delivered {$counts['delivered']}, failed {$counts['failed']}, dead {$counts['dead']}.");
     echo "OK — attempted {$counts['attempted']}, delivered {$counts['delivered']}, failed {$counts['failed']}, dead {$counts['dead']}, payloads scrubbed {$scrubbed}, pruned {$prune->rowCount()}.\n";
 } catch (Throwable $e) {
-    http_response_code(500);
+    if (isset($conn)) JobRun::fail($conn, $runId, $e);
+    if (!$isCli) http_response_code(500);
     error_log('webhook_deliveries cron failed: ' . $e->getMessage());
     echo "Error: " . $e->getMessage() . "\n";
+    // Non-zero, so a scheduler can tell a failed run from a good one (#182).
+    exit(1);
 }

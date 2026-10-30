@@ -29,7 +29,12 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 requireCapabilityJson(Cap::LMS_MANAGE);
 
-/** HTML (a knowledge article, a lesson body) down to the plain text the model should read. */
+/**
+ * HTML (a knowledge article, a lesson body) down to the plain text the model should read.
+ *
+ * @param ?string $html  the HTML to flatten; null is treated as empty
+ * @param int $limit  the most characters to return
+ */
 function lmsPlainText(?string $html, int $limit = 12000): string {
     $t = strip_tags((string)$html);
     $t = html_entity_decode($t, ENT_QUOTES, 'UTF-8');
@@ -43,7 +48,7 @@ try {
     $conn  = connectToDatabase();
 
     $cfg = aiSettingsLoad($conn, 'lms_ai');
-    if (($cfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($cfg)) {
         throw new Exception('LMS AI is not configured. Set a provider and key in LMS → Settings.');
     }
 

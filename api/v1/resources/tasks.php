@@ -18,11 +18,16 @@
  *   - comments are create-only (no edit/delete exists in the product);
  *     DELETE is a hard delete that cascades subtasks/comments/tags.
  *
- * Tasks have no audit trail in the product — none is invented here.
- * Task tables carry no tenant_id (install-wide), BUT a task can link to a
- * ticket, and tickets ARE company-scoped: the API validates ticket links
- * against the key's company scope and only reveals linked-ticket details the
- * key could read directly — tighter than the UI, which doesn't check.
+ * Tasks belong to a company (tenant_id, GH #83) and every read here is scoped to
+ * the key's companies - see apiTasksList. A task can also link to a ticket, and
+ * the API validates ticket links against the key's company scope and only
+ * reveals linked-ticket details the key could read directly.
+ *
+ * Tasks keep a history (#181: task_events, includes/services/task_history.php),
+ * written by TasksService for every write made here; it is shown in the task
+ * window's History tab and the evidence report, and is not served by this API.
+ * A key whose analyst has Read only access to Tasks is refused every write, by
+ * the service (#181 Part G).
  */
 
 // Task WRITES (create/update/move/delete/comment) are delegated to TasksService
@@ -37,6 +42,7 @@ require_once dirname(__DIR__, 3) . '/includes/timezone.php';   // naive_today_sq
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/** The SELECT for tasks, with status, priority, analyst, team and creator names. */
 function apiTaskSelect(): string {
     return "SELECT t.*,
                    ts.name AS status_name, ts.is_closed AS status_is_closed, ts.colour AS status_colour,
@@ -52,6 +58,18 @@ function apiTaskSelect(): string {
             LEFT JOIN analysts        cb ON cb.id = t.created_by_id";
 }
 
+/** Contractors (3.3.0): the supplier and the person there, by name - includes/task_contractors.php. */
+function apiTaskContractor(PDO $conn, int $taskId): ?array {
+    require_once __DIR__ . '/../../../includes/task_contractors.php';
+    return tasksContractors($conn, [$taskId])[$taskId] ?? null;
+}
+
+/**
+ * Shapes a task row for the API, with its tags and subtask progress (total and done)
+ * read alongside.
+ *
+ * @param array $r  the tasks row as apiTaskSelect() loads it, with the lookup and people names
+ */
 function apiSerializeTask(PDO $conn, array $r): array {
     $rel = function ($id, $name, array $extra = []) {
         return $id === null ? null : array_merge(['id' => (int)$id, 'name' => $name], $extra);
@@ -89,6 +107,10 @@ function apiSerializeTask(PDO $conn, array $r): array {
         // cognate of that word is a slur in nine of the languages we ship.
         'assigned_analyst' => $rel($r['assigned_analyst_id'], $r['analyst_name']),
         'assigned_team'    => $rel($r['assigned_team_id'], $r['team_name']),
+        // Contractors (3.3.0): a supplier doing the work, and the person there. The
+        // assignee above stays the person here who chases them.
+        'contractor'         => ($ctr = apiTaskContractor($conn, (int)$r['id'])) ? ['id' => $ctr['supplier_id'], 'name' => $ctr['supplier_name']] : null,
+        'contractor_contact' => $ctr && $ctr['contact_id'] ? ['id' => $ctr['contact_id'], 'name' => $ctr['contact_name']] : null,
         'collaborators'    => array_map(function ($c) {
             return [
                 'id'           => $c['analyst_id'],
@@ -99,6 +121,7 @@ function apiSerializeTask(PDO $conn, array $r): array {
         }, TasksService::collaboratorsFor($conn, (int)$r['id'])),
         'start_date'  => $r['start_date'],
         'due_date'    => $r['due_date'],
+        'estimate_hours' => isset($r['estimate_hours']) && $r['estimate_hours'] !== null ? (float)$r['estimate_hours'] : null,
         'parent_task_id' => $r['parent_task_id'] !== null ? (int)$r['parent_task_id'] : null,
         'ticket_id'   => $r['ticket_id'] !== null ? (int)$r['ticket_id'] : null,
         'change_id'   => $r['change_id'] !== null ? (int)$r['change_id'] : null,
@@ -113,6 +136,10 @@ function apiSerializeTask(PDO $conn, array $r): array {
     ];
 }
 
+/**
+ * Loads one task row, or answers 404 and stops - also for a task in a company the key
+ * cannot reach, when the key is given.
+ */
 function apiLoadTask(PDO $conn, int $taskId, ?array $apiKey = null): array {
     $stmt = $conn->prepare(apiTaskSelect() . " WHERE t.id = ?");
     $stmt->execute([$taskId]);
@@ -419,10 +446,69 @@ function apiTaskCommentsList(PDO $conn, array $apiKey, array $params, array $bod
     }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
 }
 
+/** POST /tasks/{id}/comments - adds a comment to the task through TasksService. */
 function apiTaskCommentsCreate(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         $commentId = TasksService::createComment($conn, ActorContext::fromApiKey($apiKey), (int)$params[0], (string)($body['text'] ?? ''));
         apiRespond(['id' => $commentId, 'task_id' => $params[0], 'text' => trim((string)($body['text'] ?? ''))], 201);
+    } catch (ServiceError $e) { apiFailFromService($e); }
+}
+
+// ---------------------------------------------------------------------------
+// Forms a task needs (GH #190 phase 5)
+// ---------------------------------------------------------------------------
+
+/** GET /tasks/{id}/forms - each form the task needs, its state, and its answers where the key's analyst may read them. */
+function apiTaskFormsList(PDO $conn, array $apiKey, array $params, array $body): void {
+    apiLoadTask($conn, $params[0], $apiKey);           // the task's gate, company scope included
+    require_once __DIR__ . '/../../../includes/services/task_forms.php';
+    if (!TaskForms::columnsReady($conn)) apiRespond([]);
+    $actor = (int)($apiKey['analyst_id'] ?? 0);
+    apiRespond(array_map(function ($f) {
+        $out = [
+            'id'            => $f['id'],
+            'form_id'       => $f['form_id'],
+            'title'         => $f['title'],
+            'required'      => $f['is_required'],
+            'requirement'   => $f['is_required'] ? $f['requirement_mode'] : 'optional',
+            'submission_id' => $f['submission_id'],
+            'submitted_by'  => $f['submitted_by'],
+            'submitted_at'  => $f['submitted_utc'] ? apiIsoDate($f['submitted_utc']) : null,
+            'has_draft'     => $f['has_draft'],
+            'revision'      => $f['revision'],
+        ];
+        // The one answers rule, as in the app: absent rather than empty when not allowed.
+        if (array_key_exists('answers', $f)) {
+            $out['answers'] = array_map(fn($a) => ['field_id' => $a['field_id'], 'question' => $a['label'], 'answer' => $a['value'],
+                                                   'exception' => !empty($a['exception'])], $f['answers']);
+        }
+        return $out;
+    }, TaskForms::forTask($conn, (int)$params[0], $actor, true)));
+}
+
+/**
+ * POST /tasks/{id}/forms/{task_form_id}/submissions - submit the form for this occurrence.
+ *
+ * Body: { data: {field_id: value}, client_reference?, revision? }. The same validation as the
+ * Forms page; the submission is linked to the task in the same transaction. A retry with the same
+ * client_reference returns the submission already made (200, "replayed": true). `revision`, when
+ * sent, makes the submit conditional on nobody having saved since (409 otherwise); without it the
+ * current revision is used - an integration that is the only writer need not track it.
+ */
+function apiTaskFormSubmit(PDO $conn, array $apiKey, array $params, array $body): void {
+    apiLoadTask($conn, $params[0], $apiKey);
+    require_once __DIR__ . '/../../../includes/services/task_forms.php';
+    try {
+        if (!TaskForms::enabled($conn) || !TaskForms::columnsReady($conn)) {
+            throw new ServiceError('validation', 'disabled', 'Forms on tasks are switched off (Tasks -> Settings -> Checklists).');
+        }
+        $row = TaskForms::row($conn, (int)$params[1]);
+        if ((int)$row['task_id'] !== (int)$params[0]) throw new ServiceError('not_found', 'not_found', 'That form is not on this task.');
+        $revision = isset($body['revision']) ? (int)$body['revision'] : (int)$row['revision'];
+        $res = TaskForms::submit($conn, ActorContext::fromApiKey($apiKey), (int)$row['id'], $revision,
+                                 (string)($body['client_reference'] ?? ''), (array)($body['data'] ?? []));
+        apiRespond(['task_id' => (int)$params[0], 'task_form_id' => (int)$row['id'], 'submission_id' => $res['submission_id'],
+                    'revision' => $res['revision'], 'replayed' => $res['replayed']], $res['replayed'] ? 200 : 201);
     } catch (ServiceError $e) { apiFailFromService($e); }
 }
 
@@ -447,6 +533,7 @@ function apiTaskStatusesList(PDO $conn, array $apiKey, array $params, array $bod
     }, $rows));
 }
 
+/** GET /task-priorities - the task priorities, in display order. */
 function apiTaskPrioritiesList(PDO $conn, array $apiKey, array $params, array $body): void {
     $rows = $conn->query(
         "SELECT id, name, is_default, colour, is_active FROM task_priorities ORDER BY display_order, name"
@@ -462,6 +549,7 @@ function apiTaskPrioritiesList(PDO $conn, array $apiKey, array $params, array $b
     }, $rows));
 }
 
+/** GET /task-tags - the task tags, with how many tasks carry each. */
 function apiTaskTagsList(PDO $conn, array $apiKey, array $params, array $body): void {
     $rows = $conn->query(
         "SELECT t.id, t.name, t.colour,

@@ -31,11 +31,11 @@ requireModuleAccess('system');
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.self_service.heading')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.self_service.heading'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/self-service-patterns.css?v=2">
     <style>
         body {
@@ -102,8 +102,11 @@ requireModuleAccess('system');
             padding: 4px; background: var(--surface, #fff);
         }
         .ssp-logo-hint { margin-top: 6px; }
+        /* .btn is display:inline-flex, which beats the [hidden] attribute, so
+           Remove showed with no logo to remove. */
+        .ssp-logo-row [hidden] { display: none !important; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="self-service">
     <?php include '../includes/header.php'; ?>
@@ -115,7 +118,7 @@ requireModuleAccess('system');
         </div>
 
         <div class="ssp-panel">
-            <h3><?php echo htmlspecialchars(t('system.self_service.appearance_heading')); ?></h3>
+            <h3 id="appearance"><?php echo htmlspecialchars(t('system.self_service.appearance_heading')); ?></h3>
             <p><?php echo t('system.self_service.appearance_desc'); ?></p>
 
             <div class="ssp-field">
@@ -193,7 +196,7 @@ requireModuleAccess('system');
         </div>
 
         <div class="ssp-panel">
-            <h3><?php echo htmlspecialchars(t('system.self_service.behaviour_heading')); ?></h3>
+            <h3 id="behaviour"><?php echo htmlspecialchars(t('system.self_service.behaviour_heading')); ?></h3>
             <p><?php echo t('system.self_service.behaviour_desc'); ?></p>
 
             <div class="ssp-field">
@@ -410,10 +413,14 @@ requireModuleAccess('system');
     document.addEventListener('DOMContentLoaded', function () {
         sspBindColour('sspHeaderColour', 'sspHeaderColourPick');
         sspBindColour('sspTableColour', 'sspTableColourPick');
-        document.getElementById('sspLogo').addEventListener('input', sspPaintPreview);
+        // GH #151. A listener on the old logo path box stood here after the box
+        // was replaced by the file picker (#1960). getElementById returned null,
+        // the line threw, and sspLoad() below never ran: the form showed
+        // defaults, and saving wrote those defaults over the real settings.
+        // Nothing may sit between here and sspLoad() that can throw.
         sspLoad();
     });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

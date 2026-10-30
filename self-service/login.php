@@ -51,14 +51,32 @@ try {
     $ssoOn   = ($cfg['sso_enabled'] ?? '0') === '1';
     $localOn = ($cfg['local_login_enabled'] ?? '1') !== '0';
     if ($ssoOn) {
-        // Only GLOBAL providers are shown up front (single-company installs).
-        // On a multi-tenant install we never list providers up front — the
+        // Only GLOBAL providers are shown up front, on every install. A
+        // company-owned provider is never listed — on a multi-tenant install the
         // email-first router reveals only the requester's own company's IdP(s).
+        // A global one leaks nothing: the analyst login already shows it (GH #156).
         // protocol='oidc' ONLY — an LDAP provider has no button and nothing to
         // redirect to. Directory users type their password into the ordinary
         // form and api/self-service/login.php checks it by bind, so LDAP never
         // needs a button; it only changes what the first field will accept.
-        $ssoProviders = $ssoConn->query("SELECT id, display_name FROM auth_providers WHERE enabled = 1 AND tenant_id IS NULL AND protocol = 'oidc' ORDER BY sort_order, display_name")->fetchAll(PDO::FETCH_ASSOC);
+        //
+        // GH #147: a provider can hide its button here (portal_show_button = 0)
+        // for an email-box-only page, and can claim email domains so the box
+        // sends those addresses straight to it. Both columns only once Database
+        // Verification has added them.
+        require_once '../includes/sso_identity.php';
+        $portalRouting = ssoPortalRoutingColumnsReady($ssoConn);
+        $ssoProviders = $ssoConn->query("SELECT id, display_name FROM auth_providers WHERE enabled = 1 AND tenant_id IS NULL AND protocol = 'oidc'"
+            . ($portalRouting ? ' AND portal_show_button = 1' : '')
+            . " ORDER BY sort_order, display_name")->fetchAll(PDO::FETCH_ASSOC);
+        // 🔑 With every button hidden the list above is empty, and the email box
+        // must still appear: it routes people on a listed domain, and people
+        // already linked to a provider. Hiding a button must never switch the
+        // router off.
+        $routerNeeded = $portalRouting && (int)$ssoConn->query(
+            "SELECT COUNT(*) FROM auth_providers WHERE enabled = 1 AND protocol = 'oidc'
+                AND (tenant_id IS NULL OR (portal_email_domains IS NOT NULL AND portal_email_domains <> ''))"
+        )->fetchColumn() > 0;
     }
     $multiTenant = isMultiTenant($ssoConn);
 
@@ -73,7 +91,9 @@ try {
 $hasLdap = $hasLdap ?? false;
 // On a multi-tenant install the router is active whenever SSO is on (companies
 // own their own providers, resolved per-email — there may be no global ones).
-$ssoActive = $ssoOn && ($multiTenant || !empty($ssoProviders));
+// It also stays active when buttons are hidden (GH #147), see $routerNeeded.
+$routerNeeded = $routerNeeded ?? false;
+$ssoActive = $ssoOn && ($multiTenant || !empty($ssoProviders) || $routerNeeded);
 // Break-glass: ?local=1 always reveals the local form, even when local login is "off".
 $forceLocal   = isset($_GET['local']);
 $localAllowed = $localOn || $forceLocal;
@@ -127,7 +147,10 @@ $localAllowed = $localOn || $forceLocal;
         }
         /* …and they must not sit on top of each other. */
         body:has(.login-strip-banner[data-at="bottom"]) .login-strip-footer { bottom: 42px; }
-        .login-tagline { margin: -14px 0 22px; color: #555; font-size: 14px; text-align: center; }
+        /* Inside .login-header, straight under the h1 - so no negative margin
+           here. The -14px copied from the analyst login (where the tagline sits
+           OUTSIDE the header) pulled it up into the heading (GH #150). */
+        .login-header .login-tagline { margin: 0 0 6px; color: #555; font-size: 14px; }
         body[data-logo-pos="hidden"] .login-header img,
         body[data-logo-pos="hidden"] .company-logo { display: none; }
         body[data-form-pos="left"]  .login-container { margin-right: auto; margin-left: 6vw; }
@@ -242,6 +265,11 @@ $localAllowed = $localOn || $forceLocal;
             text-decoration: none;
         }
         .login-links a:hover { text-decoration: underline; }
+        /* "Powered by FreeITSM" - very faint and small, the last line inside the
+           card (Ed). currentColor + opacity, so it suits a dark card too. */
+        .powered-by { margin-top: 14px; text-align: center; font-size: 10.5px; letter-spacing: .3px; opacity: .38; }
+        .powered-by a { color: inherit; text-decoration: none; }
+        .powered-by a:hover { text-decoration: underline; }
         .login-links .divider {
             color: #ccc;
             margin: 0 8px;
@@ -306,8 +334,14 @@ $localAllowed = $localOn || $forceLocal;
         <div class="login-header">
             <img src="<?php echo htmlspecialchars(brandingLogoUrl()); ?>" alt="Company Logo">
             <h1><?php echo htmlspecialchars($brand && $brand['heading'] !== '' ? $brand['heading'] : t('self-service.login.heading')); ?></h1>
-            <?php if ($brand && $brand['subheading'] !== ''): ?><p class="login-tagline"><?php echo htmlspecialchars($brand['subheading']); ?></p><?php endif; ?>
-            <p id="loginSubtitle"><?php echo htmlspecialchars(t('self-service.login.subtitle')); ?></p>
+            <?php /* GH #150. Tagline 1 under the heading; Tagline 2 takes the
+                     place of "Sign in to view your tickets", which stays as the
+                     default when it is empty. Both always printed so the branding
+                     preview fills in these elements instead of guessing. */
+                  $tag1 = $brand['subheading'] ?? '';
+                  $tag2 = $brand['subheading2'] ?? ''; ?>
+            <p class="login-tagline" data-tagline="1"<?php echo $tag1 === '' ? ' hidden' : ''; ?>><?php echo htmlspecialchars($tag1); ?></p>
+            <p id="loginSubtitle" data-tagline="2" data-default="<?php echo htmlspecialchars(t('self-service.login.subtitle')); ?>"><?php echo htmlspecialchars($tag2 !== '' ? $tag2 : t('self-service.login.subtitle')); ?></p>
         </div>
 
         <div class="error-message" id="errorMsg"<?php if ($sso_error): ?> style="display:block;"<?php endif; ?>><?php echo $sso_error ? htmlspecialchars($sso_error) : ''; ?></div>
@@ -336,12 +370,15 @@ $localAllowed = $localOn || $forceLocal;
                 <!-- Multi-tenant: provider buttons for the resolved company are injected here. -->
                 <div id="ssoPicker"></div>
 
-                <?php if (!$multiTenant): ?>
-                    <!-- Single-company: providers are global, so show them up front. -->
+                <?php if (!empty($ssoProviders)): ?>
+                    <!-- Global providers serve every company, so show them up front
+                         on any install (GH #156 - multi-tenant used to hide them). -->
                     <div class="sso-divider"><span></span><?php echo htmlspecialchars(t('self-service.login.or')); ?><span></span></div>
                     <?php foreach ($ssoProviders as $p): ?>
                         <a class="sso-provider-btn" href="../api/auth/oidc_login.php?provider=<?php echo (int)$p['id']; ?>&amp;portal=self-service"><?php echo htmlspecialchars($p['display_name']); ?></a>
                     <?php endforeach; ?>
+                <?php endif; ?>
+                <?php if (!$multiTenant): ?>
                     <?php if ($localAllowed): ?>
                         <a href="#" id="showLocalLink" class="ss-text-link"><?php echo htmlspecialchars(t('self-service.login.use_local_account')); ?></a>
                     <?php endif; ?>
@@ -380,11 +417,17 @@ $localAllowed = $localOn || $forceLocal;
                 <a onclick="backToLogin()"><?php echo htmlspecialchars(t('self-service.login.back_to_login')); ?></a>
             </div>
         </div>
+        <?php /* Outside both steps, so it shows on the password step and the code step alike. */ ?>
+        <div class="powered-by"><a href="https://freeitsm.co.uk" target="_blank" rel="noopener"><?php echo htmlspecialchars(t('self-service.login.powered_by')); ?></a></div>
     </div>
 
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../assets/js/i18n.js?v=3"></script>
     <script>
+    // The line under the heading as the page opened (Tagline 2, or the default).
+    // The two-step code step borrows it for its own instruction and puts it back.
+    const LOGIN_SUBTITLE = document.getElementById('loginSubtitle').textContent;
+
     async function handleLogin(e) {
         e.preventDefault();
         const btn = document.getElementById('loginBtn');
@@ -467,7 +510,9 @@ $localAllowed = $localOn || $forceLocal;
     function backToLogin() {
         document.getElementById('mfaSection').classList.remove('active');
         document.getElementById('loginSection').style.display = '';
-        document.getElementById('loginSubtitle').textContent = t('self-service.login.subtitle');
+        // Back to what the page opened with, which may be the admin's Tagline 2
+        // rather than the built-in "Sign in to view your tickets".
+        document.getElementById('loginSubtitle').textContent = LOGIN_SUBTITLE;
         document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('loginBtn').disabled = false;
         document.getElementById('loginBtn').textContent = t('self-service.login.sign_in');

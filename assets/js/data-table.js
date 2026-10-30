@@ -30,6 +30,8 @@
  *
  * editable kinds: 'text' | 'date' | 'datetime' | 'bool' |
  *   { kind:'lookup', listKey, valueKey, labelKey, allowNull?, nullLabel?, colourKey? }
+ *
+ * @wiki Saved-Table-Views-Developer-Guide
  */
 (function () {
     'use strict';
@@ -46,6 +48,12 @@
         table: 'dtTable',
     };
 
+    /**
+     * Builds one data table from a module's config and wires it up when the page has loaded.
+     *
+     * Exposed as window.createDataTable. Holds the column, sort, filter and search state in a closure.
+     * @return object  reload, render, findRow(id), getViewRows and getAllRows
+     */
     function createDataTable(config) {
         const els = Object.assign({}, DEFAULT_ELS, config.els || {});
         const columns = config.columns;
@@ -71,6 +79,11 @@
         // --- Boot -----------------------------------------------------
         document.addEventListener('DOMContentLoaded', boot);
 
+        /**
+         * Starts the table on DOMContentLoaded: columns, saved preferences, default view, rows, toolbar.
+         *
+         * The order matters - a default view is applied after preferences so it wins over them.
+         */
         async function boot() {
             columnState = columns.slice()
                 .sort((a, b) => a.defaultOrder - b.defaultOrder)
@@ -108,9 +121,11 @@
             } catch (e) { /* the table's own defaults are a fine answer */ }
         }
 
+        /** Shorthand for document.getElementById. */
         function byId(id) { return document.getElementById(id); }
 
         // --- Data -----------------------------------------------------
+        /** Fetches the rows again through the module's load() and redraws; a failed load shows an empty table. */
         async function reload() {
             try {
                 allRows = (await config.load()) || [];
@@ -149,12 +164,18 @@
             columnState = merged;
         }
 
+        /** Restores the sort from a saved {k, d} pair, ignoring a column that no longer exists. */
         function applySortConfig(s) {
             if (s && colByKey[s.k]) {
                 sort = { key: s.k, dir: s.d === 'desc' ? 'desc' : 'asc' };
             }
         }
 
+        /**
+         * Reads this analyst's saved column layout and sort for the table from their user preferences.
+         *
+         * Any failure leaves the column defaults in place.
+         */
         async function loadPreferences() {
             try {
                 const res = await fetch(`${prefApi}get_user_preference.php?key=${encodeURIComponent(prefKey)}`);
@@ -167,6 +188,11 @@
         }
 
         let saveTimer = null;
+        /**
+         * Saves the column layout and sort to the analyst's user preferences, 400ms after the last change.
+         *
+         * Debounced so dragging or toggling several columns sends one request, not one per click.
+         */
         function savePreferences() {
             clearTimeout(saveTimer);
             saveTimer = setTimeout(() => {
@@ -214,6 +240,9 @@
          * safety net that produces visible nonsense is not a safety net.
          */
         function vt(key, fallback, params) {
+            /**
+             * Replaces {name} placeholders in a string with the matching params, leaving unknown ones as they are.
+             */
             const fill = s => String(s).replace(/\{(\w+)\}/g,
                 (m, k) => (params && params[k] !== undefined) ? params[k] : m);
 
@@ -261,6 +290,7 @@
             render();
         }
 
+        /** Calls one of the table-views API endpoints and returns its JSON. */
         async function viewsFetch(path, opts) {
             const res = await fetch(viewsApi + path, opts);
             return res.json();
@@ -276,6 +306,11 @@
             return data.views || [];
         }
 
+        /**
+         * Applies a saved view from an already-loaded list, marks it as the active view and stamps it as used.
+         *
+         * The used stamp is fire and forget, so a failed request never stops the view showing.
+         */
         async function applyViewById(id, rows) {
             const view = (rows || []).find(v => Number(v.id) === Number(id));
             if (!view) return;
@@ -307,12 +342,19 @@
         // --- The library ----------------------------------------------
         let viewsModalEl = null;
 
+        /** Closes the saved views library and drops its Escape key listener. */
         function closeViewsModal() {
             if (viewsModalEl) { viewsModalEl.remove(); viewsModalEl = null; }
             document.removeEventListener('keydown', viewsEsc);
         }
+        /** Closes the saved views library when Escape is pressed. */
         function viewsEsc(e) { if (e.key === 'Escape') closeViewsModal(); }
 
+        /**
+         * Opens the saved views library - a modal with a search box, a list/cards layout switch and the views.
+         *
+         * The chosen layout is remembered in localStorage (dtViewLayout); the search reloads the list after 200ms.
+         */
         async function openViewsLibrary() {
             closePopover();
             closeViewsModal();
@@ -368,6 +410,11 @@
             refreshViewsList();
         }
 
+        /**
+         * Reloads the views matching the library's search and draws them, wiring the default, edit and delete buttons.
+         *
+         * Clicking anywhere else on an entry applies that view and closes the library.
+         */
         async function refreshViewsList() {
             const body = byId('dtViewsBody');
             if (!body) return;
@@ -402,6 +449,11 @@
             });
         }
 
+        /**
+         * Returns the HTML for one view in the library: name, badges, description, owner, dates and its action buttons.
+         *
+         * Edit and delete only appear when the server says the analyst can edit the view.
+         */
         function renderViewEntry(v) {
             const isDefault = viewDefaultId === Number(v.id);
             const vis = v.visibility === 'public' ? vt('vis_public', 'Everyone')
@@ -506,6 +558,7 @@
             byId('dtViewName').focus();
 
             const teamSel = byId('dtViewTeam');
+            /** Shows the team picker only while the "A team" visibility choice is ticked. */
             const syncTeam = () => {
                 const on = wrap.querySelector('input[name="dtVis"]:checked').value === 'team';
                 if (teamSel) teamSel.style.display = on ? '' : 'none';
@@ -541,6 +594,7 @@
             });
         }
 
+        /** Deletes a saved view, clears the toolbar label if it was the active one, and refreshes the library. */
         async function deleteView(id) {
             const data = await viewsFetch('delete.php', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -551,6 +605,7 @@
             refreshViewsList();
         }
 
+        /** Sets or clears (id null) the view this table opens with for the analyst, then refreshes the library. */
         async function setDefaultView(id) {
             const data = await viewsFetch('use.php', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -569,10 +624,16 @@
         }
 
         // --- Column value/display helpers -----------------------------
+        /** Returns a cell's raw value for sorting - the column's value() when it has one, otherwise row[key]. */
         function colValue(col, row) {
             if (typeof col.value === 'function') return col.value(row);
             return row[col.key];
         }
+        /**
+         * Returns a cell's text as shown, searched, filtered and exported.
+         *
+         * Uses the column's display(row), then the older format(raw), then the raw value; null becomes ''.
+         */
         function colDisplay(col, row) {
             if (typeof col.display === 'function') return col.display(row) || '';
             if (typeof col.format === 'function') return col.format(row[col.key]) || '';
@@ -581,6 +642,11 @@
         }
 
         // --- Toolbar --------------------------------------------------
+        /**
+         * Wires the toolbar (search, Columns, Reset, Views, Save view, CSV, PDF) and popover closing.
+         *
+         * Views and Save view are hidden on a table with no viewsKey; PDF is only wired when config.pdf is set.
+         */
         function wireToolbar() {
             const s = byId(els.search);
             if (s) s.addEventListener('input', e => {
@@ -640,12 +706,17 @@
         }
 
         // --- Rendering ------------------------------------------------
+        /** Returns the column definitions that are switched on, in their current order. */
         function visibleColumns() {
             return columnState.filter(c => c.visible).map(c => colByKey[c.key]).filter(Boolean);
         }
 
+        /** Redraws the header and the body. */
         function render() { renderHead(); renderBody(); }
 
+        /**
+         * Draws the header row and wires click-to-sort, the filter buttons and drag-to-reorder on each column heading.
+         */
         function renderHead() {
             const head = byId(els.head);
             const cols = visibleColumns();
@@ -701,6 +772,11 @@
             });
         }
 
+        /**
+         * Draws the filtered, sorted rows and the row count, then wires inline editing and row clicks.
+         *
+         * config.hideCount leaves the count element alone so a module can use it for something else.
+         */
         function renderBody() {
             const body = byId(els.body);
             const cols = visibleColumns();
@@ -730,6 +806,7 @@
             if (clickable) wireRowClicks(body, rows);
         }
 
+        /** Returns one cell's HTML - plain text, or an input or select for an editable column. */
         function renderCell(row, col) {
             const display = colDisplay(col, row);
             if (!editable || !col.editable) {
@@ -761,6 +838,9 @@
             return `<td>${esc(display)}</td>`;
         }
 
+        /**
+         * Returns an editable lookup cell: a select built from the module's lookup list, with an optional colour swatch.
+         */
         function renderLookupCell(row, col, id) {
             const ed = col.editable;
             const lookup = (config.getLookups ? config.getLookups() : {})[ed.listKey] || [];
@@ -784,6 +864,7 @@
         }
 
         // --- Inline edit wiring ---------------------------------------
+        /** Saves an inline-edited cell when its input or select changes. */
         function wireEditControls(body) {
             body.querySelectorAll('.dt-edit').forEach(el => {
                 el.addEventListener('change', () => {
@@ -797,6 +878,7 @@
             });
         }
 
+        /** Turns an edit control's value into what the module saves (1/0, null, a DB datetime, an int id). */
         function normalizeValue(col, raw) {
             const kind = col.editable.kind;
             if (kind === 'bool') return (raw === '1' || raw === 1 || raw === true) ? 1 : 0;
@@ -809,6 +891,11 @@
             return raw;
         }
 
+        /**
+         * Saves one edited cell through the module's onSaveCell and shows a toast.
+         *
+         * On failure the rows are reloaded so the cell goes back to what the server holds.
+         */
         async function saveCell(row, col, raw) {
             const value = normalizeValue(col, raw);
             try {
@@ -821,6 +908,7 @@
             }
         }
 
+        /** Updates a lookup cell's colour swatch after a save, without redrawing the table. */
         function refreshSwatch(row, col) {
             const ed = col.editable;
             const lookup = (config.getLookups ? config.getLookups() : {})[ed.listKey] || [];
@@ -835,6 +923,7 @@
         }
 
         // --- Row clicks -----------------------------------------------
+        /** Calls the module's onRowClick when a row is clicked, but not when the click lands on an edit control. */
         function wireRowClicks(body, rows) {
             body.querySelectorAll('tr.dt-row').forEach(tr => {
                 tr.addEventListener('click', e => {
@@ -846,6 +935,12 @@
         }
 
         // --- Filter / sort / search -----------------------------------
+        /**
+         * Returns the rows that pass the column filters and the search, sorted by the current sort column.
+         *
+         * Filters match on display text (empty is '(empty)'); search looks only at visible columns. Empty values
+         * always sort last, whichever the direction. Also exposed as getViewRows and used by the exports.
+         */
         function applyFiltersAndSort() {
             const cols = visibleColumns();
             let rows = allRows.filter(row => {
@@ -899,6 +994,9 @@
             return rows;
         }
 
+        /**
+         * Sorts by a column, flipping the direction when it is already the sort column, and saves the preference.
+         */
         function toggleSort(key) {
             if (sort.key === key) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
             else sort = { key, dir: 'asc' };
@@ -906,6 +1004,7 @@
             savePreferences();
         }
 
+        /** Moves a column to where another one is, redraws and saves the preference. */
         function reorderColumn(fromKey, toKey) {
             const fromIdx = columnState.findIndex(c => c.key === fromKey);
             const toIdx = columnState.findIndex(c => c.key === toKey);
@@ -917,6 +1016,12 @@
         }
 
         // --- Per-column filter dropdown -------------------------------
+        /**
+         * Opens the tickbox filter for one column, listing each distinct value with its count.
+         *
+         * Values and counts come from the rows that pass the OTHER columns' filters. Ticking every value removes
+         * the filter rather than storing one that matches everything.
+         */
         function openFilterDropdown(colKey, anchorEl) {
             closePopover();
             const col = colByKey[colKey];
@@ -1002,6 +1107,9 @@
         }
 
         // --- Columns drawer -------------------------------------------
+        /**
+         * Opens the Columns popover, where columns are ticked on or off and dragged into order; each change is saved.
+         */
         function openColumnsDrawer(anchorEl) {
             closePopover();
             const pop = document.createElement('div');
@@ -1063,6 +1171,7 @@
         }
 
         // --- Popover positioning --------------------------------------
+        /** Places a popover below its anchor, kept inside the window's width. */
         function positionPopover(pop, anchorEl) {
             const r = anchorEl.getBoundingClientRect();
             pop.style.visibility = 'hidden';
@@ -1075,12 +1184,14 @@
             pop.style.visibility = 'visible';
         }
 
+        /** Removes the open filter or columns popover, if there is one. */
         function closePopover() {
             if (openPopover && openPopover.parentNode) openPopover.parentNode.removeChild(openPopover);
             openPopover = null;
         }
 
         // --- Exports --------------------------------------------------
+        /** Downloads the filtered, sorted rows (visible columns only) as a CSV, with a BOM so Excel reads UTF-8. */
         function exportCSV() {
             const cols = visibleColumns();
             const rows = applyFiltersAndSort();
@@ -1097,6 +1208,11 @@
             if (window.showToast) showToast(`Exported ${rows.length} ${noun}${rows.length === 1 ? '' : 's'} to CSV`, 'success');
         }
 
+        /**
+         * Downloads the filtered, sorted rows as a landscape A4 PDF (jsPDF + autoTable), with optional logo.
+         *
+         * Shows an error toast when the page has not loaded jsPDF.
+         */
         async function exportPDF() {
             if (!window.jspdf) {
                 if (window.showToast) showToast('PDF library not loaded', 'error');
@@ -1145,6 +1261,7 @@
             if (window.showToast) showToast(`Exported ${rows.length} ${noun}${rows.length === 1 ? '' : 's'} to PDF`, 'success');
         }
 
+        /** Quotes a CSV value when it holds a quote, comma or newline, doubling any quotes. */
         function csvCell(v) {
             const s = String(v == null ? '' : v);
             if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1) {
@@ -1153,16 +1270,19 @@
             return s;
         }
 
+        /** Returns today's date as YYYY-MM-DD for export file names. */
         function formatDateStr() {
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
         // --- Datetime helpers (DB 'YYYY-MM-DD HH:MM:SS' <-> input) -----
+        /** Turns a DB 'YYYY-MM-DD HH:MM:SS' value into the 'YYYY-MM-DDTHH:MM' a datetime-local input wants. */
         function toLocalInput(raw) {
             if (!raw) return '';
             return String(raw).replace(' ', 'T').slice(0, 16);
         }
+        /** Turns a datetime-local input's value back into a DB 'YYYY-MM-DD HH:MM:SS' string. */
         function fromLocalInput(v) {
             if (!v) return null;
             const s = v.replace('T', ' ');
@@ -1170,6 +1290,7 @@
         }
 
         // --- Utilities ------------------------------------------------
+        /** Escapes a value for use in HTML text or an attribute. */
         function esc(s) {
             if (s === null || s === undefined) return '';
             return String(s)

@@ -42,9 +42,9 @@ $capabilityGroups = capGroups();   // generated from the registry — add a Cap:
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.landing.roles_title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.landing.roles_title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <style>
@@ -80,6 +80,7 @@ $capabilityGroups = capGroups();   // generated from the registry — add a Cap:
         .rl-check { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; font-size: 13.5px; color: var(--text, #374151); line-height: 1.45; }
         .rl-check input { margin-top: 2px; flex-shrink: 0; }
         /* The umbrella ("manage everything in this module") reads as the headline choice. */
+        .rl-cap-subhead { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted, #6b7280); margin: 8px 0 2px; }
         .rl-cap-umbrella { font-weight: 600; padding-bottom: 7px; margin-bottom: 3px; border-bottom: 1px dashed var(--border, #e5e7eb); }
         /* Sensitive = reaches credentials, email or money. Badge it; granting it should make you pause. */
         .rl-cap-sensitive { display: inline-block; margin-left: 5px; padding: 1px 6px; border-radius: 9px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; vertical-align: 1px;
@@ -88,7 +89,7 @@ $capabilityGroups = capGroups();   // generated from the registry — add a Cap:
         .rl-picker .rl-check .rl-admin-note { color: var(--text-dim, #9aa); font-size: 11.5px; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
@@ -198,7 +199,7 @@ $capabilityGroups = capGroups();   // generated from the registry — add a Cap:
     </script>
     <script src="../../assets/js/toast.js"></script>
     <script src="../../assets/js/confirm.js"></script>
-    <script src="../../assets/js/system-roles.js?v=1"></script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/system-roles.js?v=3"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

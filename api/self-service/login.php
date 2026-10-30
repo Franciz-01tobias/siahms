@@ -164,6 +164,12 @@ try {
     // someone who enabled a second factor as a local user and was later linked
     // to a directory would have silently stopped being asked for it. Turning
     // somebody's second factor off without telling them is not a thing to do.
+    // Marked as left (3.5.0) - checked after the password so it reveals nothing to a guesser.
+    if (!requesterIsActive($conn, (int)$user['id'])) {
+        echo json_encode(['success' => false, 'error' => 'Your account is no longer active. Contact the service desk if you think this is a mistake.']);
+        exit;
+    }
+
     if ($user['totp_enabled']) {
         $_SESSION['mfa_pending_ss_user_id'] = (int)$user['id'];
         $_SESSION['mfa_pending_ss_email']   = $user['email'];

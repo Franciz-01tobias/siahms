@@ -1,5 +1,12 @@
 <?php
 /**
+ * Plain-text extraction from Word (.docx) files for the RFP builder.
+ *
+ * Used when an RFP document is uploaded or extracted, so its text can be sent to the AI for
+ * requirement extraction.
+ */
+
+/**
  * Extract plain text from a .docx file using ZipArchive + DOMDocument.
  * No external dependencies required.
  *
@@ -8,6 +15,7 @@
  * tracked changes, headers and footers are all dropped. That's enough
  * for sending to AI for requirement extraction.
  *
+ * @param string $filePath  the path on disk of the uploaded .docx file
  * @throws RuntimeException on read or parse failures.
  */
 function rfpExtractDocxText(string $filePath): string
@@ -80,6 +88,8 @@ function rfpExtractDocxText(string $filePath): string
  * True if the given element has any <w:tbl> ancestor.
  * Used to skip paragraphs that are inside table cells during the
  * paragraph pass, so they don't get double-counted.
+ *
+ * @param DOMElement $node  a <w:p> paragraph element from document.xml
  */
 function rfpDocxIsInsideTable(DOMElement $node): bool
 {
@@ -94,6 +104,9 @@ function rfpDocxIsInsideTable(DOMElement $node): bool
 /**
  * Concatenate all text runs in a single <w:p>, preserving tab characters
  * where <w:tab/> elements appear.
+ *
+ * @param DOMElement $p  one <w:p> paragraph element
+ * @param string $ns  the WordprocessingML namespace URI
  */
 function rfpDocxParagraphText(DOMElement $p, string $ns): string
 {

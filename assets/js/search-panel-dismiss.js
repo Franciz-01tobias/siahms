@@ -37,6 +37,9 @@
     if (window.initSearchPanelDismiss) return;   // guard: re-included on a page
 
     /**
+     * Wires one module's search panel to close on Escape and, when the analyst's
+     * preference is on, on a click outside it (and outside opts.inside).
+     *
      * @param {Object}   opts
      * @param {string}   opts.panelId   element id of the floating panel
      * @param {Function} opts.close     the module's own close routine
@@ -49,8 +52,13 @@
         var close   = opts.close;
         var extra   = opts.inside || [];
 
+        /** Returns the panel element. */
         function panel() { return document.getElementById(panelId); }
 
+        /**
+         * Whether the panel is showing - the module's own test when given, otherwise the panel's
+         * active class.
+         */
         function isOpen() {
             if (opts.isOpen) return !!opts.isOpen();
             var p = panel();

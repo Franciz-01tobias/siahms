@@ -60,6 +60,11 @@ function apiAuthenticate(PDO $conn): array {
     $key['permissions'] = apiV1NormalisePermissions(json_decode((string)$key['permissions'], true));
     $companyIds = json_decode((string)$key['company_ids'], true);
     $key['company_scope'] = is_array($companyIds) ? array_values(array_map('intval', $companyIds)) : null; // null = all companies
+    // 🔴 Never wider than the analyst the key acts as (security review, 2026-10-09).
+    // "All companies" on a key used to mean literally every company, even when its
+    // analyst could open only one - so a key could read data its own analyst could
+    // not. Narrowed here, once, so every resource and the MCP server share it.
+    $key['company_scope'] = apiEffectiveCompanyScope($conn, (int)$key['analyst_id'], $key['company_scope']);
 
     return $key;
 }
@@ -93,7 +98,12 @@ function apiExtractKey(): ?string {
     return $xKey;
 }
 
-/** Enforce the per-key permission map. 403s (with the missing permission named) on failure. */
+/**
+ * Enforce the per-key permission map. 403s (with the missing permission named) on failure.
+ *
+ * @param string $resource  the permission area, e.g. 'tickets'
+ * @param string $action  the action within it: 'read', 'create', 'update' or 'delete'
+ */
 function apiRequirePermission(array $apiKey, string $resource, string $action): void {
     $perms = $apiKey['permissions'] ?? [];
     if (!isset($perms[$resource]) || !in_array($action, $perms[$resource], true)) {
@@ -106,6 +116,9 @@ function apiRequirePermission(array $apiKey, string $resource, string $action): 
  * mechanism as the proven api_rate_limits implementation. Default limit comes
  * from system_settings.api_rate_limit_per_minute (fallback 60); a key can
  * carry its own override. Fails open if the rate-limit table errors.
+ *
+ * @param int $keyId  the api_keys id the request came in on
+ * @param ?int $override  the key's own rate_limit_per_minute; null or 0 uses the system setting
  */
 function apiRateLimit(PDO $conn, int $keyId, ?int $override): void {
     $limit = 60;
@@ -157,6 +170,58 @@ function apiRateLimit(PDO $conn, int $keyId, ?int $override): void {
 // like the UI at N=1.
 // ---------------------------------------------------------------------------
 
+/**
+ * The companies a key may really reach: its own list, narrowed to its analyst's.
+ *
+ *   single-company install                  -> null (nothing to narrow)
+ *   analyst who may see every company       -> the key's own list (null = all)
+ *   analyst limited to some companies       -> key list ∩ theirs (no list = theirs)
+ *
+ * An empty result means the key reaches no company: reads find nothing, and
+ * creating a record is refused (apiKeyDefaultTenantId).
+ *
+ * @param int $analystId  the analyst the API key acts as - not whoever is signed in
+ * @param ?array $keyScope  the company ids the key itself is limited to; null means no limit of its own
+ */
+function apiEffectiveCompanyScope(PDO $conn, int $analystId, ?array $keyScope): ?array {
+    if (!isMultiTenant($conn)) {
+        return null;
+    }
+    $theirs = array_values(array_unique(array_map('intval', getAccessibleTenantIds($conn, $analystId))));
+    $all = array_map('intval', $conn->query("SELECT id FROM tenants")->fetchAll(PDO::FETCH_COLUMN));
+    $analystAll = !array_diff($all, $theirs);   // reaches every company (directly or through a team)
+    if ($keyScope === null) {
+        return $analystAll ? null : $theirs;
+    }
+    $keyScope = array_values(array_map('intval', $keyScope));
+    return $analystAll ? $keyScope : array_values(array_intersect($keyScope, $theirs));
+}
+
+/**
+ * For System -> API: refuse a company list the key's analyst cannot reach, so
+ * a key is never saved promising access it will not have. Throws Exception.
+ *
+ * @param int $analystId  the analyst the API key will act as - not whoever is signed in
+ * @param ?array $companyIds  the company ids chosen for the key, as integers; null means no limit
+ */
+function apiKeyCheckCompanies(PDO $conn, int $analystId, ?array $companyIds): void {
+    if ($companyIds === null || !isMultiTenant($conn)) {
+        return;
+    }
+    $known = array_map('intval', $conn->query("SELECT id FROM tenants")->fetchAll(PDO::FETCH_COLUMN));
+    $unknown = array_diff($companyIds, $known);
+    if ($unknown) {
+        throw new Exception('Unknown company id: ' . implode(', ', $unknown));
+    }
+    $theirs = array_map('intval', getAccessibleTenantIds($conn, $analystId));
+    $outside = array_diff($companyIds, $theirs);
+    if ($outside) {
+        $names = $conn->prepare("SELECT name FROM tenants WHERE id IN (" . implode(',', array_fill(0, count($outside), '?')) . ")");
+        $names->execute(array_values($outside));
+        throw new Exception('The analyst this key acts as cannot see: ' . implode(', ', $names->fetchAll(PDO::FETCH_COLUMN)) . '. A key can never reach further than its analyst.');
+    }
+}
+
 /** May this key access this company? */
 function apiKeyCanAccessTenant(PDO $conn, array $apiKey, int $tenantId): bool {
     if (!isMultiTenant($conn)) {
@@ -173,6 +238,9 @@ function apiKeyCanAccessTenant(PDO $conn, array $apiKey, int $tenantId): bool {
  * company)? Unknown id => false. The generic by-id gate behind
  * apiKeyCanAccessTicket / apiKeyCanAccessProblem. $table is a developer
  * literal, never user input.
+ *
+ * @param string $table  the table to look in - a literal from the code, never user input
+ * @param int $rowId  the row's id
  */
 function apiKeyCanAccessTenantRow(PDO $conn, array $apiKey, string $table, int $rowId): bool {
     if ($rowId <= 0) {
@@ -196,7 +264,11 @@ function apiKeyCanAccessTicket(PDO $conn, array $apiKey, int $ticketId): bool {
     return apiKeyCanAccessTenantRow($conn, $apiKey, 'tickets', $ticketId);
 }
 
-/** May this key access this problem (by its owning company)? Unknown id => false. */
+/**
+ * May this key access this problem (by its owning company)? Unknown id => false.
+ *
+ * @param int $problemId  the problems id
+ */
 function apiKeyCanAccessProblem(PDO $conn, array $apiKey, int $problemId): bool {
     return apiKeyCanAccessTenantRow($conn, $apiKey, 'problems', $problemId);
 }
@@ -206,6 +278,8 @@ function apiKeyCanAccessProblem(PDO $conn, array $apiKey, int $problemId): bool 
  * companies. Mirrors ticketTenantFilter(): NULL tenant_id rows belong to the
  * Default company. Works for tickets ('t'), problems ('p'), and any future
  * tenant-scoped module.
+ *
+ * @param string $alias  the alias the query gives the table; empty for the bare tenant_id column
  * @return array [sqlFragment, params]
  */
 function apiKeyTenantFilter(PDO $conn, array $apiKey, string $alias): array {
@@ -224,7 +298,11 @@ function apiKeyTenantFilter(PDO $conn, array $apiKey, string $alias): array {
     return [" AND $col IN ($placeholders)", $ids];
 }
 
-/** Back-compat name used by the tickets resource — delegates to the generic filter. */
+/**
+ * Back-compat name used by the tickets resource — delegates to the generic filter.
+ *
+ * @param string $alias  the alias the query gives the tickets table
+ */
 function apiKeyTicketFilter(PDO $conn, array $apiKey, string $alias = 't'): array {
     return apiKeyTenantFilter($conn, $apiKey, $alias);
 }
@@ -246,6 +324,7 @@ function apiKeyTicketFilter(PDO $conn, array $apiKey, string $alias = 't'): arra
  * identical; the meaning is not. See knowledgeTenantFilterForCompany() in
  * includes/tenancy.php for the session-side twin.
  *
+ * @param string $alias  the alias the query gives the knowledge_articles table
  * @return array [sqlFragment, params]
  */
 function apiKeyKnowledgeFilter(PDO $conn, array $apiKey, string $alias = 'a'): array {
@@ -261,7 +340,11 @@ function apiKeyKnowledgeFilter(PDO $conn, array $apiKey, string $alias = 'a'): a
     return [" AND ($col IN ($placeholders) OR $col IS NULL)", $ids];
 }
 
-/** May this key act on this article? Shared (NULL) articles belong to everyone. */
+/**
+ * May this key act on this article? Shared (NULL) articles belong to everyone.
+ *
+ * @param int $articleId  the knowledge_articles id; an unknown id passes, leaving the 404 to the caller
+ */
 function apiKeyCanAccessArticle(PDO $conn, array $apiKey, int $articleId): bool {
     if (!isMultiTenant($conn) || $apiKey['company_scope'] === null) {
         return true;
@@ -283,6 +366,11 @@ function apiKeyDefaultTenantId(PDO $conn, array $apiKey): int {
     $default = getDefaultTenantId($conn);
     if (apiKeyCanAccessTenant($conn, $apiKey, $default)) {
         return $default;
+    }
+    if ($apiKey['company_scope'] === []) {
+        // The key reaches no company (its list and its analyst's do not meet):
+        // never fall back to the Default company it has no right to.
+        apiError(403, 'forbidden', 'This key cannot reach any company its analyst can see. Check its companies in System > API.');
     }
     return $apiKey['company_scope'][0] ?? $default;
 }

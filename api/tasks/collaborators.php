@@ -26,6 +26,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tasks');
+// Reading who is involved is a read; adding, removing and ticking are writes (#181 Part G).
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') requireModuleWriteJson('tasks');
 
 try {
     $conn = connectToDatabase();
@@ -87,6 +89,8 @@ try {
  * Who may be offered as a collaborator on this task: active analysts, minus the
  * owner, minus anybody already on it, and — on a multi-company install — only
  * those who can reach the task's own company.
+ *
+ * @param array $task  the task row from TasksService::taskForCollaborators() - id, assigned_analyst_id, tenant_id
  */
 function collaboratorCandidates(PDO $conn, array $task): array
 {

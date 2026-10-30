@@ -34,8 +34,11 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/encryption.php';            // decryptValue() for the token
 require_once __DIR__ . '/../includes/services/task_recurrence.php';
+require_once __DIR__ . '/../includes/job_runs.php';             // run history (#182)
 
 $isCli = (PHP_SAPI === 'cli');
+$trigger = JobRun::scheduledTrigger();
+$runId = null;
 
 try {
     $conn = connectToDatabase();
@@ -56,11 +59,13 @@ try {
         $expected = decryptValue($settings['workflow_cron_token'] ?? null);
         if (empty($expected)) {
             http_response_code(503);
+            JobRun::refused($conn, 'task_recurrence', 'token not set');
             echo "Cron token not set. Run Database Verification to seed workflow_cron_token.\n";
             exit;
         }
         if (!hash_equals((string)$expected, (string)($_GET['token'] ?? ''))) {
             http_response_code(403);
+            JobRun::refused($conn, 'task_recurrence', 'wrong token');
             echo "Forbidden\n";
             exit;
         }
@@ -72,22 +77,45 @@ try {
         $age = (int)$ageStmt->fetchColumn();
         if ($age >= 0 && $age < $minInterval) {
             http_response_code(429);
+            JobRun::skipped($conn, 'task_recurrence', $trigger, "Minimum interval: last run {$age}s ago, minimum {$minInterval}s.");
             echo "Rate limited. Last run {$age}s ago; minimum interval is {$minInterval}s.\n";
             exit;
         }
     }
 
+    // The "last run" stamp is the minimum-interval guard's, written before the work.
+    // Health never reads it (#182): a run that crashes after this line looks
+    // exactly like one that worked. It reads job_runs, below.
     $conn->prepare(
         "INSERT INTO system_settings (setting_key, setting_value) VALUES ('task_recurrence_last_run', UTC_TIMESTAMP())
          ON DUPLICATE KEY UPDATE setting_value = UTC_TIMESTAMP()"
     )->execute();
 
-    $made = TaskRecurrence::runDue($conn);
+    // #182: one recorded run, one source per series, so a series that fails is
+    // named and the run is PARTIAL rather than quietly OK. #181's evidence report
+    // reads these runs to say what happened when an occurrence was missing or late,
+    // and each occurrence this run creates records the run's id.
+    $runId = JobRun::start($conn, 'task_recurrence', $trigger);
+    $report = [];
+    $made = TaskRecurrence::runDue($conn, null, 24, null, $report);
+    foreach ($report as $rid => $r) {
+        JobRun::source($conn, $runId, 'task_recurrence', 'series:' . $rid, $r['title'], $r['ok'],
+            $r['ok'] ? ($r['made'] ? $r['made'] . ' created' : null) : $r['error']);
+    }
+    $failedSeries = count(array_filter($report, fn($r) => !$r['ok']));
+    JobRun::finish($conn, $runId, null, ['created' => count($made), 'series' => count($report), 'failed' => $failedSeries],
+        'Created ' . count($made) . ' occurrence(s) across ' . count($report) . ' series' . ($failedSeries ? ", {$failedSeries} failed" : '') . '.');
 
     echo "Task recurrence: created " . count($made) . " occurrence(s)";
     echo $made ? " (task ids: " . implode(', ', $made) . ")\n" : ".\n";
+    // A failed series is worth a non-zero exit, so a scheduler can notice too.
+    if ($failedSeries) {
+        echo "{$failedSeries} series failed - see Reporting > System logs > Background jobs.\n";
+        exit(1);
+    }
 
 } catch (Throwable $e) {
+    if (isset($conn)) JobRun::fail($conn, $runId, $e);
     if (!$isCli) http_response_code(500);
     echo "Task recurrence failed: " . $e->getMessage() . "\n";
     error_log('cron/task_recurrence.php: ' . $e->getMessage());

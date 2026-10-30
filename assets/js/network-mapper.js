@@ -229,6 +229,10 @@
         }).catch(() => {});
     }
 
+    /**
+     * Fetches the organisation-wide header and footer branding and redraws the overlay if the diagram has
+     * already rendered; failures are ignored.
+     */
     async function loadBrandingDefaults() {
         try {
             const resp = await fetch('../api/system/get_branding.php', { credentials: 'same-origin' });
@@ -246,6 +250,10 @@
         }
     }
 
+    /**
+     * Wires the canvas drop target, click-on-empty-space deselection and the document keys (Escape leaves
+     * Present mode, Delete or Backspace removes the selected node or connector).
+     */
     function bindCanvasEvents() {
         // Drop-target wiring: must preventDefault on dragover to permit drop
         elCanvas.addEventListener('dragover', e => {
@@ -349,6 +357,10 @@
         }
     }
 
+    /**
+     * Loads the active CMDB classes into the class lookup and renders the palette, or shows an error in
+     * the palette.
+     */
     async function loadClasses() {
         try {
             const resp = await fetch(CMDB_API + 'get_classes.php');
@@ -363,10 +375,13 @@
         }
     }
 
+    /**
+     * Fills in the page title, diagram title, version pill (current or read-only) and the author, created
+     * and updated meta row.
+     */
     function renderHeader() {
-        document.title = diagram.title
-            ? t('network-mapper.editor.browser_title_named', { title: diagram.title })
-            : t('network-mapper.editor.browser_title');
+        // GH #173: the diagram's name appended to the server's pageTitle(), captured once.
+        document.title = (document.titleBase = document.titleBase || document.title) + (diagram.title ? ' - ' + diagram.title : '');
         elTitle.textContent = diagram.title || t('network-mapper.editor.untitled');
 
         const label = diagram.version_label || t('network-mapper.editor.version_unknown');
@@ -385,6 +400,7 @@
         elMetaUpdated.textContent = formatDate(diagram.updated_datetime);
     }
 
+    /** Renders one draggable palette tile per CMDB class with its icon and object count. */
     function renderPalette() {
         if (!classes.length) {
             elPaletteBody.innerHTML = '<div class="nm-palette-empty">' + t('network-mapper.editor.palette_empty') + '</div>';
@@ -411,6 +427,7 @@
         });
     }
 
+    /** Puts the dragged palette tile's class id on the drag payload for the canvas drop handler. */
     function onTileDragStart(e) {
         const classId = e.currentTarget.dataset.classId;
         e.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'nm-class', class_id: parseInt(classId, 10) }));
@@ -462,6 +479,10 @@
         };
     }
 
+    /**
+     * Handles a palette tile dropped on the canvas - works out a grid-snapped position centred on the
+     * cursor and opens the object picker for that class.
+     */
     function onCanvasDrop(e) {
         if (!diagram || !diagram.is_current) return;
         e.preventDefault();
@@ -482,6 +503,7 @@
         openObjectPicker(cls, x, y);
     }
 
+    /** Opens the object picker for a class, remembering the drop position, and loads the class's full object list. */
     function openObjectPicker(cls, x, y) {
         pickerClassId = cls.id;
         pickerDropX = x;
@@ -497,11 +519,16 @@
         setTimeout(() => elPickerSearch.focus(), 50);
     }
 
+    /** Closes the object picker modal and clears the picked class. */
     function closeObjectPicker() {
         elPickerModal.classList.remove('active');
         pickerClassId = null;
     }
 
+    /**
+     * Fetches the CMDB objects of the picker's class, filtered by the search text when there is any, and
+     * renders them.
+     */
     async function fetchPickerResults(q) {
         try {
             const url = q.trim()
@@ -518,6 +545,10 @@
         }
     }
 
+    /**
+     * Renders the picker results, leaving out objects already on the canvas, with planned and parent
+     * badges and click-to-place.
+     */
     function renderPickerResults() {
         // Filter out objects already on the canvas — placing the same object
         // twice would be confusing and save_diagram would persist both.
@@ -553,11 +584,16 @@
         });
     }
 
+    /** Debounces the picker search box by 200ms before refetching results. */
     function onPickerSearchInput(value) {
         clearTimeout(pickerSearchTimer);
         pickerSearchTimer = setTimeout(() => fetchPickerResults(value), 200);
     }
 
+    /**
+     * Keyboard handling in the object picker - arrow keys move the highlight, Enter places the highlighted
+     * object, Escape closes.
+     */
     function onPickerKeyDown(e) {
         const onCanvas = new Set(nodes.map(n => n.cmdb_object_id));
         const available = pickerResults.filter(r => !onCanvas.has(r.id));
@@ -578,6 +614,10 @@
         }
     }
 
+    /**
+     * Places the picked CMDB object as a new unsaved node at the drop position, selects it and marks the
+     * diagram dirty.
+     */
     function commitPickerSelection(obj) {
         const cls = classById[obj.class_id];
         const node = {
@@ -611,11 +651,13 @@
         return n.id ? 'r' + n.id : 't' + n.tempId;
     }
 
+    /** Returns the node whose selection key matches, or null. */
     function findNodeByKey(key) {
         if (key == null) return null;
         return nodes.find(n => nodeKey(n) === key) || null;
     }
 
+    /** Rebuilds every node element on the canvas, toggles the empty state and redraws the connectors. */
     function renderNodes() {
         // Clear existing node DOM; keep the empty-state element + the SVG
         // layer (connectors render into it separately via renderConnectors).
@@ -634,6 +676,10 @@
         renderConnectors();
     }
 
+    /**
+     * Builds the DOM element for one node - icon, planned pill, label and, on the current version, the
+     * four edge handles that start a connector drag.
+     */
     function buildNodeEl(n) {
         const iconKey = n.icon_override || n.class_icon || 'box';
         const sizePx = NODE_SIZES[n.size] || NODE_SIZES.medium;
@@ -682,6 +728,10 @@
         return el;
     }
 
+    /**
+     * Returns the identifier connectors use to reference a node - its real id, or its negative temp id
+     * when unsaved.
+     */
     function nodeRef(n) {
         // Stable cross-save identifier for connector references. Real id wins;
         // tempId (negative integer) for newly-placed nodes. save_diagram.php
@@ -690,11 +740,16 @@
         return n.id || n.tempId;
     }
 
+    /** Returns the node matching a connector reference (real id or temp id), or null. */
     function findNodeByRef(ref) {
         if (ref == null) return null;
         return nodes.find(n => n.id === ref || n.tempId === ref) || null;
     }
 
+    /**
+     * Returns the bounding box and centre of a node's icon in model coordinates, used to anchor connectors
+     * and hit-test drops.
+     */
     function nodeIconBBox(n) {
         // Icon-only bounding box, used for connector endpoint placement and
         // edge-handle anchoring. We use icon bbox (not the full node bbox)
@@ -713,6 +768,10 @@
         };
     }
 
+    /**
+     * Selects a node by key (null clears), clears any connector selection, and opens or closes the detail
+     * panel to match.
+     */
     function selectNode(key) {
         if (selectedNodeKey === key) return;
         selectedNodeKey = key;
@@ -734,6 +793,7 @@
         else closeDetail();
     }
 
+    /** Selects the clicked node and, on the current version, starts a node drag. */
     function onNodeMouseDown(e) {
         if (e.button !== 0) return;
         const key = e.currentTarget.dataset.key;
@@ -756,6 +816,7 @@
         e.preventDefault();
     }
 
+    /** Moves the dragged node to the grid-snapped cursor position and redraws the connectors. */
     function onNodeMouseMove(e) {
         if (!nodeDrag) return;
         const n = findNodeByKey(nodeDrag.key);
@@ -777,6 +838,7 @@
         renderConnectors();
     }
 
+    /** Ends a node drag and marks the diagram dirty if the node actually moved. */
     function onNodeMouseUp() {
         document.removeEventListener('mousemove', onNodeMouseMove);
         document.removeEventListener('mouseup', onNodeMouseUp);
@@ -786,6 +848,10 @@
         if (moved) markDirty();
     }
 
+    /**
+     * Removes the selected node and every connector touching it, then clears the selection and marks the
+     * diagram dirty.
+     */
     function deleteSelectedNode() {
         if (!diagram || !diagram.is_current) return;
         if (selectedNodeKey == null) return;
@@ -820,11 +886,13 @@
         return c.id ? 'cr' + c.id : 'ct' + c._tempKey;
     }
 
+    /** Returns the connector whose selection key matches, or null. */
     function findConnectorByKey(key) {
         if (key == null) return null;
         return connectors.find(c => connectorKey(c) === key) || null;
     }
 
+    /** Selects a connector by key (null clears), deselecting any node, and redraws the connectors. */
     function selectConnector(key) {
         if (selectedConnectorKey === key) return;
         selectedConnectorKey = key;
@@ -832,6 +900,10 @@
         renderConnectors();
     }
 
+    /**
+     * Redraws every connector in the SVG layer as an arrowed line with a wide click target and optional
+     * label; double-click edits the label.
+     */
     function renderConnectors() {
         if (!elSvgLayer) return;
         // Clear all rendered connector <g>s; keep the <defs> markers in place
@@ -912,6 +984,10 @@
         });
     }
 
+    /**
+     * Returns the start and end points of a connector, on the facing sides of the two icon boxes along
+     * whichever axis has the larger gap.
+     */
     function calcConnectorPoints(from, to) {
         // Endpoints land on the side of each icon bbox that faces the other
         // node. Whichever axis (horizontal/vertical) has the larger separation
@@ -939,6 +1015,7 @@
         return { x1: x1, y1: y1, x2: x2, y2: y2 };
     }
 
+    /** Removes the selected connector and marks the diagram dirty. */
     function deleteSelectedConnector() {
         if (!diagram || !diagram.is_current) return;
         if (selectedConnectorKey == null) return;
@@ -950,6 +1027,7 @@
         markDirty();
     }
 
+    /** Shows an inline text box at the connector midpoint to edit its label - Enter or blur saves, Escape cancels. */
     function promptConnectorLabel(c) {
         if (!diagram || !diagram.is_current) return;
         const from = findNodeByRef(c.from_node_id);
@@ -976,6 +1054,10 @@
         input.style.top  = (my - 14) + 'px';
 
         let cancelled = false;
+        /**
+         * Removes the label input and, unless cancelled or unchanged, stores the trimmed label (empty becomes
+         * null) and marks the diagram dirty.
+         */
         const finish = () => {
             input.removeEventListener('blur', finish);
             const next = cancelled ? (c.label || '') : input.value.trim();
@@ -1002,6 +1084,7 @@
     }
 
     // ---- Connect drag (edge handle → target node) ----
+    /** Starts drawing a new connector from the given edge handle of a node. */
     function startConnectDrag(e, fromNode, side) {
         if (!diagram || !diagram.is_current) return;
         e.stopPropagation();
@@ -1021,6 +1104,7 @@
         document.addEventListener('mouseup',   onConnectDragUp);
     }
 
+    /** Draws the temporary line from the edge handle to the cursor while a connector is being dragged. */
     function onConnectDragMove(e) {
         if (!connectDrag || !elSvgLayer) return;
         const cursor = canvasModelCoords(e);
@@ -1037,6 +1121,10 @@
         line.setAttribute('y2', String(my));
     }
 
+    /**
+     * Ends a connector drag and adds the connector if it was dropped on a different node and no identical
+     * connector exists.
+     */
     function onConnectDragUp(e) {
         document.removeEventListener('mousemove', onConnectDragMove);
         document.removeEventListener('mouseup',   onConnectDragUp);
@@ -1060,6 +1148,7 @@
         commitConnectorDrag(fromRef, toRef);
     }
 
+    /** Adds a new unsaved free-form connector between two nodes, selects it and marks the diagram dirty. */
     function commitConnectorDrag(fromRef, toRef) {
         const c = {
             id: null,
@@ -1076,6 +1165,7 @@
         markDirty();
     }
 
+    /** Returns the node whose icon box contains the given model coordinates, or null. */
     function findNodeAt(x, y) {
         // Hit-test the icon bounding box, not the full node element — matches
         // how connectors anchor and feels more precise when dropping near a
@@ -1133,6 +1223,10 @@
     }
 
     // ---- CMDB properties (lazy-loaded per selection) ----
+    /**
+     * Fetches a CMDB object's properties for the detail panel, ignoring the response if the selection has
+     * changed meanwhile.
+     */
     async function loadNodeProperties(cmdbObjectId) {
         if (!elNdProperties) return;
         currentPropertiesObjectId = cmdbObjectId;
@@ -1151,6 +1245,7 @@
         }
     }
 
+    /** Renders the property rows in the detail panel, skipping properties with no value (per-type rules). */
     function renderNodeProperties(props) {
         // Filter out empty values — Ed's explicit ask is "don't show empty
         // properties". Per-type emptiness rules:
@@ -1183,6 +1278,10 @@
         elNdProperties.innerHTML = html;
     }
 
+    /**
+     * Returns the HTML for one property value by type - yes/no, naive date, formatted number, coloured
+     * dropdown pill, linked CMDB object, or text (linkified when it is a URL).
+     */
     function renderPropertyValue(p) {
         switch (p.property_type) {
             case 'boolean': {
@@ -1251,6 +1350,7 @@
         }
     }
 
+    /** Returns dark or white text colour for a hex pill background, based on its luminance. */
     function pillTextColour(hex) {
         // Best-effort luminance test to pick black or white text for a coloured
         // pill background. Mirrors what CMDB browse table does for dropdown pills.
@@ -1263,6 +1363,7 @@
         return lum > 0.6 ? '#1f2937' : '#ffffff';
     }
 
+    /** Closes the node detail panel and cancels any pending properties render. */
     function closeDetail() {
         if (!elDetailPanel) return;
         elDetailPanel.classList.remove('open');
@@ -1299,6 +1400,7 @@
         fetchRelatedRows(src.cmdb_object_id);
     }
 
+    /** Closes the add-related-objects modal and clears its state. */
     function closeRelatedModal() {
         elRelatedModal.classList.remove('active');
         relatedSourceNode = null;
@@ -1306,6 +1408,7 @@
         relatedSelected.clear();
     }
 
+    /** Fetches the CMDB objects related to the source object and renders them in the modal. */
     async function fetchRelatedRows(cmdbObjectId) {
         try {
             const resp = await fetch(API + 'get_related_objects.php?object_id=' + cmdbObjectId, { credentials: 'same-origin' });
@@ -1318,6 +1421,10 @@
         }
     }
 
+    /**
+     * Renders the related objects grouped as outgoing, incoming and property references, with objects
+     * already on the canvas disabled.
+     */
     function renderRelatedRows() {
         if (!relatedRows.length) {
             elRmResults.innerHTML = '<div class="nm-rm-empty">' +
@@ -1383,6 +1490,7 @@
         updateRelatedAddBtn();
     }
 
+    /** Enables the related-objects Add button and shows the ticked count on it. */
     function updateRelatedAddBtn() {
         const n = relatedSelected.size;
         elRmAddBtn.disabled = n === 0;
@@ -1393,6 +1501,10 @@
                 : t('network-mapper.related.add_many', { count: n }));
     }
 
+    /**
+     * Places the ticked related objects in a ring around the source node and draws a connector for each
+     * relationship path.
+     */
     function commitRelatedSelections() {
         if (!relatedSourceNode) return;
         if (!relatedSelected.size) return;
@@ -1504,6 +1616,7 @@
         markDirty();
     }
 
+    /** Escapes quotes and backslashes in a node key for use in an attribute selector. */
     function cssEscape(s) {
         // Minimal escape for data-key selector use (keys are 'r123' or 't-1' so
         // safe in practice, but be defensive in case the format ever changes)
@@ -1525,6 +1638,7 @@
         if (autosaveOn) scheduleAutosave();
     }
 
+    /** Restarts the autosave debounce timer; when it fires it saves, or reschedules if a node drag is in progress. */
     function scheduleAutosave() {
         clearTimeout(autosaveTimer);
         autosaveTimer = setTimeout(() => {
@@ -1560,6 +1674,7 @@
         }
     }
 
+    /** Loads the user's autosave preference (off when it cannot be read) and applies it. */
     async function loadAutosavePreference() {
         try {
             const r = await fetch(SYSTEM_API + 'get_user_preference.php?key=' + encodeURIComponent(AUTOSAVE_PREF_KEY), { credentials: 'same-origin' });
@@ -1570,6 +1685,10 @@
         }
     }
 
+    /**
+     * Sets autosave on or off, updates the toggle and the save status, and optionally stores the choice as
+     * a user preference.
+     */
     function applyAutosaveState(on, persist) {
         autosaveOn = !!on;
         if (elAutosaveToggle) elAutosaveToggle.checked = autosaveOn;
@@ -1594,6 +1713,7 @@
         }
     }
 
+    /** Handles the autosave toggle - stores the new setting and schedules a save when there are unsaved changes. */
     function toggleAutosave(on) {
         clearTimeout(autosaveTimer);
         applyAutosaveState(on, true);
@@ -1621,17 +1741,23 @@
         setTimeout(() => elIpSearch.focus(), 50);
     }
 
+    /** Closes the icon picker modal and clears its state. */
     function closeIconPicker() {
         elIconPickerModal.classList.remove('active');
         iconPickerNode = null;
         iconPickerFilter = '';
     }
 
+    /** Filters the icon picker by the search text. */
     function onIconSearchInput(value) {
         iconPickerFilter = (value || '').toLowerCase().trim();
         renderIconPicker();
     }
 
+    /**
+     * Renders the icon picker grid by category, filtered by the search text, with the node's current icon
+     * highlighted.
+     */
     function renderIconPicker() {
         if (!elIpGrid) return;
         const cats = window.NM_ICON_CATEGORIES || [];
@@ -1676,6 +1802,10 @@
         });
     }
 
+    /**
+     * Sets the picked icon as the node's override (null when it matches the class default), refreshes the
+     * node and detail panel and marks the diagram dirty.
+     */
     function commitIconPick(key) {
         if (!iconPickerNode) return;
         if (!key) return;
@@ -1691,6 +1821,7 @@
         markDirty();
     }
 
+    /** Clears the selected node's icon override so it uses the class icon again. */
     function resetIconOverride() {
         if (!diagram || !diagram.is_current) return;
         if (selectedNodeKey == null) return;
@@ -1719,10 +1850,12 @@
         fetchVersionList();
     }
 
+    /** Hides the versions dropdown. */
     function closeVersionsDropdown() {
         if (elVersionsDropdown) elVersionsDropdown.style.display = 'none';
     }
 
+    /** Fetches the diagram's version chain and renders it in the versions dropdown. */
     async function fetchVersionList() {
         try {
             const resp = await fetch(API + 'list_versions.php?id=' + diagramId, { credentials: 'same-origin' });
@@ -1734,6 +1867,7 @@
         }
     }
 
+    /** Renders the version chain newest first as links, each with a viewing, current or read-only pill. */
     function renderVersionList(versions) {
         if (!versions.length) {
             elVersionsDropdown.innerHTML = '<div class="nm-vd-empty">' + escapeHtml(t('network-mapper.versions.empty')) + '</div>';
@@ -1786,10 +1920,15 @@
         elPageDropdown.style.display = '';
     }
 
+    /** Hides the page-size dropdown. */
     function closePageDropdown() {
         if (elPageDropdown) elPageDropdown.style.display = 'none';
     }
 
+    /**
+     * Renders the page-size dropdown - Off plus each paper size in landscape and portrait - and wires the
+     * rows to apply the choice.
+     */
     function renderPageDropdown() {
         const cur = diagram || {};
         const curSize = cur.paper_size || null;
@@ -1846,6 +1985,10 @@
         });
     }
 
+    /**
+     * Sets the diagram's paper size and orientation, refreshes the button label, page outline and
+     * branding, and marks the diagram dirty.
+     */
     function applyPageSetting(size, orient) {
         if (!diagram) return;
         // No-op if unchanged — avoids dirtying the diagram unnecessarily
@@ -1863,6 +2006,7 @@
         markDirty();
     }
 
+    /** Shows the chosen paper size and orientation (or Off) on the page toolbar button. */
     function updatePageButtonLabel() {
         if (!elPageBtnLabel) return;
         const size = diagram && diagram.paper_size;
@@ -1877,6 +2021,7 @@
         }
     }
 
+    /** Returns the pixel width and height of a paper size in the given orientation, or null for an unknown size. */
     function pageDimensionsPx(size, orient) {
         const def = PAPER_SIZES_PX[size];
         if (!def) return null;
@@ -1885,6 +2030,7 @@
             : { w: def.h, h: def.w };
     }
 
+    /** Draws the shaded, dashed page outline and its size label in the SVG layer behind the connectors. */
     function renderPageOutline() {
         if (!elSvgLayer) return;
         // Tear down the previous outline + label group
@@ -1960,6 +2106,7 @@
         return '';
     }
 
+    /** Returns the values for the branding tokens - title, author, version, modified date and logo URL. */
     function brandingTokenContext() {
         return {
             title:    diagram && diagram.title          ? diagram.title          : '',
@@ -2003,6 +2150,10 @@
         return html;
     }
 
+    /**
+     * Rebuilds the branded header and footer strips on the page outline; shown only when a paper size is
+     * set and a strip has any text.
+     */
     function renderBrandHeaderFooter() {
         if (!elCanvasInner) return;
         // Tear down previous overlays — re-renders are full rebuilds since
@@ -2062,6 +2213,10 @@
         ['bmFooterRight',  'footer_right'],
     ];
 
+    /**
+     * Opens the branding modal with the diagram's overrides as values and the organisation defaults as
+     * placeholders.
+     */
     function openBrandingModal() {
         if (!diagram) return;
         if (!diagram.is_current) {
@@ -2085,6 +2240,7 @@
         modal.classList.add('active');
     }
 
+    /** Closes the branding modal. */
     function closeBrandingModal() {
         const modal = document.getElementById('brandingModal');
         if (modal) modal.classList.remove('active');
@@ -2258,10 +2414,12 @@
         setTimeout(() => document.getElementById('nvVersionLabel').focus(), 50);
     }
 
+    /** Closes the new version modal. */
     function closeNewVersionModal() {
         document.getElementById('newVersionModal').classList.remove('active');
     }
 
+    /** Suggests the next version label by bumping a trailing number, or appending " (new)" when there is none. */
     function suggestNextVersionLabel(current) {
         if (!current) return 'v2';
         // Try to bump a trailing integer ("v3" -> "v4", "Draft 2" -> "Draft 3")
@@ -2270,6 +2428,7 @@
         return current + ' (new)';
     }
 
+    /** Creates a new version of the diagram from the modal fields and opens it. */
     async function createNewVersion() {
         const title = document.getElementById('nvTitle').value.trim();
         const description = document.getElementById('nvDescription').value.trim();
@@ -2326,6 +2485,7 @@
         // changed — the transform handles the visual update for them too.
     }
 
+    /** Sets the zoom to the nearest preset level and applies it. */
     function setZoom(z) {
         // Snap to the nearest level so the label always reads 25/50/75/...
         // and Fit picks a clean integer percentage even when computed from
@@ -2340,10 +2500,14 @@
         applyZoom();
     }
 
+    /** Zooms in one preset level. */
     function zoomIn()    { setZoom(zoomNext(+1)); }
+    /** Zooms out one preset level. */
     function zoomOut()   { setZoom(zoomNext(-1)); }
+    /** Resets the zoom to 100%. */
     function zoomReset() { setZoom(1); }
 
+    /** Returns the preset zoom level one step in the given direction from the current zoom. */
     function zoomNext(dir) {
         // Find the current level's index then step. Falls back gracefully if
         // zoom drifted off-step somehow (rounds to nearest first).
@@ -2361,6 +2525,10 @@
         return ZOOM_LEVELS[next];
     }
 
+    /**
+     * Zooms to fit the page outline, or the placed nodes when no paper size is set, into the canvas and
+     * scrolls to the top left.
+     */
     function zoomFit(opts) {
         // Fit-to-page if a paper size is chosen (most common case once the
         // user has set up an export-ready diagram), otherwise fit to the
@@ -2423,6 +2591,10 @@
     // on what they were looking at before the presentation.
     let presentRestore = null;
 
+    /**
+     * Enters Present mode - hides the editor chrome and fits the diagram to the screen, remembering the
+     * zoom and scroll to restore later.
+     */
     function enterPresent() {
         if (!elEditor) return;
         presentRestore = {
@@ -2448,6 +2620,7 @@
         });
     }
 
+    /** Leaves Present mode and restores the zoom and scroll position from before. */
     function exitPresent() {
         if (!elEditor) return;
         elEditor.classList.remove('is-presenting');
@@ -2468,6 +2641,7 @@
         }
     }
 
+    /** Returns true while Present mode is on. */
     function isPresenting() {
         return elEditor && elEditor.classList.contains('is-presenting');
     }
@@ -2552,6 +2726,10 @@
         return (slug || 'diagram') + '.' + ext;
     }
 
+    /**
+     * Returns the area to export - the page outline when a paper size is set, otherwise the nodes'
+     * bounding box with padding.
+     */
     function computeExportRect() {
         if (!diagram) return null;
         if (diagram.paper_size) {
@@ -2576,6 +2754,10 @@
         return { x, y, width: (maxX + PAD) - x, height: (maxY + PAD) - y };
     }
 
+    /**
+     * Captures the export area with html2canvas at 100% zoom with selection and handles hidden, then
+     * restores the view.
+     */
     async function captureCanvas() {
         if (!diagram) return null;
         if (typeof html2canvas !== 'function') {
@@ -2645,6 +2827,7 @@
         }
     }
 
+    /** Exports the diagram as a PNG download. */
     async function exportPng() {
         const result = await captureCanvas();
         if (!result) return;
@@ -2658,6 +2841,7 @@
         if (window.showToast) showToast(t('network-mapper.toast.png_exported'), 'success');
     }
 
+    /** Exports the diagram as a PDF sized to its paper choice (A4 portrait when none is set). */
     async function exportPdf() {
         // jsPDF UMD exposes its constructor under window.jspdf.jsPDF
         const jsPDF = (window.jspdf && window.jspdf.jsPDF) || null;
@@ -2697,9 +2881,11 @@
         catch (e) { return s; }
     }
 
+    /** Escapes a value for safe use in HTML. */
     function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
+    /** Escapes a value for use in an HTML attribute. */
     function escapeAttr(s) { return escapeHtml(s).replace(/'/g, "\\'"); }
 
     // =========================================================

@@ -15,6 +15,7 @@
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/tenancy.php';
 require_once '../../includes/services/task_recurrence.php';
 
 header('Content-Type: application/json');
@@ -40,7 +41,7 @@ try {
 
     echo json_encode([
         'success'   => true,
-        'projected' => TaskRecurrence::project($conn, $from, $to),
+        'projected' => TaskRecurrence::project($conn, $from, $to, 60, (int)$_SESSION['analyst_id']),
     ]);
 } catch (Throwable $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);

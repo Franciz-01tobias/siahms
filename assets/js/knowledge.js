@@ -99,6 +99,9 @@ async function loadCompanies() {
     group.style.display = '';
 }
 
+/** What the editor's Documents panel last said about the Help Centre (GH #177), or null. */
+let kbEditorHelpCentre = null;
+
 /**
  * The editor shows the three stored audiences as TWO choices plus an opt-in
  * tickbox. This pair converts between the two shapes; nothing else in the
@@ -120,6 +123,10 @@ function audienceFromControls() {
     return (base === 'customer' && pub && pub.checked) ? 'public' : base;
 }
 
+/**
+ * Sets the audience dropdown and the public tickbox from a stored audience value ('public' becomes
+ * 'customer' plus the tick), then refreshes the hint.
+ */
 function audienceToControls(stored) {
     const sel = document.getElementById('articleAudience');
     const pub = document.getElementById('articleAudiencePublic');
@@ -150,6 +157,15 @@ function updateAudienceHint() {
     }
 
     hint.textContent = window.t('knowledge.editor.audience_hint_' + audienceFromControls());
+
+    // GH #177: opening an article to customers also opens its documents. Said
+    // here, at the moment of choosing, rather than discovered afterwards - but
+    // only when it is a CHANGE (customers cannot read it yet) and there is
+    // something shown to publish.
+    const hc = kbEditorHelpCentre;
+    if (hc && hc.ready && hc.shown > 0 && !hc.customer_facing && audienceFromControls() !== 'internal') {
+        hint.textContent += ' ' + window.t('knowledge.editor.audience_docs_warning', { n: hc.shown });
+    }
 }
 
 /** Put the two visibility controls back to the safe default (a new article). */
@@ -230,7 +246,7 @@ function initTinyMCE() {
         toolbar: 'undo redo | blocks | ' +
             'bold italic forecolor backcolor | alignleft aligncenter ' +
             'alignright alignjustify | bullist numlist outdent indent | ' +
-            'link image table | codesample code | removeformat | help',
+            'link image table | codesample code | removeformat | help | fullscreen',
         codesample_languages: [
             { text: 'PowerShell', value: 'powershell' },
             { text: 'Bash/Shell', value: 'bash' },
@@ -254,11 +270,48 @@ function initTinyMCE() {
         // narrow is unaffected. Same single justified edit inbox.js took (#766).
         content_style: 'body { font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif; font-size: 14px; line-height: 1.6; }' +
                        ' @media (pointer: coarse) { body { font-size: 16px; } }',
+        /**
+         * TinyMCE setup hook - keeps a reference to the editor, toggles the kb-editor-fullscreen body class
+         * with full screen, and lets Esc leave full screen.
+         */
         setup: function(editor) {
             articleEditor = editor;
+            // Full screen (the button by Save): lift the editor above the app's
+            // own fixed layers while it is on - see knowledge.css.
+            editor.on('FullscreenStateChanged', function(e) {
+                document.body.classList.toggle('kb-editor-fullscreen', !!e.state);
+            });
+            // Esc comes back out. TinyMCE has no key for that itself; the
+            // toolbar button and View -> Fullscreen do the same.
+            editor.on('keydown', function(e) {
+                if (e.key === 'Escape' && kbEditorIsFullScreen()) {
+                    e.preventDefault();
+                    editor.execCommand('mceFullScreen');
+                }
+            });
         }
     });
 }
+
+/** Just the editor, filling the screen - TinyMCE's own fullscreen plugin. */
+function kbEditorFullScreen() {
+    if (!articleEditor) return;
+    if (!kbEditorIsFullScreen()) articleEditor.execCommand('mceFullScreen');
+    articleEditor.focus();
+}
+
+/** Returns true when the article editor is currently in TinyMCE's full-screen mode. */
+function kbEditorIsFullScreen() {
+    return !!(articleEditor && articleEditor.plugins.fullscreen && articleEditor.plugins.fullscreen.isFullscreen());
+}
+
+// Esc with the focus on the toolbar or a menu rather than in the text. Not
+// while one of TinyMCE's own dialogs is open: Esc belongs to that first.
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && kbEditorIsFullScreen() && !document.querySelector('.tox-dialog, .tox-menu')) {
+        articleEditor.execCommand('mceFullScreen');
+    }
+});
 
 // Initialize tag input functionality
 function initTagInput() {
@@ -341,6 +394,7 @@ let kbBrowseMode = 'panel';
 const KB_LAYOUT_KEY = 'knowledge_main_layout';
 let kbLayout = 'list';
 
+/** Loads the analyst's browse-mode preference ('panel' or 'explorer', defaulting to 'panel') and applies it. */
 async function loadBrowseModePreference() {
     try {
         const r = await fetch('../api/system/get_user_preference.php?key=' + encodeURIComponent(KB_BROWSE_MODE_KEY), { credentials: 'same-origin' });
@@ -352,6 +406,10 @@ async function loadBrowseModePreference() {
     applyBrowseMode();
 }
 
+/**
+ * Loads the analyst's saved main-pane layout (list, cards, tree or details) and applies it,
+ * re-fetching the articles first for the tree.
+ */
 async function loadLayoutPreference() {
     try {
         const r = await fetch('../api/system/get_user_preference.php?key=' + encodeURIComponent(KB_LAYOUT_KEY), { credentials: 'same-origin' });
@@ -372,6 +430,10 @@ async function loadLayoutPreference() {
     applyLayout(false);
 }
 
+/**
+ * Highlights the active layout button, redraws the article list, and saves the layout as a user
+ * preference when save is true.
+ */
 function applyLayout(save) {
     document.querySelectorAll('.kb-layout-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.layout === kbLayout);
@@ -386,6 +448,10 @@ function applyLayout(save) {
     }
 }
 
+/**
+ * Switches the main pane to another layout; tree and details reset to "All articles" and reload the
+ * unfiltered list before applying.
+ */
 function setLayout(mode) {
     if (!['list', 'cards', 'tree', 'details'].includes(mode)) return;
     kbLayout = mode;
@@ -414,6 +480,7 @@ function setLayout(mode) {
  */
 let kbDetailsSort = { col: 'title', dir: 1 };
 
+/** Sorts the Details table by the clicked column, reversing the direction when the same column is clicked again. */
 function kbSortDetails(col) {
     kbDetailsSort = (kbDetailsSort.col === col)
         ? { col: col, dir: -kbDetailsSort.dir }
@@ -421,6 +488,10 @@ function kbSortDetails(col) {
     renderArticleList();
 }
 
+/**
+ * Builds the HTML for the Details table - the subfolders of the current folder first, then the
+ * articles sorted by the chosen column.
+ */
 function renderDetailsLayout() {
     const folders = (activeFolder === 'root') ? []
         : kbFolders.filter(f => activeFolder === ''
@@ -428,6 +499,7 @@ function renderDetailsLayout() {
             : String(f.parent_id) === String(activeFolder));
 
     const dir = kbDetailsSort.dir;
+    /** Returns the sort key for an article in the given Details column. */
     const val = (a, col) => {
         if (col === 'modified') return a.modified_datetime || '';
         if (col === 'author')   return (a.author_name || '').toLowerCase();
@@ -439,6 +511,7 @@ function renderDetailsLayout() {
         return (a < b ? -1 : a > b ? 1 : 0) * dir;
     });
 
+    /** Returns the up or down arrow for the column currently sorted on, or nothing for the others. */
     const arrow = c => kbDetailsSort.col === c ? (dir === 1 ? ' ▲' : ' ▼') : '';
     const head = `
         <div class="kb-details-row kb-details-head">
@@ -508,6 +581,7 @@ function renderTreeLayout() {
         byFolder[k].sort((x, y) => byName(x.title, y.title));
     }
 
+    /** Builds one article row of the tree layout, indented for its depth. */
     const article = (a, depth) => `
         <div class="kb-tree-article" style="padding-left:${10 + depth * 18}px" onclick="kbRowClick(event, ${a.id})"
              data-article="${a.id}"
@@ -519,6 +593,10 @@ function renderTreeLayout() {
         </div>`;
 
     let html = '';
+    /**
+     * Walks the folder tree from a parent, adding each folder row (alphabetical) followed by its
+     * subfolders and then its own articles.
+     */
     const walk = (parent, depth) => {
         for (const f of kbFolders.filter(x => x.parent_id === parent).sort((a, b) => byName(a.name, b.name))) {
             html += `
@@ -549,6 +627,7 @@ function renderTreeLayout() {
     return html || `<div class="no-results">${escapeHtml(window.t('knowledge.list.no_articles'))}</div>`;
 }
 
+/** Hides the folder tree in the left panel on the explorer setting and redraws the article list. */
 function applyBrowseMode() {
     // Hiding the tree section is the whole point on the explorer setting: the
     // complaint was a crowded panel, so leaving the tree there and ALSO putting
@@ -557,6 +636,7 @@ function applyBrowseMode() {
     if (sec) sec.style.display = (kbBrowseMode === 'explorer') ? 'none' : '';
     if (typeof articles !== 'undefined') renderArticleList();
 }
+/** Loads the analyst's left panel preference ('always' or 'hover') and applies it, falling back to 'always'. */
 async function loadSidebarModePreference() {
     try {
         const r = await fetch('../api/system/get_user_preference.php?key=' + encodeURIComponent(KB_SIDEBAR_MODE_KEY), { credentials: 'same-origin' });
@@ -567,6 +647,7 @@ async function loadSidebarModePreference() {
         applySidebarMode('always');
     }
 }
+/** Adds or removes the sidebar-hover class on the knowledge container for the chosen left panel mode. */
 function applySidebarMode(mode) {
     const container = document.querySelector('.knowledge-container');
     if (!container) return;
@@ -601,6 +682,10 @@ async function kbConfirm(opts) {
     return confirm(opts.message || '');
 }
 
+/**
+ * Opens the app's own name dialog and returns a Promise of the typed text, falling back to the
+ * browser's prompt() when the dialog is missing.
+ */
 function kbPrompt(title, value) {
     const modal = document.getElementById('kbPromptModal');
     // No dialog on the page (an older cached template): fall back rather than
@@ -625,6 +710,7 @@ function kbPrompt(title, value) {
     });
 }
 
+/** Closes the name dialog and resolves the pending kbPrompt() with the typed value. */
 function kbPromptAccept() {
     const v = document.getElementById('kbPromptInput').value;
     kbPromptClose();
@@ -638,6 +724,7 @@ function kbPromptCancel() {
     if (kbPromptResolve) { const r = kbPromptResolve; kbPromptResolve = null; r(null); }
 }
 
+/** Hides the name dialog. */
 function kbPromptClose() {
     const modal = document.getElementById('kbPromptModal');
     if (modal) modal.classList.remove('active');
@@ -652,6 +739,10 @@ function kbPromptClose() {
 //  exactly the sort of thing worth restricting.
 // ---------------------------------------------------------------------------
 
+/**
+ * Fetches the folder tree the analyst may see, then redraws the article list, the left panel tree and
+ * the editor's folder picker.
+ */
 async function loadFolders() {
     const box = document.getElementById('kbFolderTree');
     if (!box) return;
@@ -687,6 +778,10 @@ function folderChildren(parent) {
     return kbFolders.filter(f => f.parent_id === parent);
 }
 
+/**
+ * Draws the folder tree in the left panel, with "All articles" at the top as a drop target and a key
+ * button on each folder for those who can manage permissions.
+ */
 function renderFolderTree(rootCount) {
     const box = document.getElementById('kbFolderTree');
     if (!box) return;
@@ -700,6 +795,7 @@ function renderFolderTree(rootCount) {
                     <span class="kb-folder-count">${rootCount + kbFolders.reduce((n, f) => n + f.article_count, 0)}</span>
                  </div>`;
 
+    /** Walks the folders from a parent, adding an indented, draggable tree row for each one and then its subfolders. */
     const walk = (parent, depth) => {
         for (const f of folderChildren(parent)) {
             // 🔒 marks a folder with its own rules. The badge is the whole point
@@ -740,6 +836,7 @@ function renderFolderPicker() {
     root.textContent = window.t('knowledge.folders.root');
     sel.appendChild(root);
 
+    /** Walks the folders from a parent, adding an indented option for each one to the editor's folder picker. */
     const walk = (parent, depth) => {
         for (const f of folderChildren(parent)) {
             const o = document.createElement('option');
@@ -768,6 +865,7 @@ function goUpOneLevel() {
     selectFolder(String(parent));
 }
 
+/** Makes a folder the current one, updates the URL and reloads the folder tree and the article list for it. */
 function selectFolder(value) {
     activeFolder = String(value);
     // ⚠️ The URL syncs from showView(), and changing folder does not change
@@ -779,6 +877,7 @@ function selectFolder(value) {
     loadArticles(document.getElementById('articleSearch').value, activeTagFilters);
 }
 
+/** Asks for a name and creates a folder inside the current folder, or at the top level from "All articles". */
 async function createFolderPrompt() {
     const name = await kbPrompt(window.t('knowledge.folders.new_prompt'));
     if (name === null || name.trim() === '') return;
@@ -788,12 +887,14 @@ async function createFolderPrompt() {
     await folderAction({ action: 'create', name: name.trim(), parent_id: parent }, 'knowledge.folders.created');
 }
 
+/** Asks for a new name and renames the folder. */
 async function renameFolderPrompt(id, current) {
     const name = await kbPrompt(window.t('knowledge.folders.rename_prompt'), current);
     if (name === null || name.trim() === '') return;
     await folderAction({ action: 'rename', id: id, name: name.trim() }, 'knowledge.folders.renamed');
 }
 
+/** Asks for confirmation and deletes the folder. */
 async function deleteFolderPrompt(id, name) {
     if (!await kbConfirm({
         title: window.t('knowledge.folders.delete'),
@@ -804,6 +905,10 @@ async function deleteFolderPrompt(id, name) {
     await folderAction({ action: 'delete', id: id }, 'knowledge.folders.deleted');
 }
 
+/**
+ * Posts a folder or filing action to folders.php, shows the result as a toast and reloads the folders
+ * and articles on success.
+ */
 async function folderAction(payload, okKey) {
     try {
         const r = await fetch(API_BASE + 'folders.php', {
@@ -846,6 +951,7 @@ let permSearchTimer = null;
 
 let kbDrag = null;   // { type: 'article'|'folder', id }
 
+/** Starts dragging an article or folder - records what is in flight and fades the row being dragged. */
 function kbDragStart(e, type, id) {
     kbDrag = { type: type, id: id };
     // Fade the row being dragged. Half of "where will this land?" is knowing
@@ -859,6 +965,7 @@ function kbDragStart(e, type, id) {
     e.stopPropagation();
 }
 
+/** Clears the drag state, the faded row and any drop-target highlights left by an abandoned drag. */
 function kbDragEnd() {
     kbDrag = null;
     document.querySelectorAll('.kb-dragging').forEach(el => el.classList.remove('kb-dragging'));
@@ -869,6 +976,7 @@ function kbDragEnd() {
             .forEach(el => el.classList.remove('drop-target'));
 }
 
+/** Allows a drop on a folder row and highlights it, except a folder dragged over itself. */
 function kbDragOver(e) {
     if (!kbDrag) return;
     // A folder cannot be dropped on itself. Refusing here rather than letting
@@ -880,10 +988,12 @@ function kbDragOver(e) {
     e.currentTarget.classList.add('drop-target');
 }
 
+/** Removes the drop-target highlight when the drag leaves a row. */
 function kbDragLeave(e) {
     e.currentTarget.classList.remove('drop-target');
 }
 
+/** Files the dropped article in the folder (Ctrl makes a shortcut instead) or moves the dropped folder under it. */
 async function kbDrop(e, folderId) {
     e.preventDefault();
     e.stopPropagation();
@@ -986,6 +1096,7 @@ function kbContextMenu(e, type, id, name) {
     setTimeout(() => document.addEventListener('click', closeContextMenu, { once: true }), 0);
 }
 
+/** Removes the right-click menu if one is open. */
 function closeContextMenu() {
     const m = document.getElementById('kbContextMenu');
     if (m) m.remove();
@@ -1066,6 +1177,7 @@ function folderPath(id) {
     return out;
 }
 
+/** Draws the breadcrumb for the current folder with an "up one level" button, or hides it at "All articles". */
 function renderBreadcrumb() {
     const bar = document.getElementById('kbBreadcrumb');
     if (!bar) return;
@@ -1154,8 +1266,10 @@ function renderFolderRows() {
  */
 const KB_CARD_TAG_LIMIT = 5;
 
+/** Returns the tag pills for an article, capped in the cards layout with a "+N more" pill that opens the full list. */
 function renderCardTags(article) {
     const tags = article.tags || [];
+    /** Returns the HTML for one tag pill. */
     const pill = t => `<span class="article-tag">${escapeHtml(t.name)}</span>`;
     // FIVE, not two. The first cut capped at two because the meta line was still
     // fighting the author and date for half a card; now each has the full width
@@ -1208,6 +1322,7 @@ function kbShowAllTags(el) {
     document.getElementById('kbTagsModal').classList.add('active');
 }
 
+/** Closes the all-tags dialog. */
 function closeTagsModal() {
     document.getElementById('kbTagsModal').classList.remove('active');
 }
@@ -1246,6 +1361,10 @@ function kbFolderLabel(article) {
     return `<span class="kb-card-folder" title="${escapeHtml(window.t('knowledge.editor.field_folder'))}">📁 ${escapeHtml(name)}</span>`;
 }
 
+/**
+ * Returns true when the article is shown in the current folder by a shortcut, because its real folder
+ * is a different one.
+ */
 function kbRowIsShortcut(articleId) {
     if (activeFolder === '' || activeFolder === 'root') return false;
     const a = articles.find(x => x.id === articleId);
@@ -1287,6 +1406,7 @@ async function openExceptionsModal() {
     }
 }
 
+/** Closes the permission exceptions dialog. */
 function closeExceptionsModal() {
     document.getElementById('kbExceptionsModal').classList.remove('active');
 }
@@ -1297,6 +1417,7 @@ function openArticlePermModal() {
     openPermModal('article', currentArticle.id, currentArticle.title);
 }
 
+/** Opens the "Who can see this" dialog for a folder or an article and loads its access list. */
 function openPermModal(type, id, name) {
     permTarget = { type: type, id: id, name: name || '' };
     document.getElementById('kbPermTitle').textContent = name
@@ -1308,6 +1429,7 @@ function openPermModal(type, id, name) {
     permLoad();
 }
 
+/** Closes the permissions dialog and reloads the folders and articles, since visibility may have changed. */
 function closePermModal() {
     document.getElementById('kbPermModal').classList.remove('active');
     permTarget = null;
@@ -1317,6 +1439,7 @@ function closePermModal() {
     loadArticles(document.getElementById('articleSearch').value, activeTagFilters);
 }
 
+/** Fetches the access list and mode for the current permissions target and draws the inherited rules and the list. */
 async function permLoad() {
     if (!permTarget) return;
     const box = document.getElementById('kbPermList');
@@ -1386,6 +1509,10 @@ function renderInherited(d) {
       + `<p class="field-hint">${escapeHtml(window.t('knowledge.perm.inherit_readonly'))}</p>`;
 }
 
+/**
+ * Draws the access list for the current target, with the explanation and empty state worded for open
+ * or restricted mode.
+ */
 function renderPermList() {
     const restricted = document.getElementById('kbPermRestricted').checked;
     document.getElementById('kbPermExplain').textContent =
@@ -1471,6 +1598,7 @@ async function permRemove(entryId, name) {
     await permLoad();
 }
 
+/** Adds a person or group to the current target's access list and reloads it. */
 async function permAdd(type, id) {
     const d = await permPost({ action: 'add', principal_type: type, principal_id: id });
     if (d) showToast(window.t('knowledge.perm.added'), 'success');
@@ -1479,6 +1607,10 @@ async function permAdd(type, id) {
     await permLoad();
 }
 
+/**
+ * Posts a permissions change for the current target to permissions.php, toasting any error; returns
+ * the reply or null on failure.
+ */
 async function permPost(payload) {
     if (!permTarget) return null;
     try {
@@ -1499,6 +1631,7 @@ async function permPost(payload) {
     }
 }
 
+/** Searches people and groups to add to the access list, debounced and only from two characters. */
 function permSearch() {
     clearTimeout(permSearchTimer);
     permSearchTimer = setTimeout(async () => {
@@ -1518,6 +1651,7 @@ function permSearch() {
     }, 250);
 }
 
+/** Fetches all knowledge tags and redraws the tag filters in the sidebar. */
 async function loadTags() {
     try {
         const response = await fetch(API_BASE + 'knowledge_tags.php');
@@ -1679,6 +1813,7 @@ function kbVisibleArticleIds() {
                 .filter(id => !Number.isNaN(id));
 }
 
+/** Returns the on-screen row element for an article id. */
 function kbRowEl(id) {
     return document.querySelector('#articleList [data-article="' + id + '"]');
 }
@@ -1696,6 +1831,7 @@ function kbRenderSelection() {
     renderBulkBar();
 }
 
+/** Replaces the selection with the given article ids, optionally moving the anchor and the focus, and repaints. */
 function kbSetSelection(ids, { anchor = null, focus = null } = {}) {
     kbSelected.clear();
     ids.forEach(id => kbSelected.add(id));
@@ -1717,6 +1853,7 @@ function kbSelectRangeTo(id, { add = false } = {}) {
     kbRenderSelection();
 }
 
+/** Toggles one article in or out of the selection and makes it the anchor and the focused row. */
 function kbToggleOne(id) {
     if (kbSelected.has(id)) kbSelected.delete(id); else kbSelected.add(id);
     kbAnchorId = id;
@@ -1755,6 +1892,7 @@ function kbRowClick(e, id) {
     viewArticle(id);
 }
 
+/** Clears the selection, the anchor and the focus. */
 function clearArticleSelection() {
     kbSelected.clear();
     kbAnchorId = null;
@@ -1762,6 +1900,7 @@ function clearArticleSelection() {
     kbRenderSelection();
 }
 
+/** Selects every article row currently on screen. */
 function selectAllVisibleArticles() {
     // ⚠️ What is ON SCREEN, not every article loaded. In the tree that is the
     // whole knowledge base; in a folder it is that folder. Either way it is
@@ -1770,6 +1909,10 @@ function selectAllVisibleArticles() {
     kbSetSelection(kbVisibleArticleIds());
 }
 
+/**
+ * Moves the keyboard focus up or down a row, either selecting just that row, extending the range from
+ * the anchor, or keeping the selection as it is.
+ */
 function kbMoveFocus(delta, { extend = false, keepSelection = false } = {}) {
     const ids = kbVisibleArticleIds();
     if (!ids.length) return;
@@ -1833,6 +1976,10 @@ function kbSelectBox(id) {
             </label>`;
 }
 
+/**
+ * Shows the bulk-action bar with the selected count while anything is selected and refreshes its
+ * folder list, or hides it.
+ */
 function renderBulkBar() {
     const bar = document.getElementById('kbBulkBar');
     if (!bar) return;
@@ -1856,6 +2003,10 @@ function kbRenderBulkFolders() {
     const keep = sel.value;
     const opts = ['<option value="">' + escapeHtml(window.t('knowledge.bulk.move_choose')) + '</option>',
                   '<option value="root">' + escapeHtml(window.t('knowledge.folders.root')) + '</option>'];
+    /**
+     * Walks the folders from a parent, adding an indented option for each one to the bulk "Move" list in
+     * name order.
+     */
     const walk = (parent, depth) => {
         kbFolders.filter(f => String(f.parent_id) === String(parent) || (parent === null && f.parent_id === null))
                  .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }))
@@ -1911,6 +2062,10 @@ async function applyBulkMove() {
     loadArticles(document.getElementById('articleSearch').value, activeTagFilters);
 }
 
+/**
+ * Sets the chosen audience on every selected article in one call to knowledge_bulk_audience.php and
+ * reports any articles that could not be changed.
+ */
 async function applyBulkAudience() {
     const select = document.getElementById('kbBulkAudience');
     const audience = select ? select.value : '';
@@ -2122,6 +2277,8 @@ function renderArticleDetail() {
             ${currentArticle.body}
         </div>
         <div id="kbDocuments" style="margin-top:24px;"></div>
+        <div id="kbDomains" style="margin-top:16px;"></div>
+        <div id="kbProjects" style="margin-top:16px;"></div>
     `;
 
     // Apply syntax highlighting to any code blocks
@@ -2148,8 +2305,22 @@ function renderArticleDetail() {
             parentId:   currentArticle.id,
             apiBase:    '../api/documents/',
             canEdit:    false,
-            showHeading: true      // nothing else on this page names the section
+            showHeading: true,     // nothing else on this page names the section
+            helpCentreHelpUrl: kbHelpCentreHelpUrl()
         });
+    }
+
+    // The domains this article is a runbook for (3.0.0). Listed here, linked in
+    // the editor - the documents rule above: reading is not editing. Nothing at
+    // all when none are linked.
+    if (window.KB_SHOW_DOMAINS && window.DomainLinks) {
+        DomainLinks.mount(document.getElementById('kbDomains'), {
+            kind: 'article', id: currentArticle.id, base: window.KB_BASE, editable: false, hideEmpty: true
+        });
+    }
+    // Projects (3.2.0) this article is part of - listed when reading, linked in the editor.
+    if (window.KB_SHOW_PROJECTS && window.ProjectLinks) {
+        ProjectLinks.mount(document.getElementById('kbProjects'), { kind: 'article', id: currentArticle.id, base: window.KB_BASE, editable: false, hideEmpty: true });
     }
 }
 
@@ -2240,6 +2411,7 @@ function toggleEditorPopout() {
     try { localStorage.setItem('knowledge_editor_popout', on ? '1' : '0'); } catch (e) {}
 }
 
+/** Restores the editor pop-out layout from the value saved in localStorage. */
 function applyEditorPopoutFromPref() {
     const container = document.querySelector('.knowledge-container');
     if (!container) return;
@@ -2401,6 +2573,10 @@ async function toggleRecycleBin() {
     }
 }
 
+/**
+ * Lists the archived articles in the main pane with their retention notice and View, Restore and
+ * Delete forever buttons.
+ */
 async function loadRecycleBin() {
     const articleList = document.getElementById('articleList');
     const articleCount = document.getElementById('articleCount');
@@ -2456,6 +2632,7 @@ async function loadRecycleBin() {
     }
 }
 
+/** Restores an archived article and refreshes the tags and the recycle bin. */
 async function restoreArticle(id) {
     try {
         const response = await fetch(API_BASE + 'knowledge_archive.php', {
@@ -2478,6 +2655,7 @@ async function restoreArticle(id) {
     }
 }
 
+/** Asks for confirmation, then permanently deletes an archived article and refreshes the tags and the recycle bin. */
 async function hardDeleteArticle(id, title) {
     if (!(await showConfirm({ title: window.t('knowledge.confirm.delete_title'), message: window.t('knowledge.confirm.hard_delete_message', { title: title }), okLabel: window.t('knowledge.confirm.delete_ok'), okClass: 'danger' }))) return;
 
@@ -2502,6 +2680,7 @@ async function hardDeleteArticle(id, title) {
     }
 }
 
+/** Shows an archived article read-only in a dialog. */
 async function viewArchivedArticle(id) {
     try {
         const response = await fetch(`${API_BASE}knowledge_article.php?id=${id}&include_archived=1`);
@@ -2528,6 +2707,7 @@ async function viewArchivedArticle(id) {
     }
 }
 
+/** Closes the archived article dialog. */
 function closeArchivedArticleModal() {
     document.getElementById('archivedArticleModal').classList.remove('active');
 }
@@ -2609,6 +2789,8 @@ function syncArticleUrl(view) {
 
 // Show/hide views
 function showView(view) {
+    // Never leave the page behind a full-screen editor that is no longer shown.
+    if (view !== 'editor' && kbEditorIsFullScreen()) articleEditor.execCommand('mceFullScreen');
     document.getElementById('articleListView').style.display = view === 'list' ? 'block' : 'none';
     document.getElementById('articleDetailView').style.display = view === 'detail' ? 'block' : 'none';
     // 'flex' (not 'block') so the column layout that holds the sticky-footer
@@ -2644,11 +2826,13 @@ function addTag(tagName) {
     }
 }
 
+/** Removes a tag from the article being edited. */
 function removeTag(tagName) {
     selectedTags = selectedTags.filter(t => t !== tagName);
     renderSelectedTags();
 }
 
+/** Draws the tags chosen for the article being edited, each with a remove button. */
 function renderSelectedTags() {
     const container = document.getElementById('selectedTags');
     container.innerHTML = selectedTags.map(tag => `
@@ -2659,6 +2843,10 @@ function renderSelectedTags() {
     `).join('');
 }
 
+/**
+ * Shows existing tags matching what has been typed, plus an option to create a new tag when there is
+ * no exact match.
+ */
 function showTagSuggestions(query) {
     const container = document.getElementById('tagSuggestions');
     const matchingTags = tags.filter(t =>
@@ -2690,6 +2878,7 @@ function showTagSuggestions(query) {
     }
 }
 
+/** Hides the tag suggestions list. */
 function hideSuggestions() {
     document.getElementById('tagSuggestions').classList.remove('active');
 }
@@ -2730,6 +2919,10 @@ function jsAttr(value) {
         .replace(/'/g, '&#39;');
 }
 
+/**
+ * Escapes text for use as HTML content; does not escape quotes, so it is not safe on its own inside an
+ * attribute (use jsAttr there).
+ */
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -2750,6 +2943,7 @@ function toggleShareDropdown() {
     }
 }
 
+/** Closes the share menu when a click lands outside it. */
 function closeShareDropdownOnClickOutside(e) {
     const dropdown = document.querySelector('.share-dropdown');
     if (!dropdown.contains(e.target)) {
@@ -2758,6 +2952,7 @@ function closeShareDropdownOnClickOutside(e) {
     }
 }
 
+/** Closes the share menu and removes its outside-click listener. */
 function closeShareDropdown() {
     document.getElementById('shareDropdownMenu').classList.remove('active');
     document.removeEventListener('click', closeShareDropdownOnClickOutside);
@@ -2843,6 +3038,7 @@ async function buildArticlePdf() {
     const pageH = doc.internal.pageSize.getHeight();
     const bottomLimit = pageH - margin;
 
+    /** Starts a new PDF page when the next block would run past the bottom margin. */
     function ensureSpace(needed) {
         if (y + needed > bottomLimit) { doc.addPage(); y = margin; }
     }
@@ -2856,6 +3052,10 @@ async function buildArticlePdf() {
         }
     }
 
+    /**
+     * Writes one node of the article body into the PDF - text, headings, paragraphs and lists - adding
+     * pages as needed.
+     */
     function renderNode(node) {
         if (node.nodeType === 3) {
             const text = node.textContent.replace(/\s+/g, ' ').trim();
@@ -2998,6 +3198,7 @@ function shareArticleBoth() {
     document.getElementById('shareEmailModal').classList.add('active');
 }
 
+/** Closes the share-by-email dialog. */
 function closeShareEmailModal() {
     document.getElementById('shareEmailModal').classList.remove('active');
 }
@@ -3104,10 +3305,17 @@ function blobToBase64(blob) {
 
     if (!articleId) return;
 
+    // Keep the list out of sight while the article is on its way - otherwise the
+    // folder's contents show for a moment and then get swapped for the article.
+    // Put back below if the article cannot be opened.
+    const listView = document.getElementById('articleListView');
+    if (listView) listView.style.display = 'none';
+
     const checkAndLoad = setInterval(() => {
         if (articles.length > 0 || document.getElementById('articleList').innerHTML.includes('No articles')) {
             clearInterval(checkAndLoad);
             Promise.resolve(viewArticle(articleId)).then(() => {
+                if (!currentArticle || String(currentArticle.id) !== String(articleId)) { showView('list'); return; }
                 if (!wantEdit) return;
                 // editCurrentArticle populates TinyMCE — wait until the
                 // editor instance is ready so the article body isn't lost.
@@ -3121,7 +3329,11 @@ function blobToBase64(blob) {
             });
         }
     }, 100);
-    setTimeout(() => clearInterval(checkAndLoad), 5000);
+    // Gave up waiting for the list: show it rather than leave an empty page.
+    setTimeout(() => {
+        clearInterval(checkAndLoad);
+        if (!currentArticle && listView && listView.style.display === 'none') showView('list');
+    }, 5000);
 })();
 
 // Server-stamped UTC timestamps (created/modified/archived). Parse as UTC and
@@ -3134,17 +3346,20 @@ function formatDate(dateStr) {
 
 // ===== AI Chat Functions =====
 
+/** Opens the AI chat panel and focuses its input. */
 function openAiChat() {
     document.getElementById('aiChatPanel').classList.add('active');
     document.getElementById('aiChatOverlay').classList.add('active');
     document.getElementById('aiChatInput').focus();
 }
 
+/** Closes the AI chat panel. */
 function closeAiChat() {
     document.getElementById('aiChatPanel').classList.remove('active');
     document.getElementById('aiChatOverlay').classList.remove('active');
 }
 
+/** Sends the typed question to ai_chat.php and adds the answer, or the error, to the chat panel. */
 async function askAi() {
     const input = document.getElementById('aiChatInput');
     const messagesContainer = document.getElementById('aiChatMessages');
@@ -3217,14 +3432,23 @@ async function askAi() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
+/**
+ * Turns the AI's answer into HTML - quoted article titles become links to the articles, and simple
+ * Markdown becomes bold, italics, code, paragraphs and lists.
+ */
 function formatAiResponse(text, articlesList) {
+    // TRAP: escape the WHOLE answer first, then add markup. The answer is model
+    // output built from article text, so it can contain HTML; formatting the raw
+    // text and handing it to innerHTML would run it. Only the tags added below may appear.
+    text = escapeHtml(String(text == null ? '' : text));
     // Replace quoted article titles with hyperlinks before any other formatting
     if (articlesList && articlesList.length > 0) {
         // Sort by title length descending so longer titles match first
         const sorted = [...articlesList].sort((a, b) => b.title.length - a.title.length);
         sorted.forEach(article => {
-            // Match title in quotes: "Title" or "Title", with optional (ID: X) suffix
-            const escapedTitle = article.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Match title in quotes: "Title" or "Title", with optional (ID: X) suffix -
+            // against the escaped answer, so escape the title the same way
+            const escapedTitle = escapeHtml(article.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             // Match with optional " (ID: X)" suffix that AI sometimes adds
             const regex = new RegExp('["\u201c]' + escapedTitle + '(\\s*\\(ID:\\s*\\d+\\))?["\u201d]', 'gi');
             const link = '<a href="javascript:void(0)" data-article-id="' + article.id + '" class="ai-article-link">\u201c' + escapeHtml(article.title) + '\u201d</a>';
@@ -3316,8 +3540,10 @@ document.addEventListener('click', function(e) {
 //  only route was to go back, find it again, and right-click it.
 // ---------------------------------------------------------------------------
 
+/** Returns the option HTML for a folder picker, indented by depth with the given folder pre-selected. */
 function kbFolderOptions(selectedId) {
     const opts = ['<option value="root">' + escapeHtml(window.t('knowledge.folders.root')) + '</option>'];
+    /** Walks the folders from a parent, adding an indented option for each one in name order. */
     const walk = (parent, depth) => {
         kbFolders.filter(f => (parent === null ? f.parent_id === null : String(f.parent_id) === String(parent)))
                  .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: 'base' }))
@@ -3332,6 +3558,7 @@ function kbFolderOptions(selectedId) {
     return opts.join('');
 }
 
+/** Opens the move dialog for the article being read, pre-selected to its current folder. */
 function kbMoveCurrentArticle() {
     const modal = document.getElementById('kbMoveModal');
     if (!modal || !currentArticle) return;
@@ -3343,11 +3570,13 @@ function kbMoveCurrentArticle() {
     modal.classList.add('active');
 }
 
+/** Closes the move dialog. */
 function kbCloseMoveModal() {
     const modal = document.getElementById('kbMoveModal');
     if (modal) modal.classList.remove('active');
 }
 
+/** Moves the article being read to the chosen folder through the same action as a drag. */
 async function kbConfirmMoveArticle() {
     if (!currentArticle) return;
     const sel = document.getElementById('kbMoveFolder');
@@ -3386,16 +3615,43 @@ function mountEditorDocuments() {
         box.innerHTML = '';
         box.classList.remove('fd-panel');
         if (hint) hint.style.display = id ? 'none' : '';
+        // Nor a domains panel left from the last article: a new one has no id
+        // to link to until it is saved.
+        const leftover = document.getElementById('kbEditorDomains');
+        if (leftover) leftover.innerHTML = '';
         return;
     }
     if (hint) hint.style.display = 'none';
+    // Linking domains lives here with attaching documents (3.0.0).
+    const dom = document.getElementById('kbEditorDomains');
+    // onChange redraws the reading view's list too: Cancel returns to it without
+    // fetching the article again, so it would otherwise show the old links.
+    if (dom && window.DomainLinks) DomainLinks.mount(dom, { kind: 'article', id: id, base: window.KB_BASE, onChange: () => {
+        const read = document.getElementById('kbDomains');
+        if (read) DomainLinks.mount(read, { kind: 'article', id: id, base: window.KB_BASE, editable: false, hideEmpty: true });
+    } });
+    const prj = document.getElementById('kbEditorProjects');
+    if (prj && window.KB_SHOW_PROJECTS && window.ProjectLinks) ProjectLinks.mount(prj, { kind: 'article', id: id, base: window.KB_BASE });
+    // The panel reports what the Help Centre will show (GH #177); kept so the
+    // audience hint can warn before a change publishes these documents.
+    if (!box.dataset.hcListening) {
+        box.dataset.hcListening = '1';
+        box.addEventListener('fd:helpcentre', e => { kbEditorHelpCentre = e.detail; updateAudienceHint(); });
+    }
+    kbEditorHelpCentre = null;
     FreeITSMDocuments.mount(box, {
         parentType: 'knowledge_article',
         parentId:   id,
         apiBase:    '../api/documents/',
         canEdit:    true,
-        showHeading: true
+        showHeading: true,
+        helpCentreHelpUrl: kbHelpCentreHelpUrl()
     });
+}
+
+/** The help page about documents in the Help Centre (GH #177). */
+function kbHelpCentreHelpUrl() {
+    return (window.KB_BASE || '../') + 'knowledge/help/documents-help-centre.php';
 }
 
 // ---------------------------------------------------------------------------
@@ -3409,6 +3665,7 @@ function mountEditorDocuments() {
 
 let kbAuditFor = null;   // { type, id, name }
 
+/** Opens the history dialog for a folder or an article and loads its entries. */
 function openAuditModal(type, id, name) {
     kbAuditFor = { type: type, id: id, name: name };
     const modal = document.getElementById('kbAuditModal');
@@ -3422,6 +3679,7 @@ function openAuditModal(type, id, name) {
     auditLoad();
 }
 
+/** Closes the history dialog. */
 function closeAuditModal() {
     const modal = document.getElementById('kbAuditModal');
     if (modal) modal.classList.remove('active');
@@ -3434,6 +3692,7 @@ function openArticleAuditModal() {
     openAuditModal('article', currentArticle.id, currentArticle.title);
 }
 
+/** Fetches the history entries for the folder or article in the history dialog and draws them. */
 async function auditLoad() {
     if (!kbAuditFor) return;
     const box = document.getElementById('kbAuditList');
@@ -3520,6 +3779,10 @@ function renderAuditDetail(e) {
         }));
     }
     if (d.name) bits.push(escapeHtml(d.name));
+    if (typeof d.help_centre_document !== 'undefined') {
+        bits.push(escapeHtml(window.t(d.shown ? 'knowledge.audit.detail_doc_shown' : 'knowledge.audit.detail_doc_hidden',
+            { name: d.help_centre_document })));
+    }
 
     if (!bits.length) return `<div class="kb-audit-detail">${escapeHtml(JSON.stringify(d))}</div>`;
     return `<div class="kb-audit-detail">${bits.join(' · ')}</div>`;

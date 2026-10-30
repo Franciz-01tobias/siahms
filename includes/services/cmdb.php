@@ -46,6 +46,8 @@ class CmdbService
      * companyScope null = all companies (single-company install or an all-access
      * actor) → no gate. Framed as not-found so it never reveals another
      * company's CI. $row must include tenant_id.
+     *
+     * @param array $row  the cmdb_objects row; must include tenant_id
      */
     private static function assertScope(PDO $conn, ActorContext $ctx, array $row): void
     {
@@ -66,6 +68,8 @@ class CmdbService
      * Returns the value to STORE: the Default company normalises to NULL so
      * UI-created and API-created CIs store the same thing (every read treats
      * NULL as Default's), matching AssetsService.
+     *
+     * @param array $in  the request fields; tenant_id or company_id names the company, else the actor's active one
      */
     private static function resolveTenantForCreate(PDO $conn, ActorContext $ctx, array $in): ?int
     {
@@ -92,6 +96,10 @@ class CmdbService
      * property — must have both ends in the same company. Without this a link
      * becomes a side channel: you can't read the other CI, but you can still
      * discover it exists and bind your own records to it.
+     *
+     * @param int $aId  one cmdb_objects id
+     * @param int $bId  the other cmdb_objects id
+     * @param string $what  the kind of link, for the error message, e.g. 'parent' or 'relationship'
      */
     private static function assertSameCompany(PDO $conn, int $aId, int $bId, string $what): void
     {
@@ -118,7 +126,11 @@ class CmdbService
     //  Objects
     // ======================================================================
 
-    /** Create (no id) or update (id present) an object. Returns ['id','created']. */
+    /**
+     * Create (no id) or update (id present) an object. Returns ['id','created'].
+     *
+     * @param array $in  the request fields: id (absent = new) plus those createObject() / updateObject() take
+     */
     public static function saveObject(PDO $conn, ActorContext $ctx, array $in): array
     {
         if (!empty($in['id'])) {
@@ -127,6 +139,12 @@ class CmdbService
         return ['id' => self::createObject($conn, $ctx, $in), 'created' => true];
     }
 
+    /**
+     * Creates a CI: validates the name, class, parent, company and properties, inserts it
+     * with its property values and fires the cmdb.object.created workflow event.
+     *
+     * @param array $in  name, class_id or class_key, parent_id, is_planned, tenant_id or company_id, properties or property_values
+     */
     private static function createObject(PDO $conn, ActorContext $ctx, array $in): int
     {
         $name = trim((string)($in['name'] ?? ''));
@@ -202,6 +220,13 @@ class CmdbService
         return $objectId;
     }
 
+    /**
+     * Updates a CI's name, parent, planned flag and properties; the class never changes.
+     * Fires the cmdb.object.updated workflow event.
+     *
+     * @param int $objectId  the CI to update
+     * @param array $in  any of name, parent_id, is_planned, properties or property_values; the class cannot change
+     */
     private static function updateObject(PDO $conn, ActorContext $ctx, int $objectId, array $in): int
     {
         $current = self::loadObjectRow($conn, $objectId);       // 404 if gone
@@ -257,7 +282,11 @@ class CmdbService
         return $objectId;
     }
 
-    /** Delete an object + its whole descendant tree (explicit, not FK cascade). Returns ['id','deleted_descendants']. */
+    /**
+     * Delete an object + its whole descendant tree (explicit, not FK cascade). Returns ['id','deleted_descendants'].
+     *
+     * @param int $objectId  the CI to delete, with every descendant
+     */
     public static function deleteObject(PDO $conn, ActorContext $ctx, int $objectId): array
     {
         $row = self::loadObjectRow($conn, $objectId);
@@ -297,7 +326,12 @@ class CmdbService
     //  Relationships
     // ======================================================================
 
-    /** Create a relationship from $fromId. Returns ['id','to_object_id','verb']. */
+    /**
+     * Create a relationship from $fromId. Returns ['id','to_object_id','verb'].
+     *
+     * @param int $fromId  the CI the relationship starts from
+     * @param array $in  to_object_id (required), and relationship_type_id or verb
+     */
     public static function createRelationship(PDO $conn, ActorContext $ctx, int $fromId, array $in): array
     {
         self::assertScope($conn, $ctx, self::loadObjectRow($conn, $fromId));
@@ -348,6 +382,9 @@ class CmdbService
      * Delete a relationship by row id. If $objectId is given (API), the
      * relationship must involve that object and a miss is a 404; if null (UI),
      * it's an unscoped delete that succeeds regardless. Returns the relationship id.
+     *
+     * @param int $relId  the cmdb_object_relationships row to delete
+     * @param ?int $objectId  the CI it must involve (API), or null to check only its 'from' end (UI)
      */
     public static function deleteRelationship(PDO $conn, ActorContext $ctx, int $relId, ?int $objectId = null): int
     {
@@ -377,7 +414,11 @@ class CmdbService
     //  Internals
     // ======================================================================
 
-    /** The company id a CI effectively belongs to (NULL stored = Default's). */
+    /**
+     * The company id a CI effectively belongs to (NULL stored = Default's).
+     *
+     * @param int $id  the cmdb_objects id
+     */
     private static function tenantOf(PDO $conn, int $id): int
     {
         $stmt = $conn->prepare("SELECT tenant_id FROM cmdb_objects WHERE id = ?");
@@ -393,6 +434,10 @@ class CmdbService
      * the CI being written.
      *
      * $ownTenant is the STORED value (NULL = Default's).
+     *
+     * @param int $classId  the CI's class, whose object_ref properties are checked
+     * @param array $values  [property_key => value] about to be written
+     * @param ?int $ownTenant  the CI's company as stored - null for the Default company
      */
     private static function assertObjectRefsInCompany(
         PDO $conn, ActorContext $ctx, int $classId, array $values, ?int $ownTenant): void
@@ -425,6 +470,11 @@ class CmdbService
         }
     }
 
+    /**
+     * Loads one CI with its class name and key; throws not found when it does not exist.
+     *
+     * @param int $id  the cmdb_objects id to load
+     */
     private static function loadObjectRow(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare(
@@ -450,6 +500,8 @@ class CmdbService
      *
      * The CMDB's `object_ref` is the engine's `ref` with a `cmdb_object` kind,
      * and `target_class_id` is that kind's target discriminator.
+     *
+     * @param int $classId  the cmdb_classes id
      */
     private static function classDefs(PDO $conn, int $classId): array
     {
@@ -481,6 +533,8 @@ class CmdbService
      * `self_kind` says which reference kind counts as "the same table as the
      * owner", so the no-self-reference rule fires for a CI pointing at itself
      * and NOT for, say, an asset whose linked user happens to share its id.
+     *
+     * @param int $classId  the CI's class, used only in the 'unknown property' hint
      */
     private static function valueSchema(int $classId): array
     {
@@ -509,6 +563,9 @@ class CmdbService
      * Normalise the two accepted property shapes to a { property_key: value } map.
      * The API's `properties` map passes through (unknown keys -> 422 later); the
      * UI's `property_values` id-list is translated, dropping ids not in the class.
+     *
+     * @param int $classId  the CI's class, to translate property ids to keys
+     * @param array $in  the request fields; 'properties' (API, keyed by property_key) or 'property_values' (UI, [{property_id, value}])
      */
     private static function normaliseProperties(PDO $conn, int $classId, array $in): array
     {
@@ -534,7 +591,11 @@ class CmdbService
         return [];
     }
 
-    /** Dropdown option values for one property. */
+    /**
+     * Dropdown option values for one property.
+     *
+     * @param int $propertyId  the cmdb_class_properties id
+     */
     private static function propertyOptionValues(PDO $conn, int $propertyId): array
     {
         $stmt = $conn->prepare("SELECT option_value FROM cmdb_class_property_options WHERE property_id = ? ORDER BY display_order, id");
@@ -548,6 +609,10 @@ class CmdbService
      * The typing, validation and storage rules live in TypedFields (see
      * includes/typed_fields.php); this decides only WHICH properties apply and
      * WHERE they are stored.
+     *
+     * @param int $objectId  the CI the values belong to
+     * @param int $classId  the CI's class
+     * @param array $values  [property_key => value]
      */
     private static function writeProperties(PDO $conn, int $objectId, int $classId, array $values): void
     {
@@ -560,13 +625,24 @@ class CmdbService
         );
     }
 
-    /** Required-property enforcement — create/update asymmetry. */
+    /**
+     * Required-property enforcement — create/update asymmetry.
+     *
+     * @param int $classId  the CI's class
+     * @param array $values  [property_key => value] being written
+     * @param bool $isCreate  true on create, when every required property must be present; on update only those sent are checked
+     */
     private static function checkRequired(PDO $conn, int $classId, array $values, bool $isCreate): void
     {
         TypedFields::checkRequired(self::classDefs($conn, $classId), $values, $isCreate);
     }
 
-    /** Parent validation incl. the cycle walk. */
+    /**
+     * Parent validation incl. the cycle walk.
+     *
+     * @param ?int $objectId  the CI being saved, or null when it is new (no cycle check)
+     * @param ?int $parentId  the proposed parent, or null for none
+     */
     private static function validateParent(PDO $conn, ?int $objectId, ?int $parentId): void
     {
         if ($parentId === null) {
@@ -596,7 +672,11 @@ class CmdbService
         }
     }
 
-    /** All descendant ids of an object (excluding itself), cycle-safe. */
+    /**
+     * All descendant ids of an object (excluding itself), cycle-safe.
+     *
+     * @param int $rootId  the CI whose children, grandchildren and so on are wanted
+     */
     private static function descendantIds(PDO $conn, int $rootId): array
     {
         $ids = [];

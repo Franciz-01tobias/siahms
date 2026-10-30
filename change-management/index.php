@@ -22,11 +22,11 @@ $translationNamespaces = ['common', 'change-management'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('change-management.page.changes')); ?></title>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/change-management.css?v=7">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
+    <title><?php echo htmlspecialchars(pageTitle('changes')); ?></title>
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/change-management.css?v=11">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo BASE_URL; ?>assets/js/tz.js?v=5"></script>
@@ -34,9 +34,18 @@ $translationNamespaces = ['common', 'change-management'];
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/record-preview.css?v=1">
     <script src="<?php echo BASE_URL; ?>assets/js/record-preview.js?v=1"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/tinymce/tinymce.min.js"></script>
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/project-links.css?v=1">
 </head>
-<body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>">
+<?php $cmLevel = analystModuleLevel(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'changes'); /* #180: 'full' or 'read' */ ?>
+<body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>"<?php echo $cmLevel === 'read' ? ' class="module-read-only"' : ''; ?>>
     <?php include __DIR__ . '/includes/header.php'; ?>
+    <?php /* The action row (#185): New change was at the foot of the list's
+             sidebar and missing from the Calendar and Table views. Read only
+             access (#180) gets the row without New. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('change-management.nav.changes'),
+              $cmLevel !== 'read' ? [actionRowNew(BASE_URL . 'change-management/new/', t('change-management.sidebar.new_change_tip'), true)] : [],
+              ['accent' => 'cm']); ?>
 
     <div class="changes-container">
         <!-- Sidebar with search and status filters -->
@@ -55,9 +64,6 @@ $translationNamespaces = ['common', 'change-management'];
                         <span class="filter-count" id="countAll">0</span>
                     </div>
                 </div>
-            </div>
-            <div class="sidebar-section">
-                <a class="btn btn-primary btn-full" href="new/"><?php echo htmlspecialchars(t('change-management.sidebar.new_change')); ?></a>
             </div>
         </div>
 
@@ -106,6 +112,13 @@ $translationNamespaces = ['common', 'change-management'];
                     <div class="cm-form-section" data-section-id="1" data-section-key="general">
                         <h3 class="form-section-title"><?php echo htmlspecialchars(t('change-management.editor.section_general')); ?></h3>
 
+                        <!-- From a template (#180 §8): shown on a NEW change when approved templates exist. -->
+                        <div id="templatePickerWrap" class="form-group" style="display:none;">
+                            <label class="form-label" for="templatePicker"><?php echo htmlspecialchars(t('change-management.templates.from_template')); ?></label>
+                            <select class="form-input" id="templatePicker" onchange="applyChangeTemplate(this.value)"></select>
+                            <input type="hidden" id="templateVersionId" value="">
+                            <div id="templateScope" class="approval-note"></div>
+                        </div>
                         <div class="cm-field-wrap" data-field-key="title">
                             <div class="form-group">
                                 <label class="form-label"><?php echo htmlspecialchars(t('change-management.editor.title_label')); ?></label>
@@ -521,6 +534,38 @@ $translationNamespaces = ['common', 'change-management'];
         </div>
     </div>
 
+    <!-- Text history viewer (#180 Part 2) - assets/js/change-revisions.js. A .modal-content,
+         so mobile.css LAYER 3 makes it a full-screen sheet on a phone. -->
+    <div class="modal" id="revisionModal">
+        <div class="modal-content rev-modal">
+            <div class="modal-header">
+                <h3 id="revisionTitle"></h3>
+            </div>
+            <div class="modal-body rev-layout">
+                <div class="rev-sidebar">
+                    <div class="rev-sidebar-head"><?php echo htmlspecialchars(t('change-management.revisions.versions')); ?></div>
+                    <div id="revisionList" class="rev-list"></div>
+                </div>
+                <div class="rev-main">
+                    <div class="rev-toolbar">
+                        <div class="rev-tabs">
+                            <button type="button" class="rev-tab active" data-tab="changes" onclick="revisionTab('changes')"><?php echo htmlspecialchars(t('change-management.revisions.tab_changes')); ?></button>
+                            <button type="button" class="rev-tab" data-tab="side" onclick="revisionTab('side')"><?php echo htmlspecialchars(t('change-management.revisions.tab_side')); ?></button>
+                        </div>
+                        <label class="rev-compare">
+                            <?php echo htmlspecialchars(t('change-management.revisions.compare_with')); ?>
+                            <select id="revisionCompare" onchange="revisionCompareChanged(this.value)"></select>
+                        </label>
+                    </div>
+                    <div id="revisionBody" class="rev-body"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRevisionViewer()"><?php echo htmlspecialchars(t('change-management.revisions.close')); ?></button>
+            </div>
+        </div>
+    </div>
+
     <!-- html2pdf for PDF generation -->
     <script src="../assets/js/vendor/html2pdf.bundle.min.js"></script>
     <script>
@@ -531,7 +576,15 @@ $translationNamespaces = ['common', 'change-management'];
         window.openCreateOnLoad = true;
         <?php endif; ?>
     </script>
-    <script src="<?php echo BASE_URL; ?>assets/js/change-management.js?v=21"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
+    <script>window.CHG_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects') ? 'true' : 'false'; ?>; window.CHG_BASE = <?php echo json_encode(BASE_URL); ?>;
+        // "Choose approvers" (#180): comfort for the editor; ChangesService enforces it.
+        // Read only (#180): the page leaves out what the server would refuse.
+        window.MODULE_LEVEL = <?php echo json_encode($cmLevel ?: 'full'); ?>;
+        window.CHG_CAN_CHOOSE_APPROVERS = <?php require_once __DIR__ . '/../includes/rbac.php'; echo analystMayAct(connectToDatabase(), (int)$_SESSION['analyst_id'], Cap::CHANGES_CHOOSE_APPROVERS) ? 'true' : 'false'; ?>;</script>
+    <script src="<?php echo BASE_URL; ?>assets/js/project-links.js?v=1"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/safe-html.js?v=2"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/change-revisions.js?v=3"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/change-management.js?v=31"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
 </body>
 </html>

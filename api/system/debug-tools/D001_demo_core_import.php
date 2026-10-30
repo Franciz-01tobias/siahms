@@ -20,16 +20,42 @@ $DIAG_NAME = 'Demo Core Data Import';
 // ---- helpers -----------------------------------------------------------
 
 $sections = [];
+/**
+ * Adds one titled section ("=== TITLE ===" and its lines) to the report; $body is a
+ * string or an array of lines.
+ *
+ * @param mixed $sections  the report so far, a list of section strings - appended to by reference
+ * @param mixed $title  the section heading, printed between === marks
+ * @param mixed $body  the section text - a string, or an array of lines
+ */
 function addSection(&$sections, $title, $body) {
     if (is_array($body)) $body = implode("\n", $body);
     $sections[] = "=== {$title} ===\n" . rtrim($body, "\n");
 }
+/**
+ * Formats a boolean as YES or NO for the report.
+ *
+ * @param mixed $v  any value, judged as true or false
+ */
 function bool_str($v) { return $v ? 'YES' : 'NO'; }
+/**
+ * Returns a file's size in bytes for the report - 'n/a' when it does not exist,
+ * 'unknown' when it cannot be read.
+ *
+ * @param mixed $path  the file's absolute path
+ */
 function safe_size($path) {
     if (!file_exists($path)) return 'n/a';
     $sz = @filesize($path);
     return $sz === false ? 'unknown' : ($sz . ' bytes');
 }
+/**
+ * Replaces the personal values in a row (names, email, username, password hash, MFA
+ * secret) with "[redacted N chars]", so the report can be shared.
+ *
+ * @param mixed $row  a database row as an array; anything else is returned untouched
+ * @param mixed $redactCols  the column names whose values are replaced
+ */
 function redact_row($row, $redactCols = ['password_hash', 'totp_secret', 'username', 'email', 'full_name', 'display_name', 'preferred_name']) {
     if (!is_array($row)) return $row;
     foreach ($redactCols as $c) {

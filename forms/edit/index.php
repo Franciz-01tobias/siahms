@@ -26,6 +26,15 @@ require_once '../../includes/timezone.php';
 I18n::initFromSession();
 Tz::init();
 requireModuleAccess('forms');
+// The designer is design (#180 Part 3): Read only access, or "Design forms" restricted and
+// not held, goes back to the list. Its endpoints refuse the saves regardless.
+require_once __DIR__ . '/../../includes/rbac.php';
+$edConn = connectToDatabase();
+if (analystModuleLevel($edConn, (int)$_SESSION['analyst_id'], 'forms') !== 'full'
+    || !analystMayAct($edConn, (int)$_SESSION['analyst_id'], Cap::FORMS_DESIGN)) {
+    header('Location: ' . BASE_URL . 'forms/');
+    exit;
+}
 
 $current_page = 'forms';
 $path_prefix = '../../';
@@ -61,7 +70,7 @@ foreach ($formActionDefs as $def) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('forms.editor.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('forms', t('forms.editor.page_title'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="<?php echo BASE_URL; ?>assets/js/i18n.js?v=3"></script>
     <?php echo Tz::scriptTag(); ?>
@@ -71,8 +80,8 @@ foreach ($formActionDefs as $def) {
          preview now shares the walk with the filler and the portal. -->
     <script src="<?php echo BASE_URL; ?>assets/js/form-logic.js?v=9"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/form-render.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
     <!-- Blocks (notes) - shared with the filler and the portal. -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/form-shared.css?v=6">
@@ -454,7 +463,7 @@ foreach ($formActionDefs as $def) {
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include '../includes/header.php'; ?>
@@ -1159,6 +1168,12 @@ foreach ($formActionDefs as $def) {
                     .map(o => `<option value="${faEsc(o.id)}"${String(o.id) === String(value) ? ' selected' : ''}>${faEsc(o.label)}</option>`)
                     .join('');
                 control = `<select id="${id}" onchange="${onInput}"><option value="">${faEsc(window.t('forms.actions.arg_unset'))}</option>${opts}</select>`;
+            } else if (spec.type === 'select') {
+                // Fixed choices ({value, label}) - the same shape the workflow editor reads (3.3.0).
+                const opts = (spec.options || [])
+                    .map(o => `<option value="${faEsc(o.value)}"${String(o.value) === String(value ?? spec.default ?? '') ? ' selected' : ''}>${faEsc(o.label)}</option>`)
+                    .join('');
+                control = `<select id="${id}" onchange="${onInput}">${opts}</select>`;
             } else if (spec.type === 'textarea') {
                 control = `<textarea id="${id}" rows="3" oninput="${onInput}">${faEsc(value)}</textarea>`;
             } else if (spec.type === 'number') {
@@ -1607,6 +1622,7 @@ foreach ($formActionDefs as $def) {
                                            onchange="updateOption(${i}, ${oi}, this.value)"
                                            onkeydown="onOptionKeydown(event, ${i}, ${oi})"
                                            placeholder="${escAttr(window.t('forms.field.option_ph', { n: oi + 1 }))}">
+                                    <label class="option-exc" title="${escAttr(window.t('forms.field.exception_title'))}"><input type="checkbox" ${isExceptionOption(f, opt) ? 'checked' : ''} onchange="setExceptionOption(${i}, ${oi}, this.checked)"> ${esc(window.t('forms.field.exception'))}</label>
                                     <button class="option-remove" onclick="removeOption(${i}, ${oi})">&times;</button>
                                 </div>
                             `).join('')}
@@ -2103,6 +2119,23 @@ foreach ($formActionDefs as $def) {
             });
             markDirty(); renderFields(); updatePreview();
         }
+        /* GH #190 phase 4: an answer that COUNTS AS AN EXCEPTION in a task's evidence -
+           "Warning" or "Failure" on a check. Held in config.exception_values, by the
+           option's text, and kept in step when an option is renamed or removed. */
+        function isExceptionOption(f, opt) {
+            const ev = f.config && Array.isArray(f.config.exception_values) ? f.config.exception_values : [];
+            return opt !== '' && ev.indexOf(opt) !== -1;
+        }
+        function setExceptionOption(fi, oi, on) {
+            const f = fields[fi];
+            const opt = f.options[oi] || '';
+            if (!opt) return;
+            if (!f.config || typeof f.config !== 'object') f.config = {};
+            const ev = Array.isArray(f.config.exception_values) ? f.config.exception_values.filter(v => v !== opt) : [];
+            if (on) ev.push(opt);
+            if (ev.length) f.config.exception_values = ev; else delete f.config.exception_values;
+            markDirty();
+        }
         function addOption(fi) {
             fields[fi].options.push('');
             markDirty(); renderFields();
@@ -2112,6 +2145,9 @@ foreach ($formActionDefs as $def) {
             }, 50);
         }
         function updateOption(fi, oi, val) {
+            const was = fields[fi].options[oi];
+            const ev = fields[fi].config && fields[fi].config.exception_values;
+            if (Array.isArray(ev) && ev.indexOf(was) !== -1) ev[ev.indexOf(was)] = val;   // the tick follows a renamed option
             fields[fi].options[oi] = val;
             markDirty(); updatePreview();
         }
@@ -2133,6 +2169,8 @@ foreach ($formActionDefs as $def) {
                 });
                 if (!ok) return;
             }
+            const ev = fields[fi].config && fields[fi].config.exception_values;
+            if (Array.isArray(ev)) fields[fi].config.exception_values = ev.filter(v => v !== opt);
             fields[fi].options.splice(oi, 1);
             markDirty(); renderFields(); updatePreview();
         }
@@ -2972,6 +3010,6 @@ foreach ($formActionDefs as $def) {
     </div>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -108,8 +108,8 @@ $title = $asset ? ($asset['asset_tag'] ?: $asset['hostname'] ?: t('asset-managem
     <?php /* No user-scalable=no: pinch-zoom is how somebody reads a serial number
              off a battered label in a dim store room. */ ?>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($title); ?> · FreeITSM</title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
+    <title><?php echo htmlspecialchars(pageTitle('assets', $title)); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <?php echo Tz::scriptTag(); ?>
     <style>
         /* Self-contained: this page shares no layout with the desktop module,

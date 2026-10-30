@@ -1,4 +1,12 @@
 <?php
+/**
+ * The Checklists module header - waffle menu, Templates / Settings / Help navigation and the teal styling.
+ *
+ * Included by every Checklists page; expects $current_page and $path_prefix. Reads the
+ * analyst's checklists_sidebar_mode preference into $checklistsSidebarMode ('always' or
+ * 'hover') for the left-panel CSS that follows.
+ * @wiki Checklists-and-SOPs-Developer-Guide
+ */
 $path_prefix = $path_prefix ?? '../';
 $current_module = 'checklists';
 $module_title = 'Checklists';

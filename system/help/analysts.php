@@ -52,7 +52,7 @@ require __DIR__ . '/_top.php';
         <tr><td><strong>Full name</strong></td><td>Required. The name shown on tickets, assignments and everywhere else in the app.</td></tr>
         <tr><td><strong>Email</strong></td><td>Optional, but set it if you use SSO — it is what links their identity-provider account to this one on first sign-in.</td></tr>
         <tr><td><strong>Password</strong></td><td>Required when creating. When editing, leave it blank to keep the existing password.</td></tr>
-        <tr><td><strong>Sign-in method</strong></td><td>Local username and password, or one of your configured providers. See below.</td></tr>
+        <tr><td><strong>Sign-in method</strong></td><td><strong>Follow team</strong> by default, or set one for this person: local username and password, or one of your configured providers. See below.</td></tr>
         <tr><td><strong>Access all companies</strong></td><td>Only appears once you have more than one company. On by default.</td></tr>
         <tr><td><strong>Active</strong></td><td>On by default. Turn it off to stop someone signing in without deleting their history.</td></tr>
         <tr><td><strong>Administrator</strong></td><td>Off by default. Grants the System module. See below.</td></tr>
@@ -83,7 +83,8 @@ require __DIR__ . '/_top.php';
         </div>
     </div>
     <p>So if you assign a provider, the analyst's <strong>Email</strong> field must match the address they hold at that provider — otherwise the link never forms.</p>
-    <div class="help-note"><strong>Assigning a provider does not disable their password.</strong> If you set a sign-in method <em>and</em> leave a password on the account, both routes still work. If you want SSO to be the only way in, that's a decision to make on the Security and SSO pages — see System help &rarr; Single Sign-On, particularly the break-glass advice.</div>
+    <p><strong>Follow team</strong> takes the method from the teams this person is in, set on System &rarr; Teams. It is the default for a new analyst, so a new starter picks up the right method just by joining their team. The line under the dropdown says where the answer comes from. If their teams set <em>different</em> methods, nothing is guessed: they keep signing in the way they did, their row shows a <strong>Sign-in conflict</strong> badge — click it for a picture of which team says what, and the ways to fix it — and you settle it by choosing a method for them here. System help &rarr; Teams has the details.</p>
+    <div class="help-note"><strong>A provider really is the only way in.</strong> An analyst assigned to a single sign-on provider such as Entra, Google or Okta, whether directly or through their team, cannot use the password form — it tells them to use the sign-in button, so a password left on the account is not a back door. (A directory provider — LDAP or Active Directory — is different: its people sign in on the password form, with their directory password.) If you need a way in when the provider is down, keep a local administrator account; see System help &rarr; Single Sign-On for the break-glass advice.</div>
     <div class="help-note ok"><strong>Deleting a provider is safe.</strong> If you later remove an SSO provider, every analyst who used it quietly reverts to local sign-in rather than being locked out.</div>
 </div>
 
@@ -137,16 +138,19 @@ require __DIR__ . '/_top.php';
     <div class="help-section-header"><?php echo helpSectionNum('leavers'); ?>
         <div>
             <h3>Leavers</h3>
-            <p>When someone leaves, you almost always want <strong>Active = off</strong>, not <strong>Delete</strong>.</p>
+            <p>When someone leaves, press the <strong>bin icon</strong> on their row. It opens <strong>When someone leaves</strong>, which shows what they hold, offers to hand their open work to someone else, and gives you three choices.</p>
         </div>
     </div>
     <div class="help-table"><table>
-        <tr><th>Option</th><th>What happens</th></tr>
-        <tr><td><strong>Set Active to off</strong></td><td>They can no longer sign in. Their name stays on the tickets, notes and assets they touched, so your history still reads correctly. This is the right choice for a leaver.</td></tr>
-        <tr><td><strong>Delete</strong></td><td>The account row is removed outright. There is no undo, and no warning if they still have tickets or tasks assigned to them.</td></tr>
+        <tr><th>Choice</th><th>What happens</th><th>Undo?</th></tr>
+        <tr><td><strong>Deactivate</strong></td><td>They can no longer sign in, and their API keys stop working. Their name stays on every ticket, note, change and audit entry they touched, so your history still reads correctly. <strong>This is the right choice for almost every leaver.</strong></td><td>Yes - tick Active again</td></tr>
+        <tr><td><strong>Anonymise</strong></td><td>Everything Deactivate does, then their name and contact details are removed. Their records all stay, credited to "Former analyst #42", and their personal settings and sign-in links are deleted. Use it when someone asks to be forgotten.</td><td>No</td></tr>
+        <tr><td><strong>Delete</strong></td><td>Removes the account and their personal settings. Only possible when their name is on no history at all - an account made by mistake, or a test login.</td><td>No</td></tr>
     </table></div>
-    <div class="help-note warn"><strong>Delete does not check for assigned work.</strong> Reassign anything that belongs to the person before you delete them — nothing will stop you otherwise.</div>
-    <div class="help-note">FreeITSM won't let you delete <strong>your own account</strong>, or the <strong>last active administrator</strong>. Everything else is fair game, so pause before you press it.</div>
+    <p><strong>Their open work</strong> - open tickets, problems, changes and tasks, and the articles, projects, contracts and domains they own - can be moved to another analyst, or left unassigned, as part of the same step. Each item moves exactly as if you had reassigned it by hand, so its own history shows the change. Closed items keep their name: that is history, not work.</p>
+    <p><strong>Also set up for them</strong> lists things routed to them that you need to change yourself, such as a form that sends approvals to them or an SLA alert that notifies them. FreeITSM does not change those for you: clearing an approver could let requests through unchecked.</p>
+    <div class="help-note warn"><strong>Anonymise changes names FreeITSM stored next to their account</strong> - on tickets, audit trails and checklists - but not a name somebody typed into the text of a note or an email.</div>
+    <div class="help-note">FreeITSM won't let you do any of this to <strong>your own account</strong>, or to the <strong>last active administrator</strong>.</div>
     <div class="help-note ok"><strong>Done.</strong> Add the person, set admin only if they need System, tick their companies and modules, and put them in the right teams — then check the chips on their row read the way you expect.</div>
 </div>
 

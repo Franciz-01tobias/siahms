@@ -23,7 +23,7 @@ return [
         'detect'        => '🤖 Detect problems',
         'detect_title'  => 'Let AI scan recent open incidents for recurring patterns',
         'loading'       => 'Loading…',
-        'empty'         => 'No problems. Click “New problem” to create one.',
+        'empty'         => 'No problems. Click New to create one.',
         'known_error'   => 'Known error',
         // "1 incident" and "7 incidents" are different sentences in most
         // languages, so they are different keys rather than a bare "s".
@@ -54,6 +54,7 @@ return [
     // ── The detail view ─────────────────────────────────────────────────
     'detail' => [
         'back'            => '← Back',
+        'projects'        => 'Projects',
         'not_found'       => 'Not found',
         'open_failed'     => 'Failed to open problem',
         'edit'            => 'Edit',

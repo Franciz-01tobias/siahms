@@ -24,8 +24,12 @@ $changeId = (int)($input['change_id'] ?? 0);
 try {
     $conn = connectToDatabase();
     $res = ChangesService::voteCab($conn, ActorContext::fromSession($conn), $changeId, [
-        'vote'    => $input['vote'] ?? '',
-        'comment' => $input['vote_comment'] ?? '',
+        'vote'         => $input['vote'] ?? '',
+        'comment'      => $input['vote_comment'] ?? '',
+        // What the page was drawn with - the server checks it against the current round
+        // and content (#180 §5). TRAP: the page must never re-fetch to fill these.
+        'approval_id'  => $input['approval_id'] ?? null,
+        'content_hash' => $input['content_hash'] ?? null,
     ]);
     echo json_encode([
         'success'        => true,
@@ -34,7 +38,7 @@ try {
         'new_status'     => $res['new_status'],
     ]);
 } catch (ServiceError $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage(), 'code' => $e->errorCode]);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }

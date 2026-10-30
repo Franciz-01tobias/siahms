@@ -15,6 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('tasks');
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if (!$id) {
@@ -74,6 +75,26 @@ try {
     $task['collaborators'] = TasksService::collaboratorsFor($conn, (int)$id);
     $task['collaborator_completion'] = TasksService::collaboratorCompletionEnabled($conn);
 
+    // Projects (3.2.0): the project and stage this task belongs to, for the
+    // "Part of" line and the Project field in the task window. Guarded, like
+    // the list, for installs that have not run Database Verification yet.
+    require_once '../../includes/projects/methodologies.php';
+    // Contractors (3.3.0): the supplier and the person there, by name.
+    require_once '../../includes/task_contractors.php';
+    $task = tasksWithContractors($conn, [$task])[0];
+    $task['project_name'] = $task['project_colour'] = $task['project_stage_name'] = null;
+    if (!empty($task['project_id']) && projectsSchemaReady($conn)) {
+        $pst = $conn->prepare("SELECT p.name, p.colour, s.name AS stage_name
+                                 FROM projects p LEFT JOIN project_stages s ON s.id = ? AND s.project_id = p.id
+                                WHERE p.id = ?");
+        $pst->execute([(int)($task['project_stage_id'] ?? 0), (int)$task['project_id']]);
+        if ($pr = $pst->fetch(PDO::FETCH_ASSOC)) {
+            $task['project_name'] = $pr['name'];
+            $task['project_colour'] = projectColourHex($pr['colour']);
+            $task['project_stage_name'] = $pr['stage_name'];
+        }
+    }
+
     // Get parent task info if this is a subtask
     if ($task['parent_task_id']) {
         $stmt = $conn->prepare("SELECT id, title FROM tasks WHERE id = ?");
@@ -86,7 +107,7 @@ try {
         "SELECT t.id, t.title,
                 ts.name AS status, ts.is_closed AS status_is_closed,
                 tp.name AS priority, tp.colour AS priority_colour,
-                t.due_date,
+                t.start_date, t.due_date,
                 t.assigned_analyst_id, t.board_position, t.completed_datetime,
                 a.full_name AS analyst_name
          FROM tasks t
@@ -156,6 +177,25 @@ try {
             // An install part-way through an upgrade still gets its task.
             $task['recurrence'] = null;
         }
+    }
+
+    // Repeating task evidence (#181): what the task window offers on an occurrence.
+    // Skip is for an OPEN top-level occurrence; the evidence report is for anybody
+    // the report permission lets in (everybody, until Tasks -> Settings -> Evidence
+    // restricts it). Read only access offers neither write.
+    require_once '../../includes/rbac.php';
+    $isOccurrence = !empty($task['recurrence_id']) && empty($task['parent_task_id']);
+    $canWrite = analystCanWriteModule($conn, (int)$_SESSION['analyst_id'], 'tasks');
+    $task['can_write'] = $canWrite;
+    $task['can_skip'] = $isOccurrence && $canWrite && empty($task['status_is_closed']);
+    $task['can_evidence'] = $isOccurrence && analystMayAct($conn, (int)$_SESSION['analyst_id'], Cap::TASKS_EVIDENCE_REPORT);
+    // Who completed it (#181) - a column that did not exist before. Its own query, so
+    // the task still loads on an install that has not run Database Verification.
+    $task['completed_by_name'] = null;
+    if (!empty($task['completed_by_id'])) {
+        $cb = $conn->prepare("SELECT full_name FROM analysts WHERE id = ?");
+        $cb->execute([(int)$task['completed_by_id']]);
+        $task['completed_by_name'] = $cb->fetchColumn() ?: null;
     }
 
     echo json_encode(['success' => true, 'task' => $task]);

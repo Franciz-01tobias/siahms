@@ -25,9 +25,15 @@
  * ADDING A HELP PAGE: add the entry here, then create <slug>.php which sets
  * $helpSlug and requires _top.php / _bottom.php. Nothing else to wire up — the
  * card, the search index and the sidebar all follow from this entry.
+ *
+ * @wiki Help-Page-House-Style
  */
 
-/** @return array<string,array<string,mixed>> Help topics, keyed by slug. */
+/**
+ * Every System help page, keyed by the slug of its System area, with its hero,
+ * standfirst, sections (sidebar and search deep links) and extra search terms.
+ *
+ * @return array<string,array<string,mixed>> Help topics, keyed by slug. */
 function getHelpTopics() {
     return [
         'encryption' => [
@@ -42,6 +48,18 @@ function getHelpTopics() {
             ],
             'terms' => 'aes key secret credentials at rest cipher rotate',
         ],
+        'docker' => [
+            'hero' => 'Docker',
+            'sub'  => 'Turn on HTTPS for FreeITSM running in its Docker image, with a certificate for the name your people type - no certificate knowledge needed.',
+            'sections' => [
+                ['id' => 'overview', 'label' => 'Overview'],
+                ['id' => 'why',      'label' => 'Why not Let\'s Encrypt'],
+                ['id' => 'steps',    'label' => 'Turning HTTPS on'],
+                ['id' => 'changes',  'label' => 'Changing the name or IP'],
+                ['id' => 'trouble',  'label' => 'Troubleshooting'],
+            ],
+            'terms' => 'https ssl tls certificate cert padlock not secure warning container compose 443 8443 dns hosts file root authority ca group policy intune',
+        ],
         'analysts' => [
             'hero' => 'Analysts',
             'sub'  => 'Create the people who work in FreeITSM, decide who is an administrator, control which companies and modules each of them can reach, put them into teams and reset their passwords.',
@@ -55,7 +73,7 @@ function getHelpTopics() {
                 ['id' => 'passwords', 'label' => 'Resetting a password'],
                 ['id' => 'leavers',   'label' => 'Leavers'],
             ],
-            'terms' => 'user staff agent account technician add person joiner leaver disable deactivate admin rights permissions'
+            'terms' => 'user staff agent account technician add person joiner leaver disable deactivate admin rights permissions anonymise anonymize gdpr forget erasure delete analyst reassign remove'
                      . " can't see tickets cannot see tickets no tickets empty queue locked out of system",
         ],
         'teams' => [
@@ -68,9 +86,10 @@ function getHelpTopics() {
                 ['id' => 'members',     'label' => 'Members'],
                 ['id' => 'companies',   'label' => 'Company access'],
                 ['id' => 'modules',     'label' => 'Module access'],
+                ['id' => 'signin',      'label' => 'Sign-in method'],
                 ['id' => 'deleting',    'label' => 'Deleting a team'],
             ],
-            'terms' => 'group squad service desk membership queue visibility'
+            'terms' => 'group squad service desk membership queue visibility sso single sign-on login method follow team default'
                      . " can't see tickets cannot see tickets no tickets empty queue missing departments",
         ],
         'roles' => [
@@ -79,6 +98,7 @@ function getHelpTopics() {
             'sections' => [
                 ['id' => 'overview',      'label' => 'What roles are for'],
                 ['id' => 'two-layers',    'label' => 'Access vs administration'],
+                ['id' => 'everyday',      'label' => 'Everyday work'],
                 ['id' => 'creating',      'label' => 'Creating a role'],
                 ['id' => 'assigning',     'label' => 'Assigning it'],
                 ['id' => 'admins',        'label' => 'Administrators'],
@@ -93,9 +113,10 @@ function getHelpTopics() {
                 ['id' => 'overview', 'label' => 'Overview'],
                 ['id' => 'matrix',   'label' => 'The access matrix'],
                 ['id' => 'effect',   'label' => 'What analysts see'],
+                ['id' => 'read-only', 'label' => 'Read only'],
                 ['id' => 'notes',    'label' => 'Good to know'],
             ],
-            'terms' => 'permissions hide show waffle licence enable disable feature',
+            'terms' => 'permissions hide show waffle licence enable disable feature read only reviewer auditor view only',
         ],
         'db-verify' => [
             'hero' => 'Database verification',
@@ -137,13 +158,16 @@ function getHelpTopics() {
             'sub'  => 'Set your organisation logo and the default header/footer text that appears on branded output — diagrams and exported documents.',
             'sections' => [
                 ['id' => 'overview', 'label' => 'Overview'],
+                ['id' => 'name',     'label' => 'System name'],
+                ['id' => 'back-link', 'label' => 'Link back to your site'],
                 ['id' => 'logo',     'label' => 'Logo'],
                 ['id' => 'slots',    'label' => 'Header & footer text'],
                 ['id' => 'tokens',   'label' => 'Tokens'],
                 ['id' => 'screens',  'label' => 'The three sign-in screens'],
+                ['id' => 'files',    'label' => 'Files desktop logo'],
                 ['id' => 'save',     'label' => 'Saving & resetting'],
             ],
-            'terms' => 'logo brand company name letterhead export pdf watermark login screen background image portal home wallpaper sign-in',
+            'terms' => 'logo brand company name system name service desk page title browser tab bookmark letterhead export pdf watermark login screen background image portal home wallpaper sign-in files desktop corner',
         ],
         'security' => [
             'hero' => 'Security',
@@ -154,8 +178,24 @@ function getHelpTopics() {
                 ['id' => 'password', 'label' => 'Password expiry'],
                 ['id' => 'lockout',  'label' => 'Account lockout'],
                 ['id' => 'ipban',    'label' => 'IP ban'],
+                ['id' => 'attachments', 'label' => 'Attachments'],
             ],
-            'terms' => 'brute force locked out failed attempts hardening rotation ban blocked',
+            'terms' => 'brute force locked out failed attempts hardening rotation ban blocked attachment size limit upload mb php',
+        ],
+        // A step-by-step guide, not a System area: no landing card, reached from
+        // the provider dialog's Groups and teams tab and from the Authentication help.
+        'sso-groups' => [
+            'hero' => 'Setting up groups and teams from single sign-on',
+            'sub'  => 'A step-by-step guide, with a checklist to tick off as you go: make your identity provider send its groups, then use them in FreeITSM to decide who can be an analyst, who is an administrator and which teams people are in.',
+            'sections' => [
+                ['id' => 'overview', 'label' => 'How it works'],
+                ['id' => 'before',   'label' => 'Before you start'],
+                ['id' => 'provider', 'label' => 'In your identity provider'],
+                ['id' => 'freeitsm', 'label' => 'In FreeITSM'],
+                ['id' => 'test',     'label' => 'Test it'],
+                ['id' => 'trouble',  'label' => 'If it does not work'],
+            ],
+            'terms' => 'claims groups roles entra azure ad microsoft okta keycloak object id checklist guide setup step by step analyst group administrator group teams',
         ],
         'sso' => [
             'hero' => 'Authentication',
@@ -165,6 +205,10 @@ function getHelpTopics() {
                 ['id' => 'which',      'label' => 'Single or multi-company?'],
                 ['id' => 'single',     'label' => 'Single-company setup'],
                 ['id' => 'multi',      'label' => 'Multi-company (MSP) setup'],
+                ['id' => 'jit-rules',  'label' => 'Auto-create rules'],
+                ['id' => 'profile-sync','label' => 'Profile sync'],
+                ['id' => 'sso-groups', 'label' => 'Groups from the identity provider'],
+                ['id' => 'portal-domains','label' => 'Portal: route by email domain'],
                 ['id' => 'ldap',       'label' => 'LDAP / Active Directory'],
                 ['id' => 'ldap-setup', 'label' => 'Setting up a directory'],
                 ['id' => 'ldap-groups','label' => 'Controlling access by group'],
@@ -196,6 +240,8 @@ function getHelpTopics() {
                      . ' read-only permission privilege etag conflict changed since'
                      . ' add to address book new contact create card not in address book link person'
                      . ' log logging troubleshoot diagnose health check drift compare d015 d016'
+                     . ' email domain domains route redirect straight to microsoft 365 m365 portal first sign-in hide button email only'
+                     . ' jit just-in-time auto-create auto create provision analyst portal fallback profile sync job title department claims'
                      . ' not writing failed unreachable server response refused',
         ],
         'api' => [
@@ -208,6 +254,7 @@ function getHelpTopics() {
                 ['id' => 'companies',   'label' => 'Company scope'],
                 ['id' => 'using',       'label' => 'Using the API'],
                 ['id' => 'docs',        'label' => 'Docs & testing'],
+                ['id' => 'mcp',         'label' => 'AI assistants (MCP)'],
                 ['id' => 'safety',      'label' => 'Good practice'],
             ],
             'terms' => 'rest json integration token bearer key endpoint curl script automation',
@@ -229,18 +276,24 @@ function getHelpTopics() {
         ],
         'preferences' => [
             'hero' => 'Preferences',
-            'sub'  => 'Your own personal settings — interface language, where notifications pop up, how left-hand panels behave, a couple of display options and your work calendar. Each choice is saved to your account and follows you to any browser you sign in from.',
+            'sub'  => 'Your own personal settings — interface language, where toasts pop up, what reaches the notification bell (and whether it shows on your desktop or emails you about tasks), how left-hand panels behave, a few display and task options and your work calendar. Each choice is saved to your account and follows you to any browser you sign in from.',
             'sections' => [
                 ['id' => 'overview', 'label' => 'Overview'],
                 ['id' => 'language', 'label' => 'Interface language'],
-                ['id' => 'toasts',   'label' => 'Notifications'],
+                ['id' => 'module-order', 'label' => 'Module order'],
+                ['id' => 'money',    'label' => 'Money'],
+                ['id' => 'toasts',   'label' => 'Toasts'],
+                ['id' => 'bell',     'label' => 'Notification bell'],
                 ['id' => 'panels',   'label' => 'Left panels'],
                 ['id' => 'display',  'label' => 'Display options'],
+                ['id' => 'tasks',    'label' => 'Tasks'],
                 ['id' => 'workcal',  'label' => 'My work calendar'],
             ],
             'terms' => 'my settings personal language locale translate toast popup dark mode timezone'
                      . ' my work calendar outlook caldav nextcloud icloud subscribe link which calendar sign in to my calendar'
-                     . ' search panel closing close when i click away click outside escape dismiss search window search popup',
+                     . ' search panel closing close when i click away click outside escape dismiss search window search popup'
+                     . ' notification bell chime sound desktop notifications windows notification edge push popup'
+                     . ' email when a task is assigned task assigned email subtasks board hide completed subtasks opening a task',
         ],
         'demo-data' => [
             'hero' => 'Demo data',
@@ -271,11 +324,43 @@ function getHelpTopics() {
             'sections' => [
                 ['id' => 'overview', 'label' => 'Overview'],
                 ['id' => 'adding',   'label' => 'Adding companies'],
+                ['id' => 'logo',     'label' => 'Company logo'],
                 ['id' => 'email',    'label' => 'Routing inbound email'],
                 ['id' => 'senders',  'label' => 'Personal & free email'],
                 ['id' => 'summary',  'label' => 'How email reaches a company'],
             ],
-            'terms' => 'tenant msp client customer multi-tenancy separate organisation domain',
+            'terms' => 'tenant msp client customer multi-tenancy separate organisation domain logo files desktop',
+        ],
+        // Cost centres (GH #160).
+        'cost-centres' => [
+            'hero' => 'Cost Centres',
+            'sub'  => 'Keep your finance department\'s cost centres in FreeITSM, for each company - by hand, from a spreadsheet, or kept in step with your accounting system through the API.',
+            'sections' => [
+                ['id' => 'overview',  'label' => 'What a cost centre is here'],
+                ['id' => 'codes',     'label' => 'Codes and leading zeros'],
+                ['id' => 'hierarchy', 'label' => 'Building a hierarchy'],
+                ['id' => 'inactive',  'label' => 'Inactive or delete?'],
+                ['id' => 'charging',  'label' => 'Charging assets, contracts and people'],
+                ['id' => 'import',    'label' => 'Importing and exporting'],
+                ['id' => 'api',       'label' => 'Syncing from your finance system'],
+            ],
+            'terms' => 'cost center centers nominal code codes finance accounting erp sap datev sage xero budget charge code'
+                     . ' kostenstelle excel xlsx csv import export spreadsheet leading zero zeros 0010 hierarchy parent child'
+                     . ' inactive retire sync nightly rest api charge charged asset assets contract contracts person people user users',
+        ],
+        // Photo Album - just for fun.
+        'photo-album' => [
+            'hero' => 'Photo Album',
+            'sub'  => 'Take your picture with the webcam and turn it into ASCII art - live, in your browser, with no AI involved.',
+            'sections' => [
+                ['id' => 'overview', 'label' => 'What it does'],
+                ['id' => 'camera',   'label' => 'Taking a picture'],
+                ['id' => 'styles',   'label' => 'Styles and screens'],
+                ['id' => 'adjust',   'label' => 'Getting a good likeness'],
+                ['id' => 'album',    'label' => 'Your album and privacy'],
+            ],
+            'terms' => 'photo album picture webcam camera selfie ascii art braille text art fun green screen amber colour'
+                     . ' dithering contrast brightness sharpen upload copy download png txt https secure camera blocked',
         ],
         'status-portal' => [
             'hero' => 'Service status on the portal',
@@ -301,6 +386,38 @@ function getHelpTopics() {
             'terms' => 'self-service portal my account profile own details contact details job title office location'
                      . ' phone mobile department employee id manager email edit read-only greyed out'
                      . ' gdpr article 16 rectification carddav address book write back customers update themselves',
+        ],
+        'feature-bingo' => [
+            'hero' => 'Feature Bingo',
+            'sub'  => 'One card for everything FreeITSM can do, a star for each one set up here, and an explainer of why the rest are worth a look.',
+            'sections' => [
+                ['id' => 'overview',   'label' => 'What it is'],
+                ['id' => 'cards',      'label' => 'Reading a card'],
+                ['id' => 'not-for-us', 'label' => 'Not for us'],
+                ['id' => 'developers', 'label' => 'For developers: adding a card'],
+            ],
+            'terms' => 'feature bingo features stars setup checklist getting started adoption what can it do'
+                     . ' not for us dismiss tier essential recommended extra category explore configured',
+        ],
+        // Portal managers (discussion #62).
+        'managers' => [
+            'hero' => 'Managers',
+            'sub'  => 'Let people in the self-service portal see the tickets of the people they manage - from your directory\'s reporting line, from lines you set up, or both - and decide what they see of a confidential ticket.',
+            'sections' => [
+                ['id' => 'overview',     'label' => 'What a manager is'],
+                ['id' => 'sources',      'label' => 'Where managers come from'],
+                ['id' => 'rules',        'label' => 'The rules that always apply'],
+                ['id' => 'confidential', 'label' => 'Confidential tickets'],
+                ['id' => 'views',        'label' => 'Who has looked'],
+                ['id' => 'list',         'label' => 'The list of managers'],
+                ['id' => 'settings',     'label' => 'The settings'],
+                ['id' => 'before',       'label' => 'Before you switch on'],
+            ],
+            'terms' => 'manager line manager head of department team tickets reports direct reports reporting line'
+                     . ' active directory manager attribute management lines exclusion exclude department renamed'
+                     . ' people group everyone confidential stub hidden who has seen viewed privacy grievance'
+                     . ' leavers left reply close portal self-service see other people\'s tickets oversight'
+                     . ' notify notification email bell alert new ticket tell manager',
         ],
         'search' => [
             'hero' => 'Search',
@@ -346,8 +463,10 @@ function getHelpTopics() {
                 ['id' => 'evidence',    'label' => 'Why off is the default'],
                 ['id' => 'per-feature', 'label' => 'One switch per feature'],
                 ['id' => 'providers',   'label' => 'Which providers'],
+                ['id' => 'own-model',   'label' => 'Your own model server'],
             ],
             'terms' => 'ai thinking extended thinking reasoning model openrouter anthropic openai claude gpt'
+                     . ' ollama lm studio vllm localai local model self-hosted on premises openai-compatible custom endpoint base url air-gapped'
                      . ' slow expensive tokens budget cost summarise summarize draft extract'
                      . ' no effect no api key why is the ai slow ai answers are bad',
         ],
@@ -364,6 +483,22 @@ function getHelpTopics() {
                      . ' api token personal access token pat project key mapping resolved status'
                      . ' slack channel thread message to ticket intake'
                      . ' tika document reading pdf ocr scanned searchable attachment text extraction',
+        ],
+        'currencies' => [
+            'hero' => 'Currencies',
+            'sub'  => 'Every currency in use in the world is available wherever FreeITSM records money. This page sets which ones come first, which one new records start in, and how amounts are written; any analyst can choose their own format in Preferences.',
+            'sections' => [
+                ['id' => 'overview',   'label' => 'What this sets'],
+                ['id' => 'favourites', 'label' => 'Favourites and the default'],
+                ['id' => 'format',     'label' => 'How amounts are written'],
+                ['id' => 'exceptions', 'label' => 'Exceptions'],
+                ['id' => 'per-person', 'label' => 'When somebody wants their own'],
+                ['id' => 'unknown',    'label' => 'Codes that are not recognised'],
+            ],
+            'terms' => 'currency currencies money cost price value amount gbp usd eur idr rupiah pound dollar euro'
+                     . ' symbol code decimal places thousands separator comma dot space indian lakh crore'
+                     . ' favourite favourites default iso 4217 format exception preferences retired'
+                     . ' contracts licences domains leases projects',
         ],
         'date-formats' => [
             'hero' => 'Date and time formats',
@@ -421,6 +556,7 @@ function getHelpTopics() {
 /**
  * One topic by slug, or null. Slug comes from the page ($helpSlug) or the URL.
  *
+ * @param mixed $slug  the help page slug, e.g. 'sso-groups'; unknown slugs give null
  * @return array<string,mixed>|null
  */
 function getHelpTopic($slug) {
@@ -471,6 +607,8 @@ function helpCards($multiTenant = false) {
  * flattened so the caller can do a single substring test: title, description,
  * the area's own keyword synonyms, this page's standfirst, its section labels
  * and any extra search terms.
+ *
+ * @param array $card  one card from helpCards() (title, desc, keywords, sub, terms, sections)
  */
 function helpCardHaystack(array $card) {
     $parts = [
@@ -487,6 +625,7 @@ function helpCardHaystack(array $card) {
  * make visible. Shown as a quiet footnote on the landing page rather than
  * hidden, so a new area doesn't quietly ship undocumented.
  *
+ * @param mixed $multiTenant  true when a second company exists, so 'multitenant' areas count too
  * @return array<int,string> Area titles (translated).
  */
 function helpTopicsMissing($multiTenant = false) {

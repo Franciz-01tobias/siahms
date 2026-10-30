@@ -13,6 +13,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('changes');
 
 $changeId = (int)($_GET['id'] ?? 0);
 
@@ -34,6 +35,7 @@ try {
                 c.*,
                 ct.name AS change_type,
                 cs.name AS status,
+                cs.stage AS status_stage,
                 cs.is_closed AS status_is_closed,
                 cp.name AS priority,
                 ci.name AS impact,
@@ -110,6 +112,48 @@ try {
     $cabStmt = $conn->prepare($cabSql);
     $cabStmt->execute([$changeId]);
     $change['cab_members'] = $cabStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // The approval record (#180): the current round with the version the page must send
+    // back with a vote, every round with its votes, and the rules that decide what the
+    // page offers. The rules here are comfort; ChangesService enforces them.
+    require_once '../../includes/changes/approvals.php';
+    require_once '../../includes/rbac.php';
+    $cfg = changeApprovalSettings($conn);
+    $rawStmt = $conn->prepare("SELECT * FROM changes WHERE id = ?");
+    $rawStmt->execute([$changeId]);
+    $change['approval']        = changeApprovalLiveState($conn, $rawStmt->fetch(PDO::FETCH_ASSOC), $cfg);
+    $change['approval_rounds'] = changeApprovalRounds($conn, $changeId);
+    $rawStmt->execute([$changeId]);
+    $rawRow = $rawStmt->fetch(PDO::FETCH_ASSOC);
+    $isAdmin = (int)$conn->query("SELECT is_admin FROM analysts WHERE id = " . (int)$_SESSION['analyst_id'])->fetchColumn() === 1;
+    $change['approval_rules']  = [
+        'mode'             => $cfg['mode'],
+        'edit_withdraws'   => $cfg['edit_withdraws'],
+        'stale_refused'    => $cfg['stale_refused'],
+        'delete_refused'   => $cfg['delete_refused'] && changeApprovalHasHistory($conn, $changeId),
+        // Enforce: the approval set-up is fixed once submitted (the editor shows it read-only).
+        'setup_locked'     => $cfg['enforce'] && $change['status_stage'] !== 'draft' && $change['status_stage'] !== null,
+        'override_allowed' => $cfg['override'] && $isAdmin,
+        'can_choose_approvers' => analystMayAct($conn, (int)$_SESSION['analyst_id'], Cap::CHANGES_CHOOSE_APPROVERS),
+        'material'         => $cfg['material'],
+    ];
+    // Raised from a template (#180 §8): which version, its scope, and whether it would
+    // pre-authorise the change now - with the reason when it would not.
+    $change['template'] = null;
+    if (!empty($rawRow['template_version_id'])) {
+        require_once '../../includes/changes/templates.php';
+        $tv = ChangeTemplates::version($conn, (int)$rawRow['template_version_id']);
+        if ($tv) {
+            $chk = ChangeTemplates::check($conn, $rawRow, $cfg, (int)$_SESSION['analyst_id']);
+            $change['template'] = [
+                'version_id' => (int)$tv['id'], 'version_no' => (int)$tv['version_no'], 'name' => $tv['template_name'],
+                'scope_use'  => $tv['content']['scope_use'] ?? null, 'scope_not' => $tv['content']['scope_not'] ?? null,
+                'check'      => ['ok' => $chk['ok'], 'reason' => $chk['reason'], 'changed_fields' => $chk['changed_fields'] ?? []],
+            ];
+        }
+    }
+    // The statuses the guard would accept from here (comfort: the guard enforces it).
+    $change['allowed_status_ids'] = changeApprovalAllowedStatuses($conn, $rawRow, $cfg);
 
     echo json_encode([
         'success' => true,

@@ -3,7 +3,48 @@
  * FreeITSM REST API v1 — requesters (the `users` table: end users who raise
  * tickets, distinct from analysts).
  */
+require_once dirname(__DIR__, 3) . '/includes/cost_centre_assign.php';   // GH #160
 
+
+/**
+ * The columns every read of a requester selects - including the cost centre
+ * they are charged to (GH #160), once Database Verification has added it.
+ */
+function apiUserColumns(PDO $conn): string {
+    require_once dirname(__DIR__, 3) . '/includes/cost_centre_assign.php';
+    $cols = "id, email, username, display_name, preferred_name, tenant_id, COALESCE(is_active, 1) AS is_active, created_at";
+    if (costCentreReady($conn, 'users')) {
+        $cols .= ", cost_centre_id,
+                  (SELECT ccu.code FROM cost_centres ccu WHERE ccu.id = users.cost_centre_id) AS cost_centre_code,
+                  (SELECT ccu.name FROM cost_centres ccu WHERE ccu.id = users.cost_centre_id) AS cost_centre_name";
+    }
+    return $cols;
+}
+
+/**
+ * `cost_centre_id` from a request body for a requester in company $tenantId
+ * (NULL = Default): an ACTIVE one of that company, or the one they hold. 422
+ * otherwise. Returns [sent?, value].
+ *
+ * @param ?int $currentId  the cost centre the requester holds now (may be inactive and still kept); null on a create
+ */
+function apiUserCostCentre(PDO $conn, array $body, ?int $tenantId, ?int $currentId): array {
+    if (!array_key_exists('cost_centre_id', $body)) return [false, null];
+    require_once dirname(__DIR__, 3) . '/includes/cost_centre_assign.php';
+    if (!costCentreReady($conn, 'users')) return [false, null];
+    try {
+        return [true, costCentreCheck($conn, costCentreRecordTenant($conn, $tenantId), $body['cost_centre_id'], $currentId)];
+    } catch (ServiceError $e) {
+        apiError(422, 'invalid_field', $e->getMessage());
+    }
+}
+
+/**
+ * Shapes a requester (users row) for the API - email (null for a directory user with no
+ * mailbox), names, company, active flag, cost centre and created date.
+ *
+ * @param array $u  a users row selected with apiUserColumns(), including the cost centre code and name when present
+ */
 function apiSerializeUser(array $u): array {
     return [
         'id'             => (int)$u['id'],
@@ -16,6 +57,12 @@ function apiSerializeUser(array $u): array {
         // The company this requester belongs to; null = not known, and tickets
         // they raise land in triage.
         'tenant_id'      => isset($u['tenant_id']) && $u['tenant_id'] !== null ? (int)$u['tenant_id'] : null,
+        // false = marked as left (3.5.0): kept on record, cannot sign in to the portal.
+        'is_active'      => (int)($u['is_active'] ?? 1) === 1,
+        // GH #160: the cost centre they are charged to, or null.
+        'cost_centre'    => !empty($u['cost_centre_id'])
+            ? ['id' => (int)$u['cost_centre_id'], 'code' => $u['cost_centre_code'] ?? null, 'name' => $u['cost_centre_name'] ?? null]
+            : null,
         'created_at'     => apiIsoDate($u['created_at']),
     ];
 }
@@ -55,7 +102,7 @@ function apiUsersList(PDO $conn, array $apiKey, array $params, array $body): voi
     $stmt = $conn->prepare(
         // COALESCE so mailbox-less requesters sort among everyone else rather
          // than being bunched at the top, where MySQL puts NULLs.
-        "SELECT id, email, username, display_name, preferred_name, tenant_id, created_at
+        "SELECT " . apiUserColumns($conn) . "
          FROM users WHERE $whereSql ORDER BY COALESCE(email, username, display_name) ASC LIMIT $perPage OFFSET $offset"
     );
     $stmt->execute($args);
@@ -74,7 +121,7 @@ function apiUsersGet(PDO $conn, array $apiKey, array $params, array $body): void
     if (!apiKeyCanAccessTenantRow($conn, $apiKey, 'users', (int)$params[0])) {
         apiError(404, 'not_found', 'Requester not found.');
     }
-    $stmt = $conn->prepare("SELECT id, email, username, display_name, preferred_name, tenant_id, created_at FROM users WHERE id = ?");
+    $stmt = $conn->prepare("SELECT " . apiUserColumns($conn) . " FROM users WHERE id = ?");
     $stmt->execute([$params[0]]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$user) {
@@ -151,11 +198,14 @@ function apiUsersCreate(PDO $conn, array $apiKey, array $params, array $body): v
             ? null : resolveTenantForNewUser($conn, $email);
     }
 
+    [$ccSent, $ccId] = apiUserCostCentre($conn, $body, $tenantId, null);
+
     $stmt = $conn->prepare("INSERT INTO users (email, username, display_name, preferred_name, tenant_id, created_at) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())");
     $stmt->execute([$emailOrNull, $usernameOrNull, $displayName, $preferredName, $tenantId]);
     $id = (int)$conn->lastInsertId();
+    if ($ccSent) $conn->prepare("UPDATE users SET cost_centre_id = ? WHERE id = ?")->execute([$ccId, $id]);
 
-    $get = $conn->prepare("SELECT id, email, username, display_name, preferred_name, tenant_id, created_at FROM users WHERE id = ?");
+    $get = $conn->prepare("SELECT " . apiUserColumns($conn) . " FROM users WHERE id = ?");
     $get->execute([$id]);
     apiRespond(apiSerializeUser($get->fetch(PDO::FETCH_ASSOC)), 201);
 }
@@ -176,7 +226,7 @@ function apiUsersUpdate(PDO $conn, array $apiKey, array $params, array $body): v
     if (!apiKeyCanAccessTenantRow($conn, $apiKey, 'users', (int)$params[0])) {
         apiError(404, 'not_found', 'Requester not found.');
     }
-    $stmt = $conn->prepare("SELECT id, email, username, display_name, preferred_name, tenant_id, created_at FROM users WHERE id = ?");
+    $stmt = $conn->prepare("SELECT " . apiUserColumns($conn) . " FROM users WHERE id = ?");
     $stmt->execute([$params[0]]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$user) {
@@ -206,6 +256,15 @@ function apiUsersUpdate(PDO $conn, array $apiKey, array $params, array $body): v
         $updates[] = 'preferred_name = ?';
         $args[]    = trim((string)$body['preferred_name']) ?: null;
     }
+    // "Mark as left" from an identity source (3.5.0): false keeps them on record but
+    // stops portal sign-in by every route and ends an open portal session.
+    if (array_key_exists('is_active', $body)) {
+        if (!is_bool($body['is_active']) && !in_array($body['is_active'], [0, 1, '0', '1'], true)) {
+            apiError(422, 'invalid_field', "'is_active' must be true or false.");
+        }
+        $updates[] = 'is_active = ?';
+        $args[]    = (int)(bool)(int)$body['is_active'];
+    }
     if (array_key_exists('tenant_id', $body)) {
         if ($body['tenant_id'] === null || $body['tenant_id'] === '') {
             $updates[] = 'tenant_id = ?';
@@ -219,13 +278,32 @@ function apiUsersUpdate(PDO $conn, array $apiKey, array $params, array $body): v
             $args[]    = $tenantId;
         }
     }
+    // The cost centre (GH #160), checked against the company they will be in.
+    $ccCur = $conn->prepare("SELECT tenant_id" . (costCentreReady($conn, 'users') ? ", cost_centre_id" : ", NULL AS cost_centre_id") . " FROM users WHERE id = ?");
+    $ccCur->execute([$params[0]]);
+    $ccRow = $ccCur->fetch(PDO::FETCH_ASSOC) ?: ['tenant_id' => null, 'cost_centre_id' => null];
+    $targetTenant = array_key_exists('tenant_id', $body)
+        ? (($body['tenant_id'] === null || $body['tenant_id'] === '') ? null : (int)$body['tenant_id'])
+        : ($ccRow['tenant_id'] !== null ? (int)$ccRow['tenant_id'] : null);
+    [$ccSent, $ccId] = apiUserCostCentre($conn, $body, $targetTenant, $ccRow['cost_centre_id'] !== null ? (int)$ccRow['cost_centre_id'] : null);
+    if ($ccSent) {
+        $updates[] = 'cost_centre_id = ?';
+        $args[]    = $ccId;
+    } elseif ($ccRow['cost_centre_id'] !== null && array_key_exists('tenant_id', $body)) {
+        // Moving company: their old company's cost centre cannot come too.
+        $ct = $conn->prepare("SELECT tenant_id FROM cost_centres WHERE id = ?");
+        $ct->execute([(int)$ccRow['cost_centre_id']]);
+        if ((int)$ct->fetchColumn() !== costCentreRecordTenant($conn, $targetTenant)) {
+            apiError(422, 'invalid_field', "This requester's cost centre belongs to their current company. Send cost_centre_id (one of the new company's, or null) with tenant_id.");
+        }
+    }
     if (!$updates) {
         apiError(422, 'missing_field', 'No fields to update.');
     }
     $args[] = $params[0];
     $conn->prepare('UPDATE users SET ' . implode(', ', $updates) . ' WHERE id = ?')->execute($args);
 
-    $get = $conn->prepare("SELECT id, email, username, display_name, preferred_name, tenant_id, created_at FROM users WHERE id = ?");
+    $get = $conn->prepare("SELECT " . apiUserColumns($conn) . " FROM users WHERE id = ?");
     $get->execute([$params[0]]);
     apiRespond(apiSerializeUser($get->fetch(PDO::FETCH_ASSOC)));
 }

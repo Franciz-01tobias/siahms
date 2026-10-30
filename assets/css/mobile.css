@@ -316,6 +316,64 @@
         text-align: left;
     }
     #scheduleModal .modal-body { overflow-x: hidden; }
+
+    /* Link to problem / change / ticket / task: the sheet is already full-screen, but
+       inbox.css caps the results list at 50vh, leaving half the phone blank
+       under it. Let the list take everything below the search box and scroll
+       itself (the body stops scrolling so the search stays put). */
+    #linkProblemModal .modal-body,
+    #linkChangeModal .modal-body,
+    #linkTicketModal .modal-body,
+    #linkTaskModal .modal-body { display: flex; flex-direction: column; overflow: hidden; }
+    #linkProblemModal .lp-list,
+    #linkChangeModal .lp-list,
+    #linkTicketModal .lp-list,
+    #linkTaskModal .lp-list { flex: 1; min-height: 0; max-height: none; }
+
+    /* Attachment list: on a phone inbox.js renders one full-width card per
+       attachment (attachmentCardsHtml) instead of the six-column table -
+       preview on top when there is one, then filename and From / Date/Time /
+       Size as label-value lines. Desktop keeps the table and the 240px
+       preview tiles; none of these classes exist there. */
+    .att-modal-ref {
+        display: block;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-dim, #888);
+        margin-top: 2px;
+    }
+    .att-cards { display: flex; flex-direction: column; gap: 12px; }
+    .att-card {
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: 10px;
+        background: var(--surface-2, #fafbfc);
+        padding: 10px;
+        min-width: 0;
+    }
+    .att-card-media {
+        display: block;
+        width: 100%;
+        max-height: 60vh;
+        object-fit: contain;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        background: var(--surface, #fff);
+    }
+    .att-card-audio { display: block; width: 100%; margin-bottom: 10px; }
+    .att-card-info { cursor: pointer; padding: 2px 4px; }
+    .att-card-name {
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--text, #333);
+        overflow-wrap: anywhere;
+        margin-bottom: 6px;
+    }
+    .att-card-name .attachment-icon { margin-right: 6px; }
+    .att-card-line { display: flex; gap: 10px; font-size: 13px; line-height: 1.6; }
+    .att-card-k { flex: 0 0 84px; color: var(--text-dim, #888); }
+    .att-card-v { flex: 1; min-width: 0; color: var(--text, #444); overflow-wrap: anywhere; }
+    .att-card .att-send-btn { width: 100%; margin-top: 10px; min-height: 40px; }
+
     /* Small gap between the ticket subject line and the first "Date" field. */
     #scheduleModal .schedule-ticket-info { margin-bottom: 12px; }
 
@@ -358,6 +416,23 @@
     .action-toolbar .action-btn { flex: 0 0 auto; padding: 9px 13px; }
     .action-toolbar .action-btn span:not(.action-btn-icon) { display: none; }
     .action-toolbar .action-btn-icon { font-size: 18px; }
+
+    /* Channel reply composer (Telegram / WhatsApp / Slack / web chat): its
+       Attach / Suggest / Summarise / Send row is one unwrapped flex line on
+       desktop and ran off the right edge of a phone. Two-up grid, words kept,
+       thumb-sized; an odd button out (3 shown) takes the full last row. */
+    .channel-composer-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .channel-composer-actions .action-btn {
+        justify-content: center;
+        min-height: 40px;
+        padding: 8px 10px;
+        min-width: 0;
+    }
+    .channel-composer-actions .action-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
     /* ====================================================================
        LAYER 6 — Collapsible ticket header (Gmail-app style).
@@ -3324,9 +3399,8 @@
     .pm-sidebar h3,
     .pm-sidebar #pmStatusFilters { grid-column: 1 / -1; }
     .pm-sidebar h3 { margin: 2px 0 0; }
-    .pm-sidebar .pm-new-btn { margin-top: 0; }
-    .pm-sidebar .search-btn,
-    .pm-sidebar .pm-new-btn { padding: 10px 8px; }
+    /* New problem is in the action row now (#185), so Search has the line. */
+    .pm-sidebar .search-btn { grid-column: 1 / -1; padding: 10px 8px; }
 
     /* Filters: a one-line horizontal scroller. Each chip keeps its count, which
        is the reason not to collapse this into a <select> — the counts are half
@@ -3514,7 +3588,9 @@
         order: 1;
     }
     .changes-sidebar .sidebar-section h3 { margin: 0 0 6px; }
-    .changes-sidebar .btn-full { margin: 0; }
+    /* New change is in the action row now (#185), so Search has the line. */
+    .changes-sidebar .sidebar-section:has(.search-btn) { grid-column: 1 / -1; }
+    .changes-sidebar .search-btn { width: 100%; }
 
     /* Status filters: one scrolling line, counts kept. Same idiom as
        #pmStatusFilters, .detail-tabs and .sw-filter-tabs. */
@@ -13419,6 +13495,115 @@
     }
     body[data-mobile-page="tickets-users"] .users-mobile-back svg { width: 18px; height: 18px; }
 
+    /* The detail pane could not be scrolled. Desktop clips the pane
+       (`overflow: hidden`) and scrolls only the tickets list at the bottom;
+       on a phone the header and the now single-column info grid fill the
+       screen, so that list is squeezed to nothing and there is nothing left
+       that scrolls. Here the whole pane scrolls instead, and the tickets
+       section takes its natural height. */
+    body[data-mobile-page="tickets-users"] .user-detail-container {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        min-height: 0;
+    }
+    body[data-mobile-page="tickets-users"] .user-detail-container .tickets-section {
+        flex: none;
+        overflow: visible;
+    }
+    body[data-mobile-page="tickets-users"] .user-detail-container .tickets-list { overflow: visible; }
+
+    /* People / Edit / Manager access / Delete sat beside the name in a
+       `flex-shrink: 0` row, so on a phone they ran off the right edge. Here
+       the name goes on top and the buttons wrap underneath it. The rows are
+       inline-styled in selectUser(), hence !important. */
+    body[data-mobile-page="tickets-users"] .user-detail-header { padding: 14px 16px; }
+    body[data-mobile-page="tickets-users"] .user-detail-header > div {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+    body[data-mobile-page="tickets-users"] .user-detail-header > div > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+    body[data-mobile-page="tickets-users"] .user-detail-header > div > div:last-child {
+        flex-shrink: 1 !important;
+        justify-content: flex-start !important;
+    }
+
+    /* A user's actions in a sticky footer (Ed) - mobile.js LAYER 39a2 moves
+       the real People / Edit / Manager access / Delete buttons here as icons.
+       The Domains 41i bar: fixed, z-index 1200 so dialogs at 2000 cover it,
+       env() for the iPhone home indicator. Hidden while the list is showing;
+       Delete sits apart and keeps a danger colour. */
+    body[data-mobile-page="tickets-users"] .users-detail-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="tickets-users"][data-users-pane="list"] .users-detail-bar { display: none !important; }
+    body[data-mobile-page="tickets-users"] .users-detail-bar .udb-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 46px;
+        padding: 0;
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        text-decoration: none;
+    }
+    body[data-mobile-page="tickets-users"] .users-detail-bar .udb-btn svg { width: 22px; height: 22px; }
+    body[data-mobile-page="tickets-users"] .users-detail-bar .udb-danger {
+        margin-left: 10px;
+        color: var(--danger, #c62828);
+    }
+    /* Room under the last ticket card so it is not hidden behind the bar. */
+    body[data-mobile-page="tickets-users"].has-users-bar .user-detail-container { padding-bottom: 72px; }
+
+    /* A very long name or username in the list ran past the edge; cut it to
+       one line with an ellipsis (the full value is on the detail pane). */
+    body[data-mobile-page="tickets-users"] .user-item { min-width: 0; }
+    body[data-mobile-page="tickets-users"] .user-item .user-name,
+    body[data-mobile-page="tickets-users"] .user-item .user-email {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+
+    /* The user's tickets: a five-column grid (130px 1fr 150px 80px 130px)
+       left the subject a couple of letters wide and cut Priority and Created
+       off the right. Each row becomes a small card - number and status, the
+       subject in full, then priority and date - and the header row goes,
+       since there are no columns left for it to label. */
+    body[data-mobile-page="tickets-users"] .ticket-row-header { display: none; }
+    body[data-mobile-page="tickets-users"] .ticket-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "num status"
+            "subject subject"
+            "priority date";
+        gap: 4px 10px;
+        padding: 12px 16px;
+    }
+    body[data-mobile-page="tickets-users"] .ticket-row .ticket-number   { grid-area: num; }
+    body[data-mobile-page="tickets-users"] .ticket-row .ticket-status   { grid-area: status; justify-self: end; }
+    body[data-mobile-page="tickets-users"] .ticket-row .ticket-subject  {
+        grid-area: subject;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-page="tickets-users"] .ticket-row .ticket-priority { grid-area: priority; padding-left: 0; font-size: 12px; color: var(--text-dim, #888); }
+    body[data-mobile-page="tickets-users"] .ticket-row .ticket-date     { grid-area: date; justify-self: end; font-size: 12px; }
+
     /* ---- 39b. The calendar modal's four buttons become icons -----------
        Ed asked for this, mobile only. mobile.js swaps the markup and puts the
        label into aria-label; this makes them square and keeps them on one row
@@ -13499,6 +13684,104 @@
     body[data-mobile-page="tickets-csat"] .analyst-table th,
     body[data-mobile-page="tickets-csat"] .analyst-table td { overflow-wrap: anywhere; }
     body[data-mobile-page="tickets-csat"] .panel { min-width: 0; }
+    /* Headline cards: the page's `repeat(3, 1fr)` has a min-content floor, so
+       three 20px-padded cards with 32px figures pushed Response rate off the
+       right of a phone. Two shrinkable columns (the rep-intune pattern), with
+       the third card taking the full row underneath. */
+    body[data-mobile-page="tickets-csat"] .kpi-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+    body[data-mobile-page="tickets-csat"] .kpi-card { padding: 14px; min-width: 0; }
+    body[data-mobile-page="tickets-csat"] .kpi-card:nth-child(3) { grid-column: 1 / -1; }
+    body[data-mobile-page="tickets-csat"] .kpi-value { font-size: 26px; }
+    body[data-mobile-page="tickets-csat"] .kpi-label,
+    body[data-mobile-page="tickets-csat"] .kpi-sub { overflow-wrap: anywhere; }
+
+    /* ---- 39e. CSAT filters (GH #157): a sticky Filters button + a sheet ---
+       Ed: "on mobile can we have a sticky footer with a filter icon that lets
+       you set them". Five fields in a row under the heading would take half
+       the screen before a single figure, so on a phone the form is hidden and
+       the button at the bottom opens it full-screen (LAYER 7's sheet look,
+       reusing its .ms-close). The badge counts the filters in force, so it is
+       obvious the figures are filtered while the form is out of sight. */
+    body[data-mobile-page="tickets-csat"] .csat-page { padding-bottom: 84px; }
+    body[data-mobile-page="tickets-csat"] .csat-header { flex-wrap: wrap; gap: 10px; }
+    body[data-mobile-page="tickets-csat"] .csat-filters { display: none; }
+    body[data-mobile-page="tickets-csat"].csat-filters-open .csat-filters {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 1500;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        gap: 14px;
+        margin: 0;
+        padding: 0 16px 24px;
+        border-radius: 0;
+        box-shadow: none;
+        overflow-y: auto;
+    }
+    body[data-mobile-page="tickets-csat"] .csat-filters-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        padding: 14px 0;
+        background: var(--surface, #fff);
+        border-bottom: 1px solid var(--border, #ddd);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text, #333);
+    }
+    body[data-mobile-page="tickets-csat"] .cf-field { font-size: 13px; }
+    /* 16px text: iOS zooms the page into any smaller input it focuses. */
+    body[data-mobile-page="tickets-csat"] .cf-field input,
+    body[data-mobile-page="tickets-csat"] .cf-field select {
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        font-size: 16px;
+        box-sizing: border-box;
+    }
+    body[data-mobile-page="tickets-csat"] .cf-actions { justify-content: space-between; padding-top: 6px; }
+    body[data-mobile-page="tickets-csat"] .cf-apply { flex: 1; min-height: 46px; font-size: 16px; }
+    body[data-mobile-page="tickets-csat"] .cf-clear { font-size: 15px; padding: 10px 6px; }
+    body[data-mobile-page="tickets-csat"] .csat-filter-fab {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1400;
+        min-height: 56px;
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+        border: none;
+        border-top: 1px solid var(--border, #ddd);
+        background: var(--surface, #fff);
+        color: var(--text, #333);
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 -2px 8px var(--shadow, rgba(0,0,0,0.08));
+    }
+    body[data-mobile-page="tickets-csat"] .cf-badge {
+        min-width: 22px;
+        height: 22px;
+        padding: 0 6px;
+        border-radius: 11px;
+        background: var(--accent, #0078d4);
+        color: var(--on-accent, #fff);
+        font-size: 12px;
+        line-height: 22px;
+        text-align: center;
+    }
 
     /* ====================================================================
        LAYER 40 - Checklists & SOPs
@@ -13639,6 +13922,29 @@
         white-space: nowrap;
     }
 
+    /* ---- 40f. The editor's padding, and the step rows (Ed) -------------
+       Padding: the page was on the desktop's 24px/32px and each card on
+       20px/22px, so a field started 54px in from each edge of a 360px
+       screen - the card measured x=32, w=296. The house figure is 12px
+       (Techniques §31's padding note), and the card keeps 14px inside. */
+    body[data-mobile-page="checklists-edit"] .ed-body { padding-left: 12px; padding-right: 12px; padding-top: 12px; }
+    body[data-mobile-page="checklists-edit"] .ed-grid { gap: 12px; }
+    body[data-mobile-page="checklists-edit"] .ed-card { padding: 14px; }
+
+    /* Step rows: handle, number, title, role and delete were one flex row,
+       measured at a 77px title and a 54px role drop-down - neither readable.
+       The row wraps: handle, number, title and delete stay on the first line
+       (the title takes the rest of it), and the role drops to its own full
+       line underneath. `order` moves the role after delete without touching
+       the markup, which the drag-and-drop code builds and re-reads. */
+    body[data-mobile-page="checklists-edit"] .step-head { flex-wrap: wrap; row-gap: 8px; }
+    body[data-mobile-page="checklists-edit"] .step-head .step-title { flex: 1 1 0; min-width: 0; }
+    body[data-mobile-page="checklists-edit"] .step-head .step-role { flex: 1 1 100%; order: 5; min-width: 0; }
+    body[data-mobile-page="checklists-edit"] .step-head .step-del { min-width: 36px; min-height: 36px; justify-content: center; align-items: center; }
+    /* The toggles under it were indented 28px to sit under a desktop title;
+       here they line up with the role above them. */
+    body[data-mobile-page="checklists-edit"] .step-opts { padding-left: 0; gap: 4px 18px; }
+
     /* ---- 40d. 16px on every field in this module -----------------------
        🔴 NOT COSMETIC, and Ed hit it on the template search box (`.chk-search`
        is 13px). Techniques §3: iOS zooms on focus for any field under 16px,
@@ -13778,4 +14084,2290 @@
     body[data-mobile-page="checklists"] .chk-main {
         padding-bottom: calc(var(--chk-bar-h, 62px) + 10px + env(safe-area-inset-bottom));
     }
+}
+
+@media (max-width: 768px) {
+    /* ── Tickets: the right-click menu as a full-screen sheet (2.10.0) ────────
+       A long press on a ticket row opens it (inbox.js, wireTicketLongPress).
+       Same element and items as the desktop popup; .ctx-sheet is only ever
+       added below 768px. A row with a further level slides the first level off
+       to the left and its options in from the right (.ctx-drilled).
+       ────────────────────────────────────────────────────────────────────── */
+    #emailList .email-item {
+        -webkit-touch-callout: none;   /* iOS: no "copy / look up" bubble on a hold */
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    .ticket-context-menu.ctx-sheet {
+        inset: 0;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 0 0 env(safe-area-inset-bottom);
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        z-index: 3000;
+    }
+    .ticket-context-menu.ctx-sheet > * {
+        transition: transform 0.25s ease;
+    }
+    .ticket-context-menu.ctx-sheet .ticket-context-menu-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--surface, #fff);
+        margin: 0;
+        padding: 18px 56px 14px 18px;
+        font-size: 13px;
+    }
+    .ticket-context-menu.ctx-sheet .ticket-context-menu-item {
+        min-height: 52px;
+        padding: 12px 18px;
+        font-size: 16px;
+        gap: 14px;
+        border-bottom: 1px solid var(--border-soft, #eee);
+    }
+    .ticket-context-menu.ctx-sheet .ticket-context-menu-item svg { width: 20px; height: 20px; }
+    .ticket-context-menu.ctx-sheet .ticket-context-menu-parent .ctx-sub-arrow { width: 14px; height: 14px; }
+    /* The hover flyouts never show here - their copy opens as the second level. */
+    .ticket-context-menu.ctx-sheet .ticket-context-submenu { display: none !important; }
+
+    .ticket-context-menu.ctx-sheet .ctx-sheet-close {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        z-index: 3;
+        width: 44px;
+        height: 44px;
+        border: none;
+        background: transparent;
+        color: var(--text-muted, #666);
+        font-size: 30px;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .ticket-context-menu:not(.ctx-sheet) .ctx-sheet-close,
+    .ticket-context-menu:not(.ctx-sheet) .ctx-sheet-level2 { display: none; }
+
+    /* Level two: its own scrolling panel over the first, waiting off to the right. */
+    .ticket-context-menu.ctx-sheet .ctx-sheet-level2 {
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+        background: var(--surface, #fff);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        transform: translateX(100%);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    .ticket-context-menu.ctx-sheet.ctx-drilled > :not(.ctx-sheet-level2):not(.ctx-sheet-close) {
+        transform: translateX(-100%);
+    }
+    .ticket-context-menu.ctx-sheet.ctx-drilled .ctx-sheet-level2 { transform: translateX(0); }
+    .ctx-sheet-level2-head {
+        position: sticky;
+        top: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 56px 8px 6px;
+        background: var(--surface, #fff);
+        border-bottom: 1px solid var(--border, #ddd);
+    }
+    .ctx-sheet-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        min-height: 44px;
+        padding: 0 10px 0 4px;
+        border: none;
+        background: transparent;
+        color: var(--accent, #0078d4);
+        font-size: 16px;
+        cursor: pointer;
+    }
+    .ctx-sheet-level2-title {
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-dim, #888);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .ctx-sheet-level2-list .ticket-context-submenu-item {
+        min-height: 52px;
+        padding: 12px 18px;
+        font-size: 16px;
+        border-bottom: 1px solid var(--border-soft, #eee);
+    }
+    .ctx-sheet-level2-list .ticket-context-submenu-item .ctx-status-swatch { width: 16px; height: 16px; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+    .ticket-context-menu.ctx-sheet > *,
+    .ticket-context-menu.ctx-sheet .ctx-sheet-level2 { transition: none; }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       LAYER 41 - Domains
+       --------------------------------------------------------------------
+       The module came after the rollout, so it was built with mobile.css
+       linked and markers on five of its seven pages - and its own
+       `@media (max-width: 900px)` block already stacks the register's
+       sidebar above the list. That stack is the main fault: search, ten
+       views and six filters, a screen and a half before the first domain.
+       What it needed, page by page (measured at 360x740 through an
+       explicit-width iframe, Techniques §8/§30):
+
+         register   sidebar -> a §4 sheet behind a Filters bar; the stats
+                    two-up (§10); the ten-column table -> a card feed with
+                    §21 labels; the main pane handed the scroller role (§28)
+         dashboard  stats two-up; the shell's 100vh replaced (see 41a)
+         domain     the tab strip wrapping to three rows -> one swipeable
+                    row; a card heading's link poking past the card
+         accounts   a seven-column table clipped after two -> a card feed
+         table      the shared .dt-* view (LAYER 15) already answers it
+         settings   the shared settings layer already answers it
+         help       the shared guide layer already answers it
+
+       ⚠️ Every focusable field in the module is 13px, which on an iPhone is
+       not cosmetic - §3: it zooms on focus, spills, and switches this whole
+       block off. 41b fixes it module-wide.
+       ==================================================================== */
+
+    /* ---- 41a. The scrolling shell ----------------------------------------
+       Three pages scroll inside `.dom-shell`, which was an inline
+       `height: calc(100vh - 62px)` until this round turned it into a class
+       (same values, so desktop is unchanged). On a phone the header is not
+       62px and 100vh runs under Safari's address bar, hiding the bottom of
+       the page. LAYER 2 already makes <body> a 100dvh flex column, so the
+       shell takes the remainder instead - and min-height: 0, or its content
+       becomes its floor and nothing scrolls (§28). */
+    body[data-mobile-module="domains"] .dom-shell {
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+    }
+    body[data-mobile-module="domains"] .dom-shell-pad {
+        padding: 12px 12px 24px;
+    }
+
+    /* ---- 41b. 16px on every field in this module (§3) -------------------
+       Excluding what must not change rather than listing what must, so a
+       field type added later is covered by default. */
+    body[data-mobile-module="domains"] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+    body[data-mobile-module="domains"] select,
+    body[data-mobile-module="domains"] textarea {
+        font-size: 16px;
+    }
+
+    /* ---- 41c. The stat strip, two-up (§10) ------------------------------
+       `repeat(auto-fit, minmax(150px, 1fr))` needs 312px for two and the
+       padded pane has 308, so six figures stacked one per row. A grid that
+       is two-up by rule keeps them comparable and halves the scroll. */
+    body[data-mobile-module="domains"] .dom-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    body[data-mobile-module="domains"] .dom-stat {
+        min-width: 0;
+        padding: 11px 12px;
+    }
+    body[data-mobile-module="domains"] .dom-stat .v { font-size: 22px; }
+    body[data-mobile-module="domains"] .dom-stat .l { overflow-wrap: anywhere; }
+
+    /* ---- 41d. The register: the list gets the screen -------------------
+       The sidebar goes into a sheet (mobile.js moves the REAL node, so the
+       page's own listeners keep working); the main pane is the scroller and
+       keeps clear of the Filters bar by its measured height. */
+    body[data-mobile-page="domains-register"] .dom-layout {
+        flex: 1 1 auto;
+        flex-direction: column;
+        height: auto;
+        min-height: 0;
+    }
+    body[data-mobile-page="domains-register"] .dom-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 12px calc(var(--dom-bar-h, 64px) + 12px);
+    }
+    body[data-mobile-page="domains-register"] .dom-fbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="domains-register"] .dom-fbar-btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--text, #1e293b);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    body[data-mobile-page="domains-register"] .dom-fbar-btn svg { width: 18px; height: 18px; flex: 0 0 auto; }
+    /* The current view rides on the button, so you can see what the list is
+       showing without opening the sheet - harvested from the view's own
+       button, so no new string. */
+    body[data-mobile-page="domains-register"] .dom-fbar-view {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+        color: var(--dom-accent, #4d7c0f);
+    }
+    body[data-mobile-page="domains-register"] .dom-sheet {
+        position: fixed;
+        inset: 0;
+        z-index: 1300;          /* over the bar that opens it */
+        display: none;
+        flex-direction: column;
+        background: var(--surface, #fff);
+    }
+    body[data-mobile-page="domains-register"][data-dom-sheet="open"] .dom-sheet { display: flex; }
+    body[data-mobile-page="domains-register"] .dom-sheet-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px;
+        padding-top: calc(12px + env(safe-area-inset-top));
+        border-bottom: 1px solid var(--border-soft, #e2e8f0);
+    }
+    body[data-mobile-page="domains-register"] .dom-sheet-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text, #1e293b);
+    }
+    body[data-mobile-page="domains-register"] .dom-sheet-close {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text, #1e293b);
+        cursor: pointer;
+    }
+    body[data-mobile-page="domains-register"] .dom-sheet-close svg { width: 22px; height: 22px; }
+    body[data-mobile-page="domains-register"] .dom-sheet-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    /* The relocated sidebar, inside the sheet: full width, no rail chrome,
+       and the sheet does the scrolling. */
+    body[data-mobile-page="domains-register"] .dom-sheet .dom-sidebar {
+        width: auto;
+        border: 0;
+        padding: 12px;
+        overflow: visible;
+    }
+    body[data-mobile-page="domains-register"] .dom-sheet .dom-quick button {
+        min-height: 44px;
+        font-size: 15px;
+    }
+
+    /* ---- 41e. The register table -> a card feed (§11, §21, §23) ---------
+       Ten known columns, read one domain at a time: a feed. Each card leads
+       with the checkbox, the name and the security grade; then status and
+       the expiry countdown on one line; then the facts that cannot speak for
+       themselves, each with its own column heading (mobile.js harvests
+       them from the hidden <thead>, so they are right in every language).
+       Columns: 1 checkbox · 2 domain · 3 status · 4 expires · 5 renewal ·
+       6 registrar · 7 grade · 8 protection · 9 certificate · 10 owner. */
+    body[data-mobile-page="domains-register"] #domTable,
+    body[data-mobile-page="domains-register"] #domTable tbody {
+        display: block;
+        width: 100%;
+    }
+    body[data-mobile-page="domains-register"] #domTable thead { display: none; }
+    /* The checkbox sits in the card's corner and the whole card is indented
+       past it, so no cell needs its own offset - the first version gave every
+       cell padding-left and every fact a whole line, and a screenshot showed
+       seven-line cards reading like a spreadsheet. */
+    body[data-mobile-page="domains-register"] #domTable tbody tr {
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 12px;
+        padding: 12px 14px 12px 44px;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    }
+    body[data-mobile-page="domains-register"] #domTable tbody td {
+        display: block;
+        flex: 1 1 100%;
+        min-width: 0;              /* §14 */
+        padding: 0;
+        border: 0;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+        box-sizing: border-box;
+    }
+    body[data-mobile-page="domains-register"] #domTable tbody td.cb {
+        position: absolute;
+        left: 14px;
+        top: 14px;
+        width: 20px;
+        padding: 0;
+    }
+    body[data-mobile-page="domains-register"] #domTable tbody td.cb input { width: 18px; height: 18px; margin: 0; }
+    /* §23, met in the data: with a middle basis a SHORT name let the status
+       climb onto the first line and a long one did not, so cards in the same
+       list had two shapes. Name + grade now fill the line exactly (the grade
+       badge is ~28px, plus the 12px gap), so the status always starts the
+       second line whatever the name's length. */
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(2) {
+        flex: 1 1 calc(100% - 44px);
+        padding: 0;
+        order: 1;
+    }
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(7) {
+        flex: 0 0 auto;
+        padding: 0;
+        order: 2;
+    }
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(3) {
+        flex: 0 0 auto;
+        order: 3;
+    }
+    /* The expiry GROWS to end the status line, so the facts below always
+       start a fresh line at the left - a growing item anywhere else pushed
+       "Renewal" to the right edge on some cards and not others. */
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(4) {
+        flex: 1 1 auto;
+        order: 4;
+    }
+    /* A forced line break between the status line and the facts line: a
+       zero-height full-width flex item placed by `order`. Without it, a long
+       status ("Letting lapse") wrapped the expiry and the icons rode up
+       beside it on the right - two card shapes from one rule (§23). */
+    body[data-mobile-page="domains-register"] #domTable tbody tr::after {
+        content: "";
+        order: 5;
+        flex: 0 0 100%;
+        height: 0;
+    }
+    /* The lock / registry-lock / DNSSEC icons have no text to label, so they
+       lead the facts line as a set of badges. */
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(8) {
+        flex: 0 0 auto;
+        order: 6;
+    }
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(4) .dom-sub {
+        display: inline;
+        margin-left: 6px;
+    }
+    /* The labelled facts flow as one wrapping line rather than a line each. */
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(n+5):not(:nth-child(7)):not(:nth-child(8)) {
+        flex: 0 1 auto;
+        order: 7;
+        color: var(--text-dim, #888);
+        font-size: 12.5px;
+    }
+    body[data-mobile-page="domains-register"] #domTable tbody td:nth-child(n+5):not(:nth-child(7)) .dom-sub { display: inline; margin-left: 6px; }
+    /* §11: the empty state is one colspan cell - first AND last child - so
+       nothing positional may swallow it. */
+    body[data-mobile-page="domains-register"] #domTable tbody td[colspan] {
+        flex: 1 1 100%;
+        padding: 0;
+        text-align: center;
+        order: 0;
+    }
+    /* §21: never label an empty cell, and leave no gap where one was. */
+    body[data-mobile-page="domains-register"] #domTable tbody td:empty { display: none; }
+
+    /* ---- 41f. Registrar accounts -> a card feed ------------------------
+       Seven columns clipped after two. The account name (and its sign-in
+       link) heads the card; the six facts below it are labelled, because a
+       reference, a person's name and a bare domain count mean nothing alone. */
+    body[data-mobile-page="domains-accounts"] .dom-table,
+    body[data-mobile-page="domains-accounts"] .dom-table tbody {
+        display: block;
+        width: 100%;
+    }
+    body[data-mobile-page="domains-accounts"] .dom-table thead { display: none; }
+    body[data-mobile-page="domains-accounts"] .dom-table tbody tr {
+        display: block;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    }
+    body[data-mobile-page="domains-accounts"] .dom-table tbody td {
+        display: block;
+        padding: 2px 0;
+        border: 0;
+        font-size: 13px;
+        color: var(--text-dim, #888);
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-page="domains-accounts"] .dom-table tbody td:first-child {
+        padding-bottom: 6px;
+        color: var(--text, #333);
+    }
+    body[data-mobile-page="domains-accounts"] .dom-table tbody td:first-child a {
+        display: inline-block;
+        min-height: 32px;
+        line-height: 32px;
+    }
+    body[data-mobile-page="domains-accounts"] .dom-table tbody td[colspan] { text-align: center; }
+    body[data-mobile-page="domains-accounts"] .dom-table tbody td:empty { display: none; }
+    body[data-mobile-page="domains-accounts"] .dom-toolbar { flex-wrap: wrap; }
+
+    /* ---- 41g. A domain's page -------------------------------------------
+       Six tabs wrapped into three ragged rows above the content: one row
+       that swipes, as the settings tabs and .detail-tabs do. */
+    body[data-mobile-page="domains-view"] #domTabs {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+    }
+    body[data-mobile-page="domains-view"] #domTabs::-webkit-scrollbar { display: none; }
+    body[data-mobile-page="domains-view"] #domTabs .tab {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        min-height: 42px;
+    }
+    body[data-mobile-page="domains-view"] .dom-fields { grid-template-columns: 112px minmax(0, 1fr); }
+    body[data-mobile-page="domains-view"] .dom-actions { gap: 8px; }
+
+    /* ---- 41h. Card headings that carry a link -----------------------------
+       "All checks" / "See all" sat beside the heading with no room to wrap,
+       and ran 14px past the card's edge. Let the heading row wrap. */
+    body[data-mobile-module="domains"] .dom-card-h {
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        padding: 12px 14px;
+    }
+    body[data-mobile-module="domains"] .dom-card-h > * { min-width: 0; }
+    body[data-mobile-module="domains"] .dom-card-b { padding: 12px 14px; }
+
+    /* ---- 41i. A domain's actions in a sticky footer (Ed) ----------------
+       mobile.js moves the real Refresh / Check now / Edit / Delete buttons
+       into this bar as icons; this is the furniture - the Checklists editor's
+       40c shape (fixed, bottom, z-index 1200 so dialogs at 2000 cover it,
+       env() for the iPhone home indicator, height measured not assumed).
+       The four share the width rather than being 52px squares, so busy()'s
+       "Working..." fits while a refresh runs. Delete keeps the module's own
+       danger colour and sits apart from the other three. */
+    body[data-mobile-page="domains-view"] .dom-view-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="domains-view"] .dom-vb-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 46px;
+        padding: 0 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    body[data-mobile-page="domains-view"] .dom-vb-btn svg { width: 20px; height: 20px; flex: 0 0 auto; }
+    body[data-mobile-page="domains-view"] #btnDelete.dom-vb-btn { margin-left: 10px; }
+    /* Back: a square at the left, the Checklists editor's 52px shape. It is an
+       <a>, so it needs the button look the others get from .dom-btn. */
+    body[data-mobile-page="domains-view"] #domBack.dom-vb-btn {
+        flex: 0 0 46px;
+        border: 1px solid var(--border, #ddd);
+        background: var(--surface, #fff);
+        color: var(--text, #333);
+        text-decoration: none;
+    }
+    body[data-mobile-page="domains-view"] .dom-back-row { display: none; }
+    /* The row the buttons left would be an empty strip with a spacer in it. */
+    body[data-mobile-page="domains-view"] .dom-actions { display: none; }
+    body[data-mobile-page="domains-view"] .dom-shell-pad {
+        padding-bottom: calc(var(--dom-vbar-h, 64px) + 16px);
+    }
+
+    /* ---- 41j. Connections tab (3.0.0): the linked record is the tap target ---
+       An inline <a> ignores min-height (Techniques §30's inline-box note), so it
+       becomes an inline-block with room above and below. */
+    body[data-mobile-page="domains-view"] .dom-conn-row-link { display: inline-block; padding: 6px 0; }
+    body[data-mobile-page="domains-view"] .dom-conn-x { width: 36px; height: 36px; }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       LAYER 42 - People
+       --------------------------------------------------------------------
+       Built after the rollout with mobile.css linked and a marker on all
+       five pages, and with its own `@media (max-width: 640px)` block that
+       already turned the tables into labelled blocks. Measured at 360x740
+       through an explicit-width iframe (§8/§30), what was still wrong:
+
+         every page  could not be SCROLLED by a finger (§28): inbox.css
+                     makes <body> overflow: hidden, LAYER 2 makes it a
+                     100dvh column, and no People container took the
+                     scroller role - a person page was 9,712px of document
+                     behind a viewport that clips. Only scrollTo() moved it.
+         list        three filters at 13px (§3) and their headings filled
+                     320px before the first person
+         tables      every value labelled, the empty ones too ("Job
+                     title:" over nothing - §21's never-label-empty), and
+                     a ticket's subject given no more room than its date
+         company     a 420px nested scroller for its people inside the
+                     page's own - a scroll trap on a touch screen
+
+       The module's 640px block moved here (Morning Checks' precedent,
+       LAYER 26): one place answers "what does People look like on a
+       phone", and it now starts at 768 like everything else. Its 900px
+       block stays in people.css - that is a narrow DESKTOP window.
+       ==================================================================== */
+
+    /* ---- 42a. The scroller role (§28) -----------------------------------
+       The record pages scroll .ppl-page; the list page keeps its filters
+       pinned and scrolls the list. min-height: 0 or the content becomes
+       the floor and nothing scrolls. The desktop's calc(100vh - 62px)
+       heights go: LAYER 2's flex body hands out the remainder. */
+    body[data-mobile-module="people"] .ppl-page {
+        flex: 1 1 auto;
+        height: auto;                 /* not the desktop's calc(100vh - 62px) */
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 12px 24px;
+    }
+    body[data-mobile-module="people"] .ppl-layout {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    body[data-mobile-module="people"] .ppl-main-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 12px 24px;
+    }
+
+    /* ---- 42b. 16px on every field (§3) ---------------------------------- */
+    body[data-mobile-module="people"] input:not([type="checkbox"]):not([type="radio"]),
+    body[data-mobile-module="people"] select,
+    body[data-mobile-module="people"] textarea {
+        font-size: 16px;
+    }
+
+    /* ---- 42c. The list's filters: a compact strip ------------------------
+       Search on its own row, the two drop-downs side by side beneath it.
+       The headings go: each control carries an aria-label, the search has
+       a placeholder and the selects show their value ("Current people",
+       "All companies"), so the words were saying it twice. */
+    body[data-mobile-page="people-list"] .ppl-sidebar {
+        flex: 0 0 auto;
+        width: auto;
+        overflow: visible;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+        border-right: none;
+        border-bottom: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="people-list"] .ppl-sidebar h3,
+    body[data-mobile-page="people-list"] .ppl-intro { display: none; }
+    body[data-mobile-page="people-list"] .ppl-sidebar input,
+    body[data-mobile-page="people-list"] .ppl-sidebar select {
+        margin: 0;
+        min-height: 40px;
+        flex: 1 1 140px;
+        min-width: 0;
+    }
+    body[data-mobile-page="people-list"] .ppl-sidebar input { flex-basis: 100%; }
+
+    /* ---- 42d. Every table as a card feed (§11, §23) ----------------------
+       One card per row: the identifier leads, a status pill sits at the
+       right of the same line, a forced break (the zero-height full-width
+       item placed by `order` - the Domains technique) starts a new line,
+       prose gets a line of its own, and the short facts flow after it. */
+    body[data-mobile-module="people"] .ppl-table,
+    body[data-mobile-module="people"] .ppl-table tbody { display: block; width: 100%; }
+    body[data-mobile-module="people"] .ppl-table thead { display: none; }
+    body[data-mobile-module="people"] .ppl-table tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 3px 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border, #eee);
+    }
+    /* 🔴 display: flex defeats [hidden] - "Show all" and the company's own
+       people filter both work by hiding rows. */
+    body[data-mobile-module="people"] .ppl-table tbody tr[hidden] { display: none; }
+    body[data-mobile-module="people"] .ppl-table tbody tr:last-child { border-bottom: none; }
+    body[data-mobile-module="people"] .ppl-table tbody tr::after {
+        content: ""; order: 2; flex: 0 0 100%; height: 0;
+    }
+    body[data-mobile-module="people"] .ppl-table td {
+        display: block;
+        padding: 0;
+        border: none;
+        min-width: 0;
+        order: 4;
+        font-size: 13px;
+        color: var(--text-muted, #555);
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-module="people"] .ppl-table td:empty { display: none; }
+    body[data-mobile-module="people"] .ppl-table td:first-child {
+        order: 0;
+        flex: 1 1 60%;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text, #222);
+    }
+    /* The identifier is the tap target, so it gets a tap-sized box (an
+       inline <a> ignores min-height - §30's inline-box note). */
+    body[data-mobile-module="people"] .ppl-table td:first-child > a,
+    body[data-mobile-module="people"] .ppl-table td:first-child .ppl-ref > a {
+        display: inline-block;
+        padding: 4px 0;
+    }
+    body[data-mobile-module="people"] .ppl-table td.ppl-empty {
+        flex: 1 1 100%;
+        text-align: center;
+        font-weight: 400;
+        color: var(--text-dim, #888);
+        padding: 8px 0;
+    }
+    body[data-mobile-module="people"] .ppl-table tbody tr:has(> td.ppl-empty)::after { display: none; }
+
+    /* A label only where the value means nothing alone (§21): a bare date,
+       count, priority word or a second name. Never on an empty cell - the
+       :empty rule above removes the cell, so no label is left hanging. The
+       words are the module's own translated column headings (data-label). */
+    body[data-mobile-page="people-list"] .ppl-list td:nth-child(4)::before,
+    body[data-mobile-module="people"] #sec-tickets td:nth-child(n+4)::before,
+    body[data-mobile-module="people"] #sec-assets td:nth-child(n+4)::before,
+    body[data-mobile-module="people"] #sec-contracts td:nth-child(n+2)::before,
+    body[data-mobile-module="people"] #sec-domains td:nth-child(n+3)::before,
+    body[data-mobile-module="people"] #sec-courses td:nth-child(n+3)::before,
+    body[data-mobile-module="people"] #sec-courses .ppl-table:not(:has(thead th:nth-child(4))) td:nth-child(2)::before,
+    body[data-mobile-module="people"] #sec-forms td:nth-child(n+2)::before {
+        content: attr(data-label) "\00a0";
+        color: var(--text-dim, #888);
+        font-size: 12px;
+    }
+
+    /* Status pills ride on the first line, at the right (§23). A person's
+       courses have one in column 2; a company's courses table (three
+       columns, all counts) does not - keyed on column count, not position. */
+    body[data-mobile-module="people"] #sec-tickets td:nth-child(3),
+    body[data-mobile-module="people"] #sec-domains td:nth-child(2),
+    body[data-mobile-module="people"] #sec-courses .ppl-table:has(thead th:nth-child(4)) td:nth-child(2) {
+        order: 1;
+        flex: 0 0 auto;
+    }
+
+    /* A person card: the email on a line of its own. Left to flow, a short
+       address pulled the role up beside it and a long one did not - two
+       card shapes decided by the data (§23's tell). */
+    body[data-mobile-page="people-list"] .ppl-list td:nth-child(2),
+    body[data-mobile-module="people"] #pplPeople td:nth-child(2) {
+        flex: 0 0 100%;
+    }
+
+    /* A ticket's subject is a sentence: a full line of its own (§11). */
+    body[data-mobile-module="people"] #sec-tickets td:nth-child(2) {
+        order: 3;
+        flex: 0 0 100%;
+        font-size: 14px;
+        color: var(--text, #333);
+    }
+
+    /* ---- 42e. Record pages ----------------------------------------------
+       The company's people list scrolled inside a 420px box inside the
+       page - two scrollers under one thumb. The page scrolls; this does
+       not. The filter beside the heading takes its own row. */
+    body[data-mobile-module="people"] .ppl-people-wrap { max-height: none; overflow: visible; }
+    body[data-mobile-module="people"] .ppl-table-wrap { overflow: visible; }
+    body[data-mobile-module="people"] .ppl-filter { flex: 1 1 100%; min-width: 0; width: 100%; margin-left: 0; min-height: 40px; }
+    body[data-mobile-module="people"] .ppl-hero { padding: 14px; gap: 12px; }
+    body[data-mobile-module="people"] .ppl-hero h1 { font-size: 19px; }
+    body[data-mobile-module="people"] .ppl-hero-actions .ppl-btn { min-height: 36px; }
+    body[data-mobile-module="people"] .ppl-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    body[data-mobile-module="people"] .ppl-stat { padding: 10px 12px; }
+    body[data-mobile-module="people"] .ppl-stat .v { font-size: 17px; }
+    body[data-mobile-module="people"] .ppl-showall { min-height: 44px; }
+    /* Companies: the search under the intro at full width, one card per row
+       (minmax(0, ...) - a bare 320px track would set a floor, §14). */
+    body[data-mobile-page="people-companies"] .ppl-co-search,
+    body[data-mobile-page="people-suppliers"] .ppl-co-search { flex: 1 1 100%; min-height: 44px; }
+    body[data-mobile-page="people-companies"] .ppl-co-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    body[data-mobile-page="people-companies"] .ppl-co-card { padding: 14px 16px; gap: 12px; }
+    body[data-mobile-page="people-companies"] .ppl-co-card:hover { transform: none; }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       LAYER 43 - Assets > Users, and the Manager access page it opens
+       --------------------------------------------------------------------
+       Both pages were simply never opted in - no mobile.css, no mobile.js,
+       no marker - so none of the rollout reached them. Measured at 360x740
+       before anything was written:
+
+         users   the header nav ran to 1,379px: §3's reflow trigger, which
+                 on an iPhone puts the whole page back to desktop width;
+                 <body> clips, so the detail stacked under a 320px list was
+                 unreachable; the equipment table 516px in a 326px panel;
+                 every field 13-14px; an Add button 24px tall
+         manager the same header; a results table with a 12px column and
+                 ten crushed cells; 26px buttons; 13px search fields
+
+       Users is Tickets > Users with assets in it, so it gets the same
+       answer: LAYER 39a's pane stack, now one block serving both pages.
+       Manager access is ONE shared page (includes/manager_access_page.php)
+       behind both modules, so its marker is the page's, not the module's.
+       ⚠️ That include prints its <style> inside <body> - after this file -
+       so every rule below wins on specificity, never on order (§24).
+       ==================================================================== */
+
+    /* ---- 43a. Users: the pane stack (39a's, one more page) ---------------
+       The page's own 900px block already stacks the grid; on a phone the
+       two panels become two screens. The list scrolls inside its panel and
+       the detail scrolls itself - the page never scrolls (§28). */
+    body[data-mobile-page="assets-users"] .au-wrap {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 10px 12px 12px;
+        gap: 0;
+        /* §16: the page's grid says `align-items: start` (top-align the two
+           panels). In a flex COLUMN that means "do not stretch the width",
+           and the list sized itself to its content - 357px in a 336px slot. */
+        align-items: stretch;
+    }
+    body[data-mobile-page="assets-users"] .au-wrap > .au-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;                 /* §14: the list measured 357px in 336 */
+        display: flex;
+        flex-direction: column;
+    }
+    body[data-mobile-page="assets-users"] .au-person > div { min-width: 0; }
+    body[data-mobile-page="assets-users"][data-users-pane="list"] #auDetail { display: none; }
+    body[data-mobile-page="assets-users"][data-users-pane="detail"] .au-wrap > .au-panel:first-child { display: none; }
+    body[data-mobile-page="assets-users"] .au-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    body[data-mobile-page="assets-users"] #auDetail {
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+    }
+    body[data-mobile-page="assets-users"] .users-mobile-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        align-self: flex-start;
+        flex-shrink: 0;
+        margin: 10px 12px 0;
+        padding: 8px 12px 8px 8px;
+        min-height: 44px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--accent, #0078d4);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    body[data-mobile-page="assets-users"] .users-mobile-back svg { width: 18px; height: 18px; }
+    /* The detail is a flex column now, so its own blocks must not shrink
+       to fit the screen - they stack and the pane scrolls. */
+    body[data-mobile-page="assets-users"] #auDetail > * { flex-shrink: 0; }
+
+    /* ---- 43b. Users: fields and buttons --------------------------------- */
+    body[data-mobile-page="assets-users"] .au-search { flex-wrap: wrap; padding: 10px 12px; }
+    body[data-mobile-page="assets-users"] .au-search input,
+    body[data-mobile-page="assets-users"] .au-search select {
+        font-size: 16px;                         /* §3 */
+        min-height: 40px;
+        flex: 1 1 140px;
+        min-width: 0;
+    }
+    body[data-mobile-page="assets-users"] .au-search input[type=search] { flex-basis: 100%; }
+    body[data-mobile-page="assets-users"] .au-head-btn { min-height: 36px; padding: 6px 14px; font-size: 13px; }
+    body[data-mobile-page="assets-users"] .au-person { padding: 12px 14px; min-height: 52px; box-sizing: border-box; }
+    body[data-mobile-page="assets-users"] .au-btn { min-height: 40px; }
+    body[data-mobile-page="assets-users"] .au-detail-head { padding: 14px 12px; }
+    body[data-mobile-page="assets-users"] .au-actions { gap: 6px; }
+    /* Facts two-up rather than one per row (§10): short values, read across. */
+    body[data-mobile-page="assets-users"] .au-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 14px;
+        padding: 12px;
+    }
+    body[data-mobile-page="assets-users"] .au-fact-value { overflow-wrap: anywhere; }
+    body[data-mobile-page="assets-users"] .au-managed-note { margin: 0 12px 12px; }
+    /* The reports' hover is a colour swap - a nicety a phone never sees (§26),
+       but a chip that small is a poor target. */
+    body[data-mobile-page="assets-users"] .au-report { padding: 6px 12px; }
+
+    /* ---- 43c. Users: the equipment as a card feed (§11, §21, §23) ---------
+       Six known columns, read one item at a time. The name leads with its
+       type pill at the right; make/model on the next line; serial, tag and
+       the date - three bare values that are meaningless alone - carry their
+       headings, harvested by mobile.js from the table's own <thead>. The
+       table is rebuilt with the whole detail pane, so the feed WATCHES the
+       pane (§30's note on tables that do not exist at load). */
+    body[data-mobile-page="assets-users"] .au-table,
+    body[data-mobile-page="assets-users"] .au-table tbody { display: block; width: 100%; }
+    body[data-mobile-page="assets-users"] .au-table thead { display: none; }
+    body[data-mobile-page="assets-users"] .au-table tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 3px 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    }
+    body[data-mobile-page="assets-users"] .au-table tbody tr::after {
+        content: ""; order: 2; flex: 0 0 100%; height: 0;
+    }
+    body[data-mobile-page="assets-users"] .au-table td {
+        display: block;
+        padding: 0;
+        border: none;
+        min-width: 0;
+        order: 4;
+        font-size: 13px;
+        color: var(--text-muted, #555);
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-page="assets-users"] .au-table td:nth-child(2) {
+        order: 0;
+        flex: 1 1 60%;
+        font-size: 14px;
+        color: var(--text, #333);
+    }
+    body[data-mobile-page="assets-users"] .au-table td:nth-child(2) a { display: inline-block; padding: 4px 0; }
+    body[data-mobile-page="assets-users"] .au-table td:nth-child(1) { order: 1; flex: 0 0 auto; }
+    body[data-mobile-page="assets-users"] .au-table td:nth-child(3) { order: 3; flex: 0 0 100%; }
+    body[data-mobile-page="assets-users"] .au-table td[data-mobile-label]::before {
+        content: attr(data-mobile-label) "\00a0";
+        color: var(--text-dim, #888);
+        font-size: 12px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;   /* the app's own (inbox.css) - not the code font of the serial and tag cells */
+    }
+    /* "No equipment" is one colspan cell: keep it whole and centred. */
+    body[data-mobile-page="assets-users"] .au-table td[colspan] { flex: 1 1 100%; order: 0; }
+    body[data-mobile-page="assets-users"] .au-table tbody tr:has(> td[colspan])::after { display: none; }
+
+    /* ---- 43d. Manager access (both modules) ----------------------------- */
+    body[data-mobile-page="manager-access"] .ma-search,
+    body[data-mobile-page="manager-access"] .ma-option select {
+        font-size: 16px;                         /* §3 */
+        min-height: 40px;
+    }
+    body[data-mobile-page="manager-access"] .ma-wrap { padding: 12px; }
+    body[data-mobile-page="manager-access"] .ma-back { min-height: 40px; padding: 6px 14px; font-size: 14px; }
+    body[data-mobile-page="manager-access"] .ma-stat { min-width: 0; flex: 1 1 100%; }
+    body[data-mobile-page="manager-access"] .ma-btn { min-height: 36px; padding: 6px 12px; }
+    /* The search results: name (and its job line) take the full width, the
+       member count and the Add / Exclude pair go underneath, right-aligned.
+       As a table the name got 179px and the count column 12. */
+    body[data-mobile-page="manager-access"] .ma-table,
+    body[data-mobile-page="manager-access"] .ma-table tbody { display: block; width: 100%; }
+    body[data-mobile-page="manager-access"] .ma-table tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-soft, #eee);
+    }
+    body[data-mobile-page="manager-access"] .ma-table td {
+        display: block;
+        padding: 0;
+        border: none;
+        min-width: 0;
+    }
+    body[data-mobile-page="manager-access"] .ma-table td:first-child { flex: 1 1 100%; overflow-wrap: anywhere; }
+    body[data-mobile-page="manager-access"] .ma-table td:empty { display: none; }
+    body[data-mobile-page="manager-access"] .ma-table td.acts { margin-left: auto; }
+    body[data-mobile-page="manager-access"] .ma-line { flex-wrap: wrap; }
+    body[data-mobile-page="manager-access"] .ma-team li { padding: 10px 8px; }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       Contracts list: Overview / Contracts views + a sticky footer (Ed)
+       --------------------------------------------------------------------
+       mobile.js builds .ctr-mbar and sets data-contracts-view on <body>;
+       this is the furniture - the tickets rota's switcher (fixed, bottom,
+       z-index 1200 so dialogs at 2000 cover it, env() for the iPhone home
+       indicator). Search and New contract move from the top of the page into
+       the footer, and the party drop-down into the Filter sheet, so the
+       strip no longer starts the page with two controls and a select.
+       ==================================================================== */
+    body[data-contracts-view="list"] .contracts-sidebar { display: none; }
+    body[data-contracts-view="overview"] .contracts-main { display: none; }
+    body[data-contracts-view] .contracts-sidebar .sidebar-section:has(.sidebar-search-btn),
+    body[data-contracts-view] .contracts-sidebar .sidebar-section:has(.sidebar-add-btn) { display: none; }
+    body[data-contracts-view] .contracts-main .party-filter { display: none; }
+    body[data-contracts-view] .contracts-layout {
+        padding-bottom: calc(70px + env(safe-area-inset-bottom));
+    }
+
+    .ctr-mbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        gap: 4px;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    .ctr-mbar-btn {
+        position: relative;
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 4px 2px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: none;
+        color: var(--text-muted, #666);
+        font: inherit;
+        font-size: 11px;
+        line-height: 1.1;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .ctr-mbar-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .ctr-mbar-btn svg { width: 21px; height: 21px; flex-shrink: 0; }
+    .ctr-mbar-btn[aria-pressed="true"] {
+        background: var(--surface-hover, #f0f0f0);
+        border-color: var(--border, #ddd);
+        color: var(--accent, #0078d4);
+    }
+    /* A filter is on while its select is out of sight. */
+    .ctr-mbar-btn.has-dot::after {
+        content: "";
+        position: absolute;
+        top: 6px;
+        right: calc(50% - 16px);
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent, #0078d4);
+    }
+
+    /* The Filter sheet: options as full-width rows over a dimmed page. */
+    .ctr-filter-sheet {
+        position: fixed;
+        inset: 0;
+        z-index: 1300;
+        background: rgba(0, 0, 0, 0.4);
+        align-items: flex-end;
+    }
+    .ctr-filter-sheet .cfs-panel {
+        width: 100%;
+        background: var(--surface, #fff);
+        border-radius: 14px 14px 0 0;
+        padding: 6px 12px calc(12px + env(safe-area-inset-bottom));
+    }
+    .ctr-filter-sheet .cfs-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 4px 10px;
+        font-weight: 600;
+        color: var(--text, #333);
+    }
+    .ctr-filter-sheet .cfs-close {
+        border: none;
+        background: none;
+        color: var(--accent, #0078d4);
+        font: inherit;
+        font-size: 15px;
+        padding: 8px;
+        cursor: pointer;
+    }
+    .ctr-filter-sheet .cfs-opt {
+        display: block;
+        width: 100%;
+        min-height: 48px;
+        margin-bottom: 6px;
+        padding: 10px 14px;
+        text-align: left;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 10px;
+        background: var(--surface, #fff);
+        color: var(--text, #333);
+        font: inherit;
+        font-size: 15px;
+        cursor: pointer;
+    }
+    .ctr-filter-sheet .cfs-opt.on {
+        border-color: var(--accent, #0078d4);
+        color: var(--accent, #0078d4);
+        font-weight: 600;
+    }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       LAYER 29t - LMS -> Tests (competency tests, 3.0.0): list, builder,
+       question bank, candidates, a candidate's result. lms/tests/_page.php is
+       the one shell all three pages share, so opting in was one include.
+       Built after LAYER 29, and it follows that layer's shapes on purpose:
+       the same card feed (12px 14px, `flex: 1 1 60%` name, thumb-sized action
+       row), the same scrolling tab strip, the house 12px page padding.
+
+       Measured at 360x740 against stubbed fixtures - the install has no tests,
+       so an unstubbed run proves nothing (Techniques §30's third form):
+         docW 360/360 - but only because `.ct-scroll` declares overflow-y alone
+           and so scrolls SIDEWAYS too (§12), swallowing two tables that ran
+           off the right edge (Candidates: 13 crushed cells, actions unseen)
+         question cards: actions held a right-hand column, the question text
+           one word per line (§11's crushed signature)
+         builder: a `200px 200px 1fr` grid with the title and role fields past
+           the edge, a six-column skill row, 20 fields at 13-14px (§3 zoom)
+       ==================================================================== */
+
+    /* §28: hand the scroller role over explicitly. `.ct-page` is a direct
+       child of LAYER 2's 100dvh flex body and sizes itself `height: 100vh`,
+       which on iOS is the LARGE viewport - the LMS shells' #1399 fault. */
+    body[data-mobile-page^="lms-tests"] .ct-page {
+        height: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    /* §12 / LAYER 33: nothing may hide off the side again. */
+    body[data-mobile-page^="lms-tests"] .ct-scroll { overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+    body[data-mobile-page^="lms-tests"] .ct-wrap { padding: 12px 12px 40px; }
+    body[data-mobile-page^="lms-tests"] .ct-section { padding: 14px; border-radius: 10px; }
+    body[data-mobile-page^="lms-tests"] .ct-intro { margin: -4px 0 12px; font-size: 13.5px; }
+
+    /* §3: 16px on every focusable field, or iOS zooms and reflows. Exclude
+       what must not change - checkboxes and radios keep their size. Covers
+       the builder, the bank filters and the question / send dialogs. */
+    body[data-mobile-page^="lms-tests"] input:not([type=checkbox]):not([type=radio]),
+    body[data-mobile-page^="lms-tests"] select,
+    body[data-mobile-page^="lms-tests"] textarea { font-size: 16px; }
+
+    /* ---- the two tables: card feeds (§11 - one row at a time, and the
+       Skills column is prose). Same shape as LAYER 29's courses feed. The
+       head stays in the DOM because §21 reads its labels from it. */
+    body[data-mobile-page^="lms-tests"] .lms-table,
+    body[data-mobile-page^="lms-tests"] .lms-table tbody { display: block; width: 100%; }
+    body[data-mobile-page^="lms-tests"] .lms-table thead { display: none; }
+    body[data-mobile-page^="lms-tests"] .lms-table tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 8px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    }
+    body[data-mobile-page^="lms-tests"] .lms-table tbody td {
+        display: block;
+        flex: 1 1 100%;
+        min-width: 0;                  /* LAYER 27: one nowrap cell pins the card */
+        padding: 0;
+        border: none;
+        font-size: 12.5px;
+        color: var(--text-dim, #888);
+        overflow-wrap: anywhere;
+    }
+    /* The name leads; the candidate status pill rides beside it (§23 middle
+       basis). Keyed on the pill rather than a position, because the status is
+       column 3 on the Candidates tab and column 2 in the builder. */
+    body[data-mobile-page^="lms-tests"] .lms-table tbody td:first-child {
+        flex: 1 1 60%;
+        order: -2;
+        font-size: 15px;
+        color: var(--text, #333);
+    }
+    body[data-mobile-page^="lms-tests"] .lms-table tbody td:has(> .ct-state) {
+        flex: 0 0 auto;
+        order: -1;
+        text-align: right;
+    }
+    body[data-mobile-page^="lms-tests"] .lms-table tbody td:first-child .ct-note { font-size: 12.5px; }
+    /* Actions: full width and thumb-sized. `:not(:first-child)` for the
+       empty-state warning in §11, though these tables draw their empty state
+       as a .ct-empty div rather than a row. */
+    body[data-mobile-page^="lms-tests"] .lms-table tbody td:last-child:not(:first-child) {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+        white-space: normal !important;     /* beat the inline nowrap */
+    }
+    body[data-mobile-page^="lms-tests"] .lms-table tbody td:last-child:not(:first-child) > * {
+        flex: 1 1 auto;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* ---- question cards (bank, builder, the bank picker): the actions take
+       their own row under the question instead of a column beside it. */
+    body[data-mobile-page^="lms-tests"] .ct-q { padding: 12px 14px; }
+    body[data-mobile-page^="lms-tests"] .ct-q-top { flex-wrap: wrap; }
+    body[data-mobile-page^="lms-tests"] .ct-q-body { flex: 1 1 0; }
+    body[data-mobile-page^="lms-tests"] .ct-q-actions {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        margin-top: 8px;
+    }
+    body[data-mobile-page^="lms-tests"] .ct-q-actions .btn { min-height: 36px; padding: 6px 14px; }
+
+    /* ---- bank filters: search on its own row, the selects two-up on a grid
+       (§10 - they line up instead of packing 1-2-1). */
+    body[data-mobile-page^="lms-tests"] .ct-filters {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+    body[data-mobile-page^="lms-tests"] .ct-filters input[type=search] { grid-column: 1 / -1; min-width: 0; }
+    body[data-mobile-page^="lms-tests"] .ct-filters select,
+    body[data-mobile-page^="lms-tests"] .ct-filters input { width: 100%; min-width: 0; box-sizing: border-box; }
+    body[data-mobile-page^="lms-tests"] .ct-bulk { flex-wrap: wrap; }
+
+    /* ---- builder: section headings with buttons wrap the buttons under the
+       heading instead of crushing it. */
+    body[data-mobile-page^="lms-tests"] .ct-section > h2 { flex-wrap: wrap; row-gap: 8px; }
+    body[data-mobile-page^="lms-tests"] .ct-section > h2 .ct-head-actions { flex: 1 1 100%; margin-left: 0; }
+    body[data-mobile-page^="lms-tests"] .ct-head-actions .btn { min-height: 36px; }
+    body[data-mobile-page^="lms-tests"] .ct-row-actions .btn { min-height: 40px; }
+
+    /* The role: title and description full width, time limit and pass mark
+       two-up. In the question dialog the skill takes a row and difficulty /
+       format share the next. `minmax(0, ...)` per the Techniques 34i note. */
+    body[data-mobile-page^="lms-tests"] .ct-grid2,
+    body[data-mobile-page^="lms-tests"] .ct-modal .ct-grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    body[data-mobile-page^="lms-tests"] .ct-modal .ct-grid2 > :first-child { grid-column: 1 / -1; }
+    body[data-mobile-page^="lms-tests"] .ct-grid2 input,
+    body[data-mobile-page^="lms-tests"] .ct-grid2 select,
+    body[data-mobile-page^="lms-tests"] .ct-grid2 textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+
+    /* Skills: the six-column row becomes a small card. The column heads go
+       (one row of headings cannot label a stack of cards), and the one value
+       that means nothing bare - the question COUNT, a lone "5" - gets its
+       heading back as the row ::before, from the attribute mobile.js
+       harvests out of that hidden head (§21: translated for free). Difficulty
+       and format are selects whose shown value says what it is. */
+    body[data-mobile-page^="lms-tests"] .ct-skill-head { display: none; }
+    body[data-mobile-page^="lms-tests"] .ct-skill {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            "name name"
+            "diff fmt"
+            "lbl  have"
+            "count acts";
+        gap: 8px;
+        padding: 10px;
+    }
+    body[data-mobile-page^="lms-tests"] .ct-skill .skName  { grid-area: name; }
+    body[data-mobile-page^="lms-tests"] .ct-skill .skDiff  { grid-area: diff; }
+    body[data-mobile-page^="lms-tests"] .ct-skill .skFmt   { grid-area: fmt; }
+    body[data-mobile-page^="lms-tests"] .ct-skill .skCount { grid-area: count; }
+    body[data-mobile-page^="lms-tests"] .ct-skill .ct-skill-have { grid-area: have; align-self: end; text-align: right; }
+    body[data-mobile-page^="lms-tests"] .ct-skill > span:last-child { grid-area: acts; justify-content: flex-end; align-items: center; }
+    body[data-mobile-page^="lms-tests"] .ct-skill[data-mobile-count-label]::before {
+        content: attr(data-mobile-count-label);
+        grid-area: lbl;
+        align-self: end;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .3px;
+        color: var(--text-muted, #666);
+    }
+    body[data-mobile-page^="lms-tests"] .ct-skill .skFill { min-height: 40px; }
+    body[data-mobile-page^="lms-tests"] .ct-skill .ct-x { min-width: 40px; min-height: 40px; }
+
+    /* ---- a candidate result */
+    body[data-mobile-page^="lms-tests"] .ct-title-row h1 { font-size: 20px; overflow-wrap: anywhere; }
+    body[data-mobile-page^="lms-tests"] .ct-score-big { font-size: 38px; }
+    /* §10: the six facts two-up on a grid, not one tall column. */
+    body[data-mobile-page^="lms-tests"] .ct-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+    body[data-mobile-page^="lms-tests"] .ct-meta > div { min-width: 0; overflow-wrap: anywhere; }
+    /* By skill: the name on its own line, then the bar and the figure. */
+    body[data-mobile-page^="lms-tests"] .ct-skillbar { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin-bottom: 12px; }
+    body[data-mobile-page^="lms-tests"] .ct-skillbar > span:first-child { grid-column: 1 / -1; }
+    /* "<- their answer": the row is a FLEX row, so the label needs a full-width
+       basis to drop under the answer (display: block is inert on a flex item -
+       §27); the indent lines it up with the answer text, past the mark. */
+    body[data-mobile-page^="lms-tests"] .ct-answers li.picked { flex-wrap: wrap; row-gap: 0; }
+    body[data-mobile-page^="lms-tests"] .ct-answers li.picked > span:not(.ct-mark) { flex: 1 1 0; min-width: 0; }
+    body[data-mobile-page^="lms-tests"] .ct-answers li.picked::after { flex: 1 1 100%; margin: 0; padding-left: 36px; }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       LAYER 44 - Projects (3.2.0)
+       --------------------------------------------------------------------
+       Built after the rollout with mobile.css linked AFTER projects.css and
+       markers on all three pages, so nothing spilled off the document - and
+       two pages were still unusable, which only the pane widths showed
+       (Techniques §30, measured at 360x740 through an explicit-width
+       iframe):
+
+         portfolio  a 240px flex-shrink:0 sidebar left .prj-main 120px wide,
+                    holding a 300px card grid - the fixed-sidebar shape for
+                    the sixth time (§32). Sidebar -> a §4 sheet behind a
+                    Filters bar (mobile.js LAYER 44a, the Domains 41 shape).
+         a project  the banner's icon + text + 92px ring in one flex row left
+                    the text 10px wide: the name one word per line, a banner
+                    755px tall. Lane heads the same (titles 41px). The
+                    actions -> a sticky footer (41i's shape, mobile.js 44b);
+                    tasks get a phase picker, because the drag between lanes
+                    is not a phone control here (44c, §22).
+         help       the shared guide layer already answers it.
+
+       Every field in the module was 13px (§3) - 44b fixes it module-wide.
+       ==================================================================== */
+
+    /* ---- 44a. The scrolling shells (§28) ----------------------------------
+       Both pages are `height: calc(100vh - 62px)` shells. On a phone the
+       header is not 62px and 100vh runs under Safari's address bar; LAYER 2
+       already makes <body> a 100dvh flex column, so each shell takes the
+       remainder - and min-height: 0, or its content becomes its floor and
+       nothing scrolls. */
+    body[data-mobile-page="projects-portfolio"] .prj-layout {
+        flex: 1 1 auto;
+        flex-direction: column;
+        height: auto;
+        min-height: 0;
+    }
+    body[data-mobile-page="projects-portfolio"] .prj-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 12px calc(var(--prj-bar-h, 64px) + 12px);
+    }
+    body[data-mobile-page="projects-view"] .prj-page {
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 12px calc(var(--prj-vbar-h, 64px) + 16px);
+    }
+
+    /* ---- 44b. 16px on every field in this module (§3) -------------------
+       Excluding what must not change rather than listing what must, so a
+       field type added later is covered by default. The dialogs are inside
+       <body> too, so this reaches them whatever LAYER 3's selectors miss. */
+    body[data-mobile-module="projects"] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="hidden"]),
+    body[data-mobile-module="projects"] select,
+    body[data-mobile-module="projects"] textarea {
+        font-size: 16px;
+    }
+    /* §20: a native date field sizes itself to the date it draws, which on
+       iOS spells the month out. LAYER 3 resets the dialogs' fields; the
+       add-a-task row is not in a dialog. */
+    body[data-mobile-module="projects"] .prj-add-task input[type="date"] {
+        -webkit-appearance: none;
+        appearance: none;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+    body[data-mobile-module="projects"] .prj-add-task input[type="date"]::-webkit-date-and-time-value {
+        margin: 0;
+        text-align: left;
+    }
+
+    /* ---- 44c. The portfolio ------------------------------------------------
+       The figures are already two-up (projects.css's own 1100px block); they
+       get the house density. One card per row - `minmax(300px, 1fr)` fits
+       one 300px track in 336px and the card's own min-width: auto would
+       still hold it (§14), so the track is minmax(0, 1fr). */
+    body[data-mobile-page="projects-portfolio"] .prj-tiles { gap: 10px; margin-bottom: 12px; }
+    body[data-mobile-module="projects"] .prj-tile { min-width: 0; padding: 11px 12px 11px 14px; }
+    body[data-mobile-module="projects"] .prj-tile-num { font-size: 22px; }
+    body[data-mobile-module="projects"] .prj-tile-label { overflow-wrap: anywhere; }
+    body[data-mobile-page="projects-portfolio"] .prj-toolbar { margin-bottom: 12px; }
+    body[data-mobile-page="projects-portfolio"] .prj-toolbar .prj-btn { min-height: 40px; }
+    body[data-mobile-page="projects-portfolio"] .prj-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+    body[data-mobile-page="projects-portfolio"] .prj-card { min-width: 0; }
+    /* §7: a lift-on-hover sticks after a tap on a touchscreen. */
+    body[data-mobile-page="projects-portfolio"] .prj-card:hover {
+        transform: none;
+        box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px var(--border-soft, #eee);
+    }
+    body[data-mobile-page="projects-portfolio"] .prj-empty { margin: 32px auto; }
+
+    /* The Filters bar and its sheet (mobile.js 44a moves the REAL sidebar in,
+       so projects-portfolio.js keeps every listener it attached) - the
+       Domains register's 41d furniture under this module's names. */
+    body[data-mobile-page="projects-portfolio"] .prj-fbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="projects-portfolio"] .prj-fbar-btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--text, #1e293b);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    body[data-mobile-page="projects-portfolio"] .prj-fbar-btn svg { width: 18px; height: 18px; flex: 0 0 auto; }
+    /* The current view rides on the button, harvested from the view's own
+       label, so no new string. */
+    body[data-mobile-page="projects-portfolio"] .prj-fbar-view {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+        color: var(--prj-accent, #e11d48);
+    }
+
+    /* The sheet chrome, shared by the Filters sheet and the phase picker. */
+    body[data-mobile-module="projects"] .prj-msheet {
+        position: fixed;
+        inset: 0;
+        z-index: 1300;          /* over the bar that opens it */
+        display: none;
+        flex-direction: column;
+        background: var(--surface, #fff);
+    }
+    body[data-mobile-module="projects"] .prj-msheet.open { display: flex; }
+    body[data-mobile-module="projects"] .prj-msheet-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px;
+        padding-top: calc(12px + env(safe-area-inset-top));
+        border-bottom: 1px solid var(--border-soft, #e2e8f0);
+    }
+    body[data-mobile-module="projects"] .prj-msheet-title {
+        min-width: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text, #1e293b);
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-module="projects"] .prj-msheet-close {
+        flex: 0 0 44px;
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text, #1e293b);
+        cursor: pointer;
+    }
+    body[data-mobile-module="projects"] .prj-msheet-close svg { width: 22px; height: 22px; }
+    body[data-mobile-module="projects"] .prj-msheet-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    /* The relocated sidebar, inside the sheet: full width, no rail chrome,
+       and the sheet does the scrolling. */
+    body[data-mobile-page="projects-portfolio"] .prj-msheet .prj-sidebar {
+        width: auto;
+        border: 0;
+        padding: 12px;
+        overflow: visible;
+    }
+    body[data-mobile-page="projects-portfolio"] .prj-msheet .prj-views li {
+        min-height: 44px;
+        box-sizing: border-box;
+        font-size: 15px;
+    }
+
+    /* ---- 44d. A project: the banner ---------------------------------------
+       Icon, text and the 92px ring shared one row and left the text 10px.
+       Icon and ring now share the first line (the ring's caption beside it,
+       at the right) and the text takes the full width below. */
+    body[data-mobile-page="projects-view"] .prj-banner {
+        padding: 16px 14px 14px;
+        border-radius: 14px;
+    }
+    body[data-mobile-page="projects-view"] .prj-banner-main {
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+    }
+    body[data-mobile-page="projects-view"] .prj-banner-icon {
+        order: 1;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+    }
+    body[data-mobile-page="projects-view"] .prj-banner-ring {
+        order: 2;
+        flex: 1 1 auto;
+        min-width: 0;
+        flex-direction: row-reverse;
+        justify-content: flex-start;
+        gap: 10px;
+    }
+    body[data-mobile-page="projects-view"] .prj-ring-caption {
+        align-items: flex-end;
+        text-align: right;
+        min-width: 0;
+    }
+    body[data-mobile-page="projects-view"] .prj-banner-text {
+        order: 3;
+        flex: 1 1 100%;
+    }
+    body[data-mobile-page="projects-view"] .prj-banner h1 { font-size: 22px; overflow-wrap: anywhere; }
+    body[data-mobile-page="projects-view"] .prj-banner-goal { font-size: 14px; }
+    body[data-mobile-page="projects-view"] .prj-banner-facts { gap: 6px 14px; margin-top: 10px; }
+    /* Edit and Delete moved to the footer (44h), so the row they left would
+       be an empty strip. */
+    body[data-mobile-page="projects-view"] .prj-banner-actions { display: none; }
+
+    /* ---- 44e. The tabs: one row that swipes (41g's idiom) ---------------- */
+    body[data-mobile-page="projects-view"] .prj-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+        margin: 14px 0 12px;
+    }
+    body[data-mobile-page="projects-view"] .prj-tabs::-webkit-scrollbar { display: none; }
+    body[data-mobile-page="projects-view"] .prj-tabs button {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        min-height: 44px;
+        padding: 10px 14px;
+    }
+
+    /* ---- 44f. Overview, Connections, History -------------------------------
+       The grids are already one column (projects.css's own 1100px block);
+       what is left is density and the controls a phone cannot see. */
+    body[data-mobile-page="projects-view"] .prj-ov-tiles { gap: 10px; margin-bottom: 12px; }
+    /* 🔴 projects.css's own 1100px block stacks both grids to a bare `1fr`,
+       and a bare 1fr track has min-content for a floor: one linked record's
+       nowrap label held the Connections track at 452px inside a 328px pane,
+       every panel cut off at the right. The shell clips sideways, so the
+       document measured a perfectly contained 360 (§30). minmax(0, 1fr) is
+       the guard the stacking dropped (Techniques: "check it kept the
+       minmax(0, ...)"). */
+    body[data-mobile-page="projects-view"] .prj-ov-grid,
+    body[data-mobile-page="projects-view"] .prj-conn-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+    body[data-mobile-page="projects-view"] .prj-conn { min-width: 0; }
+    body[data-mobile-page="projects-view"] .prj-panel { padding: 14px; }
+    body[data-mobile-page="projects-view"] .prj-ov-links { margin-top: 12px; }
+    body[data-mobile-page="projects-view"] .prj-link { padding: 9px 0; }
+    body[data-mobile-page="projects-view"] .prj-next a { min-height: 40px; padding: 6px 0; }
+    body[data-mobile-page="projects-view"] .prj-next-title { min-width: 0; overflow-wrap: anywhere; }
+    body[data-mobile-page="projects-view"] .prj-link-chip { min-height: 38px; box-sizing: border-box; }
+    /* §26: the unlink and remove crosses appear only on :hover, and a phone
+       never hovers - they were there, tappable by accident and invisible. */
+    body[data-mobile-page="projects-view"] .prj-task-remove {
+        opacity: 1;
+        flex: 0 0 auto;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        font-size: 22px;
+        border-radius: 8px;
+    }
+    body[data-mobile-page="projects-view"] .prj-conn-row { padding: 6px 0 6px 4px; }
+    body[data-mobile-page="projects-view"] .prj-conn-main { min-height: 36px; justify-content: center; }
+    body[data-mobile-page="projects-view"] .prj-conn-results button { min-height: 44px; justify-content: center; }
+
+    /* ---- 44g. The plan ----------------------------------------------------- */
+    body[data-mobile-page="projects-view"] .prj-plan-head {
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    body[data-mobile-page="projects-view"] .prj-plan-head .prj-btn { min-height: 40px; }
+    /* Lane head: the kind chip and the name share the first line, and the
+       side cluster (dates, status, count, Start/Finish, edit) takes a line
+       of its own instead of squeezing the name to 41px. */
+    body[data-mobile-page="projects-view"] .prj-lane-head {
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        padding: 12px 12px 10px;
+    }
+    body[data-mobile-page="projects-view"] .prj-lane-titles { flex: 1 1 0; }
+    body[data-mobile-page="projects-view"] .prj-lane-head h3 { overflow-wrap: anywhere; }
+    body[data-mobile-page="projects-view"] .prj-lane-side {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+    body[data-mobile-page="projects-view"] .prj-lane-side .btn.sm { min-height: 36px; padding: 6px 14px; }
+    body[data-mobile-page="projects-view"] .prj-lane-side .prj-icon-btn {
+        margin-left: auto;
+        width: 40px;
+        height: 40px;
+    }
+    /* "Drag a task onto a phase" describes the desktop gesture; here the
+       move is the picker on each row (44c in mobile.js). */
+    body[data-mobile-page="projects-view"] .prj-lane.unassigned .prj-lane-head .prj-muted { display: none; }
+
+    /* Task rows. The title was cut to "Install switches a..." in a row of
+       seven things. Now: the title (wrapping, never cut) with the phase
+       picker and the remove cross on the first line; who and when - and the
+       subtask count and priority, when there are any - on the line below.
+       A zero-height full-width item placed by `order` is the line break
+       (the Domains feed's 41e), so the second line starts at the left
+       whatever the title's length. The status dot sits in the corner and
+       the row is indented past it, so whichever chip comes first lines up
+       under the title. The markup is the page's own; only `order` moves. */
+    body[data-mobile-page="projects-view"] .prj-lane-tasks { padding: 2px 6px; }
+    body[data-mobile-page="projects-view"] .prj-task {
+        position: relative;
+        flex-wrap: wrap;
+        gap: 0 6px;
+        padding: 6px 2px 8px 24px;
+    }
+    body[data-mobile-page="projects-view"] .prj-task:hover { background: none; }
+    body[data-mobile-page="projects-view"] .prj-grip { display: none; }
+    body[data-mobile-page="projects-view"] .prj-task-status {
+        position: absolute;
+        left: 7px;
+        top: 19px;
+    }
+    body[data-mobile-page="projects-view"] .prj-task-title {
+        order: 1;
+        flex: 1 1 0;
+        min-height: 36px;
+        display: flex;
+        align-items: center;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-page="projects-view"] .prj-move-btn { order: 2; }
+    body[data-mobile-page="projects-view"] .prj-task-remove { order: 3; }
+    body[data-mobile-page="projects-view"] .prj-task::after {
+        content: "";
+        order: 4;
+        flex: 0 0 100%;
+        height: 0;
+    }
+    body[data-mobile-page="projects-view"] .prj-task > .prj-task-sub,
+    body[data-mobile-page="projects-view"] .prj-task > .prj-task-prio,
+    body[data-mobile-page="projects-view"] .prj-task > .prj-due,
+    body[data-mobile-page="projects-view"] .prj-task > .prj-avatar { order: 5; }
+    body[data-mobile-page="projects-view"] .prj-due.none { display: none; }
+    /* The phase picker - injected by mobile.js on a phone only, so it has no
+       desktop state to hide (§25). */
+    body[data-mobile-page="projects-view"] .prj-move-btn {
+        flex: 0 0 auto;
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--text-muted, #555);
+        cursor: pointer;
+    }
+    body[data-mobile-page="projects-view"] .prj-move-btn svg { width: 18px; height: 18px; }
+    body[data-mobile-page="projects-view"] .prj-add-toggle { min-height: 40px; margin: 4px 10px 10px; }
+    /* The add-a-task form: what needs doing on its own line, then who, then
+       the due date and Add. */
+    body[data-mobile-page="projects-view"] .prj-add-task {
+        flex-wrap: wrap;
+        padding: 8px 12px 12px;
+    }
+    body[data-mobile-page="projects-view"] .prj-add-task input[type="text"],
+    body[data-mobile-page="projects-view"] .prj-add-task select {
+        flex: 1 1 100%;
+        max-width: none;
+        min-height: 40px;
+        box-sizing: border-box;
+    }
+    body[data-mobile-page="projects-view"] .prj-add-task input[type="date"] {
+        flex: 1 1 0;
+        min-height: 40px;
+    }
+    body[data-mobile-page="projects-view"] .prj-add-task .prj-btn {
+        flex: 0 0 auto;
+        min-height: 40px;
+        padding: 6px 18px;
+        justify-content: center;
+    }
+
+    /* GH #184: Up / Down within the task's own lane, above the lane list. */
+    body[data-mobile-page="projects-view"] .prj-move-nudge {
+        display: flex;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+    }
+    body[data-mobile-page="projects-view"] .prj-move-nudge-btn {
+        flex: 1;
+        min-height: 44px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--text, #222);
+        font: inherit;
+        font-size: 15px;
+    }
+    body[data-mobile-page="projects-view"] .prj-move-nudge-btn:disabled { opacity: .4; }
+
+    /* The phase picker: a list of the plan's own lanes, harvested from their
+       headings. The lane the task is in is marked and cannot be chosen. */
+    body[data-mobile-page="projects-view"] .prj-move-opt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 52px;
+        padding: 10px 14px;
+        border: 0;
+        border-bottom: 1px solid var(--border-soft, #f0f0f0);
+        background: none;
+        color: var(--text, #222);
+        font: inherit;
+        font-size: 15px;
+        text-align: left;
+        cursor: pointer;
+    }
+    /* A handful of choices: a bottom sheet over the dimmed plan rather than
+       a whole empty screen (LAYER 16's popup shape). A tap on the dimmed
+       part closes it. */
+    body[data-mobile-page="projects-view"] .prj-move-sheet {
+        justify-content: flex-end;
+        background: rgba(15, 23, 42, .45);
+    }
+    body[data-mobile-page="projects-view"] .prj-move-sheet .prj-msheet-head {
+        background: var(--surface, #fff);
+        border-radius: 14px 14px 0 0;
+        padding-top: 8px;
+    }
+    body[data-mobile-page="projects-view"] .prj-move-sheet .prj-msheet-body {
+        flex: 0 1 auto;
+        max-height: 60dvh;
+        background: var(--surface, #fff);
+    }
+    body[data-mobile-page="projects-view"] .prj-move-opt .prj-lane-kind { flex: 0 0 auto; }
+    body[data-mobile-page="projects-view"] .prj-move-opt span:last-child { min-width: 0; overflow-wrap: anywhere; }
+    body[data-mobile-page="projects-view"] .prj-move-opt[aria-current="true"] {
+        color: var(--text-dim, #888);
+        font-weight: 600;
+        cursor: default;
+    }
+    body[data-mobile-page="projects-view"] .prj-move-opt[aria-current="true"]::after {
+        content: "\2713";
+        margin-left: auto;
+        color: var(--prj-accent, #e11d48);
+    }
+
+    /* ---- 44h. A project's actions in a sticky footer (41i's shape) ---------
+       mobile.js moves the real back link, Edit and Delete into this bar as
+       icons. Fixed, bottom, z-index 1200 so the dialogs and the confirm sit
+       over it, env() for the iPhone home indicator, height measured into
+       --prj-vbar-h rather than assumed. The banner's ghost buttons are drawn
+       for a dark gradient, so in a white bar they get the house look: Edit
+       in the module's gradient, Delete in red, set apart on the right. */
+    body[data-mobile-page="projects-view"] .prj-view-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    body[data-mobile-page="projects-view"] .prj-vb-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 46px;
+        margin: 0;
+        padding: 0 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 8px;
+        box-sizing: border-box;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-decoration: none;
+    }
+    body[data-mobile-page="projects-view"] .prj-vb-btn svg { width: 20px; height: 20px; flex: 0 0 auto; }
+    body[data-mobile-page="projects-view"] .prj-back.prj-vb-btn {
+        flex: 0 0 46px;
+        border: 1px solid var(--border, #ddd);
+        background: var(--surface, #fff);
+        color: var(--text, #333);
+    }
+    body[data-mobile-page="projects-view"] #pvEdit.prj-vb-btn {
+        border: 0;
+        background: var(--prj-gradient, linear-gradient(135deg, #f43f5e, #7c3aed));
+        color: #fff;
+    }
+    body[data-mobile-page="projects-view"] #pvDelete.prj-vb-btn {
+        margin-left: 10px;
+        border: 1px solid #fecaca;
+        background: var(--surface, #fff);
+        color: #dc2626;
+    }
+    /* Template: an icon square like Back; hidden without the permission. */
+    body[data-mobile-page="projects-view"] #pvTemplate.prj-vb-btn {
+        flex: 0 0 46px;
+        border: 1px solid var(--border, #ddd);
+        background: var(--surface, #fff);
+        color: var(--text, #333);
+    }
+    body[data-mobile-page="projects-view"] #pvTemplate.prj-vb-btn span { display: none; }
+    body[data-mobile-page="projects-view"] #pvTemplate.prj-vb-btn[hidden] { display: none; }
+    /* Until the project has loaded (or when it was not found) there is
+       nothing to edit or delete - the banner is still [hidden] then. */
+    body[data-mobile-page="projects-view"]:has(#prjBanner[hidden]) #pvTemplate.prj-vb-btn,
+    body[data-mobile-page="projects-view"]:has(#prjBanner[hidden]) #pvEdit.prj-vb-btn,
+    body[data-mobile-page="projects-view"]:has(#prjBanner[hidden]) #pvDelete.prj-vb-btn { display: none; }
+
+    /* ---- 44i. The dialogs ---------------------------------------------------
+       Both are .modal-content, so LAYER 3 already makes them full-screen
+       sheets. Inside: the three method cards were 100px columns with their
+       descriptions wrapping a word a line, and the field grid two-up. Both
+       stack (a grid, so grid-template-columns - §27). */
+    body[data-mobile-module="projects"] .prj-method-cards,
+    body[data-mobile-module="projects"] .prj-form-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    body[data-mobile-module="projects"] .prj-method-card { min-height: 44px; }
+    body[data-mobile-module="projects"] .prj-form-banner { padding: 14px 16px; }
+    body[data-mobile-module="projects"] .prj-swatch { width: 32px; height: 32px; }
+    body[data-mobile-module="projects"] .prj-icon-choice { width: 40px; height: 40px; }
+
+    /* ====================================================================
+       44j-44p - the phase-2 tools (People, Scope, RACI, RAID, Gates), their
+       four dialogs and Projects -> Settings. Measured at 360x740 first:
+       nothing spilled off the document on any tab, and the faults were the
+       quieter kind - a five-column board two-up at 158px with its add
+       fields cut to "A deliverable o", a 700px RACI matrix showing ONE
+       member column beside a 220px sticky deliverable column (§11's "can
+       they, on this screen?"), RAID rows with their titles squeezed past an
+       84px type column, and every segmented picker and small button 24-27px
+       tall. The tab row (now up to nine tabs) already swipes - 44e.
+       ==================================================================== */
+
+    /* ---- 44j. People --------------------------------------------------------
+       Already one card per row (minmax(280px) fits once in 328) - but 280 is
+       a floor that a 300px phone would not meet (§14), so the track takes
+       minmax(0, 1fr). The remove cross is revealed and 36px by 44f, so the
+       name keeps clear of it; the role picker gets tap height. */
+    body[data-mobile-page="projects-view"] .prj-people-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+    }
+    body[data-mobile-page="projects-view"] .prj-person { padding: 12px 14px; }
+    body[data-mobile-page="projects-view"] .prj-person-name { padding-right: 36px; overflow-wrap: anywhere; }
+    body[data-mobile-page="projects-view"] .prj-pm-badge { display: inline-block; white-space: nowrap; }
+    body[data-mobile-page="projects-view"] .prj-person .prj-task-remove { top: 4px; right: 4px; }
+    body[data-mobile-page="projects-view"] .prj-role-select { min-height: 40px; width: 100%; }
+
+    /* ---- 44k. Scope: the MoSCoW board as one list in priority order -------
+       projects.css's own 1100px block puts the five columns two-up at 158px:
+       titles a word or two a line, each add field cut to "A deliverable o"
+       beside a 20px "+". One column per row reads as what the board IS - the
+       scope in priority order, Must first - with nothing to swipe to.
+       Changing a card's priority is the picker on each card (mobile.js 44d,
+       44c's sheet), because the drag between columns is a desktop gesture
+       here: the columns are a screen apart once stacked (§22). Tapping a
+       card still opens its dialog, whose Priority field does the same. */
+    body[data-mobile-page="projects-view"] .prj-moscow {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+    body[data-mobile-page="projects-view"] .prj-moscow-col { min-width: 0; min-height: 0; padding: 10px 10px 12px; }
+    body[data-mobile-page="projects-view"] .prj-moscow-col header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+    body[data-mobile-page="projects-view"] .prj-moscow-cards { min-height: 0; }
+    body[data-mobile-page="projects-view"] .prj-item {
+        position: relative;
+        min-height: 44px;
+        padding: 10px 52px 10px 12px;
+        box-sizing: border-box;
+    }
+    body[data-mobile-page="projects-view"] .prj-item-title { overflow-wrap: anywhere; }
+    /* §7: a lift-on-hover sticks after a tap. */
+    body[data-mobile-page="projects-view"] .prj-item:hover { transform: none; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    body[data-mobile-page="projects-view"] .prj-moscow-add { gap: 6px; }
+    body[data-mobile-page="projects-view"] .prj-moscow-add input { min-height: 40px; box-sizing: border-box; }
+    body[data-mobile-page="projects-view"] .prj-moscow-add .prj-icon-btn { flex: 0 0 40px; width: 40px; height: 40px; }
+    /* The priority picker: injected on a phone only (§25), in the card's
+       corner so the title keeps the width. It reuses 44c's button look. */
+    body[data-mobile-page="projects-view"] .prj-item .prj-move-btn {
+        position: absolute;
+        top: 50%;
+        right: 8px;
+        margin-top: -18px;
+    }
+
+    /* ---- 44l. RACI: one card per deliverable ------------------------------
+       700px of matrix in a 328px scroller, and the sticky 220px deliverable
+       column left room for ONE member at a time - so the comparison the
+       table exists for was not available on this screen either way (§11's
+       follow-up question). A RACI is read a deliverable at a time (who does
+       it, who owns it; the "nobody accountable" warning is per row), which
+       is a card feed. Each card: the deliverable, then its cells two-up,
+       each cell's button followed by the member's name - harvested from the
+       hidden header by mobile.js 44e, so no string is invented (§21) - into
+       its own attribute, not data-mobile-label, because the shared §21 rule
+       prints that one BEFORE the cell and here the name follows the button. The
+       button is the page's own: a tap still cycles R, A, C, I. */
+    body[data-mobile-page="projects-view"] .prj-raci-wrap {
+        overflow: visible;
+        background: none;
+        box-shadow: none;
+        border-radius: 0;
+    }
+    body[data-mobile-page="projects-view"] .prj-raci,
+    body[data-mobile-page="projects-view"] .prj-raci tbody { display: block; width: 100%; }
+    body[data-mobile-page="projects-view"] .prj-raci thead { display: none; }
+    body[data-mobile-page="projects-view"] .prj-raci tbody tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 10px;
+        margin-bottom: 10px;
+        padding: 12px;
+        border-radius: 12px;
+        background: var(--surface, #fff);
+        box-shadow: 0 1px 4px rgba(0,0,0,.06), 0 0 0 1px var(--border-soft, #eee);
+    }
+    body[data-mobile-page="projects-view"] .prj-raci tbody th.prj-raci-item {
+        grid-column: 1 / -1;
+        position: static;
+        min-width: 0;
+        padding: 0 0 4px;
+        border: 0;
+        background: none;
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-page="projects-view"] .prj-raci tbody td {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        text-align: left;
+    }
+    body[data-mobile-page="projects-view"] .prj-raci tbody td[data-prj-member]::after {
+        content: attr(data-prj-member);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        color: var(--text, #222);
+    }
+    body[data-mobile-page="projects-view"] .prj-raci-cell { flex: 0 0 40px; width: 40px; height: 40px; }
+    body[data-mobile-page="projects-view"] .prj-raci-cell:hover:not(:disabled) { transform: none; }
+
+    /* ---- 44m. RAID -----------------------------------------------------------
+       The layout is already one column (its own 1100px block); the heat map
+       fits at 328 with 40px squares. Left: a hover scale and fade that stick
+       after a tap (§7), a type filter wrapping 4 + 2 at 27px tall, and rows
+       whose titles were squeezed past an 84px type column. */
+    body[data-mobile-page="projects-view"] .prj-raid-layout { gap: 12px; }
+    body[data-mobile-page="projects-view"] .prj-heat-cell:hover { transform: none; opacity: .35; }
+    body[data-mobile-page="projects-view"] .prj-heat-cell.has:hover,
+    body[data-mobile-page="projects-view"] .prj-heat-cell.sel:hover { opacity: 1; }
+    body[data-mobile-page="projects-view"] .prj-heat-panel .prj-link[data-heat-clear] { min-height: 40px; }
+    /* The filter: three even columns (§10 - a grid lines up, flex-wrap
+       packs), every button tap height. */
+    body[data-mobile-page="projects-view"] .prj-raid-filters .prj-seg {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: 100%;
+        box-sizing: border-box;
+    }
+    body[data-mobile-page="projects-view"] .prj-raid-filters .prj-seg button {
+        min-width: 0;
+        min-height: 40px;
+        padding: 6px 4px;
+        overflow-wrap: anywhere;
+    }
+    body[data-mobile-page="projects-view"] .prj-raid-filters .prj-check { min-height: 40px; }
+    /* A row: the type as a kicker on the first line, the title the full
+       width below it, the score in the corner across both. */
+    body[data-mobile-page="projects-view"] .prj-raid-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2px 10px;
+        padding: 10px 12px;
+    }
+    body[data-mobile-page="projects-view"] .prj-raid-row:hover { transform: none; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+    body[data-mobile-page="projects-view"] .prj-raid-type { grid-column: 1; grid-row: 1; min-width: 0; }
+    body[data-mobile-page="projects-view"] .prj-raid-main { grid-column: 1; grid-row: 2; }
+    body[data-mobile-page="projects-view"] .prj-raid-title { overflow-wrap: anywhere; }
+    body[data-mobile-page="projects-view"] .prj-raid-score { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+
+    /* ---- 44n. Gates ----------------------------------------------------------
+       Already one column (its own 1100px block). Save and Decide were 24px
+       tall; the tolerance fields keep their 90px beside their labels. */
+    body[data-mobile-page="projects-view"] .prj-gates-grid { gap: 12px; }
+    body[data-mobile-page="projects-view"] #pvGates .set-actions .prj-btn,
+    body[data-mobile-page="projects-view"] .prj-gate .btn.sm {
+        min-height: 40px;
+        padding: 8px 16px;
+    }
+    body[data-mobile-page="projects-view"] .prj-tol input { min-height: 40px; box-sizing: border-box; }
+    body[data-mobile-page="projects-view"] .prj-gate { gap: 12px; }
+    body[data-mobile-page="projects-view"] .prj-gate .btn.sm { flex: 0 0 auto; }
+
+    /* ---- 44o. The four dialogs' segmented pickers --------------------------
+       LAYER 3 makes the dialogs sheets and 44b gives their fields 16px. The
+       RAID type picker wrapped 4 + 1 at 27px tall and the People one sat
+       left-aligned at 27px: both become even full-width rows of 40px
+       buttons (three across, so RAID's five are 3 + 2). */
+    body[data-mobile-module="projects"] .modal .prj-seg {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: 100%;
+        box-sizing: border-box;
+    }
+    body[data-mobile-module="projects"] .modal .prj-seg button {
+        min-width: 0;
+        min-height: 40px;
+        padding: 6px 4px;
+        overflow-wrap: anywhere;
+    }
+
+    /* ---- 44p. Projects -> Settings --------------------------------------------
+       The shared settings layer already answers the shell, the tabs and the
+       set-row grid (one column, 16px fields). One thing is this page's: the
+       role list's grip appears only on :hover (§26), so on a phone "Drag to
+       reorder" pointed at nothing. The row is draggable="true" - HTML5, the
+       kind §22 says iOS drives from a long press - so the grip is revealed
+       and given touch-action: none. */
+    body[data-mobile-page="settings"] .prj-role .prj-grip {
+        opacity: 1;
+        touch-action: none;
+        padding: 8px 2px;
+    }
+
+    /* ---- 44q. Asset targets (Overview) -------------------------------------
+       The cards are an auto-fill grid of 260px and already fall to one column.
+       The pencil was a 22px target - 40px here. The dialog's three-across
+       rows (Type / Where / Contains, Field / Is / Value) were 90px each: one
+       column. Its two pickers sat in 44o's three-column grid with a hole -
+       two across. The "what's left" table was five columns in a 340px sheet:
+       each row becomes a card with its labels (the td data-label idiom). */
+    body[data-mobile-page="projects-view"] .prj-tg-edit { min-width: 40px; min-height: 40px; justify-content: center; }
+    body[data-mobile-page="projects-view"] .prj-tg-left { min-height: 40px; }
+    body[data-mobile-module="projects"] #prjTargetModal .prj-form-grid { grid-template-columns: minmax(0, 1fr); }
+    body[data-mobile-module="projects"] #ptScope,
+    body[data-mobile-module="projects"] #ptlSeg { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    body[data-mobile-module="projects"] .prj-tg-table-wrap { max-height: none; border: none; }
+    body[data-mobile-module="projects"] .prj-tg-table thead { display: none; }
+    body[data-mobile-module="projects"] .prj-tg-table,
+    body[data-mobile-module="projects"] .prj-tg-table tbody,
+    body[data-mobile-module="projects"] .prj-tg-table tr,
+    body[data-mobile-module="projects"] .prj-tg-table td { display: block; width: 100%; box-sizing: border-box; }
+    body[data-mobile-module="projects"] .prj-tg-table tr { border: 1px solid var(--border, #e5e7eb); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
+    body[data-mobile-module="projects"] .prj-tg-table td { border: none; padding: 3px 0; display: flex; gap: 10px; overflow-wrap: anywhere; }
+    body[data-mobile-module="projects"] .prj-tg-table td:empty { display: none; }
+    body[data-mobile-module="projects"] .prj-tg-table td::before { content: attr(data-label); flex: 0 0 38%; color: var(--text-dim, #888); font-size: 12px; }
+    body[data-mobile-module="projects"] .prj-tg-table td:first-child { font-size: 15px; }
+    body[data-mobile-module="projects"] .prj-tg-table td:first-child::before { display: none; }
+
+    /* ---- 44r. Timeline and milestones (3.3.0) -------------------------------
+       A Gantt keeps its columns and scrolls, as the Tasks timeline does
+       (Mobile-Friendly-Tasks): it scrolls inside its own box (§2/§3), so the
+       page never widens. projects-timeline.js already narrows the name column
+       to 124px under 768px; here the STAGE pill leaves that column (the name is
+       what the reader needs), task names lose their indent, and the box is
+       allowed most of the screen's height rather than 100vh - 300px, which on
+       a phone left about four rows. Dragging is mouse-only (§22); a tap opens
+       the task, the stage or the milestone, so the drag hint is hidden. The
+       Overview's milestone rows wrap their state and Done under the name. */
+    body[data-mobile-page="projects-view"] .prj-tl-label .prj-lane-kind { display: none; }
+    body[data-mobile-page="projects-view"] .prj-tl-label.task { padding-left: 10px; }
+    /* 44g pins the Plan row's status dot absolutely; the Timeline's name column reuses the class. */
+    body[data-mobile-page="projects-view"] .prj-tl-label .prj-task-status { position: static; }
+    body[data-mobile-page="projects-view"] .prj-tl-label { font-size: 12.5px; padding: 0 8px; }
+    body[data-mobile-page="projects-view"] .prj-tl-scroll { max-height: 65vh; min-height: 280px; }
+    body[data-mobile-page="projects-view"] .prj-tl-drag-hint { display: none; }
+    body[data-mobile-page="projects-view"] .prj-tl-tools .btn { min-height: 40px; }
+    body[data-mobile-page="projects-view"] .prj-ms-row { flex-wrap: wrap; }
+    body[data-mobile-page="projects-view"] .prj-ms-row-main { flex-basis: calc(100% - 30px); }
+    body[data-mobile-page="projects-view"] .prj-ms-row-state { margin-left: 23px; }
+    body[data-mobile-page="projects-view"] .prj-ms-row .btn { margin-left: auto; min-height: 36px; }
+    body[data-mobile-page="projects-view"] .prj-ms-chip { min-height: 32px; }
+    /* RAID 3.3.0: the Escalated badge joins the row's grid (44m) under the title;
+       the dialog's inline rows (escalate, add an action) stack, each control full width. */
+    body[data-mobile-page="projects-view"] .prj-raid-esc { grid-column: 1; grid-row: 3; justify-self: start; }
+    body[data-mobile-module="projects"] .prj-raid-inline { flex-direction: column; align-items: stretch; }
+    body[data-mobile-module="projects"] .prj-raid-inline > * { width: 100%; flex: 0 0 auto; max-width: none; box-sizing: border-box; }
+    /* An action: dot, title and the unlink cross on one line, who / when under it.
+       44g pins .prj-task-status absolutely for Plan rows - not here. */
+    body[data-mobile-module="projects"] .prj-raid-action-list li { flex-wrap: wrap; }
+    body[data-mobile-module="projects"] .prj-raid-action-list .prj-task-status { position: static; order: 0; }
+    body[data-mobile-module="projects"] .prj-raid-action-list li a { order: 1; flex: 1 1 0; }
+    body[data-mobile-module="projects"] .prj-raid-action-list li .prj-task-remove { order: 2; min-width: 36px; min-height: 36px; }
+    body[data-mobile-module="projects"] .prj-raid-action-list li .prj-muted { order: 3; flex-basis: 100%; margin: 0 0 0 18px; }
+    body[data-mobile-module="projects"] .prj-raid-action-list li .prj-muted:empty { display: none; }
+
+    /* The Capacity page (3.3.0): the same scrolling shell as a project's page
+       (44a, §28) - no footer bar here, so ordinary bottom padding. The table
+       keeps its columns and scrolls sideways in its own box (§2/§3) with the
+       person column sticky; the weeks picker takes the full width. The Plan's
+       estimate box is always outlined on a phone (there is no hover to reveal it). */
+    /* The tutorial page (3.3.0, projects/tutorial.php): the Capacity shell; the map
+       drops to two columns and loses its lines at 560px (projects.css), and the
+       walk's Back / Next are full thumb height. */
+    body[data-mobile-page="projects-tutorial"] .prj-page {
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 12px 24px;
+    }
+    body[data-mobile-page="projects-tutorial"] .prj-tutorial-head h1 { font-size: 20px; }
+    body[data-mobile-page="projects-tutorial"] .prj-tour.is-walk .prj-tour-panel { order: -1; }
+    body[data-mobile-page="projects-tutorial"] .prj-tour-bar .prj-seg { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+    body[data-mobile-page="projects-tutorial"] .prj-tour-bar .prj-seg button,
+    body[data-mobile-page="projects-tutorial"] .prj-tour-nav .btn { min-height: 40px; }
+    body[data-mobile-page="projects-tutorial"] .prj-tour-method { width: 100%; }
+    body[data-mobile-page="projects-tutorial"] .prj-tour-method select { flex: 1; min-width: 0; }
+    body[data-mobile-page="projects-capacity"] .prj-page {
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 12px 24px;
+    }
+    body[data-mobile-page="projects-capacity"] .prj-cap-weeks { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    body[data-mobile-page="projects-capacity"] .prj-cap-weeks button { min-height: 40px; }
+    body[data-mobile-page="projects-capacity"] .prj-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    body[data-mobile-page="projects-capacity"] .prj-cap th.who { min-width: 132px; }
+    body[data-mobile-page="projects-capacity"] .prj-cap-name { max-width: 88px; }
+    body[data-mobile-page="projects-capacity"] .prj-cap-row { height: 48px; }
+    body[data-mobile-page="projects-view"] .prj-est-input { border-color: var(--border, #ddd); background: var(--surface, #fff); width: 64px; }
+    /* On the Plan row it joins the meta line under the title (44g's order 5), not the start of the row. */
+    body[data-mobile-page="projects-view"] .prj-task > .prj-est { order: 5; }
+    /* The portfolio's Sort and Cards / Roadmap (3.3.0) take their own row under New. */
+    body[data-mobile-page="projects-portfolio"] .prj-toolbar { flex-wrap: wrap; }
+    body[data-mobile-page="projects-portfolio"] .prj-toolbar-right { width: 100%; margin-left: 0; justify-content: space-between; }
+    body[data-mobile-page="projects-portfolio"] .prj-layout-seg button { min-height: 40px; }
+    body[data-mobile-page="projects-portfolio"] .prj-sort select { min-height: 40px; }
+    body[data-mobile-page="projects-view"] .prj-burn-controls { width: 100%; }
+    body[data-mobile-page="projects-view"] .prj-burn-stage { flex: 1 1 auto; max-width: none; min-height: 40px; }
+
+    /* ---- 44s. Gate checklists (3.3.0) ----------------------------------------
+       A gate's row held Decide beside its text, which now includes the checklist:
+       the checklist was squeezed to ~220px at 390. The text and checklist take the
+       width, and Decide wraps under them - after reading the checklist, which is
+       the order it is used in. Controls are 40px. */
+    body[data-mobile-page="projects-view"] .prj-gate { flex-wrap: wrap; }
+    body[data-mobile-page="projects-view"] .prj-gate-main { flex: 1 1 calc(100% - 30px); min-width: 0; }
+    body[data-mobile-page="projects-view"] .prj-gate > [data-gate] { margin-left: 26px; }
+    body[data-mobile-page="projects-view"] .prj-gc-head select,
+    body[data-mobile-page="projects-view"] .prj-gc-control select { min-height: 40px; }
+    body[data-mobile-page="projects-view"] .prj-gc-control .btn.sm { min-height: 40px; }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       LAYER 45 - Files
+       --------------------------------------------------------------------
+       Files is a fake Windows desktop: fixed-position windows, a taskbar,
+       a start menu, drag-to-resize. None of that is a phone control, so on
+       a phone there is no desktop at all (§11): files-desktop.js renders .fd-mobile,
+       a plain list of the same folders (tap a folder to go in, Back to come
+       out, tap a file to open it in the viewer), and this layer hides the desktop and
+       gives the list the house shell.
+
+         desktop    files.css has body.fd-body {height:100vh;overflow:hidden}
+                    and the navbar's on/auto-hide/off modes. Here: back to
+                    LAYER 2's 100dvh column, the header always shown (the
+                    person's auto-hide/off is a mouse setting), and the list
+                    the one scroller (§28: flex 1, min-height 0).
+         list bar   sticky, first child of the scroller (§5), one line (§13).
+         fields     every field 16px (§3) - the new-folder name dialog.
+         help/settings  the shared help layer and the settings shell already
+                    answer them.
+
+       45a desktop hidden, shell   45b list   45c fields   45d the viewer
+       ==================================================================== */
+
+    /* 45a - no desktop on a phone; the house shell instead (§2, §28). */
+    body[data-mobile-page="files-desktop"].fd-body { height: 100dvh; overflow: hidden; background: var(--app-bg); }
+    body[data-mobile-page="files-desktop"] .fd-navwrap { position: static !important; transform: none !important; display: block !important; flex-shrink: 0; box-shadow: none; }
+    body[data-mobile-page="files-desktop"] .fd-desktop,
+    body[data-mobile-page="files-desktop"] .fd-taskbar,
+    body[data-mobile-page="files-desktop"] .fd-startmenu,
+    body[data-mobile-page="files-desktop"] .fd-preview,
+    body[data-mobile-page="files-desktop"] .fd-navsensor { display: none !important; }
+    body[data-mobile-page="files-desktop"] .fd-mobile {
+        display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* 45b - the list: a sticky bar, then one row per folder or file. */
+    body[data-mobile-page="files-desktop"] .fdm-bar {
+        position: sticky; top: 0; z-index: 2;
+        display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+        background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    body[data-mobile-page="files-desktop"] .fdm-title { flex: 1; min-width: 0; font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    body[data-mobile-page="files-desktop"] .fdm-back,
+    body[data-mobile-page="files-desktop"] .fdm-btn {
+        flex: 0 0 auto; width: 44px; height: 44px; border: 0; border-radius: 8px;
+        background: transparent; color: var(--text); display: flex; align-items: center; justify-content: center;
+    }
+    body[data-mobile-page="files-desktop"] .fdm-back svg,
+    body[data-mobile-page="files-desktop"] .fdm-btn svg { width: 20px; height: 20px; }
+    body[data-mobile-page="files-desktop"] .fdm-list { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+    body[data-mobile-page="files-desktop"] .fdm-row {
+        display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px;
+        padding: 8px 16px; border: 0; border-bottom: 1px solid var(--border-soft);
+        background: var(--surface); color: var(--text); font: inherit; font-size: 15px; text-align: left;
+    }
+    body[data-mobile-page="files-desktop"] .fdm-row > svg { flex: 0 0 auto; }
+    body[data-mobile-page="files-desktop"] .fdm-name { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    body[data-mobile-page="files-desktop"] .fdm-meta { font-size: 12px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* 45c - fields at 16px so iOS does not zoom (§3); dialogs fit the screen. */
+    body[data-mobile-module="files"] input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=hidden]),
+    body[data-mobile-module="files"] select,
+    body[data-mobile-module="files"] textarea { font-size: 16px; }
+    body[data-mobile-page="files-desktop"] .fd-dialog { width: calc(100vw - 24px); }
+    body[data-mobile-page="files-desktop"] .fd-btn { min-height: 44px; }
+}
+
+@media (max-width: 768px) {
+    /* 45d - the viewer on a phone: full screen over the list, its own bar
+       with Back (files-viewer.js openPhone). Only ever created on a phone. */
+    body[data-mobile-page="files-desktop"] .fdm-viewer {
+        /* Above the header too (LAYER 1 lifts it): the viewer is full screen and
+           carries its own Back, so nothing may sit on top of that bar. */
+        position: fixed; inset: 0; z-index: 300000; display: flex; flex-direction: column; background: var(--surface);
+    }
+    body[data-mobile-page="files-desktop"] .fdm-viewer-bar {
+        display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-shrink: 0;
+        padding-top: calc(6px + env(safe-area-inset-top)); border-bottom: 1px solid var(--border);
+    }
+    body[data-mobile-page="files-desktop"] .fdm-viewer-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-bar { flex-wrap: wrap; }
+    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-name { display: none; }
+    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-btn { min-height: 40px; min-width: 40px; }
+    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-paper { padding: 20px 16px; min-height: 0; }
+    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-paperstage { padding: 8px; }
+    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-pdf { padding: 8px; }
 }

@@ -17,6 +17,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('tickets');
 
 $analystId = (int)$_SESSION['analyst_id'];
 
@@ -78,11 +79,29 @@ try {
         $accessibleDeptsStmt->closeCursor();
 
         if (empty($accessibleDepts)) {
-            // No accessible departments - just count unassigned
-            $totalCount = 0;
+            // TRAP: never short-circuit an empty department list to 0 - count "t.department_id IS NULL".
+            // Every team member sees no-department tickets (the branch below says so with
+            // "OR t.department_id IS NULL"); returning 0 here hid ALL of them, and an install with
+            // no departments yet showed 0 everywhere once someone joined a team. Applies to the
+            // three other empty-list branches below too. tests/team-counts-no-departments.php
+            $totalStmt = $conn->prepare("SELECT COUNT(*) FROM tickets t WHERE t.department_id IS NULL$ttSql");
+            $totalStmt->execute($ttParams);
+            $totalCount = (int)$totalStmt->fetchColumn();
+            $totalStmt->closeCursor();
+
             $departments = [];
             $deptStatusCounts = [];
-            $statusCounts = [];
+
+            $statusStmt = $conn->prepare(
+                "SELECT ts.name AS status, COUNT(*) as count
+                   FROM tickets t
+                   LEFT JOIN ticket_statuses ts ON ts.id = t.status_id
+                  WHERE t.department_id IS NULL$ttSql
+               GROUP BY ts.name"
+            );
+            $statusStmt->execute($ttParams);
+            $statusCounts = $statusStmt->fetchAll(PDO::FETCH_ASSOC);
+            $statusStmt->closeCursor();
         } else {
             // Build IN clause with the department IDs
             $deptIdPlaceholders = implode(',', array_fill(0, count($accessibleDepts), '?'));
@@ -205,7 +224,12 @@ try {
     // Unassigned-by-analyst count (tickets with no assigned analyst, within accessible depts)
     if ($hasTeamFilter) {
         if (empty($accessibleDepts)) {
-            $unassignedAnalystCount = 0;
+            // No departments linked: tickets with no department, as above.
+            $uaStmt = $conn->prepare("SELECT COUNT(*) FROM tickets t
+                                       WHERE t.assigned_analyst_id IS NULL AND t.department_id IS NULL$ttSql");
+            $uaStmt->execute($ttParams);
+            $unassignedAnalystCount = (int)$uaStmt->fetchColumn();
+            $uaStmt->closeCursor();
         } else {
             $deptIdPlaceholdersUA = implode(',', array_fill(0, count($accessibleDepts), '?'));
             $uaSql = "SELECT COUNT(*) FROM tickets t
@@ -247,7 +271,16 @@ try {
 
     if ($hasTeamFilter) {
         if (empty($accessibleDepts)) {
-            $unassignedAnalystStatusRows = [];
+            $uaStatusStmt = $conn->prepare(
+                "SELECT ts.name AS status, COUNT(*) as count
+                   FROM tickets t
+                   LEFT JOIN ticket_statuses ts ON ts.id = t.status_id
+                  WHERE t.assigned_analyst_id IS NULL AND t.department_id IS NULL$ttSql
+               GROUP BY ts.name"
+            );
+            $uaStatusStmt->execute($ttParams);
+            $unassignedAnalystStatusRows = $uaStatusStmt->fetchAll(PDO::FETCH_ASSOC);
+            $uaStatusStmt->closeCursor();
         } else {
             $uaStatusStmt = $conn->prepare(
                 "SELECT ts.name AS status, COUNT(*) as count
@@ -288,7 +321,7 @@ try {
     if ($hasTeamFilter) {
         $ownClause = "t.assigned_analyst_id = ? OR t.owner_id = ?";
         if (empty($accessibleDepts)) {
-            $deptJoinFilter = " AND ($ownClause)";
+            $deptJoinFilter = " AND (t.department_id IS NULL OR $ownClause)";
             $analystParams = [$analystId, $analystId];
         } else {
             $deptIn = implode(',', array_fill(0, count($accessibleDepts), '?'));
@@ -322,6 +355,30 @@ try {
         $analystStatusStmt->execute(array_merge($analystParams, $ttParams));
         $analystStatusCounts = $analystStatusStmt->fetchAll(PDO::FETCH_ASSOC);
         $analystStatusStmt->closeCursor();
+    }
+
+    // Which analysts get a folder (GH #176). On a multi-company install the list
+    // was every active analyst, so one client's analysts saw another client's by
+    // name. Now: those who can access the company being viewed ("All companies"
+    // = any company the viewer can access), plus the viewer, plus anyone holding
+    // tickets in scope - their name is already on those tickets, and dropping
+    // their folder would stop the analyst folders adding up to the tickets.
+    // TRAP: decide access with getAccessibleTenantIds(), never a copy of its rule in SQL.
+    //   It unions the analyst's own grants with every team's; a second copy drifts.
+    if (isMultiTenant($conn)) {
+        $viewScope = isActiveTenantAll($conn)
+            ? getAccessibleTenantIds($conn, $analystId)
+            : [getActiveTenantId($conn, $analystId)];
+        $shown = [];
+        foreach ($analystCounts as $row) {
+            $aid = (int)$row['id'];
+            if ($aid === $analystId || (int)$row['count'] > 0
+                || array_intersect($viewScope, getAccessibleTenantIds($conn, $aid))) {
+                $shown[$aid] = true;
+            }
+        }
+        $analystCounts = array_values(array_filter($analystCounts, fn($r) => isset($shown[(int)$r['id']])));
+        $analystStatusCounts = array_values(array_filter($analystStatusCounts, fn($r) => isset($shown[(int)$r['analyst_id']])));
     }
 
     // Master list of active statuses — drives the folder UI
@@ -486,6 +543,23 @@ try {
                 'count'    => (int)$tm['count'],
                 'statuses' => $statuses,
             ];
+        }
+
+        // Team folders: everyone's, or only your own (GH #176, Tickets -> Settings ->
+        // General). 'mine' keeps the teams you belong to, plus any team holding
+        // tickets you can already see - their tickets are in your list, and hiding
+        // the folder would stop the team folders adding up. Administrators always
+        // see every team. Display only: nobody loses sight of a ticket.
+        $teamFoldersMode = 'all';
+        try {
+            $teamFoldersMode = (string)($conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'ticket_team_folders'")->fetchColumn() ?: 'all');
+        } catch (Exception $e) { /* setting absent: today's behaviour */ }
+        if ($teamFoldersMode === 'mine' && !analystIsAdmin($conn, $analystId)) {
+            $mineStmt = $conn->prepare("SELECT team_id FROM analyst_teams WHERE analyst_id = ?");
+            $mineStmt->execute([$analystId]);
+            $myTeams = array_flip(array_map('intval', $mineStmt->fetchAll(PDO::FETCH_COLUMN)));
+            $teamStructure = array_values(array_filter($teamStructure,
+                fn($tm) => isset($myTeams[$tm['id']]) || $tm['count'] > 0));
         }
 
         // "Unassigned" in team grouping means NO TEAM — the same shape the other

@@ -15,6 +15,8 @@
  * See the wiki: Directory sync — importing people from Active Directory.
  */
 
+require_once __DIR__ . '/sso_identity.php';   // SSO profile-sync lock (#155)
+
 /**
  * Every person field that a human may edit through the UI or the API.
  *
@@ -167,6 +169,8 @@ const USER_SELF_EDITABLE_FIELDS = [
  * this code does not recognise, or one that has since been deleted - keeps the
  * old, safe answer: the person signs in elsewhere, and no local password may
  * be planted on the account.
+ *
+ * @param mixed $providerId  the person's users.auth_provider_id; null or 0 means not linked
  */
 function userSignsInElsewhere(PDO $conn, $providerId): bool
 {
@@ -211,6 +215,7 @@ function userSourceFilter($source): array
  * never reveals how many people another company has in a shared directory.
  *
  * @param string $tenantSql  activeTenantFilter() for alias `u`
+ * @param array $tenantArgs  the bound values that go with $tenantSql
  */
 function userSourcesInScope(PDO $conn, string $tenantSql, array $tenantArgs): array
 {
@@ -250,7 +255,11 @@ function userSourcesInScope(PDO $conn, string $tenantSql, array $tenantArgs): ar
 const PORTAL_PROFILE_FIELDS_SETTING       = 'portal_profile_fields';
 const PORTAL_PROFILE_ADDRESS_BOOK_SETTING = 'portal_profile_address_book';
 
-/** A raw system_settings value, or null when it has never been saved. */
+/**
+ * A raw system_settings value, or null when it has never been saved.
+ *
+ * @param string $key  the system_settings key, e.g. PORTAL_PROFILE_FIELDS_SETTING
+ */
 function portalProfileSettingRaw(PDO $conn, string $key): ?string
 {
     try {
@@ -290,6 +299,7 @@ function portalProfileAddressBookWrites(PDO $conn): bool
  * How the portal treats one person's contact details. One answer, used by both
  * the read and the save, so the form and the endpoint cannot disagree.
  *
+ * @param int $userId  the portal user (users.id) whose details are being read or saved
  * @return array|null null when the person does not exist. Otherwise:
  *   fields       - what the portal offers them (the administrator's choice)
  *   locked       - of those, the ones they may not change: a directory owns them
@@ -301,8 +311,11 @@ function portalProfileAddressBookWrites(PDO $conn): bool
 function portalProfileAccess(PDO $conn, int $userId): ?array
 {
     $cols = implode(', ', array_map(function ($f) { return 'u.' . $f; }, USER_PERSON_FIELDS));
+    // profile_sync_mode only once Database Verification has added it (#155) -
+    // naming a missing column here would break My Account for everyone.
+    $syncCol = ssoJitColumnsReady($conn) ? 'p.profile_sync_mode' : 'NULL AS profile_sync_mode';
     $st = $conn->prepare(
-        "SELECT u.is_managed, u.display_name, p.protocol, p.carddav_write_back, $cols
+        "SELECT u.is_managed, u.display_name, p.protocol, p.carddav_write_back, $syncCol, $cols
            FROM users u
       LEFT JOIN auth_providers p ON p.id = u.auth_provider_id
           WHERE u.id = ?"
@@ -329,6 +342,19 @@ function portalProfileAccess(PDO $conn, int $userId): ?array
         ? array_values(array_intersect($fields, userDirectoryOwnedFields($row['protocol'] ?? null, false)))
         : [];
 
+    // SSO profile sync (discussion #155): an OIDC provider set to 'always'
+    // rewrites these on every sign-in, so an edit here would be undone at the
+    // next one. Only the five it actually writes - never employee_id or
+    // manager_id, which OIDC sync does not touch. Kept apart from $managed,
+    // which means "a directory import owns this record" and which the CardDAV
+    // write-back rules above depend on.
+    if (ssoProfileSyncLocks($row['protocol'] ?? null, $row['profile_sync_mode'] ?? null)) {
+        $locked = array_values(array_unique(array_merge(
+            $locked,
+            array_intersect($fields, USER_CARDDAV_OWNED)   // the same five: job_title, department, office, phone, mobile
+        )));
+    }
+
     return [
         'fields'       => $fields,
         'locked'       => $locked,
@@ -346,6 +372,7 @@ function portalProfileAccess(PDO $conn, int $userId): ?array
  * destroys that distinction — the same trap `users.email` documents at length,
  * one column over.
  *
+ * @param string $field  the users column, one of USER_PERSON_FIELDS; 'manager_id' is read as an id
  * @param  mixed  $value  raw from the request body
  * @return string|int|null
  */
@@ -369,6 +396,9 @@ function userPersonFieldValue(string $field, $value)
  * then walk it forever. Checked here because the database cannot express it.
  *
  * Returns true if the assignment is SAFE.
+ *
+ * @param int $userId  the person (users.id) being given a manager
+ * @param ?int $managerId  the proposed manager's users.id; null (no manager) is always safe
  */
 function userManagerIsSafe(PDO $conn, int $userId, ?int $managerId): bool
 {

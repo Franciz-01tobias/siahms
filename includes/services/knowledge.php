@@ -51,6 +51,8 @@ class KnowledgeService
      * file an article against a third, and an API key inherits the same scope.
      *
      * Returns the id to store, or null for shared.
+     *
+     * @param mixed $raw  the tenant_id from the request; '', null or 0 means shared with every company
      */
     private static function resolveTenantId(PDO $conn, ActorContext $ctx, $raw): ?int
     {
@@ -81,6 +83,8 @@ class KnowledgeService
      * is the kind of silent miss that makes people distrust the whole tree. Same
      * reasoning as resolveAudience() rejecting a bogus value on the write path
      * while the read path normalises.
+     *
+     * @param mixed $raw  the folder_id from the request; '', null or 0 means the root
      */
     private static function resolveFolderId(PDO $conn, $raw): ?int
     {
@@ -106,6 +110,8 @@ class KnowledgeService
      * down to 'internal' so a bad value can never widen visibility — a WRITE with a
      * bogus audience is a caller bug and is rejected outright, so nobody silently
      * saves an article as internal while believing they published it.
+     *
+     * @param mixed $raw  the audience from the request, an Audience value; '' or null means internal
      */
     private static function resolveAudience($raw): string
     {
@@ -127,6 +133,8 @@ class KnowledgeService
      * A SHARED article (tenant_id NULL) is everyone's, so anyone may act on it.
      * companyScope null = every company (single-company install, or an all-access
      * analyst/key).
+     *
+     * @param int $articleId  the knowledge article being changed
      */
     private static function assertCanAccessArticle(PDO $conn, ActorContext $ctx, int $articleId): void
     {
@@ -148,7 +156,12 @@ class KnowledgeService
     //  Articles
     // ======================================================================
 
-    /** Create (no id) or update (id present) an article. Returns ['id','created','embedding_generated']. */
+    /**
+     * Create (no id) or update (id present) an article. Returns ['id','created','embedding_generated'].
+     *
+     * @param array $in  id (absent = new), title, body_html, owner_id, next_review_date, tenant_id, audience, folder_id,
+     *     tags, is_published, save_as_version - on update only keys sent are changed
+     */
     public static function saveArticle(PDO $conn, ActorContext $ctx, array $in): array
     {
         if (!empty($in['id'])) {
@@ -329,6 +342,8 @@ class KnowledgeService
      * article they just saved, and an install that has not run Database
      * Verification has no corpus at all, which is a normal state rather than a
      * fault.
+     *
+     * @param int $articleId  the knowledge article to reindex (or remove from the index)
      */
     private static function reindexForSearch(PDO $conn, int $articleId): void
     {
@@ -341,7 +356,11 @@ class KnowledgeService
         }
     }
 
-    /** Soft-archive an article (move to recycle bin). 404 if gone, 409 if already archived. */
+    /**
+     * Soft-archive an article (move to recycle bin). 404 if gone, 409 if already archived.
+     *
+     * @param int $id  the knowledge article to move to the recycle bin
+     */
     public static function archiveArticle(PDO $conn, ActorContext $ctx, int $id): int
     {
         $row = self::loadArticleRow($conn, $id);
@@ -363,7 +382,11 @@ class KnowledgeService
         return $id;
     }
 
-    /** Restore an archived article. 404 if gone, 409 if not archived. */
+    /**
+     * Restore an archived article. 404 if gone, 409 if not archived.
+     *
+     * @param int $id  the archived knowledge article to restore
+     */
     public static function restoreArticle(PDO $conn, ActorContext $ctx, int $id): int
     {
         self::loadArticleRow($conn, $id);
@@ -382,7 +405,11 @@ class KnowledgeService
         return $id;
     }
 
-    /** Permanently delete an archived article (+ versions/tags, orphan-tag cleanup). 404/409 guards. */
+    /**
+     * Permanently delete an archived article (+ versions/tags, orphan-tag cleanup). 404/409 guards.
+     *
+     * @param int $id  the archived knowledge article to delete for good
+     */
     public static function purgeArticle(PDO $conn, ActorContext $ctx, int $id): int
     {
         $row = self::loadArticleRow($conn, $id);
@@ -410,6 +437,11 @@ class KnowledgeService
     //  Internals
     // ======================================================================
 
+    /**
+     * Loads one Knowledge article; throws not found when it does not exist.
+     *
+     * @param int $id  the knowledge article to load
+     */
     private static function loadArticleRow(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare("SELECT * FROM knowledge_articles WHERE id = ?");
@@ -421,7 +453,12 @@ class KnowledgeService
         return $row;
     }
 
-    /** Replace the article's tag set: get-or-create each name, relink (mirrors knowledge_save.php). */
+    /**
+     * Replace the article's tag set: get-or-create each name, relink (mirrors knowledge_save.php).
+     *
+     * @param int $articleId  the knowledge article whose tags are replaced
+     * @param array $tags  tag names; blanks and names over 50 characters are skipped, new names are created
+     */
     private static function setTags(PDO $conn, int $articleId, array $tags): void
     {
         $conn->prepare("DELETE FROM knowledge_article_tags WHERE article_id = ?")->execute([$articleId]);
@@ -446,6 +483,10 @@ class KnowledgeService
      * Regenerate the article's OpenAI embedding — best-effort, after commit,
      * silent on failure. Returns true only if an embedding was stored. No-ops
      * unless decryptValue() is loaded and a key is configured (see class header).
+     *
+     * @param int $articleId  the knowledge article
+     * @param string $title  the article's title
+     * @param string $body  the article's body as HTML; tags are stripped before it is sent
      */
     private static function updateEmbedding(PDO $conn, int $articleId, string $title, string $body): bool
     {
@@ -493,7 +534,11 @@ class KnowledgeService
         return false;
     }
 
-    /** Validate an analyst id exists + is active (throwing twin of apiResolveAnalyst). */
+    /**
+     * Validate an analyst id exists + is active (throwing twin of apiResolveAnalyst).
+     *
+     * @param int $analystId  the analyst named as the article's owner - not the actor
+     */
     private static function resolveAnalyst(PDO $conn, int $analystId): void
     {
         $stmt = $conn->prepare("SELECT full_name FROM analysts WHERE id = ? AND is_active = 1");
@@ -503,7 +548,12 @@ class KnowledgeService
         }
     }
 
-    /** Validate an optional YYYY-MM-DD date (throwing twin of apiParseDateOnly). */
+    /**
+     * Validate an optional YYYY-MM-DD date (throwing twin of apiParseDateOnly).
+     *
+     * @param mixed $value  the date from the request, Y-m-d; null or '' gives null
+     * @param string $field  the request field name, used in the error message
+     */
     private static function parseDateOnly($value, string $field): ?string
     {
         if ($value === null || $value === '') {

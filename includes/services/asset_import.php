@@ -57,6 +57,8 @@ class AssetImportService
         'hostname', 'asset_type_id', 'asset_status_id', 'location_id',
         'manufacturer', 'model', 'service_tag',
         'supplier_id', 'purchase_date', 'purchase_cost', 'order_number', 'warranty_expiry',
+        'cost_centre_id',   // GH #160 - by code, see resolveLookups()
+        'lease_start', 'lease_expiry',
     ];
 
     /**
@@ -99,6 +101,7 @@ class AssetImportService
 
     const MAX_ROWS = 5000;
 
+    /** True when the asset import tables exist (after Database Verification). Cached per request. */
     public static function schemaReady(PDO $conn): bool
     {
         static $ready = null;
@@ -124,6 +127,9 @@ class AssetImportService
      * first column's header arrives as "\xEF\xBB\xBFHostname" — which maps to
      * nothing, so the identity column silently goes missing and every row looks
      * new. It is the single most common reason a first import "does nothing".
+     *
+     * @param string $path  the CSV file on disk
+     * @param array $config  delimiter (default ','), has_header (default true; false names the columns 'Column 1'...)
      */
     public static function readCsv(string $path, array $config = []): array
     {
@@ -190,7 +196,11 @@ class AssetImportService
         return ['headers' => $headers, 'rows' => $rows, 'truncated' => $truncated];
     }
 
-    /** "Serial", "Serial" -> "Serial", "Serial (2)". */
+    /**
+     * "Serial", "Serial" -> "Serial", "Serial (2)".
+     *
+     * @param array $headers  the trimmed header cells in column order
+     */
     private static function dedupeHeaders(array $headers): array
     {
         $seen = [];
@@ -212,6 +222,8 @@ class AssetImportService
      *
      * A suggestion only — every one is shown and overridable. Getting this
      * wrong silently is exactly what the preview exists to catch.
+     *
+     * @param array $headers  the file's column names, as returned by readCsv()
      */
     public static function suggestMapping(PDO $conn, array $headers, int $analystId): array
     {
@@ -234,6 +246,9 @@ class AssetImportService
             'purchase_cost' => ['purchasecost', 'cost', 'price', 'value'],
             'order_number' => ['ordernumber', 'ponumber', 'po'],
             'warranty_expiry' => ['warrantyexpiry', 'warranty', 'warrantyend', 'warrantyends', 'warrantyexpires', 'warrantyuntil'],
+            'cost_centre_id' => ['costcentre', 'costcenter', 'costcentrecode', 'costcentercode', 'costcode', 'kostenstelle'],
+            'lease_start' => ['leasestart', 'leasestartdate', 'leasebegins', 'leasefrom', 'leasestarts'],
+            'lease_expiry' => ['leaseend', 'leaseenddate', 'leaseends', 'leaseexpiry', 'leaseexpires', 'leaseto', 'leaseuntil', 'returndate'],
         ];
 
         $fields = AssetFieldsService::catalogue($conn, $analystId);
@@ -274,7 +289,10 @@ class AssetImportService
     /**
      * Import rows. `$mode` of 'preview' does every check and writes nothing.
      *
+     * @param array $rows  source rows, each [column name => value] plus '__row' (the line number in the file)
+     * @param array $mapping  [column name => null | {target_kind: 'core'|'field', target_key}]
      * @param array $opts profile-shaped settings; see asset_import_profiles.
+     * @param string $mode  'live' writes; anything else ('preview') checks every row and writes no asset
      * @return array the run row, with counts.
      */
     public static function run(PDO $conn, ActorContext $ctx, array $rows, array $mapping, array $opts, string $mode = 'preview'): array
@@ -378,6 +396,11 @@ class AssetImportService
     /**
      * One row: map it, find it, write it.
      *
+     * @param array $row  one source row, [column name => value] plus '__row'
+     * @param array $mapping  [column name => null | {target_kind: 'core'|'field', target_key}]
+     * @param array $opts  the run's profile-shaped settings (defaults, write_mode, on_unknown_option...)
+     * @param array $matchKeys  the asset columns to identify a row by, in order, e.g. ['hostname', 'service_tag']
+     * @param bool $live  true to write, false for a preview
      * @return array ['action', 'asset_id'?, 'source_ref'?, 'display_name'?, 'detail'?]
      */
     private static function processRow(
@@ -441,9 +464,26 @@ class AssetImportService
      *
      * A numeric value is still accepted as an id, so an export from another
      * FreeITSM keeps working.
+     *
+     * @param array $core  [core column => value] from applyMapping(); names in lookup columns become ids
      */
     private static function resolveLookups(PDO $conn, array $core, ?int $tenantId): array
     {
+        // A cost centre (GH #160) is matched by its CODE in the asset's company -
+        // always, never as an id: codes like "0010" are digits too, and reading one
+        // as an id would charge the asset to a different cost centre entirely.
+        // An inactive one is refused by AssetsService, with its code in the message.
+        if (isset($core['cost_centre_id']) && $core['cost_centre_id'] !== '') {
+            require_once __DIR__ . '/../cost_centre_assign.php';
+            $raw = trim((string)$core['cost_centre_id']);
+            $cc = costCentreByCode($conn, costCentreRecordTenant($conn, $tenantId), $raw);
+            if (!$cc) {
+                throw new ServiceError('validation', 'invalid_field',
+                    "No cost centre with the code \"{$raw}\" in this company. Add it in System -> Cost Centres first, or map that column to nothing.");
+            }
+            $core['cost_centre_id'] = $cc['id'];
+        }
+
         $lookups = [
             'asset_type_id'   => ['asset_types',        'asset type'],
             'asset_status_id' => ['asset_status_types', 'asset status'],
@@ -486,7 +526,11 @@ class AssetImportService
         return $core;
     }
 
-    /** Not every lookup table is company-scoped (suppliers may not be). */
+    /**
+     * Not every lookup table is company-scoped (suppliers may not be).
+     *
+     * @param string $table  a lookup table name from the fixed list in resolveLookups() - never user input
+     */
     private static function hasTenantColumn(PDO $conn, string $table): bool
     {
         static $cache = [];
@@ -501,7 +545,12 @@ class AssetImportService
         return $cache[$table];
     }
 
-    /** Split a source row into core columns and custom field values. */
+    /**
+     * Split a source row into core columns and custom field values.
+     *
+     * @param array $row  one source row, [column name => value]
+     * @param array $mapping  [column name => null | {target_kind: 'core'|'field', target_key}]
+     */
     private static function applyMapping(array $row, array $mapping): array
     {
         $core = [];
@@ -529,6 +578,9 @@ class AssetImportService
      * 🔑 The first key that yields exactly one match wins. A key that yields
      * MANY stops the search and reports the conflict — falling through to the
      * next key would quietly resolve an ambiguity nobody had looked at.
+     *
+     * @param array $core  the row's [core column => value] after lookups
+     * @param array $matchKeys  the asset columns to try, in order - each from MATCH_KEYS, so safe to put in SQL
      */
     private static function findMatch(PDO $conn, array $core, array $matchKeys, ?int $tenantId): array
     {
@@ -551,6 +603,19 @@ class AssetImportService
         return ['count' => 0, 'id' => null, 'key' => null, 'value' => null];
     }
 
+    /**
+     * Creates an asset from one import row, with its custom fields, or describes it on a
+     * preview.
+     *
+     * Throws when nothing is mapped to the asset name.
+     *
+     * @param array $core  the row's [core column => value] after lookups and defaults
+     * @param array $fields  the row's [custom field_key => value]
+     * @param array $opts  the run's settings (source_name, apply_field_set_id, on_unknown_option...)
+     * @param string $ref  the value the row is identified by, for the log
+     * @param ?string $name  the asset name for the log
+     * @param bool $live  true to create, false to describe it for a preview
+     */
     private static function applyCreate(
         PDO $conn, ActorContext $ctx, array $core, array $fields, array $opts,
         string $ref, ?string $name, ?int $tenantId, bool $live): array
@@ -575,6 +640,19 @@ class AssetImportService
                 'display_name' => $name, 'detail' => self::describe($core, $written)];
     }
 
+    /**
+     * Updates an existing asset from one import row, or describes it on a preview.
+     *
+     * Works out the changes first so a preview and a live run report the same thing; in
+     * fill mode only empty values are written, and the name is never changed.
+     *
+     * @param array $core  the row's [core column => value] after lookups and defaults
+     * @param array $fields  the row's [custom field_key => value]
+     * @param array $opts  the run's settings; write_mode 'fill' (default) only fills blanks, anything else overwrites
+     * @param string $ref  the value the row is identified by, for the log
+     * @param ?string $name  the asset name for the log
+     * @param bool $live  true to write, false to describe the changes for a preview
+     */
     private static function applyUpdate(
         PDO $conn, ActorContext $ctx, int $assetId, array $core, array $fields,
         array $opts, string $ref, ?string $name, bool $live): array
@@ -642,6 +720,9 @@ class AssetImportService
      * A field the asset does not carry is REPORTED, not silently dropped — a
      * column mapped to a field that the asset's type does not have is a mapping
      * mistake somebody needs to know about.
+     *
+     * @param array $fields  [custom field_key => value] to write
+     * @param array $opts  the run's settings; on_unknown_option decides unknown dropdown values
      */
     private static function writeFields(PDO $conn, ActorContext $ctx, int $assetId, array $fields, array $opts): array
     {
@@ -681,6 +762,10 @@ class AssetImportService
     /**
      * A dropdown value the option list does not have (§6.7).
      * reject -> the row fails; add -> the option is created.
+     *
+     * @param array $def  the dropdown field's definition, with id and label
+     * @param string $value  the value from the source row
+     * @param array $opts  the run's settings; on_unknown_option 'add' creates the option, anything else ('reject') throws
      */
     private static function resolveOption(PDO $conn, array $def, string $value, array $opts): ?string
     {
@@ -702,7 +787,11 @@ class AssetImportService
             "\"{$value}\" is not one of the choices for '{$def['label']}' (" . implode(', ', $allowed) . ').');
     }
 
-    /** The profile's field set, applied to everything it touches. */
+    /**
+     * The profile's field set, applied to everything it touches.
+     *
+     * @param array $opts  the run's settings; apply_field_set_id names the set to attach, if any
+     */
     private static function attachProfileSet(PDO $conn, ActorContext $ctx, int $assetId, array $opts): void
     {
         if (empty($opts['apply_field_set_id'])) {
@@ -717,6 +806,11 @@ class AssetImportService
      * ⚠️ Only ever compares against assets THIS PROFILE has touched before.
      * Comparing against the whole estate would deactivate every asset the
      * spreadsheet was never about.
+     *
+     * @param int $runId  the asset_import_runs row being finished
+     * @param int $profileId  the import profile whose earlier live runs are compared
+     * @param array $touchedIds  the asset ids this run created, updated or found unchanged
+     * @param string $policy  on_missing: 'deactivate' sets an inactive status, anything else only logs it
      */
     private static function handleMissing(
         PDO $conn, int $runId, int $profileId, array $touchedIds, string $policy, ?int $tenantId): int
@@ -760,6 +854,10 @@ class AssetImportService
         return $n;
     }
 
+    /**
+     * The asset status to give an asset that has dropped out of the source - the first
+     * active status whose name contains retired, disposed or inactive.
+     */
     private static function inactiveStatusId(PDO $conn, ?int $tenantId): ?int
     {
         $stmt = $conn->prepare(
@@ -777,7 +875,12 @@ class AssetImportService
     //  The holding area
     // ====================================================================
 
-    /** Rows that could not be imported and have not been dealt with. */
+    /**
+     * Rows that could not be imported and have not been dealt with.
+     *
+     * @param ?int $runId  only this run's parked rows, or null for every live run
+     * @param int $limit  the most rows to return
+     */
     public static function unresolved(PDO $conn, ?int $runId = null, int $limit = 200): array
     {
         if (!self::schemaReady($conn)) {
@@ -805,7 +908,11 @@ class AssetImportService
         return $rows;
     }
 
-    /** Mark a parked row dealt with — either retried successfully, or dismissed. */
+    /**
+     * Mark a parked row dealt with — either retried successfully, or dismissed.
+     *
+     * @param int $entryId  the asset_import_run_entries row to mark dealt with
+     */
     public static function resolveEntry(PDO $conn, int $entryId): void
     {
         $conn->prepare("UPDATE asset_import_run_entries SET resolved_datetime = UTC_TIMESTAMP() WHERE id = ?")
@@ -816,6 +923,12 @@ class AssetImportService
     //  Run bookkeeping
     // ====================================================================
 
+    /**
+     * Records the start of an import run and returns its id.
+     *
+     * @param array $opts  the run's settings; profile_id, source_name and stored_file are recorded
+     * @param string $mode  'live' or 'preview' (anything not 'live' is stored as preview)
+     */
     private static function startRun(PDO $conn, ActorContext $ctx, array $opts, string $mode, ?int $tenantId): int
     {
         // ⚠️ started_datetime is written EXPLICITLY as UTC_TIMESTAMP(), not left
@@ -839,6 +952,13 @@ class AssetImportService
         return (int)$conn->lastInsertId();
     }
 
+    /**
+     * Marks an import run finished with its counts, and returns the run.
+     *
+     * @param int $runId  the asset_import_runs row to finish
+     * @param int $seen  how many source rows were read
+     * @param array $counts  [action => count] for every ACTIONS key
+     */
     private static function finishRun(PDO $conn, int $runId, int $seen, array $counts): array
     {
         $stmt = $conn->prepare(
@@ -855,6 +975,11 @@ class AssetImportService
         return self::loadRun($conn, $runId);
     }
 
+    /**
+     * Loads one import run with its counts as integers; throws not found when it does not exist.
+     *
+     * @param int $runId  the asset_import_runs row to load
+     */
     public static function loadRun(PDO $conn, int $runId): array
     {
         $stmt = $conn->prepare("SELECT * FROM asset_import_runs WHERE id = ?");
@@ -870,7 +995,13 @@ class AssetImportService
         return $row;
     }
 
-    /** Every row's outcome for a run. */
+    /**
+     * Every row's outcome for a run.
+     *
+     * @param int $runId  the asset_import_runs row whose log to read
+     * @param ?string $action  only entries with this ACTIONS value, or null for all
+     * @param int $limit  the most entries to return
+     */
     public static function runEntries(PDO $conn, int $runId, ?string $action = null, int $limit = 500): array
     {
         $sql = "SELECT * FROM asset_import_run_entries WHERE run_id = ?";
@@ -885,6 +1016,17 @@ class AssetImportService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Writes one row of an import run's log.
+     *
+     * @param int $runId  the asset_import_runs row the entry belongs to
+     * @param ?int $rowNo  the source line number; null for an entry with no source row (a missing asset)
+     * @param string $action  one of ACTIONS
+     * @param ?string $ref  the value the row is identified by (cut to 255 characters)
+     * @param ?string $name  the asset name (cut to 255 characters)
+     * @param ?string $detail  what happened, in words (cut to 1000 characters)
+     * @param ?array $raw  the source row, kept so it can be corrected and retried; '__row' is dropped
+     */
     private static function logEntry(
         PDO $conn, int $runId, ?int $rowNo, string $action, ?int $assetId,
         ?string $ref, ?string $name, ?string $detail, ?array $raw): void
@@ -914,6 +1056,7 @@ class AssetImportService
     //  Small helpers
     // ====================================================================
 
+    /** An asset's id and core columns, for comparing with an import row. */
     private static function loadCore(PDO $conn, int $assetId): array
     {
         $cols = implode(', ', array_map(static fn($c) => "`{$c}`", self::CORE_TARGETS));
@@ -922,6 +1065,12 @@ class AssetImportService
         return $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /**
+     * The first of $keys that has a non-blank value in $core, or null.
+     *
+     * @param array $core  [core column => value]
+     * @param array $keys  the columns to try, in order
+     */
     private static function firstNonEmpty(array $core, array $keys): ?string
     {
         foreach ($keys as $k) {
@@ -932,19 +1081,37 @@ class AssetImportService
         return null;
     }
 
+    /**
+     * The value an import row is matched on - the first non-blank of the match keys.
+     *
+     * @param array $row  one source row, [column name => value]
+     * @param array $mapping  [column name => null | {target_kind, target_key}]
+     * @param array $matchKeys  the asset columns a row is identified by, in order
+     */
     private static function refOf(array $row, array $mapping, array $matchKeys): ?string
     {
         [$core] = self::applyMapping($row, $mapping);
         return self::firstNonEmpty($core, $matchKeys);
     }
 
+    /**
+     * The asset name an import row maps to.
+     *
+     * @param array $row  one source row, [column name => value]
+     * @param array $mapping  [column name => null | {target_kind, target_key}]
+     */
     private static function nameOf(array $row, array $mapping): ?string
     {
         [$core] = self::applyMapping($row, $mapping);
         return $core['hostname'] ?? null;
     }
 
-    /** A human sentence describing what a row did, for the log. */
+    /**
+     * A human sentence describing what a row did, for the log.
+     *
+     * @param array $core  [core column => value] written or to be written
+     * @param array $fields  [custom field_key => value], possibly with '__ignored' listing keys that went nowhere
+     */
     private static function describe(array $core, array $fields): string
     {
         $ignored = $fields['__ignored'] ?? null;
@@ -965,6 +1132,11 @@ class AssetImportService
         return $out;
     }
 
+    /**
+     * A value cut to 40 characters for the run log.
+     *
+     * @param mixed $v  the value to show
+     */
     private static function short($v): string
     {
         $s = (string)$v;

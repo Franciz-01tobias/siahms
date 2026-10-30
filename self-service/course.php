@@ -71,7 +71,7 @@ $translationNamespaces = ['common', 'self-service', 'lms'];
 
 // The player's own stylesheet, in the HEAD with the portal's own rather than
 // half way down the body.
-$pageHead = '<link rel="stylesheet" href="../assets/css/lms.css?v=10">';
+$pageHead = '<link rel="stylesheet" href="../assets/css/lms.css?v=11">';
 
 $pageStyles = <<<'CSS'
 .cr-bar {
@@ -89,7 +89,7 @@ $pageStyles = <<<'CSS'
     font-size: 13px; padding: 6px 12px; border-radius: 6px; text-decoration: none;
     border: 1px solid var(--border, #e5e7eb); color: var(--text, #333); background: var(--surface, #fff);
 }
-.cr-frame { width: 100%; height: calc(100vh - 48px - 49px); border: 0; display: block; background: var(--surface, #fff); }
+.cr-frame { width: 100%; height: calc(100vh - var(--ss-chrome, 48px) - 49px); border: 0; display: block; background: var(--surface, #fff); }
 
 /* The player's stylesheet is shared with the analyst app and paints in the
    analyst accent, so inside the portal its Next button and progress bar came

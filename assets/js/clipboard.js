@@ -28,6 +28,11 @@
 (function () {
     'use strict';
 
+    /**
+     * Copies text with execCommand('copy') through a hidden-but-rendered textarea, then restores the page's selection.
+     *
+     * @return true only if the browser reports the copy worked
+     */
     function legacyCopy(text) {
         var ta = document.createElement('textarea');
         ta.value = text;
@@ -64,6 +69,8 @@
     }
 
     /**
+     * Copies text to the clipboard - the Clipboard API where the page is a secure context, otherwise (or if it is refused) the execCommand fallback.
+     *
      * @param  {string} text
      * @return {Promise<boolean>} true only if the text is genuinely on the clipboard
      */

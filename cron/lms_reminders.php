@@ -29,6 +29,8 @@ header('Content-Type: text/plain; charset=utf-8');
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/lms_reminders.php';
+require_once __DIR__ . '/../includes/encryption.php';   // decryptValue() for the token
+require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $isCli = (PHP_SAPI === 'cli');
 
@@ -45,7 +47,9 @@ if (!$isCli) {
     try {
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'lms_reminder_cron_token'");
         $st->execute();
-        $expected = (string)$st->fetchColumn();
+        // #182: the token is stored encrypted like every *_cron_token, and was
+        // compared still encrypted - so even a seeded one could never match.
+        $expected = (string)decryptValue((string)$st->fetchColumn());
     } catch (Throwable $e) {
         $expected = '';
     }
@@ -57,18 +61,29 @@ if (!$isCli) {
     // guard becomes an invitation.
     if ($expected === '' || !hash_equals($expected, $given)) {
         http_response_code(403);
+        JobRun::refused($conn, 'lms_reminders', $expected === '' ? 'token not set' : 'wrong token');
         echo "Forbidden\n";
         exit(1);
     }
 }
+$trigger = JobRun::scheduledTrigger();
 
 $settings = lmsReminderSettings($conn);
 if ($settings[LMS_REM_ENABLED] !== '1') {
+    JobRun::skipped($conn, 'lms_reminders', $trigger, 'Training reminders are switched off.');
     echo "Training reminders are switched off (LMS > Settings > Reminders). Nothing to do.\n";
     exit(0);
 }
 
-$r = lmsRemindersRun($conn, false);
+$runId = JobRun::start($conn, 'lms_reminders', $trigger);
+try {
+    $r = lmsRemindersRun($conn, false);
+} catch (Throwable $e) {
+    JobRun::fail($conn, $runId, $e);
+    echo "Training reminders failed: " . $e->getMessage() . "\n";
+    exit(1);
+}
+lmsRemindersJobFinish($conn, $runId, $r);
 
 printf(
     "Training reminders: %d sent, %d already sent, %d with no email address, %d failed.%s\n",

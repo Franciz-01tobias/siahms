@@ -171,6 +171,7 @@ return [
         'categories_heading' => 'Hendingskategoriar',
         'categories_intro' => 'Kategoriar er ryggrada i organiseringa av kalenderen. Kvar kategori har eit namn og ein farge, slik at hendingar er lette å kjenne att med eitt blikk. Sidepanelet viser alle tilgjengelege kategoriar med avkryssingsboksar &mdash; fjern krysset for ein kategori for å skjule desse hendingane i kalenderen.',
         'categories_certificates' => '<strong>Sertifikat</strong> &mdash; hald oversikt over utløpsdatoar for SSL/TLS-sertifikat, kodesigneringssertifikat og andre legitimasjonar som må fornyast med jamne mellomrom',
+        'categories_projects' => '<strong>Prosjekt</strong> &mdash; fylt av Prosjekt-modulen: sluttdatoen til kvart aktive prosjekt og slutten på kvar open etappe, fase eller sprint, haldne i takt med planen',
         'categories_contracts' => '<strong>Kontraktar</strong> &mdash; før opp fornyingsdatoar for leverandørkontraktar, lisensutløp og milepælar for SLA-gjennomgang, slik at ingenting går ut på dato utan at du veit om det',
         'categories_maintenance' => '<strong>Vedlikehald</strong> &mdash; planlegg vedlikehaldsvindauge for tenarar, nettverksutstyr og infrastruktur. Laget ditt og andre involverte ser nøyaktig når det er venta nedetid',
         'categories_meetings' => '<strong>Møte</strong> &mdash; før opp daglege statusmøte, CAB-møte, leverandørsamtalar og andre faste avtalar som gjeld IT-drifta',

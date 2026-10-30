@@ -116,6 +116,24 @@
     border: 1px solid var(--warning-border, #f0d9a8);
 }
 
+/* The Help Centre (GH #177): on a knowledge article only. One line saying what
+   customers get, and a tag per document saying whether it is one of them. */
+.fd-hc {
+    font-size: 12.5px; line-height: 1.5; padding: 8px 11px; border-radius: 6px; margin: 0 0 10px;
+    background: var(--info-bg, #eff6ff); color: var(--info-text, #1e40af);
+    border: 1px solid var(--info-border, #bfdbfe);
+}
+.fd-hc a { color: inherit; font-weight: 600; }
+.fd-hc-tag {
+    font-size: 11px; padding: 1px 7px; border-radius: 10px; display: inline-block; margin-top: 5px;
+    background: var(--success-bg, #dcfce7); color: var(--success-text, #166534);
+    border: 1px solid var(--success-border, #bbf7d0);
+}
+.fd-hc-tag.fd-hc-hidden {
+    background: var(--surface-2, #f3f4f6); color: var(--text-muted, #666);
+    border-color: var(--border, #e0e0e0);
+}
+
 .fd-actions { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
 .fd-btn {
     padding: 4px 9px; font-size: 12px; border-radius: 5px; cursor: pointer;

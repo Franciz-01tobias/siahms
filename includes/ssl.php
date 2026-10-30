@@ -43,6 +43,10 @@
  *      store is correct and we must not override it with a possibly-staler copy.
  */
 if (!function_exists('sslResolveCaBundle')) {
+    /**
+     * The CA bundle file to verify TLS with: PHP's configured one, else the bundled
+     * cacert.pem on Windows, else '' for the system store.
+     */
     function sslResolveCaBundle(): string
     {
         foreach (['curl.cainfo', 'openssl.cafile'] as $iniKey) {
@@ -76,6 +80,12 @@ if (!function_exists('sslResolveCaBundle')) {
  *                            the CA bundle so it works out of the box.
  */
 if (!function_exists('sslApplyCurl')) {
+    /**
+     * Applies the install's TLS verification setting, and the CA bundle, to a cURL handle.
+     *
+     * @param mixed $ch  the cURL handle from curl_init() (CurlHandle, or a resource before PHP 8)
+     * @param bool $alwaysVerify  true verifies even when SSL_VERIFY_PEER is off - for traffic that must never go unverified
+     */
     function sslApplyCurl($ch, bool $alwaysVerify = false): void
     {
         $verify = $alwaysVerify || (defined('SSL_VERIFY_PEER') ? (bool)SSL_VERIFY_PEER : true);

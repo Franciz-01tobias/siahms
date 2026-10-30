@@ -23,9 +23,9 @@ $translationNamespaces = ['common', 'system'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.companies.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.companies.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* System module accent (blue-grey) — pin the generic --accent so shared
            components (inbox.css, header) pick up the module colour. */
@@ -42,7 +42,12 @@ $translationNamespaces = ['common', 'system'];
 
         /* flex:1 (not a hardcoded 100vh-48px height) so a taller/wrapping header
            can't push the page off-screen — see the tickets/settings fix (#535). */
-        .companies-container { flex: 1; overflow-y: auto; padding: 30px 20px; }
+        /* 🔴 ...but flex:1 only means something inside a flex column. inbox.css
+           makes body 100vh + overflow:hidden and leaves it a block, so the
+           container grew to its content and the bottom of the page (public
+           email domains) was cut off with no way to scroll to it. */
+        body { display: flex; flex-direction: column; }
+        .companies-container { flex: 1; min-height: 0; overflow-y: auto; padding: 30px 20px; }
         .page-title { font-size: 22px; font-weight: 600; color: var(--text, #333); margin: 0 0 6px 0; }
         .page-subtitle { font-size: 13px; color: var(--text-dim, #888); margin: 0 0 30px 0; }
 
@@ -150,7 +155,7 @@ $translationNamespaces = ['common', 'system'];
         [data-theme-mode="dark"] .sso-banner { filter: brightness(0.82); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="companies">
     <?php include '../includes/header.php'; ?>
@@ -189,7 +194,7 @@ $translationNamespaces = ['common', 'system'];
         <!-- Public email domains (global). Only meaningful once there's more
              than one company (shared-intake routing), so hidden at N=1. -->
         <div class="settings-card" id="freemailCard" style="display: none;">
-            <h2 class="card-title"><?php echo htmlspecialchars(t('system.companies.freemail_title')); ?></h2>
+            <h2 id="freemail" class="card-title"><?php echo htmlspecialchars(t('system.companies.freemail_title')); ?></h2>
             <p class="card-hint"><?php echo htmlspecialchars(t('system.companies.freemail_hint')); ?></p>
 
             <div id="customFreemailList"></div>
@@ -226,6 +231,19 @@ $translationNamespaces = ['common', 'system'];
                            style="text-transform: uppercase; max-width: 200px;"
                            placeholder="<?php echo htmlspecialchars(t('system.companies.field_code_placeholder')); ?>">
                     <div class="hint" id="codeDerivedHint" style="margin-top:6px;"></div>
+                </div>
+                <?php /* The company's own logo - shown on the Files desktop for people
+                         working in this company. Existing companies only: it saves
+                         straight away through api/system/tenant_logo.php. */ ?>
+                <div class="form-field" id="logoSection" style="display: none;">
+                    <label><?php echo htmlspecialchars(t('system.companies.logo_label')); ?></label>
+                    <div class="hint"><?php echo htmlspecialchars(t('system.companies.logo_hint')); ?></div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
+                        <div id="coLogoPreview" style="width:120px;height:48px;border:1px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-dim);overflow:hidden;"></div>
+                        <input type="file" id="coLogoFile" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" style="display:none;">
+                        <button type="button" class="btn btn-secondary" id="coLogoPick"><?php echo htmlspecialchars(t('system.companies.logo_choose')); ?></button>
+                        <button type="button" class="btn btn-secondary" id="coLogoRemove" style="display:none;"><?php echo htmlspecialchars(t('system.companies.logo_remove')); ?></button>
+                    </div>
                 </div>
                 <div class="checkbox-field">
                     <input type="checkbox" id="fActive" checked>
@@ -382,6 +400,43 @@ $translationNamespaces = ['common', 'system'];
 
     // ---------- Modal ----------
     const modal = document.getElementById('companyModal');
+    function renderCoLogo(url) {
+        const box = document.getElementById('coLogoPreview');
+        box.innerHTML = '';
+        if (url) {
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = '';
+            img.style.cssText = 'max-width:100%;max-height:100%;';
+            box.appendChild(img);
+        } else {
+            box.textContent = window.t('system.companies.logo_none');
+        }
+        document.getElementById('coLogoRemove').style.display = url ? '' : 'none';
+    }
+    async function sendCoLogo(fd) {
+        fd.append('tenant_id', document.getElementById('companyId').value);
+        const r = await fetch(API + 'system/tenant_logo.php', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (!j.success) { showToast(j.error, 'error'); return; }
+        renderCoLogo(j.logo_url);
+        const co = companies.find(x => String(x.id) === document.getElementById('companyId').value);
+        if (co) co.logo_url = j.logo_url;
+    }
+    document.getElementById('coLogoPick').addEventListener('click', () => document.getElementById('coLogoFile').click());
+    document.getElementById('coLogoFile').addEventListener('change', function () {
+        if (!this.files[0]) return;
+        const fd = new FormData();
+        fd.append('logo', this.files[0]);
+        this.value = '';
+        sendCoLogo(fd);
+    });
+    document.getElementById('coLogoRemove').addEventListener('click', () => {
+        const fd = new FormData();
+        fd.append('remove', '1');
+        sendCoLogo(fd);
+    });
+
     function openModal(c) {
         document.getElementById('modalTitle').textContent = c ? window.t('system.companies.modal_edit_title') : window.t('system.companies.modal_add_title');
         document.getElementById('companyId').value = c ? c.id : '';
@@ -400,6 +455,11 @@ $translationNamespaces = ['common', 'system'];
         updateDerivedHint(c || null);
         codeInput.oninput = function () { updateDerivedHint(c || null); };
         document.getElementById('fName').oninput = function () { updateDerivedHint(c || null); };
+
+        // Company logo (Files desktop): existing companies only.
+        const logoSection = document.getElementById('logoSection');
+        logoSection.style.display = (c && c.id) ? '' : 'none';
+        renderCoLogo(c ? c.logo_url : null);
 
         // Email domains: only when editing an existing company on a multi-company
         // install (shared-intake routing is meaningless with a single company).
@@ -770,6 +830,6 @@ $translationNamespaces = ['common', 'system'];
 
     loadCompanies();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -29,12 +29,21 @@ try {
         $ssoTenants = $ssoAdminConn->query("SELECT id, name FROM tenants WHERE is_active = 1 ORDER BY is_default DESC, name")->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Exception $e) { $ssoTenants = []; $ssoMultiTenant = false; }
-$ssoColspan = $ssoMultiTenant ? 7 : 6; // providers table column count (Company col only at N>1; Type always)
+// The teams a group can be mapped to (3.5.0).
+$ssoTeams = [];
+try { $ssoTeams = $ssoAdminConn->query("SELECT id, name, is_active FROM teams ORDER BY name")->fetchAll(PDO::FETCH_ASSOC); } catch (Throwable $e) { $ssoTeams = []; }
+$ssoColspan = $ssoMultiTenant ? 8 : 7; // providers table column count (Company col only at N>1; Type always)
 
 // The redirect URI the admin must register in their IdP. Built from the
 // deployment's BASE_URL so it's correct whatever path the app is served at.
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = requestScheme();
 $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 'api/auth/oidc_callback.php';
+// Where each sign-out asks the provider to send people back. 🔴 Must stay the
+// same as auth/analyst_logout.php and self-service/logout.php build them:
+// Keycloak and Okta refuse any address not registered exactly, and the portal
+// one was missing from the setup guide, so portal sign-out failed there.
+$signoutAnalystUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL;
+$signoutPortalUri  = $signoutAnalystUri . 'self-service/login.php';
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -42,9 +51,9 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.sso.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.sso.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* System module accent (blue-grey) — pin the generic --accent to it. */
         body {
@@ -114,6 +123,8 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
            item that scrolls its own overflow, and without it a long URI refuses
            to shrink and pushes the card sideways. */
         .redirect-uri-box { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 10px; }
+        .signout-heading { margin: 22px 0 4px; font-size: 14px; color: var(--text, #333); }
+        .signout-label { font-size: 12px; font-weight: 600; color: var(--text-dim, #666); margin-bottom: -4px; }
         .redirect-uri-box code { align-self: stretch; min-width: 0; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 4px; padding: 8px 10px; font-size: 12px; color: var(--text, #333); overflow-x: auto; white-space: nowrap; }
 
         /* Providers table */
@@ -133,6 +144,10 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
         .status-badge.on { background: #e8f5e9; color: #2e7d32; }
         .status-badge.off { background: #f0f0f0; color: #999; }
         .badge-jit { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e3f2fd; color: #1565c0; }
+        .badge-sync { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+        .badge-sync.always { background: #e0f2fe; color: #0369a1; }
+        .badge-sync.initial { background: #fef3c7; color: #b45309; }
+        .badge-sync.never { background: #f3f4f6; color: #6b7280; }
         /* Row actions are ICONS, matching System → Integrations and the rest of
            the settings screens. Three words per row ("Configure Delete") read as
            prose competing with the data; three small glyphs read as controls.
@@ -162,11 +177,29 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
            header and footer are rigid flex items, and the body takes the slack
            with `min-height: 0` so it is allowed to shrink below its content and
            scroll. `overflow: hidden` on the box keeps the corners clean. */
-        .sso-modal { background: var(--surface, #fff); border-radius: 10px; width: 560px; max-width: 92vw; max-height: 90vh;
+        /* 3.5.0: near full-screen - a provider has a lot to set (Ed). */
+        .sso-modal { background: var(--surface, #fff); border-radius: 10px; width: 1000px; max-width: 96vw; height: 90vh; max-height: 90vh;
             display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
         .sso-modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border-soft, #eee); font-size: 16px; font-weight: 600; color: var(--text, #333); flex: 0 0 auto; }
         .sso-modal-body { padding: 20px 24px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
         .sso-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border-soft, #eee); display: flex; justify-content: flex-end; gap: 10px; flex: 0 0 auto; }
+        .sso-tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--border-soft, #eee); flex: 0 0 auto; overflow-x: auto; }
+        .sso-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 12px 14px; cursor: pointer; font-size: 14px; color: var(--text-muted, #666); white-space: nowrap; }
+        .sso-tabs button.active { color: var(--accent, #0078d4); border-bottom-color: var(--accent, #0078d4); font-weight: 600; }
+        .sso-tab-intro { margin: 0 0 12px; font-size: 13px; color: var(--text-muted, #666); }
+        .sso-guide-link { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin: 0 0 18px; padding: 10px 12px; border-radius: 6px;
+                          background: var(--info-bg, #e0f2fe); border: 1px solid var(--info-border, #b9def5); font-size: 13px; }
+        .sso-guide-link a { font-weight: 600; color: var(--info-text, #075985); text-decoration: none; }
+        .sso-guide-link a:hover { text-decoration: underline; }
+        .sso-guide-link span { color: var(--info-text, #075985); opacity: .85; }
+        .sso-map { width: 100%; border-collapse: collapse; }
+        .sso-map th { text-align: left; font-size: 12px; font-weight: 600; color: var(--text-muted, #666); padding: 4px 6px; }
+        .sso-map td { padding: 4px 6px; vertical-align: top; }
+        .sso-map td:last-child { width: 1%; }
+        .sso-map input, .sso-map select { width: 100%; box-sizing: border-box; }
+        .sso-group-warn { font-size: 12px; color: var(--warning-text, #92400e); margin-top: 4px; }
+        .sso-group-warn:empty { display: none; }
+        .sso-group-picker select, .sso-group-picker input { width: 100%; box-sizing: border-box; }
         /* The four attribute mappings sit two-up; they collapse to one column on narrow screens. */
         /* Encryption + port share a row: the select flexes, the port stays narrow.
            Needed because .form-field select is width:100%, which would otherwise
@@ -222,6 +255,9 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
         [data-theme-mode="dark"] .status-badge.on { background: #16331f; color: #86efac; }
         [data-theme-mode="dark"] .status-badge.off { background: #2a3039; color: #8b95a3; }
         [data-theme-mode="dark"] .badge-jit { background: #14324a; color: #7fc4f5; }
+        [data-theme-mode="dark"] .badge-sync.always { background: #0c2d48; color: #7dd3fc; }
+        [data-theme-mode="dark"] .badge-sync.initial { background: #3b2a0c; color: #fde68a; }
+        [data-theme-mode="dark"] .badge-sync.never { background: #262930; color: #9ca3af; }
         [data-theme-mode="dark"] .jit-off { color: #6b7280; }
         [data-theme-mode="dark"] .table-action-btn { color: #90a4ae; }
         [data-theme-mode="dark"] .table-action-btn.danger:hover { background: #3a1a1d; color: #fca5a5; }
@@ -229,7 +265,7 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
         [data-theme-mode="dark"] .test-result.err { background: #3a1a1d; color: #fca5a5; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="sso">
     <?php include '../includes/header.php'; ?>
@@ -240,7 +276,7 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
 
         <!-- Global switches -->
         <div class="settings-card">
-            <h3><?php echo htmlspecialchars(t('system.sso.global_heading')); ?></h3>
+            <h3 id="global"><?php echo htmlspecialchars(t('system.sso.global_heading')); ?></h3>
             <p class="card-desc"><?php echo htmlspecialchars(t('system.sso.global_desc')); ?></p>
             <div class="load-error" id="globalLoadError" hidden>
                 <strong><?php echo htmlspecialchars(t('system.sso.global_load_failed')); ?></strong>
@@ -266,12 +302,22 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
 
         <!-- Redirect URI -->
         <div class="settings-card">
-            <h3><?php echo htmlspecialchars(t('system.sso.redirect_heading')); ?></h3>
+            <h3 id="redirect"><?php echo htmlspecialchars(t('system.sso.redirect_heading')); ?></h3>
             <p class="card-desc"><?php echo htmlspecialchars(t('system.sso.redirect_desc')); ?></p>
             <div class="redirect-uri-box">
                 <code id="redirectUri"><?php echo htmlspecialchars($redirectUri); ?></code>
                 <button class="btn btn-secondary" id="copyRedirectBtn"><?php echo htmlspecialchars(t('system.sso.copy')); ?></button>
             </div>
+
+            <h4 class="signout-heading"><?php echo htmlspecialchars(t('system.sso.signout_heading')); ?></h4>
+            <p class="card-desc"><?php echo htmlspecialchars(t('system.sso.signout_desc')); ?></p>
+            <?php foreach ([['signout_analyst', $signoutAnalystUri], ['signout_portal', $signoutPortalUri]] as [$soKey, $soUri]): ?>
+            <div class="redirect-uri-box">
+                <span class="signout-label"><?php echo htmlspecialchars(t('system.sso.' . $soKey)); ?></span>
+                <code><?php echo htmlspecialchars($soUri); ?></code>
+                <button class="btn btn-secondary copy-signout-btn" type="button"><?php echo htmlspecialchars(t('system.sso.copy')); ?></button>
+            </div>
+            <?php endforeach; ?>
         </div>
 
         <!-- Providers -->
@@ -283,13 +329,13 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
                      the far right and left the three cards on this page with
                      their buttons in three different places. */ ?>
             <div class="providers-head">
-                <h3 style="margin:0;"><?php echo htmlspecialchars(t('system.sso.providers_heading')); ?></h3>
+                <h3 id="providers" style="margin:0;"><?php echo htmlspecialchars(t('system.sso.providers_heading')); ?></h3>
                 <p class="card-desc" style="margin:4px 0 0;"><?php echo htmlspecialchars(t('system.sso.providers_desc')); ?></p>
                 <button class="add-btn" id="addProviderBtn"><?php echo htmlspecialchars(t('system.sso.add')); ?></button>
             </div>
             <table class="providers">
                 <thead>
-                    <tr><th><?php echo htmlspecialchars(t('system.sso.col_name')); ?></th><?php if ($ssoMultiTenant): ?><th><?php echo htmlspecialchars(t('system.sso.col_company')); ?></th><?php endif; ?><th><?php echo htmlspecialchars(t('system.sso.col_type')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_issuer')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_status')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_auto_create')); ?></th><th style="text-align:right;"><?php echo htmlspecialchars(t('system.sso.col_actions')); ?></th></tr>
+                    <tr><th><?php echo htmlspecialchars(t('system.sso.col_name')); ?></th><?php if ($ssoMultiTenant): ?><th><?php echo htmlspecialchars(t('system.sso.col_company')); ?></th><?php endif; ?><th><?php echo htmlspecialchars(t('system.sso.col_type')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_issuer')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_status')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_sync')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_auto_create')); ?></th><th style="text-align:right;"><?php echo htmlspecialchars(t('system.sso.col_actions')); ?></th></tr>
                 </thead>
                 <tbody id="providersBody">
                     <tr class="empty-row"><td colspan="<?php echo $ssoColspan; ?>"><?php echo htmlspecialchars(t('system.sso.loading')); ?></td></tr>
@@ -302,8 +348,18 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
     <div class="sso-modal-overlay" id="providerModal">
         <div class="sso-modal">
             <div class="sso-modal-header" id="modalTitle"><?php echo htmlspecialchars(t('system.sso.modal_add_title')); ?></div>
+            <div class="sso-tabs" id="ssoTabs" role="tablist">
+                <button type="button" data-tab="connection" class="active"><?php echo htmlspecialchars(t('system.sso.tab_connection')); ?></button>
+                <button type="button" data-tab="signin"><?php echo htmlspecialchars(t('system.sso.tab_signin')); ?></button>
+                <button type="button" data-tab="groups"><?php echo htmlspecialchars(t('system.sso.tab_groups')); ?></button>
+                <button type="button" data-tab="portal"><?php echo htmlspecialchars(t('system.sso.tab_portal')); ?></button>
+            </div>
             <div class="sso-modal-body">
                 <input type="hidden" id="providerId">
+                <?php /* 3.5.0: four tab panels. An OIDC provider shows one at a time
+                         (ssoApplyTabs()); LDAP and CardDAV, which use few of them,
+                         show every panel as one page with no tab bar. */ ?>
+                <div class="sso-tab-panel" data-tab="connection">
                 <div class="form-field">
                     <label><?php echo htmlspecialchars(t('system.sso.field_protocol')); ?></label>
                     <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_protocol_hint')); ?></div>
@@ -526,19 +582,133 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
                          "create the person the first time they sign in" describes
                          something that cannot happen — an address book signs
                          nobody in. */ ?>
-                <div class="checkbox-field" id="autoCreateField">
-                    <input type="checkbox" id="fAutoCreate">
-                    <div class="cb-label"><strong><?php echo htmlspecialchars(t('system.sso.cb_autocreate')); ?></strong><span><?php echo htmlspecialchars(t('system.sso.cb_autocreate_desc')); ?></span></div>
-                </div>
+                </div><!-- /connection -->
+                <div class="sso-tab-panel" data-tab="signin">
                 <!-- OIDC-only: LDAP has no email_verified claim to require. -->
                 <div class="checkbox-field" id="requireVerifiedField">
                     <input type="checkbox" id="fRequireVerified">
                     <div class="cb-label"><strong><?php echo htmlspecialchars(t('system.sso.cb_verified')); ?></strong><span><?php echo t('system.sso.cb_verified_desc', ['claim' => '<code>email_verified: true</code>', 'claim_false' => '<code>email_verified: false</code>']); ?></span></div>
                 </div>
+                <div class="form-field" id="profileSyncModeField">
+                    <label><?php echo htmlspecialchars(t('system.sso.field_profile_sync_mode')); ?></label>
+                    <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_profile_sync_mode_hint')); ?></div>
+                    <select id="fProfileSyncMode" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:4px;background:var(--surface,#fff);color:var(--text,#333);">
+                        <option value="never"><?php echo htmlspecialchars(t('system.sso.profile_sync_never')); ?></option>
+                        <option value="initial"><?php echo htmlspecialchars(t('system.sso.profile_sync_initial')); ?></option>
+                        <option value="always"><?php echo htmlspecialchars(t('system.sso.profile_sync_always')); ?></option>
+                    </select>
+                </div>
+                <div class="checkbox-field" id="autoCreateField">
+                    <input type="checkbox" id="fAutoCreate">
+                    <div class="cb-label"><strong><?php echo htmlspecialchars(t('system.sso.cb_autocreate_users')); ?></strong><span><?php echo htmlspecialchars(t('system.sso.cb_autocreate_users_desc')); ?></span></div>
+                </div>
+                <div class="checkbox-field" id="autoCreateAnalystsField">
+                    <input type="checkbox" id="fAutoCreateAnalysts">
+                    <div class="cb-label"><strong><?php echo htmlspecialchars(t('system.sso.cb_autocreate_analysts')); ?></strong><span><?php echo htmlspecialchars(t('system.sso.cb_autocreate_analysts_desc')); ?></span></div>
+                </div>
                 <div class="form-field" id="defaultModulesField">
                     <label><?php echo htmlspecialchars(t('system.sso.field_default_modules')); ?></label>
                     <div class="hint"><?php echo t('system.sso.field_default_modules_hint', ['example' => '<code>tickets, knowledge</code>', 'strong' => '<strong>' . htmlspecialchars(t('system.sso.field_default_modules_strong')) . '</strong>']); ?></div>
                     <input type="text" id="fDefaultModules" placeholder="<?php echo htmlspecialchars(t('system.sso.field_default_modules_placeholder')); ?>">
+                </div>
+                <?php /* 3.5.0: companies for auto-created analysts - multi-company only. */ ?>
+                <?php if ($ssoMultiTenant): ?>
+                <div class="form-field" id="jitCompanyField">
+                    <label for="fJitCompany"><?php echo htmlspecialchars(t('system.sso.field_jit_company')); ?></label>
+                    <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_jit_company_hint')); ?></div>
+                    <select id="fJitCompany" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:4px;background:var(--surface,#fff);color:var(--text,#333);">
+                        <option value="all"><?php echo htmlspecialchars(t('system.sso.jit_company_all')); ?></option>
+                        <option value="provider"><?php echo htmlspecialchars(t('system.sso.jit_company_provider')); ?></option>
+                        <option value="none"><?php echo htmlspecialchars(t('system.sso.jit_company_none')); ?></option>
+                    </select>
+                </div>
+                <?php endif; ?>
+                <div class="form-field" id="analystFallbackField">
+                    <label><?php echo htmlspecialchars(t('system.sso.field_fallback_mode')); ?></label>
+                    <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_fallback_mode_hint')); ?></div>
+                    <select id="fAnalystFallbackMode" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:4px;background:var(--surface,#fff);color:var(--text,#333);">
+                        <option value="confirm"><?php echo htmlspecialchars(t('system.sso.fallback_mode_confirm')); ?></option>
+                        <option value="redirect"><?php echo htmlspecialchars(t('system.sso.fallback_mode_redirect')); ?></option>
+                        <option value="block"><?php echo htmlspecialchars(t('system.sso.fallback_mode_block')); ?></option>
+                    </select>
+                </div>
+                </div><!-- /signin -->
+                <div class="sso-tab-panel" data-tab="groups">
+                <?php /* SSO groups (3.5.0) - includes/sso_claims.php. Everything here is
+                         chosen, not typed: groups come from what the provider has sent at
+                         sign-in (sso_groups_seen) and what a group gives comes from a team. */ ?>
+                <div id="claimMappingFields">
+                    <p class="sso-tab-intro"><?php echo htmlspecialchars(t('system.sso.claims_intro')); ?></p>
+                    <?php /* Ed: someone new to this gets lost - point them at the guide. */ ?>
+                    <div class="sso-guide-link">
+                        <a href="../help/sso-groups.php" target="_blank" rel="noopener"><?php echo htmlspecialchars(t('system.sso.claims_guide')); ?> &#8599;</a>
+                        <span><?php echo htmlspecialchars(t('system.sso.claims_guide_hint')); ?></span>
+                    </div>
+                    <div class="form-field">
+                        <label for="fOidcGroupClaimSel"><?php echo htmlspecialchars(t('system.sso.field_group_claim')); ?></label>
+                        <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_group_claim_hint')); ?></div>
+                        <select id="fOidcGroupClaimSel">
+                            <option value=""><?php echo htmlspecialchars(t('system.sso.claims_off')); ?></option>
+                            <option value="groups">groups</option>
+                            <option value="roles">roles</option>
+                            <option value="realm_access.roles">realm_access.roles (Keycloak)</option>
+                            <option value="__other"><?php echo htmlspecialchars(t('system.sso.claims_other')); ?></option>
+                        </select>
+                        <input type="text" id="fOidcGroupClaimOther" maxlength="100" style="display:none;margin-top:6px;"
+                               placeholder="<?php echo htmlspecialchars(t('system.sso.claims_other_ph')); ?>">
+                    </div>
+                    <div id="claimGroupBits">
+                    <?php /* Some providers (Microsoft Entra) send codes, not names: name
+                             each group here once and every dropdown shows the name. */ ?>
+                    <div class="form-field" id="ssoSeenField" style="margin-bottom:18px;">
+                        <label><?php echo htmlspecialchars(t('system.sso.field_groups_seen')); ?></label>
+                        <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_groups_seen_hint')); ?></div>
+                        <table class="sso-map">
+                            <thead><tr><th><?php echo htmlspecialchars(t('system.sso.col_code')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_group_name')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_last_seen')); ?></th></tr></thead>
+                            <tbody id="ssoSeenRows"></tbody>
+                        </table>
+                    </div>
+                        <div class="form-field">
+                            <label><?php echo htmlspecialchars(t('system.sso.field_claim_analyst_group')); ?></label>
+                            <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_claim_analyst_group_hint')); ?></div>
+                            <div class="sso-group-picker" id="pickAnalystGroup"></div>
+                        </div>
+                        <div class="form-field">
+                            <label><?php echo htmlspecialchars(t('system.sso.field_claim_admin_group')); ?></label>
+                            <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_claim_admin_group_hint')); ?></div>
+                            <div class="sso-group-picker" id="pickAdminGroup"></div>
+                        </div>
+                        <div class="form-field">
+                            <label><?php echo htmlspecialchars(t('system.sso.field_group_teams')); ?></label>
+                            <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_group_teams_hint')); ?></div>
+                            <?php if ($ssoTeams): ?>
+                            <table class="sso-map">
+                                <thead><tr><th><?php echo htmlspecialchars(t('system.sso.col_group')); ?></th><th><?php echo htmlspecialchars(t('system.sso.col_team')); ?></th><th></th></tr></thead>
+                                <tbody id="ssoMapRows"></tbody>
+                            </table>
+                            <button type="button" class="btn btn-secondary" id="ssoMapAdd" style="margin-top:8px;"><?php echo htmlspecialchars(t('system.sso.map_add')); ?></button>
+                            <?php else: ?>
+                            <div class="hint" style="padding:10px;border:1px dashed var(--border,#ccc);border-radius:6px;"><?php echo htmlspecialchars(t('system.sso.no_teams')); ?>
+                                <a href="../teams/"><?php echo htmlspecialchars(t('system.sso.go_teams')); ?></a></div>
+                            <?php endif; ?>
+                        </div>
+                        <div id="oidcLastSeen" style="font-size:12px;color:var(--text-muted,#666);margin-top:6px;"></div>
+                    </div>
+                </div>
+                </div><!-- /groups -->
+                <div class="sso-tab-panel" data-tab="portal">
+                <?php /* GH #147. OIDC only: a directory has nothing to redirect to
+                         and no button. */ ?>
+                <div id="portalRoutingFields">
+                    <div class="form-field">
+                        <label for="fPortalDomains"><?php echo htmlspecialchars(t('system.sso.field_portal_domains')); ?></label>
+                        <div class="hint"><?php echo htmlspecialchars(t('system.sso.field_portal_domains_hint')); ?></div>
+                        <textarea id="fPortalDomains" rows="3" placeholder="company.com" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:4px;background:var(--surface,#fff);color:var(--text,#333);font-family:inherit;box-sizing:border-box;"></textarea>
+                    </div>
+                    <div class="checkbox-field">
+                        <input type="checkbox" id="fPortalShowButton" checked>
+                        <div class="cb-label"><strong><?php echo htmlspecialchars(t('system.sso.cb_portal_show_button')); ?></strong><span><?php echo htmlspecialchars(t('system.sso.cb_portal_show_button_desc')); ?></span></div>
+                    </div>
                 </div>
                 <?php if ($ssoMultiTenant): ?>
                 <div class="form-field" id="tenantField">
@@ -552,6 +722,7 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
                     </select>
                 </div>
                 <?php endif; ?>
+                </div><!-- /portal -->
             </div>
             <div class="sso-modal-footer">
                 <button class="btn btn-secondary" id="cancelModalBtn" type="button"><?php echo htmlspecialchars(t('system.sso.cancel')); ?></button>
@@ -568,6 +739,7 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
     const API = '<?php echo $path_prefix; ?>api/';
     const MULTI_TENANT = <?php echo $ssoMultiTenant ? 'true' : 'false'; ?>;
     const SSO_COLSPAN = <?php echo $ssoColspan; ?>;
+    const SSO_TEAMS = <?php echo json_encode(array_map(fn($t) => ['id' => (int)$t['id'], 'name' => $t['name'], 'active' => (int)$t['is_active'] === 1], $ssoTeams), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     let providers = [];
 
     // ---------- Global switches ----------
@@ -627,6 +799,12 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
             ok ? window.t('system.sso.redirect_copied') : 'Could not copy - your browser blocked it.',
             ok ? 'success' : 'error'));
     });
+    document.querySelectorAll('.copy-signout-btn').forEach(btn => btn.addEventListener('click', function () {
+        const txt = this.parentElement.querySelector('code').textContent;
+        copyToClipboard(txt).then(ok => showToast(
+            ok ? window.t('system.sso.signout_copied') : 'Could not copy - your browser blocked it.',
+            ok ? 'success' : 'error'));
+    }));
 
     // ---------- Providers list ----------
     function esc(s) { return (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -674,13 +852,30 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
                 <td><span class="proto-badge">${badge}</span></td>
                 <td class="issuer-cell" title="${esc(target)}">${esc(target)}</td>
                 <td><span class="status-badge ${p.enabled ? 'on' : 'off'}">${p.enabled ? window.t('system.sso.enabled') : window.t('system.sso.disabled')}</span></td>
+                <?php /* Profile sync is an OIDC feature (#155): LDAP keeps details
+                         up to date through its own directory sync, so its row says
+                         "not applicable" rather than showing a setting it ignores. */ ?>
+                <td>${p.protocol !== 'oidc' ? '<span class="jit-off">' + window.t('system.sso.jit_na') + '</span>' : (() => {
+                    const mode = p.profile_sync_mode || 'never';
+                    const label = mode === 'never' ? window.t('system.sso.sync_pill_never')
+                                : mode === 'initial' ? window.t('system.sso.sync_pill_initial')
+                                : window.t('system.sso.sync_pill_always');
+                    return '<span class="badge-sync ' + esc(mode) + '">' + esc(label) + '</span>';
+                })()}</td>
                 <?php /* "Auto-create on first sign-in" cannot apply to something
                          nobody signs in through, so a CardDAV row says "not
                          applicable" rather than "Off" — Off implies a setting
                          somebody could turn on. */ ?>
                 <td>${isCardDav
                         ? '<span class="jit-off">' + window.t('system.sso.jit_na') + '</span>'
-                        : (p.auto_create_users ? '<span class="badge-jit">' + window.t('system.sso.jit_on') + '</span>' : '<span class="jit-off">' + window.t('system.sso.jit_off') + '</span>')}</td>
+                        : (() => {
+                            const u = !!p.auto_create_users;
+                            const a = !!p.auto_create_analysts;
+                            if (u && a) return '<span class="badge-jit">' + window.t('system.sso.jit_both') + '</span>';
+                            if (a)      return '<span class="badge-jit">' + window.t('system.sso.jit_analyst') + '</span>';
+                            if (u)      return '<span class="badge-jit">' + window.t('system.sso.jit_user') + '</span>';
+                            return '<span class="jit-off">' + window.t('system.sso.jit_off') + '</span>';
+                        })()}</td>
                 <td style="text-align:right;">
                     ${(isLdap || isCardDav)
                         /* A directory has a connection, a sign-in scope, group gating, an
@@ -757,10 +952,22 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
         // sign anybody in, so offering the toggle would promise something that
         // can never happen.
         $('autoCreateField').style.display = isCardDav ? 'none' : '';
-        // "Default module access for auto-created users" describes the accounts
-        // JIT sign-in creates. Nothing signs in through an address book, so
-        // there are none — the field is meaningless rather than merely unused.
-        $('defaultModulesField').style.display = isCardDav ? 'none' : '';
+        $('autoCreateAnalystsField').style.display = isCardDav ? 'none' : '';   // LDAP uses this one too
+        // Discussion #155. Only the OIDC callback reads these two: LDAP signs in
+        // through a password form, so there is no redirect to fall back from,
+        // and it keeps details up to date through its own directory sync.
+        // The fallback only applies when analysts are NOT auto-created.
+        const autoAnalysts = $('fAutoCreateAnalysts').checked;
+        $('analystFallbackField').style.display = (isOidc && !autoAnalysts) ? '' : 'none';
+        $('profileSyncModeField').style.display = isOidc ? '' : 'none';
+        $('portalRoutingFields').style.display = isOidc ? '' : 'none';   // GH #147
+        $('claimMappingFields').style.display = isOidc ? '' : 'none';   // SSO groups (3.5.0)
+        ssoApplyTabs();
+        // "Default module access for auto-created analysts" describes the
+        // accounts JIT sign-in creates, so it only shows while that is on.
+        // Nothing signs in through an address book, so there are none.
+        $('defaultModulesField').style.display = (!isCardDav && autoAnalysts) ? '' : 'none';
+        if ($('jitCompanyField')) $('jitCompanyField').style.display = (!isCardDav && autoAnalysts) ? '' : 'none';   // 3.5.0
         // "Shown on the login button" is false for an address book.
         $('displayNameHint').textContent = isCardDav
             ? window.t('system.sso.field_display_name_hint_carddav')
@@ -773,6 +980,160 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
             : window.t('system.sso.cb_enabled_desc');
     }
     $('fProtocol').addEventListener('change', syncProtocolFields);
+    $('fAutoCreateAnalysts').addEventListener('change', syncProtocolFields);
+
+    // ===== 3.5.0: tabs, and the SSO groups panel =====
+    let ssoTab = 'connection';
+    function ssoShowTab(name) {
+        ssoTab = name;
+        document.querySelectorAll('#ssoTabs button').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
+        ssoApplyTabs();
+    }
+    // OIDC: one panel at a time. LDAP / CardDAV: every panel, no tab bar.
+    function ssoApplyTabs() {
+        const isOidc = $('fProtocol').value === 'oidc';
+        $('ssoTabs').style.display = isOidc ? '' : 'none';
+        document.querySelectorAll('.sso-tab-panel').forEach(p => {
+            p.style.display = (!isOidc || p.getAttribute('data-tab') === ssoTab) ? '' : 'none';
+        });
+    }
+    document.querySelectorAll('#ssoTabs button').forEach(b => b.addEventListener('click', () => ssoShowTab(b.getAttribute('data-tab'))));
+
+    const SSO_COMMON_CLAIMS = ['groups', 'roles', 'realm_access.roles'];
+    function ssoGroupClaimSet(v) {
+        const known = v === '' || SSO_COMMON_CLAIMS.includes(v);
+        $('fOidcGroupClaimSel').value = known ? v : '__other';
+        $('fOidcGroupClaimOther').value = known ? '' : v;
+        ssoSyncClaimUi();
+    }
+    function ssoGroupClaimGet() {
+        return $('fOidcGroupClaimSel').value === '__other' ? $('fOidcGroupClaimOther').value.trim() : $('fOidcGroupClaimSel').value;
+    }
+    function ssoSyncClaimUi() {
+        $('fOidcGroupClaimOther').style.display = $('fOidcGroupClaimSel').value === '__other' ? '' : 'none';
+        $('claimGroupBits').style.display = ssoGroupClaimGet() !== '' || $('fOidcGroupClaimSel').value === '__other' ? '' : 'none';
+    }
+    $('fOidcGroupClaimSel').addEventListener('change', ssoSyncClaimUi);
+    $('fOidcGroupClaimOther').addEventListener('input', ssoSyncClaimUi);
+
+    // ===== Group pickers (3.5.0) =====
+    // A group is CHOSEN from the ones the provider has sent, shown by the name the
+    // admin gave it (System -> SSO -> Groups seen) - Microsoft Entra sends codes.
+    // "Type a group..." remains for a group nobody has signed in with yet.
+    let ssoSeenList = [];   // [{group, label, last_seen}]
+    function ssoSeenKnown(v) { v = String(v || '').toLocaleLowerCase(); return ssoSeenList.some(g => g.group.toLocaleLowerCase() === v); }
+    function ssoGroupText(g) {
+        const code = g.group.length > 24 ? g.group.slice(0, 8) + '…' : g.group;
+        return g.label ? g.label + (g.label === g.group ? '' : '  (' + code + ')') : g.group;
+    }
+    function ssoPickerOptions(value) {
+        let html = '<option value="">' + esc(window.t('system.sso.group_none')) + '</option>';
+        let found = false;
+        ssoSeenList.forEach(g => {
+            const sel = value && g.group.toLocaleLowerCase() === String(value).toLocaleLowerCase();
+            if (sel) found = true;
+            html += '<option value="' + esc(g.group) + '"' + (sel ? ' selected' : '') + '>' + esc(ssoGroupText(g)) + '</option>';
+        });
+        if (value && !found) html += '<option value="' + esc(value) + '" selected>' + esc(value + ' - ' + window.t('system.sso.group_unseen_tag')) + '</option>';
+        html += '<option value="__type">' + esc(window.t('system.sso.group_type')) + '</option>';
+        return html;
+    }
+    function ssoPickerHtml(value) {
+        return '<select class="sso-pick-sel">' + ssoPickerOptions(value) + '</select>'
+             + '<input type="text" class="sso-pick-text" maxlength="255" autocomplete="off" style="display:none;margin-top:6px;" placeholder="' + esc(window.t('system.sso.group_type_ph')) + '">'
+             + '<div class="sso-group-warn"></div>';
+    }
+    function ssoPickerMount(el, value) { if (el) { el.innerHTML = ssoPickerHtml(value || ''); ssoPickerWarn(el); } }
+    function ssoPickerValue(el) {
+        if (!el) return '';
+        const sel = el.querySelector('.sso-pick-sel');
+        return sel.value === '__type' ? el.querySelector('.sso-pick-text').value.trim() : sel.value;
+    }
+    // A group nobody has signed in with yet is allowed, but said out loud - a
+    // misspelt one would quietly match nobody.
+    function ssoPickerWarn(el) {
+        const w = el.querySelector('.sso-group-warn');
+        const v = ssoPickerValue(el);
+        w.textContent = (v && !ssoSeenKnown(v)) ? window.t('system.sso.group_not_seen') : '';
+    }
+    document.addEventListener('change', e => {
+        if (!e.target.classList || !e.target.classList.contains('sso-pick-sel')) return;
+        const el = e.target.closest('.sso-group-picker');
+        el.querySelector('.sso-pick-text').style.display = e.target.value === '__type' ? '' : 'none';
+        if (e.target.value === '__type') el.querySelector('.sso-pick-text').focus();
+        ssoPickerWarn(el);
+    });
+    document.addEventListener('input', e => {
+        if (e.target.classList && e.target.classList.contains('sso-pick-text')) ssoPickerWarn(e.target.closest('.sso-group-picker'));
+    });
+    // A name typed in "Groups seen" shows in every dropdown straight away.
+    function ssoPickersRefresh() {
+        document.querySelectorAll('.sso-group-picker').forEach(el => {
+            const sel = el.querySelector('.sso-pick-sel');
+            if (sel.value === '__type') return;
+            const v = sel.value;
+            sel.innerHTML = ssoPickerOptions(v);
+        });
+    }
+    function ssoSeenLoad(list) {
+        ssoSeenList = (list || []).map(g => ({ group: g.group, label: g.label || null, last_seen: g.last_seen || null }));
+        const body = $('ssoSeenRows');
+        $('ssoSeenField').style.display = ssoSeenList.length ? '' : 'none';
+        body.innerHTML = ssoSeenList.map((g, i) =>
+            '<tr><td><code style="font-size:12px;word-break:break-all;">' + esc(g.group) + '</code></td>'
+          + '<td><input type="text" class="sso-label" data-i="' + i + '" maxlength="100" value="' + esc(g.label || '') + '" placeholder="' + esc(window.t('system.sso.group_name_ph')) + '"></td>'
+          + '<td style="white-space:nowrap;font-size:12px;color:var(--text-muted,#666);">' + esc(g.last_seen && window.fmtDateTime ? window.fmtDateTime(g.last_seen) : (g.last_seen || '')) + '</td></tr>').join('');
+        body.querySelectorAll('.sso-label').forEach(inp => inp.addEventListener('input', () => {
+            ssoSeenList[+inp.dataset.i].label = inp.value.trim() || null;
+            ssoPickersRefresh();
+        }));
+    }
+    function ssoSeenCollect() {
+        return ssoSeenList.map(g => ({ group: g.group, label: g.label || '' }));
+    }
+    function ssoNameOf(code) {
+        const g = ssoSeenList.find(x => x.group.toLocaleLowerCase() === String(code).toLocaleLowerCase());
+        return g && g.label ? g.label : code;
+    }
+
+    // Group -> team rows.
+    function ssoTeamOptions(selected, fallbackName) {
+        let html = '<option value="">' + esc(window.t('system.sso.choose_team')) + '</option>';
+        let found = false;
+        SSO_TEAMS.forEach(t => {
+            if (t.id === selected) found = true;
+            html += '<option value="' + t.id + '"' + (t.id === selected ? ' selected' : '') + '>' + esc(t.name + (t.active ? '' : ' (' + window.t('system.sso.inactive') + ')')) + '</option>';
+        });
+        if (selected && !found) html += '<option value="' + selected + '" selected>' + esc(fallbackName || ('#' + selected)) + '</option>';
+        return html;
+    }
+    function ssoMapAddRow(group, teamId, teamName) {
+        const body = $('ssoMapRows');
+        if (!body) return;
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td><div class="sso-group-picker"></div></td>'
+            + '<td><select>' + ssoTeamOptions(teamId || 0, teamName) + '</select></td>'
+            + '<td><button type="button" class="btn btn-secondary" title="' + esc(window.t('system.sso.map_remove')) + '">&times;</button></td>';
+        ssoPickerMount(tr.querySelector('.sso-group-picker'), group || '');
+        tr.querySelector('button').addEventListener('click', () => tr.remove());
+        body.appendChild(tr);
+    }
+    function ssoMapLoad(rows) {
+        const body = $('ssoMapRows');
+        if (!body) return;
+        body.innerHTML = '';
+        rows.forEach(r => ssoMapAddRow(r.group, r.team_id, r.team_name));
+        if (!rows.length) ssoMapAddRow('', 0);
+    }
+    function ssoMapCollect() {
+        const body = $('ssoMapRows');
+        if (!body) return undefined;   // no teams yet: leave any stored rows alone
+        return Array.from(body.querySelectorAll('tr')).map(tr => ({
+            group: ssoPickerValue(tr.querySelector('.sso-group-picker')),
+            team_id: parseInt(tr.querySelector('td:nth-child(2) select').value, 10) || 0
+        })).filter(r => r.group !== '' || r.team_id);
+    }
+    if ($('ssoMapAdd')) $('ssoMapAdd').addEventListener('click', () => ssoMapAddRow('', 0));
 
     function openModal(p) {
         document.getElementById('testResult').className = 'test-result';
@@ -839,8 +1200,28 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
         document.getElementById('fScopes').value = p ? (p.scopes || 'openid email profile') : 'openid email profile';
         document.getElementById('fEnabled').checked = p ? !!p.enabled : true;
         document.getElementById('fAutoCreate').checked = p ? !!p.auto_create_users : false;
+        document.getElementById('fAutoCreateAnalysts').checked = p ? !!p.auto_create_analysts : false;
+        syncProtocolFields();   // again: which #155 fields show depends on this box
+        document.getElementById('fAnalystFallbackMode').value = (p && p.analyst_fallback_mode) ? p.analyst_fallback_mode : 'confirm';
         document.getElementById('fRequireVerified').checked = p ? !!p.require_verified_email : false;
+        document.getElementById('fProfileSyncMode').value = (p && p.profile_sync_mode) ? p.profile_sync_mode : 'never';
         document.getElementById('fDefaultModules').value = p ? (p.default_modules || '') : '';
+        if ($('fJitCompany')) $('fJitCompany').value = (p && p.jit_company_access) ? p.jit_company_access : 'all';
+        // SSO groups (3.5.0): where they come from, the two groups, the team rows,
+        // and the groups seen at sign-in for the dropdowns.
+        ssoSeenLoad(p ? (p.groups_seen || []) : []);
+        ssoGroupClaimSet(p ? (p.oidc_group_claim || '') : '');
+        ssoPickerMount($('pickAnalystGroup'), p ? (p.oidc_analyst_group || '') : '');
+        ssoPickerMount($('pickAdminGroup'), p ? (p.oidc_admin_group || '') : '');
+        ssoMapLoad(p ? (p.team_mappings || []) : []);
+        const seen = p && p.oidc_groups_last_seen;
+        $('oidcLastSeen').textContent = seen
+            ? window.t('system.sso.claims_last_seen', { who: seen.who || '?', at: window.fmtDateTime ? window.fmtDateTime(seen.at) : seen.at,
+                                                        groups: (seen.groups && seen.groups.length) ? seen.groups.map(ssoNameOf).join(', ') : window.t('system.sso.claims_none_sent') })
+            : (p && p.oidc_group_claim ? window.t('system.sso.claims_not_yet') : '');
+        ssoShowTab('connection');
+        $('fPortalDomains').value = p ? (p.portal_email_domains || '') : '';
+        $('fPortalShowButton').checked = p ? p.portal_show_button !== 0 : true;
         const tenantSel = document.getElementById('fTenant');
         if (tenantSel) tenantSel.value = (p && p.tenant_id) ? String(p.tenant_id) : '';
         const secret = document.getElementById('fClientSecret');
@@ -1058,8 +1439,19 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
             scopes: document.getElementById('fScopes').value.trim(),
             enabled: document.getElementById('fEnabled').checked ? 1 : 0,
             auto_create_users: document.getElementById('fAutoCreate').checked ? 1 : 0,
+            auto_create_analysts: document.getElementById('fAutoCreateAnalysts').checked ? 1 : 0,
+            analyst_fallback_mode: document.getElementById('fAnalystFallbackMode').value || 'confirm',
             require_verified_email: document.getElementById('fRequireVerified').checked ? 1 : 0,
+            profile_sync_mode: document.getElementById('fProfileSyncMode').value || 'never',
             default_modules: document.getElementById('fDefaultModules').value.trim(),
+            jit_company_access: $('fJitCompany') ? $('fJitCompany').value : undefined,
+            oidc_group_claim: ssoGroupClaimGet(),
+            oidc_analyst_group: ssoPickerValue($('pickAnalystGroup')),
+            oidc_admin_group: ssoPickerValue($('pickAdminGroup')),
+            team_mappings: ssoMapCollect(),
+            group_labels: ssoSeenCollect(),
+            portal_email_domains: $('fPortalDomains').value,
+            portal_show_button: $('fPortalShowButton').checked ? 1 : 0,
             tenant_id: (document.getElementById('fTenant') ? (document.getElementById('fTenant').value || null) : null)
         };
         if (isLdap) Object.assign(payload, ldapPayload(), { id: payload.id });
@@ -1150,6 +1542,6 @@ $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_U
     loadGlobal();
     loadProviders();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

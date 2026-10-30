@@ -17,6 +17,9 @@
  */
 
 /**
+ * Prints the "subscribe to this calendar feed" dialogue - feed address, QR code and phone
+ * instructions - with the labels given.
+ *
  * @param string $id       prefix for every element id, so two can coexist
  * @param array  $labels   title, intro, address_label, address_hint, url_label,
  *                         copy, ios_label, ios_hint, android_label, android_hint,

@@ -43,6 +43,14 @@ require_once __DIR__ . '/../../../includes/functions.php';
 require_once __DIR__ . '/../../../includes/capabilities.php';
 
 $sections = [];
+/**
+ * Adds one titled section ("=== TITLE ===" and its lines) to the report; $body is a
+ * string or an array of lines.
+ *
+ * @param mixed $sections  the report so far, a list of section strings - appended to by reference
+ * @param mixed $title  the section heading, printed between === marks
+ * @param mixed $body  the section text - a string, or an array of lines
+ */
 function addSection(&$sections, $title, $body) {
     if (is_array($body)) $body = implode("\n", $body);
     $sections[] = "=== {$title} ===\n" . rtrim($body, "\n");
@@ -60,6 +68,8 @@ $apiRoot = $appRoot . DIRECTORY_SEPARATOR . 'api';
  * or they belong to the self-service portal, which authenticates its own way. Being
  * unguarded is the point, so they are excluded from the findings rather than shouted
  * about. Listed explicitly so the exclusion is a decision, not an accident.
+ *
+ * @param string $rel  the endpoint's path from the app root, with forward slashes, e.g. api/auth/login.php
  */
 function d005IsPublicByDesign(string $rel): bool {
     $publicPrefixes = [
@@ -84,6 +94,8 @@ function d005IsPublicByDesign(string $rel): bool {
  *
  * Add to this ONLY when the endpoint genuinely acts on the caller's own account. If you
  * are adding something because "it's probably fine", it isn't — guard it instead.
+ *
+ * @param string $rel  the endpoint's path from the app root, with forward slashes
  */
 function d005ByDesign(string $rel): ?string {
     $ok = [
@@ -98,7 +110,11 @@ function d005ByDesign(string $rel): ?string {
     return $ok[$rel] ?? null;
 }
 
-/** Does this endpoint change anything? Writes are what make a missing guard dangerous. */
+/**
+ * Does this endpoint change anything? Writes are what make a missing guard dangerous.
+ *
+ * @param string $src  the endpoint file's full PHP source
+ */
 function d005IsWriteShaped(string $src): bool {
     // SQL that mutates. Note CREATE TABLE / CREATE INDEX: leaving those out is not
     // academic — it is why this tool initially reported db_verify.php, which builds the
@@ -120,6 +136,9 @@ function d005IsWriteShaped(string $src): bool {
  *   - MFA endpoints authenticate through getMfaAuthContext(), not a bare $_SESSION read;
  *   - the browser extension's endpoint takes an Authorization API key;
  *   - the inbound messaging webhook is authenticated by the provider's own signature.
+ *
+ * @param string $src  the endpoint file's full PHP source
+ * @param string $rel  the endpoint's path from the app root, with forward slashes
  */
 function d005Classify(string $src, string $rel): array {
     if (strncmp($rel, 'api/v1/', 7) === 0) {
@@ -253,6 +272,20 @@ foreach ($rows as $r) {
     }
 }
 
+// A CREDENTIAL written behind module access alone. Module access is the everyday job;
+// replacing a provider's API key, or pointing it at another endpoint, is a settings-tab
+// job and needs that tab's capability - usually the one its test_*.php sibling already
+// checks. Found by hand twice (the Forms and Workflow AI panels saved their keys behind
+// module access while the Test buttons beside them were capability-guarded), hence this
+// rule: a settings-shaped endpoint that encrypts a secret must not stop at Layer 1.
+$credential = [];
+foreach ($rows as $r) {
+    if ($r['public'] || $r['level'] !== 'module' || !$r['write']) continue;
+    if (!preg_match('/(settings|credential|connection|provider|_key)[^\/]*\.php$/', $r['rel'])) continue;
+    $src = (string) file_get_contents($appRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $r['rel']));
+    if (strpos($src, 'encryptValue(') !== false) $credential[] = $r;
+}
+
 $byDesign = [];
 foreach ($rows as $r) {
     if ($r['public']) continue;
@@ -354,6 +387,18 @@ if ($high) {
         $b[] = '';
     }
     addSection($sections, 'HIGH — data-changing endpoints behind "logged in" only (' . count($high) . ')', $b);
+}
+
+if ($credential) {
+    $b = [
+        'These SAVE AN ENCRYPTED SECRET (an API key, a password) and check nothing beyond',
+        'module access. Anyone who uses the module day to day can then replace the key or',
+        'point it at a server of their choosing. A settings tab needs its capability - the',
+        'test_*.php sibling of the same panel usually shows which one.',
+        '',
+    ];
+    foreach ($credential as $r) $b[] = sprintf('  [%-18s] %s', $r['module'], $r['rel']);
+    addSection($sections, 'HIGH — credentials saved behind module access only (' . count($credential) . ')', $b);
 }
 
 if ($stringly) {

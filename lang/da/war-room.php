@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - war-room strings.
+ * FreeITSM — war-room strings (da).
  *
- * Mirrors lang/en/war-room.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/war-room.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'Krisecenter',
     'nav' => [
@@ -210,6 +214,9 @@ return [
         'cmd_impact' => 'Hvad der afhænger af en konfigurationsenhed',
         'cmd_linked' => 'Sager, der er koblet til en given sag — dubletter og undersager',
         'cmd_supplier' => 'Hvem du skal ringe til: leverandøren, deres kontrakt og deres direkte numre',
+        'cmd_projects' => 'Aktive projekter og deres tilstand (kræver adgang til Projekter)',
+        'cmd_project' => 'Hvordan et enkelt projekt går: tilstand og hvorfor, etaper, milepæle, risici',
+        'cmd_dates' => 'Kommende projektdatoer - go-lives, flytninger, etapeafslutninger - og overskredne milepæle',
         'cmd_help' => 'Denne liste, i chatten',
         'warbot_limits_title' => 'Hvad den ikke vil gøre',
         'warbot_limits_body' => 'Warbot kan kun læse. Den kan ikke oprette, ændre eller lukke noget, og den læser ikke en sag højt for et rum — den henviser dig i stedet til sagen. Dens svar er altid mærket som kommende fra en bot, og alle i kanalen kan se dem.',

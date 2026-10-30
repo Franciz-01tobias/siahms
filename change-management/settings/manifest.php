@@ -59,10 +59,47 @@ return [
             'grant'     => 'Manage change impacts',
         ],
         [
+            // The approval rules (#180): Record or Enforce, independence, what counts as a
+            // material edit, out-of-date votes, deleting submitted changes. Sensitive: these
+            // decide what the approval record proves, so they are the audit trail's settings.
+            'id'        => 'approvals',
+            'cap'       => Cap::CHANGES_APPROVALS,
+            'label_key' => 'change-management.settings.tab_approvals',
+            'grant'     => 'Manage the approval rules for changes',
+            'sensitive' => true,
+        ],
+        [
+            // Standard-change templates (#180 §8): writing the recipes. Approving one is a
+            // separate, everyday permission (below), so the author cannot approve their own.
+            'id'        => 'templates',
+            'cap'       => Cap::CHANGES_TEMPLATES,
+            'label_key' => 'change-management.settings.tab_templates',
+            'grant'     => 'Write standard-change templates',
+            // An approver must be able to read the versions they approve.
+            'also_visible_to' => [Cap::CHANGES_TEMPLATES_APPROVE],
+        ],
+        [
             // A per-analyst display preference. Not administration; nothing to grant.
             'id'        => 'left-panel',
             'cap'       => null,
             'label_key' => 'common.left_panel.tab',
+        ],
+    ],
+
+    // Everyday work (#180 Part 3) - not a tab. Bites only once Settings → Approvals →
+    // "Who can choose a change's approvers" is set to the permission.
+    'actions' => [
+        [
+            'cap'      => Cap::CHANGES_CHOOSE_APPROVERS,
+            'grant'    => 'Choose who approves a change: the approver, the CAB and whether it is required',
+            'restrict' => ['setting' => 'change_approval_choose_approvers', 'value' => 'permission'],
+        ],
+        [
+            // Always applies: approving a recipe that pre-approves changes is never everybody's job.
+            'cap'       => Cap::CHANGES_TEMPLATES_APPROVE,
+            'grant'     => 'Approve standard-change templates (which then approve the changes raised from them)',
+            'sensitive' => true,
+            'restrict'  => null,
         ],
     ],
 ];

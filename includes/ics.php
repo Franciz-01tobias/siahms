@@ -14,7 +14,11 @@
  * has the same rule with different spelling — see MicrosoftCalendarProvider.)
  */
 
-/** Escape a text value per RFC 5545 (backslash, newline, comma, semicolon). */
+/**
+ * Escape a text value per RFC 5545 (backslash, newline, comma, semicolon).
+ *
+ * @param mixed $s  the text value, cast to string; null gives ''
+ */
 function icsEscape($s): string
 {
     $s = (string)$s;
@@ -31,6 +35,8 @@ function icsEscape($s): string
  * Byte-based, not character-based, deliberately: the limit in RFC 5545 is
  * octets, and a subject with an accent or an emoji in it is longer than it
  * looks. Calendar clients are unforgiving about over-long lines.
+ *
+ * @param string $line  one complete content line, e.g. 'SUMMARY:...', already escaped
  */
 function icsFold(string $line): string
 {
@@ -46,7 +52,13 @@ function icsFold(string $line): string
     return $out;
 }
 
-/** The VCALENDAR header lines. $name is what the client shows as the calendar's name. */
+/**
+ * The VCALENDAR header lines. $name is what the client shows as the calendar's name.
+ *
+ * @param string $name         the calendar's display name (X-WR-CALNAME)
+ * @param string $tz           the feed's IANA time zone name, e.g. 'Europe/London' (X-WR-TIMEZONE)
+ * @param int $refreshHours    how often clients are asked to refresh, in hours - only a hint
+ */
 function icsHeader(string $name, string $tz, int $refreshHours = 6): array
 {
     return [
@@ -81,6 +93,7 @@ function icsHeader(string $name, string $tz, int $refreshHours = 6): array
  *   'all_day'     => false,
  *   'stamp'       => 'Y-m-d H:i:s' | null,   // last-modified; defaults to now
  * ]
+ * @param string $tz  the IANA time zone name that start and end are written in, e.g. 'Europe/London'
  * @return string[] lines, or [] when the row cannot be parsed (skipped, never fatal:
  *                  one bad row must not take the whole feed down)
  */
@@ -134,7 +147,12 @@ function icsEvent(array $ev, string $tz): array
     return $lines;
 }
 
-/** Emit the finished calendar with the right headers. */
+/**
+ * Emit the finished calendar with the right headers.
+ *
+ * @param array $lines      every line so far - icsHeader() then icsEvent() output; END:VCALENDAR is added here
+ * @param string $filename  the file name for Content-Disposition, e.g. 'calendar.ics'
+ */
 function icsRespond(array $lines, string $filename): void
 {
     $lines[] = 'END:VCALENDAR';

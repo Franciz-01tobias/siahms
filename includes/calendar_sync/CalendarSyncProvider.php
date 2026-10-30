@@ -73,7 +73,11 @@ abstract class CalendarSyncProvider
      */
     protected $account = [];
 
-    /** Act as this analyst. Returns $this so it chains off the factory. */
+    /**
+     * Act as this analyst. Returns $this so it chains off the factory.
+     *
+     * @param array $account  the analyst's decrypted calendar_enrolments.credentials; [] for a provider that needs none
+     */
     public function withAccount(array $account): self
     {
         $this->account = $account;
@@ -93,11 +97,17 @@ abstract class CalendarSyncProvider
      */
     public $conn = null;
 
+    /**
+     * Keeps the decrypted calendar_connections row (credentials already an array) the provider works from.
+     *
+     * @param array $connection  the decrypted calendar_connections row, credentials already a PHP array
+     */
     public function __construct(array $connection)
     {
         $this->connection = $connection;
     }
 
+    /** Returns the connection's provider key (for example 'microsoft' or 'caldav'), or ''. */
     public function getProvider(): string
     {
         return $this->connection['provider'] ?? '';
@@ -109,6 +119,8 @@ abstract class CalendarSyncProvider
      * The settings screen needs to know BEFORE it renders a field — discovering
      * it from a thrown exception is the wrong way round. Same reasoning as
      * IssueTrackerProvider::supports().
+     *
+     * @param string $capability  a CAP_* key, e.g. CalendarSyncProvider::CAP_ALL_DAY
      */
     public function supports(string $capability): bool
     {
@@ -125,6 +137,9 @@ abstract class CalendarSyncProvider
      * or remove the event later, and a reassigned ticket leaves a copy in the
      * old analyst's calendar with nothing pointing at it. A provider that cannot
      * return a durable id cannot be supported.
+     *
+     * @param string $calendarAddress  whose calendar - a mailbox address for Microsoft, a calendar URL for CalDAV
+     * @param array $event  the canonical event shape described at the top of this file
      */
     abstract public function createEvent(string $calendarAddress, array $event): string;
 
@@ -135,6 +150,10 @@ abstract class CalendarSyncProvider
      * and throw CalendarEventMissing, so the caller can create a fresh one
      * rather than the analyst silently losing the entry — somebody deleting it
      * from their own calendar is a normal thing to do, not an error.
+     *
+     * @param string $calendarAddress  whose calendar - a mailbox address for Microsoft, a calendar URL for CalDAV
+     * @param string $remoteEventId  the provider's id for the event, as createEvent() returned it
+     * @param array $event  the canonical event shape described at the top of this file
      */
     abstract public function updateEvent(string $calendarAddress, string $remoteEventId, array $event): void;
 
@@ -144,6 +163,9 @@ abstract class CalendarSyncProvider
      * An event that is ALREADY gone is a success, not a failure: the desired
      * end state is "not in their calendar", and that is satisfied. Treating it
      * as an error would leave the map row behind and retry forever.
+     *
+     * @param string $calendarAddress  whose calendar - a mailbox address for Microsoft, a calendar URL for CalDAV
+     * @param string $remoteEventId  the provider's id for the event, as createEvent() returned it
      */
     abstract public function deleteEvent(string $calendarAddress, string $remoteEventId): void;
 
@@ -165,6 +187,7 @@ abstract class CalendarSyncProvider
     /**
      * What has changed in this calendar since last time (GH #75, bi-directional).
      *
+     * @param  string      $calendarAddress whose calendar - a mailbox address for Microsoft, a calendar URL for CalDAV
      * @param  string|null $token opaque provider state from the previous call;
      *                            null means "no history — take a baseline"
      * @return array [
@@ -203,6 +226,7 @@ abstract class CalendarSyncProvider
      * a deploy, a subscription lapses unnoticed. A silent gap then looks exactly
      * like "nothing changed", so the poll must remain as a backstop.
      *
+     * @param  string $calendarAddress whose calendar - a mailbox address for Microsoft, a calendar URL for CalDAV
      * @param  string $notifyUrl publicly reachable HTTPS endpoint
      * @param  string $secret    echoed back in every notification; the only thing
      *                           telling a real callback from anyone on the
@@ -214,7 +238,11 @@ abstract class CalendarSyncProvider
         throw new Exception('This calendar provider does not support change notifications.');
     }
 
-    /** Push an existing subscription's expiry out. Same return as create. */
+    /**
+     * Push an existing subscription's expiry out. Same return as create.
+     *
+     * @param string $subscriptionId  the provider's subscription id, as createSubscription() returned it
+     */
     public function renewSubscription(string $subscriptionId): array
     {
         throw new Exception('This calendar provider does not support change notifications.');
@@ -223,6 +251,8 @@ abstract class CalendarSyncProvider
     /**
      * Stop notifications. An ALREADY-GONE subscription is a success: the desired
      * end state is "not subscribed", and that is satisfied.
+     *
+     * @param string $subscriptionId  the provider's subscription id, as createSubscription() returned it
      */
     public function deleteSubscription(string $subscriptionId): void
     {
@@ -241,6 +271,8 @@ abstract class CalendarSyncProvider
      * Providers that cannot answer should report CAP_VERIFY_TARGET as false;
      * the default assumes the address is fine rather than blocking enrolment on
      * a check the provider cannot perform.
+     *
+     * @param string $calendarAddress  the address to check - a mailbox address for Microsoft, a calendar URL for CalDAV
      */
     public function verifyTarget(string $calendarAddress): bool
     {

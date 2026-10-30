@@ -88,7 +88,7 @@ try {
     }
 
     $cfg = aiSettingsLoad($conn, 'warroom_ai');
-    if (($cfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($cfg)) {
         echo json_encode([
             'success' => false,
             'error'   => 'not_configured',

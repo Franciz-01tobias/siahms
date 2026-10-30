@@ -25,9 +25,9 @@ $translationNamespaces = ['common', 'system'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.modules.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.modules.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* System module accent (blue-grey). --on-accent is pinned too: in dark the
            accent is a LIGHT blue-grey, so text on it must go dark, not white. */
@@ -67,6 +67,9 @@ $translationNamespaces = ['common', 'system'];
         .all-note { color: #5e35b1; }
 
         .chk-row { display: block; padding: 6px 4px; cursor: pointer; border-bottom: 1px solid var(--border, #f2f2f2); color: var(--text, #333); }
+        .chk-line { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border, #f2f2f2); }
+        .chk-line .chk-row { flex: 1; border-bottom: none; }
+        .lvl-select { font-size: 12px; padding: 2px 6px; }
         .chk-row input { margin-right: 8px; }
         #moduleModalBody h4 { margin: 14px 0 4px; font-size: 13px; color: var(--text-muted, #667); text-transform: uppercase; letter-spacing: 0.4px; }
 
@@ -93,7 +96,7 @@ $translationNamespaces = ['common', 'system'];
         [data-theme-mode="dark"] .all-note       { color: #c4b5fd; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="modules">
     <?php include '../includes/header.php'; ?>
@@ -105,7 +108,7 @@ $translationNamespaces = ['common', 'system'];
 
             <!-- Conflict policy -->
             <div class="panel">
-                <h2>When grants conflict</h2>
+                <h2 id="conflicts">When grants conflict</h2>
                 <label class="mode-opt"><input type="radio" name="permMode" value="most" onchange="setMode('most')"> <strong>Most permissive</strong> &mdash; an analyst can use a module if <em>any</em> of their teams, or their own access, grants it. (Recommended default.)</label>
                 <label class="mode-opt"><input type="radio" name="permMode" value="least" onchange="setMode('least')"> <strong>Least permissive (strict)</strong> &mdash; an analyst can use a module only if their own access <em>and every team they're in</em> grant it.</label>
                 <div id="strictExplainer" class="strict-explainer" style="display:none;">
@@ -115,7 +118,7 @@ $translationNamespaces = ['common', 'system'];
 
             <!-- Access level: grant / revoke all-module access without leaving this screen -->
             <div class="panel">
-                <h2>Access level</h2>
+                <h2 id="access-level">Access level</h2>
                 <p style="color:var(--text-muted,#666);font-size:13px;margin:0 0 8px;">Turn <strong>all modules</strong> on or off for a team or analyst right here. <strong>Off</strong> = restrict them to specific modules, which you then grant in the table below.</p>
                 <input type="text" id="lvlFilter" class="lvl-filter" placeholder="Filter by name&hellip;" onkeyup="renderAccessLevels()">
                 <div class="lvl-cols">
@@ -132,7 +135,7 @@ $translationNamespaces = ['common', 'system'];
 
             <!-- Effective access checker -->
             <div class="panel eff-tool">
-                <h2>Effective access checker</h2>
+                <h2 id="checker">Effective access checker</h2>
                 <label for="effAnalyst">Show what an analyst can actually reach, and why:</label>
                 <select id="effAnalyst" onchange="loadEffective()"><option value="">&mdash; choose an analyst &mdash;</option></select>
                 <div id="effResult"></div>
@@ -187,7 +190,10 @@ $translationNamespaces = ['common', 'system'];
         }
     }
 
-    function grantedBy(list, key) { return list.filter(e => e.all_modules || (e.modules || []).includes(key)); }
+    function grantedBy(list, key) {
+        return list.filter(e => e.all_modules || (e.modules || []).includes(key))
+                   .map(e => Object.assign({}, e, { _read: !e.all_modules && e.levels && e.levels[key] === 'read' }));
+    }
 
     // Access-level lists: an all-modules toggle per team / analyst, editable in place.
     function renderAccessLevels() {
@@ -227,7 +233,7 @@ $translationNamespaces = ['common', 'system'];
     function pills(items) {
         if (!items.length) return '<span class="pill-none">None</span>';
         const shown = items.slice(0, 3), extra = items.length - 3;
-        let html = shown.map(e => `<span class="pill ${e.all_modules ? 'pill-all' : ''}"${e.all_modules ? ' title="Has all modules"' : ''}>${escapeHtml(e.name)}${e.all_modules ? ' &#10022;' : ''}</span>`).join('');
+        let html = shown.map(e => `<span class="pill ${e.all_modules ? 'pill-all' : ''}"${e.all_modules ? ' title="Has all modules"' : ''}>${escapeHtml(e.name)}${e.all_modules ? ' &#10022;' : ''}${e._read ? ' (read only)' : ''}</span>`).join('');
         if (extra > 0) html += `<span class="pill pill-more">+${extra}</span>`;
         return html;
     }
@@ -257,13 +263,20 @@ $translationNamespaces = ['common', 'system'];
         editingModule = key;
         const m = DATA.modules.find(x => x.key === key);
         document.getElementById('moduleModalTitle').textContent = 'Who can use ' + m.name + '?';
+        // A module that offers Read only (#180) shows Full / Read only beside each grant.
+        const offersRead = !!m.read_only;
         const rows = (arr, kind) => (arr.length ? arr.map(e => {
             const has = e.all_modules || (e.modules || []).includes(key);
             const note = e.all_modules ? ' <span class="all-note">(all modules)</span>' : '';
-            return `<label class="chk-row"><input type="checkbox" data-kind="${kind}" data-id="${e.id}" ${has ? 'checked' : ''} ${e.all_modules ? 'disabled' : ''}> ${escapeHtml(e.name)}${note}</label>`;
+            const lvl = (e.levels && e.levels[key]) === 'read' ? 'read' : 'full';
+            const levelSel = offersRead && !e.all_modules
+                ? `<select class="lvl-select" data-kind="${kind}" data-id="${e.id}"><option value="full"${lvl === 'full' ? ' selected' : ''}>Full</option><option value="read"${lvl === 'read' ? ' selected' : ''}>Read only</option></select>`
+                : '';
+            return `<div class="chk-line"><label class="chk-row"><input type="checkbox" data-kind="${kind}" data-id="${e.id}" ${has ? 'checked' : ''} ${e.all_modules ? 'disabled' : ''}> ${escapeHtml(e.name)}${note}</label>${levelSel}</div>`;
         }).join('') : '<p class="pill-none">None</p>');
         document.getElementById('moduleModalBody').innerHTML =
             `<p style="color:var(--text-muted,#666);font-size:13px;margin:0 0 6px;">Tick the teams and analysts that can use <strong>${escapeHtml(m.name)}</strong>. Anyone with <em>all modules</em> always has access &mdash; flip that with the <strong>Access level</strong> toggles above.</p>
+             ${offersRead ? '<p style="color:var(--text-muted,#666);font-size:13px;margin:0 0 6px;"><strong>Read only</strong> lets them see everything here - records, history, exports - and change nothing. A named approver can still approve.</p>' : ''}
              <h4>Teams</h4>${rows(DATA.teams, 'team')}
              <h4>Analysts</h4>${rows(DATA.analysts, 'analyst')}`;
         document.getElementById('moduleModal').classList.add('active');
@@ -271,13 +284,16 @@ $translationNamespaces = ['common', 'system'];
     function closeModuleModal() { document.getElementById('moduleModal').classList.remove('active'); }
 
     async function saveModuleModal() {
-        const team_ids = [], analyst_ids = [];
+        const team_ids = [], analyst_ids = [], levels = { team: {}, analyst: {} };
         document.querySelectorAll('#moduleModalBody input[type=checkbox]:not([disabled])').forEach(c => {
             if (c.checked) (c.dataset.kind === 'team' ? team_ids : analyst_ids).push(parseInt(c.dataset.id));
         });
+        document.querySelectorAll('#moduleModalBody .lvl-select').forEach(s => {
+            levels[s.dataset.kind][s.dataset.id] = s.value;
+        });
         const d = await (await fetch(API + 'save_module_grants.php', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ module_key: editingModule, team_ids, analyst_ids })
+            body: JSON.stringify({ module_key: editingModule, team_ids, analyst_ids, levels })
         })).json();
         if (d.success) { closeModuleModal(); showToast('Saved', 'success'); loadData(); }
         else showToast('Failed: ' + (d.error || ''), 'error');
@@ -293,7 +309,7 @@ $translationNamespaces = ['common', 'system'];
         box.innerHTML =
             `<div class="eff-head">Conflict policy: <strong>${d.mode === 'least' ? 'Least permissive (strict)' : 'Most permissive'}</strong></div>` +
             '<table class="eff-table">' + d.modules.map(m =>
-                `<tr><td>${escapeHtml(m.name)}</td><td>${m.allowed ? '<span class="yes">&#10003; Access</span>' : '<span class="no">&#10007; No access</span>'}</td><td class="reason">${escapeHtml(m.reason)}</td></tr>`
+                `<tr><td>${escapeHtml(m.name)}</td><td>${m.allowed ? (m.level === 'read' ? '<span class="yes">&#10003; Read only</span>' : '<span class="yes">&#10003; Access</span>') : '<span class="no">&#10007; No access</span>'}</td><td class="reason">${escapeHtml(m.reason)}</td></tr>`
             ).join('') + '</table>';
     }
 
@@ -305,6 +321,6 @@ $translationNamespaces = ['common', 'system'];
 
     loadData();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

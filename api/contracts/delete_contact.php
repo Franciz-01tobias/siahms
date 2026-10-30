@@ -1,4 +1,12 @@
 <?php
+/**
+ * API: delete a supplier contact.
+ *
+ * Fires the supplier_contact 'deleted' workflow event with the contact's name.
+ *
+ * @input  id  the contact to delete (JSON body)
+ * @output {success}
+ */
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';

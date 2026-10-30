@@ -13,6 +13,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('assets');
 
 $assetId = $_GET['asset_id'] ?? null;
 
@@ -33,6 +34,7 @@ try {
     $sql = "SELECT
                 ah.id,
                 ah.asset_id,
+                ah.analyst_id,
                 ah.field_name,
                 ah.old_value,
                 ah.new_value,

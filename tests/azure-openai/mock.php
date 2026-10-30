@@ -23,6 +23,11 @@ if (PHP_SAPI !== 'cli-server') { http_response_code(404); exit; }
  * a failure without a second file:
  *   ok                     → a normal successful completion
  *   needs-max-completion   → the 400 a newer deployment returns for `max_tokens`
+ *   needs-default-temperature → the 400 gpt-5-class models return for temperature 0
+ *   gpt5-like              → both of the above, one after the other (GH #171)
+ *   content-filtered       → an UNRELATED 400 that must never be retried
+ * and the v1 route (/openai/v1/chat/completions), which has no deployment in
+ * the address and must carry it as `model` instead.
  */
 
 $raw     = file_get_contents('php://input');
@@ -49,6 +54,8 @@ $log = [
     'body_keys'             => array_keys($body),
     'max_tokens'            => $body['max_tokens'] ?? null,
     'max_completion_tokens' => $body['max_completion_tokens'] ?? null,
+    'has_temperature'       => array_key_exists('temperature', $body),
+    'model'                 => $body['model'] ?? null,
     'messages'              => $body['messages'] ?? [],
 ];
 
@@ -62,16 +69,54 @@ file_put_contents($logFile, json_encode($all));
 
 header('Content-Type: application/json');
 
+// GH #171: a model's version date in the API version box. Azure answers an
+// api-version it does not know with a bare 404 and these exact words.
+// Checked FIRST: Azure turns an unknown address away before reading the body.
+if (strpos($uri, 'api-version=2025-08-07') !== false) {
+    http_response_code(404);
+    echo json_encode(['error' => ['code' => '404', 'message' => 'Resource not found']]);
+    exit;
+}
+
+
 // The 400 a current Azure deployment returns when it is handed `max_tokens`.
 // Wording taken from Azure's own message, because our retry is triggered by
 // recognising it — a paraphrase here would make the test prove nothing.
-if (strpos($uri, '/deployments/needs-max-completion/') !== false
+if ((strpos($uri, '/deployments/needs-max-completion/') !== false || strpos($uri, '/deployments/gpt5-like/') !== false)
     && array_key_exists('max_tokens', $body)) {
     http_response_code(400);
     echo json_encode(['error' => [
         'code'    => 'unsupported_parameter',
         'message' => "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
     ]]);
+    exit;
+}
+
+// The 400 a gpt-5-class model returns for any temperature but its default.
+if ((strpos($uri, '/deployments/needs-default-temperature/') !== false || strpos($uri, '/deployments/gpt5-like/') !== false)
+    && array_key_exists('temperature', $body) && $body['temperature'] != 1) {
+    http_response_code(400);
+    echo json_encode(['error' => [
+        'code'    => 'unsupported_value',
+        'message' => "Unsupported value: 'temperature' does not support 0.0 with this model. Only the default (1) value is supported.",
+    ]]);
+    exit;
+}
+
+// An unrelated 400 - the kind a retry must never swallow.
+if (strpos($uri, '/deployments/content-filtered/') !== false) {
+    http_response_code(400);
+    echo json_encode(['error' => [
+        'code'    => 'content_filter',
+        'message' => "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
+    ]]);
+    exit;
+}
+
+// The v1 route names no deployment in the address, so the body must.
+if (strpos($uri, '/openai/v1/chat/completions') !== false && empty($body['model'])) {
+    http_response_code(400);
+    echo json_encode(['error' => ['code' => 'missing_model', 'message' => "Missing required parameter: 'model'."]]);
     exit;
 }
 

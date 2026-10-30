@@ -36,6 +36,13 @@ require_once '../../includes/services/tickets.php';
 require_once '../../includes/calendar_sync/calendar_sync.php';
 require_once '../../includes/timezone.php';   // naive_now(), for the work-window cutoffs (GH #126)
 
+/**
+ * Sends an HTTP status and a plain-text message, then stops - the feed's only error
+ * path, since a calendar app shows nothing richer.
+ *
+ * @param mixed $code  the HTTP status line after the protocol, e.g. '403 Forbidden'
+ * @param mixed $msg  the plain-text body the calendar app receives
+ */
 function feed_deny($code, $msg) {
     header($_SERVER['SERVER_PROTOCOL'] . ' ' . $code);
     header('Content-Type: text/plain; charset=utf-8');
@@ -73,6 +80,7 @@ try {
     // unbounded feed grows for ever and every client re-downloads all of it.
     $stmt = $conn->prepare(
         "SELECT t.id, t.ticket_number, t.subject,
+                " . ticketSensitivitySelectSql($conn) . " AS sensitivity,
                 t.work_start_datetime, t.work_end_datetime, t.work_all_day,
                 t.updated_datetime,
                 ts.name AS status_name, tp.name AS priority_name
@@ -142,8 +150,9 @@ $tz     = date_default_timezone_get() ?: 'UTC';
 $host   = $_SERVER['HTTP_HOST'] ?? 'freeitsm';
 $domain = preg_replace('/[^a-zA-Z0-9.\-]/', '', $host) ?: 'freeitsm';
 $base   = defined('BASE_URL') ? rtrim(BASE_URL, '/') : '';
-$https  = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off')
-       || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+// requestIsHttps(): the one HTTPS rule (GH #152) - a proxy's X-Forwarded-Proto
+// only counts when TRUST_PROXY_HTTPS says the proxy is ours.
+$https  = requestIsHttps();
 
 $lines = icsHeader('FreeITSM — my scheduled work', $tz);
 
@@ -151,9 +160,12 @@ foreach ($rows as $r) {
     // 'ref' publishes the ticket number and nothing else. The times still tell
     // you your day is full, which is most of the value, without the subject
     // leaving the login.
+    // A confidential ticket shows as "Confidential ticket" whatever the detail
+    // level (discussion #62) - the feed is read by a calendar app, not FreeITSM.
     $summary = $detail === 'ref'
         ? $r['ticket_number']
-        : $r['ticket_number'] . ' — ' . $r['subject'];
+        : $r['ticket_number'] . ' — ' . (ticketSensitivityNormalise($r['sensitivity']) === 'confidential'
+            ? TICKET_CONFIDENTIAL_SUBJECT : $r['subject']);
 
     $description = '';
     if ($detail !== 'ref') {

@@ -34,13 +34,13 @@ $translationNamespaces = ['common', 'contracts'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('contracts.rfp.scoring.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('contracts', t('contracts.nav.rfp_builder'), t('contracts.rfp.scoring.page_title'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script src="../../assets/js/chart.min.js"></script>
     <style>
         body { --accent: var(--con-accent, #f59e0b); }
@@ -306,7 +306,7 @@ $translationNamespaces = ['common', 'contracts'];
         [data-theme-mode="dark"] .supplier-link.active { background: #3a2e12; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="contracts">
     <?php include '../includes/header.php'; ?>
@@ -866,6 +866,6 @@ $translationNamespaces = ['common', 'contracts'];
             return label === key ? p : label;
         }
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

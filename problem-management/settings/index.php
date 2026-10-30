@@ -1,4 +1,12 @@
 <?php
+/**
+ * Problem Management -> Settings: the Statuses, Priorities and Problem AI tabs.
+ *
+ * Needs the problems module; each tab is shown only to analysts with its
+ * capability (settings_manifest.php). Statuses and priorities are listed, added,
+ * edited and deleted through api/problem-management/; the AI tab is the shared
+ * AI provider panel for "Draft root cause" and "Detect problems".
+ */
 session_start();
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../includes/functions.php';
@@ -24,9 +32,9 @@ $path_prefix = '../../';
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Problem Management Settings</title>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('problems', 'Settings')); ?></title>
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=79">
     <style>
         /* Pin the shared accent to the module red so the tabs, Add buttons,
            toggles, modal primary button and focus rings read on-brand. */
@@ -43,7 +51,7 @@ $path_prefix = '../../';
         .pms-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
         .tab-content .table-action-btn svg { width: 15px; height: 15px; }
     </style>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo BASE_URL; ?>assets/js/tz.js?v=5"></script>
 </head>
@@ -106,7 +114,7 @@ $path_prefix = '../../';
 
     <script src="<?php echo BASE_URL; ?>assets/js/toast.js"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/confirm.js"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/ai-settings.js?v=2"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/ai-settings.js?v=4"></script>
     <script>
     const PMS_API = '../../api/problem-management/';
     function pmsEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -173,5 +181,5 @@ $path_prefix = '../../';
     pmsLoad();
     </script>
 </body>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
 </html>

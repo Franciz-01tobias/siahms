@@ -29,7 +29,7 @@ return [
     // -- Inventory (index.php) ------------------------------------------------
     'inventory' => [
         'page_title'      => 'Service Desk - Software',
-        'heading'         => 'Software Inventory',
+        'heading'         => 'Software inventory',
         'search'          => 'Search by application name or publisher...',
         'tab_apps'        => 'Applications',
         'tab_components'  => 'Components',
@@ -45,6 +45,7 @@ return [
 
         // Manually added applications (#1549).
         'add_app'         => 'Add application',
+        'new_app'         => 'New application',
         'edit_app'        => 'Edit application',
         'added_by_hand'   => 'Added by hand',
         'f_name'          => 'Name',
@@ -135,7 +136,7 @@ return [
 
     // -- Widget library (dashboard/library.php) ------------------------------
     'library' => [
-        'page_title'   => 'Service Desk - Software Widget Library',
+        'page_title'   => 'Software Widget Library',
         'back'         => 'Dashboard',
         'heading'      => 'Widget Library',
         'search'       => 'Search widgets...',

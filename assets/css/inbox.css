@@ -112,6 +112,8 @@ body {
 .changes-header .header-nav,
 .cmdb-header .header-nav,
 .contracts-header .header-nav,
+.domains-header .header-nav,
+.files-header .header-nav,
 .forms-header .header-nav,
 .knowledge-header .header-nav,
 .lms-header .header-nav,
@@ -124,6 +126,7 @@ body {
 .software-header .header-nav,
 .system-header .header-nav,
 .tasks-header .header-nav,
+.projects-header .header-nav,
 .tickets-header .header-nav,
 .watchtower-header .header-nav,
 .wiki-header .header-nav,
@@ -136,8 +139,9 @@ body {
 /* Per-module min-widths (chosen to fit the longest label in each nav).
    Modules with many buttons (tickets, system) use the lower end so the
    nav doesn't overflow on standard laptop widths. */
-.assets-header .header-nav .nav-btn,
 .changes-header .header-nav .nav-btn,
+.domains-header .header-nav .nav-btn,
+.projects-header .header-nav .nav-btn,
 .knowledge-header .header-nav .nav-btn,
 .lms-header .header-nav .nav-btn,
 .morning-checks-header .header-nav .nav-btn,
@@ -147,6 +151,12 @@ body {
 .watchtower-header .header-nav .nav-btn,
 .workflow-header .header-nav .nav-btn {
     min-width: 130px;
+    justify-content: center;
+}
+
+/* Assets: nine buttons since Leases (3.5.0), so a whisker narrower. */
+.assets-header .header-nav .nav-btn {
+    min-width: 118px;
     justify-content: center;
 }
 
@@ -1161,6 +1171,36 @@ body.ticket-popout .ticket-toolbar {
     outline: none;
     border-color: var(--accent, #0078d4);
 }
+
+/* Confidential tickets (discussion #62): the Sensitivity select and a padlock
+   before the subject in the ticket list. Danger tones, from the theme, so they
+   follow light and dark. */
+.toolbar-select.is-confidential {
+    background: var(--danger-bg, #fdecea);
+    color: var(--danger-text, #b71c1c);
+    border-color: var(--danger-border, #f5c2c0);
+    font-weight: 600;
+}
+.row-confidential-icon {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-right: 4px;
+    color: var(--danger-text, #b71c1c);
+}
+.row-confidential-icon svg { width: 13px; height: 13px; }
+.summary-confidential {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--danger-bg, #fdecea);
+    color: var(--danger-text, #b71c1c);
+    border: 1px solid var(--danger-border, #f5c2c0);
+}
+.summary-confidential[hidden] { display: none; }
+.summary-confidential .row-confidential-icon { margin-right: 4px; }
 
 /* Action Toolbar */
 .action-toolbar {
@@ -3940,6 +3980,27 @@ body .tox-tinymce-aux {
 .reply-tpl-labelrow {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; margin-bottom: 6px;
+}
+
+/* Reply window laid out to give the message the room (Ed, 2.10.0).
+   To / Cc: label beside the box, one line each, two columns. */
+#emailModal .reply-addr-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+}
+#emailModal .reply-addr {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+#emailModal .reply-addr .form-label { margin: 0; flex-shrink: 0; min-width: 22px; }
+#emailModal .reply-addr .form-input { flex: 1; min-width: 0; }
+/* Templates and Signature, bottom left of the footer; Cancel / Cleanup / Send
+   stay right. Their menus open UPWARDS from here, or they would drop off the
+   bottom of the window. */
+#emailModal .reply-footer-tools { display: flex; gap: 8px; margin-right: auto; align-items: center; }
+/* Same size as Cancel / Cleanup / Send beside them (.btn's padding and font),
+   rather than the compact size they had sitting on the editor's label row. */
+#emailModal .reply-footer-tools .reply-tpl-btn { padding: 10px 16px; font-size: 14px; line-height: normal; }
+#emailModal .reply-footer-tools .reply-tpl-menu {
+    top: auto; bottom: calc(100% + 6px); left: 0; right: auto;
 }
 .reply-tpl-wrap { position: relative; }
 .reply-tpl-btn {

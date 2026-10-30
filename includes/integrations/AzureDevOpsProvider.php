@@ -61,6 +61,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
     const COMMENT_OVERLAP_MINUTES    = 5;
     const COMMENT_LOOKBACK_CAP_HOURS = 24;
 
+    /** The optional features Azure DevOps supports - everything except a priority list. */
     protected function capabilities(): array
     {
         return [
@@ -92,6 +93,10 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * a work item id is unique across the organisation, and scoping the read to
      * a project would mean knowing which project it lives in before we can look
      * it up, which the link row does not always carry.
+      *
+      * @param string $path  the route under `_apis/`, e.g. 'wit/workitems/42'; a leading slash is dropped
+      * @param array $query  query-string parameters; api-version is added and wins over any given
+      * @param string $version  the api-version to send - one of the API_VERSION* constants
      */
     protected function apiUrl(string $path, array $query = [], string $version = self::API_VERSION): string
     {
@@ -99,7 +104,14 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return $this->baseUrl() . '/_apis/' . ltrim($path, '/') . '?' . http_build_query($query);
     }
 
-    /** A project-scoped API URL: `{base}/{project}/_apis/{path}`. */
+    /**
+     * A project-scoped API URL: `{base}/{project}/_apis/{path}`.
+     *
+     * @param string $project  the project name (or GUID); URL-encoded here
+     * @param string $path  the route under the project's `_apis/`; a leading slash is dropped
+     * @param array $query  query-string parameters; api-version is added and wins over any given
+     * @param string $version  the api-version to send - one of the API_VERSION* constants
+     */
     protected function projectUrl(string $project, string $path, array $query = [], string $version = self::API_VERSION): string
     {
         $query['api-version'] = $version;
@@ -107,7 +119,12 @@ class AzureDevOpsProvider extends IssueTrackerProvider
              . '?' . http_build_query($query);
     }
 
-    /** The human-facing link stored on the link row and shown in the panel. */
+    /**
+     * The human-facing link stored on the link row and shown in the panel.
+     *
+     * @param string $project  the name of the project the work item lives in
+     * @param string $id  the numeric work item id
+     */
     public function browseUrl(string $project, string $id): string
     {
         return $this->baseUrl() . '/' . rawurlencode($project) . '/_workitems/edit/' . rawurlencode($id);
@@ -121,6 +138,11 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * username entirely; sending the user's email in it also works, which is
      * why a wrong implementation can appear to succeed on a developer's own
      * account and fail on a service account.
+      *
+      * @param string $method  the HTTP method - 'GET', 'POST' or 'PATCH'
+      * @param string $url  the full URL, from apiUrl() or projectUrl()
+      * @param ?array $json  the body to JSON-encode; null sends no body
+      * @param ?string $contentType  the body's Content-Type; null means application/json
      */
     protected function devopsRequest(string $method, string $url, ?array $json = null, ?string $contentType = null): array
     {
@@ -146,7 +168,13 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return is_array($decoded) ? $decoded : [];
     }
 
-    /** A JSON Patch write. Separated because the content type is the whole trick. */
+    /**
+     * A JSON Patch write. Separated because the content type is the whole trick.
+     *
+     * @param string $method  'POST' to create a work item, 'PATCH' to change one
+     * @param string $url  the full URL, from apiUrl() or projectUrl()
+     * @param array $ops  the JSON Patch operations, e.g. built by addOp()
+     */
     protected function patchRequest(string $method, string $url, array $ops): array
     {
         return $this->devopsRequest($method, $url, $ops, 'application/json-patch+json');
@@ -160,6 +188,9 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * JSON — so "the connection test passed but nothing works" is the symptom of
      * treating any 2xx as fine. This is why devopsRequest() accepts 200-299 but
      * testConnection() insists on a parsed identity.
+      *
+      * @param int $code  the HTTP status code
+      * @param string $rawBody  the response body as received - JSON, or an HTML sign-in page
      */
     protected function extractError(int $code, string $rawBody): string
     {
@@ -180,6 +211,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
     /**
      * Azure DevOps fields are HTML — both the description and comment bodies.
      * `System.Description` is rendered as rich text on every work item form.
+      *
+      * @param IssueDoc $doc  the description or comment to render as HTML
      */
     public function renderDoc(IssueDoc $doc)
     {
@@ -201,6 +234,9 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * So the type's own field list decides, and the answer is cached per
      * (project, type) because it cannot change without an admin editing the
      * process.
+      *
+      * @param string $project  the project name
+      * @param string $type  the work item type name, e.g. 'Bug'
      */
     protected function bodyFieldFor(string $project, string $type): string
     {
@@ -232,6 +268,12 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      *
      * Separate and protected so the patch shape is provable without a live org —
      * this is the single most provider-specific thing in the file.
+      *
+      * @param array $target  array{project:string, work_item_type?:string, issue_type?:string, area_path?:string,
+      *                        iteration_path?:string} - the escalation target
+      * @param string $summary  the title; trimTitle() collapses whitespace and caps it at 255 characters
+      * @param IssueDoc $body  the description, written to the type's body field (see bodyFieldFor())
+      * @param array $fields  mapped fields, field reference name => value; keys that are not strings are skipped
      */
     protected function buildCreatePatch(array $target, string $summary, IssueDoc $body, array $fields = []): array
     {
@@ -275,6 +317,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * requesting a Bug quietly produced a Task, with no error anywhere, because
      * the default silently applied. That is exactly what happened on the first
      * live run. Accept both, and default only when neither was given.
+      *
+      * @param array $target  the escalation target; its work_item_type, else issue_type, is read
      */
     protected function targetType(array $target): string
     {
@@ -287,7 +331,12 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return 'Task';
     }
 
-    /** One JSON Patch add operation against a field. */
+    /**
+     * One JSON Patch add operation against a field.
+     *
+     * @param string $refName  the field reference name, e.g. 'System.Title'
+     * @param mixed $value  the value to set
+     */
     protected function addOp(string $refName, $value): array
     {
         return ['op' => 'add', 'path' => '/fields/' . $refName, 'value' => $value];
@@ -297,6 +346,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * ⚠️ System.Title is capped at 255 characters and Azure DevOps rejects the
      * whole create if it is longer — so a ticket with a very long subject would
      * fail to escalate at all rather than arrive with a shortened title.
+      *
+      * @param string $summary  the ticket subject
      */
     protected function trimTitle(string $summary): string
     {
@@ -305,6 +356,16 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return mb_strlen($s) > 255 ? (mb_substr($s, 0, 252) . '...') : $s;
     }
 
+    /**
+     * Creates a work item of the target's type in the target project and returns it parsed.
+     *
+     * Throws when no project is given or Azure DevOps returns no id.
+      *
+      * @param array $target  the escalation target, shaped as for buildCreatePatch() - project is required
+      * @param string $summary  the ticket subject, used as the title
+      * @param IssueDoc $body  the description
+      * @param array $fields  mapped fields, field reference name => value
+     */
     public function createIssue(array $target, string $summary, IssueDoc $body, array $fields = []): array
     {
         $project = (string)($target['project'] ?? '');
@@ -335,6 +396,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      *
      * ⚠️ `external_key` is the plain numeric id. Azure DevOps has no
      * human-readable key like Jira's OPS-123 — the id IS what people quote.
+      *
+      * @param array $wi  one work item as Azure DevOps returns it - id plus fields keyed by reference name
      */
     protected function parseWorkItem(array $wi): array
     {
@@ -365,6 +428,10 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * category `Resolved` on a Bug and `InProgress` on a User Story.
      *
      * Cached per (project, type) — a process only changes when an admin edits it.
+      *
+      * @param string $project  the project name
+      * @param string $type  the work item type name, e.g. 'Bug'
+      * @param string $state  the state name, e.g. 'Resolved'; matched without regard to case
      */
     protected function stateCategory(string $project, string $type, string $state): ?string
     {
@@ -414,6 +481,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      *
      * Jira has no equivalent: its "Won't Do" lands in `done` and there is no
      * fifth category, which is why this setting exists only here.
+      *
+      * @param string $category  the Azure DevOps state category - Proposed, InProgress, Resolved, Completed or Removed
      */
     protected function mapStateCategory(string $category): ?string
     {
@@ -442,6 +511,11 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return 'System.Title,System.State,System.WorkItemType,System.AssignedTo,System.TeamProject';
     }
 
+    /**
+     * Reads one work item by its numeric id and returns it parsed for the escalation panel.
+     *
+     * @param string $externalId  the numeric work item id; anything else throws
+     */
     public function fetchIssue(string $externalId): array
     {
         if (!ctype_digit((string)$externalId)) {
@@ -457,6 +531,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      *
      * ⚠️ Capped at 200 ids per call by the API. Asking for 201 is a 400, not a
      * truncated list, so the chunking is load-bearing rather than politeness.
+      *
+      * @param array $externalIds  work item ids to read; ones that are not numeric are dropped
      */
     public function fetchIssues(array $externalIds): array
     {
@@ -491,6 +567,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * Comments are project-scoped even though work item ids are not, so we have
      * to know which project the item lives in. Resolved from the item itself and
      * cached, rather than requiring every caller to carry it.
+      *
+      * @param string $externalId  the numeric work item id
      */
     protected function projectOf(string $externalId): string
     {
@@ -506,6 +584,12 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return $cache[$externalId] = $project;
     }
 
+    /**
+     * Posts a comment, rendered to HTML, on a work item and returns the new comment's id.
+     *
+     * @param string $externalId  the numeric work item id
+     * @param IssueDoc $body  the comment, rendered to HTML
+     */
     public function addComment(string $externalId, IssueDoc $body): string
     {
         $url = $this->projectUrl($this->projectOf($externalId),
@@ -518,6 +602,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
     /**
      * Comments on one work item, normalised.
      *
+      * @param string $externalId  the numeric work item id
      * @return array [['comment_id'=>…, 'comment_body'=>plain text,
      *                 'author_identity'=>…, 'author_name'=>…, 'created_ts'=>?int], …]
      */
@@ -545,6 +630,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * `aad.<base64>`. Comparing descriptors would never match, so every one of
      * our own comments would be re-imported as if a developer had written it.
      * The GUID in `id` is identical across both.
+      *
+      * @param array $c  one entry of the comments response - id, text (HTML), createdBy, createdDate
      */
     protected function parseComment(array $c): array
     {
@@ -567,6 +654,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * documented on integrationsHtmlToIssueText(): strip_tags removes the TAGS
      * but keeps the CONTENT of <style>, so a pasted-in styled block arrives as
      * a wall of CSS.
+      *
+      * @param string $html  a comment's text as HTML
      */
     protected function htmlToText(string $html): string
     {
@@ -586,6 +675,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * so an implementation that stops after the upload reports success, and the
      * file exists in the org, invisible to everyone.
      *
+      * @param string $externalId  the numeric id of the work item to attach the file to
      * @param array $file ['data'=>binary, 'filename'=>string, 'content_type'=>string]
      */
     public function addAttachment(string $externalId, array $file): void
@@ -633,7 +723,11 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         );
     }
 
-    /** Azure DevOps takes the filename verbatim; strip anything path- or header-breaking. */
+    /**
+     * Azure DevOps takes the filename verbatim; strip anything path- or header-breaking.
+     *
+     * @param string $filename  the file's original name
+     */
     protected function safeFilename(string $filename): string
     {
         $safe = str_replace(['"', "\r", "\n", '\\', '/'], '', basename($filename));
@@ -649,6 +743,9 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * has no value yet, `replace` fails, whereas `add` both sets and overwrites.
      * The contract cannot express `remove`, so clearing a field is not supported
      * here — and that is a genuine limit rather than an oversight.
+      *
+      * @param string $externalId  the numeric work item id
+      * @param array $fields  field reference name => value; each becomes an `add` op
      */
     public function updateFields(string $externalId, array $fields): void
     {
@@ -679,6 +776,9 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      *     future-dated window correctly matching nothing. This is the OPPOSITE
      *     of Jira, where an absolute date is read in the Jira user's own
      *     timezone and forced us onto relative minutes.
+      *
+      * @param ?string $since  UTC 'Y-m-d H:i:s' watermark (last_poll_watermark); null on the first run returns nothing
+      * @param array $externalIds  ids of the work items this connection holds links to; non-numeric ones are dropped
      */
     public function pollChanges(?string $since, array $externalIds = []): array
     {
@@ -724,6 +824,9 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * The overlap exists because a comment written in the same second the poll
      * ran would otherwise fall between two windows and never be seen; the same
      * comment arriving twice is harmless, as the comment map dedupes by id.
+      *
+      * @param int $sinceTs  the watermark as a Unix timestamp
+      * @param ?int $nowTs  the current time as a Unix timestamp; null means time()
      */
     protected function pollCutoff(int $sinceTs, ?int $nowTs = null): int
     {
@@ -733,13 +836,25 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return (int) max($overlap, $floor);
     }
 
-    /** WIQL is UTC when the literal says so. Format it that way, always. */
+    /**
+     * WIQL is UTC when the literal says so. Format it that way, always.
+     *
+     * @param int $ts  a Unix timestamp
+     */
     protected function wiqlTimestamp(int $ts): string
     {
         return gmdate('Y-m-d\TH:i:s', $ts) . '.0000000Z';
     }
 
-    /** @return string[] ids of watched work items changed since $cutoff */
+    /**
+     * Asks WIQL which of the watched work items changed since $cutoff, in chunks.
+     *
+     * A chunk that fails is skipped rather than failing the whole poll.
+     *
+      * @param array $ids  numeric work item ids to check
+      * @param int $cutoff  a Unix timestamp; items changed at or after it are returned
+     * @return string[] ids of watched work items changed since $cutoff
+     */
     protected function searchChangedSince(array $ids, int $cutoff): array
     {
         $out   = [];
@@ -794,7 +909,12 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         ];
     }
 
-    /** @return array [['key'=>'Support','name'=>'Support'], …] */
+    /**
+     * Lists the organisation's well-formed projects for the mapping dropdowns, a page of
+     * 100 at a time up to 1,000.
+     *
+     * @return array [['key'=>'Support','name'=>'Support'], …]
+     */
     public function listProjects(): array
     {
         $out  = [];
@@ -823,6 +943,8 @@ class AzureDevOpsProvider extends IssueTrackerProvider
      * ⚠️ Per-project, genuinely — two projects in one organisation on different
      * processes return different lists. Basic gives Issue/Epic/Task; Agile adds
      * Bug, User Story and Feature. Caching this across projects would be wrong.
+      *
+      * @param string $project  the project name, as listProjects() returns it in `key`
      */
     public function listIssueTypes(string $project): array
     {
@@ -840,7 +962,11 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         return $out;
     }
 
-    /** Types that exist for tooling rather than for people to be assigned work. */
+    /**
+     * Types that exist for tooling rather than for people to be assigned work.
+     *
+     * @param string $name  the work item type name
+     */
     protected function isInternalType(string $name): bool
     {
         return in_array($name, [

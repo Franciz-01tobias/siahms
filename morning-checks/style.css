@@ -48,12 +48,15 @@ header {
     width: auto;
 }
 
-nav {
+/* TRAP: never a bare `nav` here. These rules predate the module sidebar
+   (includes/app_sidebar.php), which is a <nav> too - `nav a`'s 20px side
+   padding squeezed its 42px icons to nothing on this page only. */
+nav:not(.app-sidebar) {
     display: flex;
     gap: 10px;
 }
 
-nav a {
+nav:not(.app-sidebar) a {
     padding: 8px 20px;
     text-decoration: none;
     color: var(--text-muted, #5a6c7d);
@@ -62,12 +65,12 @@ nav a {
     font-weight: 500;
 }
 
-nav a:hover {
+nav:not(.app-sidebar) a:hover {
     background-color: var(--surface-hover, #f0f2f5);
     color: var(--text, #2c3e50);
 }
 
-nav a.active {
+nav:not(.app-sidebar) a.active {
     background-color: var(--accent, #007bff);
     color: white;
 }

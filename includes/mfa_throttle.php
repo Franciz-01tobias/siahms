@@ -59,13 +59,19 @@ const MFA_THROTTLE_FALLBACK_MINUTES = 30;
  * Guard the table name. Returns the safe literal or null.
  * Interpolating a caller-supplied table into SQL is how a helper like this turns
  * into an injection point, so the name never travels — only the choice does.
+ *
+ * @param string $table  the account table asked for - only 'analysts' or 'users' pass
  */
 function mfaThrottleTable(string $table): ?string
 {
     return in_array($table, MFA_THROTTLE_TABLES, true) ? $table : null;
 }
 
-/** One system_settings read, with its own guard. Mirrors getSecuritySetting() in auth/login.php. */
+/**
+ * One system_settings read, with its own guard. Mirrors getSecuritySetting() in auth/login.php.
+ *
+ * @param string $key  the system_settings setting_key to read
+ */
 function mfaThrottleSetting(PDO $conn, string $key): ?string
 {
     try {
@@ -102,6 +108,9 @@ function mfaThrottleLockoutMinutes(PDO $conn): int
 /**
  * Is this account's code step locked right now? Returns whole minutes remaining,
  * or 0 when it is free to try. Degrades to 0 when the columns are absent.
+ *
+ * @param string $table  the account table: 'analysts' or 'users'
+ * @param int $accountId  the account's id in that table; 0 or less always gives 0
  */
 function mfaThrottleMinutesRemaining(PDO $conn, string $table, int $accountId): int
 {
@@ -131,6 +140,9 @@ function mfaThrottleMinutesRemaining(PDO $conn, string $table, int $accountId): 
  *
  * `tracked` is false when the columns are missing, so the caller can tell
  * "counted" from "could not count" rather than reading 0 as a clean slate.
+ *
+ * @param string $table  the account table: 'analysts' or 'users'
+ * @param int $accountId  the account's id in that table; 0 or less counts nothing
  */
 function mfaThrottleRecordFailure(PDO $conn, string $table, int $accountId): array
 {
@@ -175,6 +187,9 @@ function mfaThrottleRecordFailure(PDO $conn, string $table, int $accountId): arr
  *
  * ⚠️ This is the ONLY thing that clears it. In particular the password step must
  * never call it — that is precisely the reset the attack relied on.
+ *
+ * @param string $table  the account table: 'analysts' or 'users'
+ * @param int $accountId  the account's id in that table
  */
 function mfaThrottleReset(PDO $conn, string $table, int $accountId): void
 {
@@ -193,6 +208,8 @@ function mfaThrottleReset(PDO $conn, string $table, int $accountId): void
 /**
  * Log the missing-column case once per request rather than on every keystroke,
  * so a un-migrated install leaves one readable line instead of a flooded log.
+ *
+ * @param Exception $e  the exception from the failed query, normally a missing mfa_* column
  */
 function mfaThrottleWarnOnce(Exception $e): void
 {

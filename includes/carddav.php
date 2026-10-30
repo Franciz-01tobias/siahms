@@ -187,6 +187,8 @@ function cardDavRequest(array $cfg, string $method, string $url, string $body = 
  *
  * Deliberately not "HTTP 401" — the whole point of these strings is that the
  * person reading them is configuring a server, not debugging one.
+ *
+ * @param int $status  the HTTP status of the failed request; 0 means the server was never reached
  */
 function cardDavExplainStatus(int $status): string
 {
@@ -217,6 +219,7 @@ function cardDavExplainStatus(int $status): string
  * itself — is not, which is how the parent gets excluded without special-casing
  * it by URL.
  *
+ * @param array $cfg  request settings from cardDavConfigFromProvider() - url (the account's DAV home), username, password, auth
  * @return array ['ok'=>bool, 'books'=>[['href'=>…,'name'=>…,'description'=>…]], 'auth'=>…, 'error'=>…, 'status'=>int]
  */
 function cardDavListAddressBooks(array $cfg): array
@@ -265,6 +268,8 @@ function cardDavListAddressBooks(array $cfg): array
  * Returns null when the body is not parseable as DAV at all — which is a
  * different answer from "parsed fine, found none", and the two must not be
  * collapsed: the first is a wrong URL, the second is an empty account.
+ *
+ * @param string $xml  the PROPFIND multistatus body as the server sent it
  */
 function cardDavParseAddressBooks(string $xml): ?array
 {
@@ -323,6 +328,8 @@ function cardDavParseAddressBooks(string $xml): ?array
  * which on an address book of a few thousand contacts is the difference between
  * one request and a few thousand.
  *
+ * @param array $cfg  request settings from cardDavConfigFromProvider()
+ * @param string $bookHref  the address book's href as the server listed it, absolute or relative to $cfg['url']
  * @return array ['ok'=>bool, 'cards'=>[['href'=>…,'etag'=>…,'vcard'=>…]], 'error'=>…, 'status'=>int]
  */
 function cardDavFetchCards(array $cfg, string $bookHref): array
@@ -379,6 +386,9 @@ function cardDavFetchCards(array $cfg, string $bookHref): array
  * segment, and all three are legal. Concatenating blindly produces
  * `https://host/dav.php/addressbooks/jsmith//dav.php/addressbooks/jsmith/itsm/`
  * — a 404 that looks like a missing address book rather than a client bug.
+ *
+ * @param string $baseUrl  the absolute URL the href is relative to (the configured server address)
+ * @param string $href  an href from a DAV response - absolute, root-relative or a bare segment; '' gives $baseUrl
  */
 function cardDavAbsoluteUrl(string $baseUrl, string $href): string
 {
@@ -403,6 +413,8 @@ function cardDavAbsoluteUrl(string $baseUrl, string $href): string
  * the raw text line by line therefore reads `CATEGORIES:customer,supplier,pa`
  * and then a separate line ` rtner`, so the last value in a long list silently
  * goes missing and everything still looks like it worked.
+ *
+ * @param string $vcard  one raw vCard as the server sent it, any line endings
  */
 function cardDavUnfold(string $vcard): array
 {
@@ -433,6 +445,8 @@ function cardDavUnfold(string $vcard): array
  * backslash still in it. Harmless-looking while the sync was one-way; the moment
  * a value is written back it would be re-escaped to `Head\\, Sales` and the card
  * would gain a backslash on every run.
+ *
+ * @param string $v  an escaped vCard TEXT value as it appears after the colon
  */
 function cardDavUnescapeText(string $v): string
 {
@@ -462,6 +476,8 @@ function cardDavUnescapeText(string $v): string
  * ⚠️ CR is dropped rather than escaped. A lone `\r` has no representation in a
  * vCard text value, and emitting a bare carriage return inside one would be read
  * by the next parser as a line fold.
+ *
+ * @param string $v  the plain text to write into a vCard
  */
 function cardDavEscapeText(string $v): string
 {
@@ -477,6 +493,9 @@ function cardDavEscapeText(string $v): string
  * `CATEGORIES;TYPE=x:a,b` are the same property, and an implementation that
  * looks for `CATEGORIES:` misses the second. Comparison is case-insensitive
  * because the spec says property names are.
+ *
+ * @param array $lines  the card's unfolded lines from cardDavUnfold()
+ * @param string $name  the property name to find, e.g. 'CATEGORIES' - any case
  */
 function cardDavProperty(array $lines, string $name): array
 {
@@ -510,6 +529,9 @@ function cardDavProperty(array $lines, string $name): array
  * operator is the only one who knows which of their groups is the real one.
  * `contacts` is the count of ordinary (non-group) cards, which is what "bring
  * in everything" would import.
+ *
+ * @param array $cfg  request settings from cardDavConfigFromProvider()
+ * @param string $bookHref  the address book's href as the server listed it
  */
 function cardDavScanBook(array $cfg, string $bookHref): array
 {
@@ -572,6 +594,8 @@ function cardDavScanBook(array $cfg, string $bookHref): array
  * case-insensitively but stored as typed, because a CATEGORIES value is
  * matched case-insensitively by every client that writes one, while a group UID
  * is opaque and must survive untouched.
+ *
+ * @param mixed $stored  auth_providers.carddav_scope_value as stored - newline-separated; null reads as empty
  */
 function cardDavScopeList($stored): array
 {
@@ -592,6 +616,9 @@ function cardDavScopeList($stored): array
  * ⚠️ Decrypts here and nowhere earlier: the row travels around as stored, and
  * the plaintext exists only for the length of one call. Same handling as
  * `ldap_bind_password`.
+ *
+ * @param array $provider  an auth_providers row as stored, carddav_password still encrypted
+ * @param ?string $overridePassword  a plain password to use instead of the stored one; null decrypts the stored one
  */
 function cardDavConfigFromProvider(array $provider, ?string $overridePassword = null): array
 {

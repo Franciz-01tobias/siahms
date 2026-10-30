@@ -40,6 +40,8 @@ const SEARCH_SOURCE_DOCUMENT = 'document';
  * scans need tier 2 (Tika). Using the tier-1 test alone marked every PDF
  * `unsupported` at upload, which reads as "we looked and there is nothing to
  * read" — permanently — when the truth was "we never asked the thing that could".
+ *
+ * @param string $filename  the file's name - only its extension is judged
  */
 function documentTextReadable(PDO $conn, string $filename): bool
 {
@@ -53,6 +55,10 @@ function documentTextReadable(PDO $conn, string $filename): bool
  * Called after an upload. A link, or a file type nothing can read, is recorded
  * with a terminal status rather than left out — "we looked and there is nothing
  * to read" and "we have not looked yet" must not be the same row.
+ *
+ * @param int $documentId  the documents id
+ * @param string $kind  the document kind: 'file' or 'link' (DOCUMENT_KIND_*); a link is marked unsupported
+ * @param ?string $filename  the file's original name; null when there is none
  */
 function documentTextEnqueue(PDO $conn, int $documentId, string $kind, ?string $filename): void
 {
@@ -95,6 +101,8 @@ function documentTextQueueDepth(PDO $conn): int
  * NO permission facts beyond the tenant, deliberately: who may see a document
  * depends on what it is attached to, which changes after indexing. That question
  * is answered at query time — see documentSearchVisibilityClause().
+ *
+ * @param int $documentId  the documents id
  */
 function searchIndexDocument(PDO $conn, int $documentId): void
 {
@@ -140,7 +148,11 @@ function searchIndexDocument(PDO $conn, int $documentId): void
     ]);
 }
 
-/** Drop a document from the index — used when its last link goes. */
+/**
+ * Drop a document from the index — used when its last link goes.
+ *
+ * @param int $documentId  the documents id
+ */
 function searchUnindexDocument(PDO $conn, int $documentId): void
 {
     try { searchCorpusDelete($conn, SEARCH_SOURCE_DOCUMENT, $documentId); }
@@ -154,6 +166,9 @@ function searchUnindexDocument(PDO $conn, int $documentId): void
  * so two workers cannot collide, return abandoned claims to the queue, and stop
  * the moment the extractor looks unreachable rather than grinding through a
  * batch collecting timeouts.
+ *
+ * @param int $limit  the most queued documents to read this run
+ * @param float $deadline  a microtime(true) moment to stop by; 0 means no time limit
  */
 function documentTextDrain(PDO $conn, int $limit = 5, float $deadline = 0): array
 {
@@ -262,6 +277,8 @@ function documentTextDrain(PDO $conn, int $limit = 5, float $deadline = 0): arra
  * Expressed as "not a document, OR a visible document", so it can be ANDed onto
  * the existing search WHERE without disturbing any other source type.
  *
+ * @param ?array $allowedModules  the analyst's allowed module keys ($_SESSION['allowed_modules']); null means all
+ * @param string $alias  the alias the search query gives the search_documents table
  * @return array [sqlFragment, params]
  */
 function documentSearchVisibilityClause(PDO $conn, int $analystId, ?array $allowedModules, string $alias = 'sd'): array

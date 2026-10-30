@@ -37,7 +37,7 @@ try {
         exit;
     }
 
-    $out = FormsService::collectionSubmissions($conn, $id);
+    $out = FormsService::collectionSubmissions($conn, $id, ActorContext::fromSession($conn)->companyScope);
     echo json_encode([
         'success'     => true,
         'collection'  => $collection,

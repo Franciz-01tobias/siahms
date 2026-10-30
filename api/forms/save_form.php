@@ -15,6 +15,9 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('forms');
+requireModuleWriteJson('forms');   // Read only access (#180) changes nothing here
+require_once '../../includes/rbac.php';
+requireActionJson(Cap::FORMS_DESIGN);   // designing - #180; module access is enough until Forms → Settings → Access restricts it
 
 $input = json_decode(file_get_contents('php://input'), true);
 if (!$input) {

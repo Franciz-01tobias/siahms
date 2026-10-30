@@ -13,9 +13,15 @@
  *   2. Add an entry below (id, slug, file, title, category, desc, keywords, icon,
  *      when, checks, duration, persists, optional input).
  *   3. Create system/debug-tools/<slug>/index.php (two lines — see d001/index.php).
+ *
+ * @wiki System
  */
 
-/** @return array<int,array<string,mixed>> Ordered list of debug tools. */
+/**
+ * Every Debug Tool with its card and page metadata - id, slug, backend file,
+ * title, category, description, search keywords, when to run it, what it checks.
+ *
+ * @return array<int,array<string,mixed>> Ordered list of debug tools. */
 function getDebugTools() {
     return [
         [
@@ -343,24 +349,27 @@ function getDebugTools() {
             // damages the page, not just its own entry.
             'id'       => 'D014',
             'slug'     => 'd014',
-            'file'     => 'D014_azure_openai.php',
-            'title'    => 'Azure OpenAI — deployment endpoints',
+            'file'     => 'D014_ai_connections.php',
+            'title'    => 'AI connections — what is sent and what comes back',
             'category' => 'Integrations',
             'icon'     => 'cpu',
-            'desc'     => 'For installs using Azure OpenAI: show the exact URL and headers FreeITSM sends, make one live call, and read back what Azure said.',
-            'keywords' => 'azure openai deployment endpoint api-version api key 401 404 DeploymentNotFound content filter max_completion_tokens ai provider gpt enterprise tenant governance d014',
-            'when'     => 'Run this when an AI feature set to Azure OpenAI is not working, and paste the output into the discussion rather than describing the symptom. Azure support was written without an Azure subscription to test against: every byte FreeITSM sends is covered by an automated suite, but nothing had ever spoken to a real tenant before it shipped, so the first installs to use it are doing the verification. This tool exists to make that one round trip instead of five. It prints the URL it builds from your endpoint, deployment and API version, the headers it sends, and then makes a real call and shows Azure\'s answer word for word — with a reading of the failures worth naming, because a 404 here almost always means the deployment NAME rather than a missing endpoint, and a 401 usually means a key from a different Azure resource.',
-            'checks'   => [
-                'Which AI features on this install are set to Azure, and which are on another provider — so a feature that is quietly still on Anthropic is visible rather than assumed',
-                'The endpoint, deployment and API version exactly as saved, including whether the API version is falling back to the built-in default',
-                'The complete URL that will be called, assembled the same way the live code assembles it — this is the single most common thing to get wrong, and seeing it written out usually ends the question',
-                'That the key is sent in an api-key header and NOT as Authorization: Bearer, which is the difference between Azure and OpenAI',
-                'One live call per Azure-configured feature, reporting the reply, the token counts and how long it took',
-                'On failure, Azure\'s own words verbatim plus a reading: 404/DeploymentNotFound, 401, a bad api-version, the content filter, max_completion_tokens, or a network/TLS problem that never reached Azure at all',
-                'An empty answer with a successful call is named separately, because a deployment that reasons at length can spend its whole budget before writing a word and that looks like a failure without being one',
+            'desc'     => 'For any AI feature, on any provider: make the Test button\'s call and print the exact request FreeITSM sent and the provider\'s exact answer, with the key hidden.',
+            'keywords' => 'ai provider anthropic openai openrouter azure foundry openai deployment endpoint api-version api version target uri api key test failed connection 401 404 resource not found DeploymentNotFound content filter max_completion_tokens temperature gpt-5 payload request response headers dev tools inspect d014 171',
+            'inputs'   => [
+                ['name' => 'ns', 'label' => 'Feature', 'type' => 'select', 'optional' => true, 'options' => debugToolAiFeatureOptions()],
             ],
-            'duration' => 'A few seconds, plus one live call per Azure-configured feature.',
-            'persists' => 'Nothing is written. It makes the same tiny live call the Test button makes, which spends a handful of tokens against your own deployment. No API key is printed — only its first four characters and its length — and no prompt or ticket content appears in the output.',
+            'when'     => 'Run this when an AI feature\'s Test button fails, and paste the output into the issue rather than describing the symptom. Browser developer tools cannot show this call, because FreeITSM\'s SERVER makes it - the browser only ever talks to FreeITSM, which is why no API key appears in its headers. This tool records the server\'s own exchange and prints it: the address, the headers, the body, and the provider\'s answer word for word, followed by a reading of what the failure most likely means. For Azure OpenAI it goes further on a 404 or 400, which is usually the API version: it tries the common alternatives and tells you which one this deployment accepts. Choose one feature, or leave it on every feature to test each distinct setup once.',
+            'checks'   => [
+                'Every AI feature on this install, its provider, its model or deployment, and whether a key is saved — so a feature quietly still on another provider is visible rather than assumed',
+                'The setup exactly as saved, and for Azure what looks wrong before anything is sent: an API version that is really the model\'s version date (the GH #171 case), or an endpoint host Azure OpenAI does not normally use',
+                'One live call per distinct setup — features sharing a provider, model and key are called once — with every request and answer printed in full: address, headers, body, HTTP status, time taken and the provider\'s own words',
+                'Where a model refuses a setting by name (max_tokens, or a temperature newer models do not allow) and FreeITSM puts it right and asks again, both exchanges are shown so the correction is visible',
+                'On failure, a reading of what it most likely means: a key from another resource, a deployment name that does not exist, an API version Azure does not recognise, the content filter, a rate limit, or a network problem that never reached the provider',
+                'For a failing Azure deployment, the same call with each common API version (including the newer v1 route), and the one that works',
+                'An empty answer from a successful call is named separately, because a model that reasons first can spend a small budget before writing anything',
+            ],
+            'duration' => 'A few seconds per setup. A failing Azure setup adds up to four more short calls.',
+            'persists' => 'Nothing is written. It makes the same tiny call the Test button makes, which spends a handful of tokens, and a failing Azure setup a few more. The API key never appears - only its first four characters and its length - and no ticket content is sent: the only prompt is the fixed connection test.',
         ],
         [
             'id'       => 'D015',
@@ -406,10 +415,61 @@ function getDebugTools() {
             'duration' => 'Slower than the other tools — it reads every card in the book. Seconds for a few hundred contacts.',
             'persists' => 'Nothing, in either direction. It does not write to the address book and does not change anybody here, and it deliberately offers no "fix it" button: which side is right is a judgement a person has to make, and a one-click reconcile across hundreds of contacts is how a careful integration becomes a data-loss incident. ⚠️ Contact names and details DO appear in the output, so treat the report as personal data.',
         ],
+        [
+            'id'       => 'D017',
+            'slug'     => 'd017',
+            'file'     => 'D017_config_completeness.php',
+            'title'    => 'Config completeness — is anything missing from config.php?',
+            'category' => 'Installation',
+            'icon'     => 'shield',
+            'desc'     => 'Check your config.php against what this version expects, setting by setting, and get the exact line to add for anything missing.',
+            'keywords' => 'config config.php db_config settings constants missing upgrade template base_url ssl_verify_peer ssl_ca_bundle encryption_key_path trust_proxy_https cannot redeclare undefined constant 129 d017',
+            'when'     => 'Run this after an upgrade, after moving an install to a new server, or whenever a page fails with "undefined constant" or "Cannot redeclare". config.php is your own file - it is edited once and kept, so an upgrade never adds a line to it, and a copy made from an older version can lack a setting a newer version knows about. Most settings now have a safe built-in default, so a missing line usually changes nothing; this tool tells you which ones, and which ones you would want to set yourself.',
+            'checks'   => [
+                'Every setting this version knows about - whether it is needed, has a built-in default, or is optional - and whether your config.php sets it',
+                'The database settings that have no default, which normally live in db_config.php outside the web root',
+                'Constants in your config.php that this version does not know about (usually harmless leftovers)',
+                'Functions declared inside config.php - the shape that caused GH #129, where an old copy of a function in config.php clashed with the app\'s own',
+                'A plain-English verdict, with the exact line to add for anything you want to set',
+            ],
+            'duration' => 'Instant',
+            'persists' => 'Nothing. Read-only - it reads config.php\'s text for the NAMES it defines and checks which settings exist. 🔒 It never prints a value: no password, no path, no address - names and yes/no only, so the report is safe to send on.',
+        ],
+        [
+            'id'       => 'D018',
+            'slug'     => 'd018',
+            'file'     => 'D018_ticket_folder_counts.php',
+            'title'    => 'Ticket folder counts — why do the numbers say 0?',
+            'category' => 'Tickets',
+            'icon'     => 'count',
+            'desc'     => 'Follow every ticket through the filters behind the inbox\'s folder numbers, for one analyst, and see the step where they drop to zero.',
+            'keywords' => 'ticket counts totals badge folder numbers zero 0 all tickets my tickets status department analyst team inbox folder list empty d018',
+            'inputs'   => [
+                ['name' => 'analyst', 'label' => 'Analyst', 'type' => 'select', 'optional' => true, 'options' => debugToolAnalystOptions()],
+            ],
+            'when'     => 'Run this when somebody\'s inbox folder list shows 0 on All Tickets, the statuses or the departments, while they know there are tickets. Choose the analyst who sees the wrong numbers. The usual cause is not the database but teams: someone in a team gets folders and counts only for that team\'s departments, plus tickets with no department and their own. Up to 3.6.1 a team linked to no department counted nothing at all, which is why "My tickets" could show a number while everything else said 0; 3.7.0 counts the tickets with no department, and this tool shows which departments are being left out and why.',
+            'checks'   => [
+                'The analyst: active, and allowed into the Tickets module',
+                'Every table and column the counts read, with the optional ones (snooze, team grouping, companies) named separately because the counts work without them',
+                'Every ticket, then each filter in turn - the Trash, merged tickets, snoozed tickets, the company in use, the departments their teams can see - with how many each step removes',
+                'Their teams and the departments each team is linked to, naming a team linked to none, and how many tickets sit in departments they cannot see',
+                'Every team on the install: active or not, its members, its departments and how many tickets those hold - so one run covers everybody, not just the analyst chosen',
+                'The loose ends: departments no team is linked to, analysts in no team, and team or department links left pointing at something deleted',
+                'Statuses: which are active, and tickets with no status, a deleted status or an inactive one, which count in the total but in no status folder',
+                'When you run it for yourself, the real counts endpoint is called too, and its numbers printed beside the step-by-step ones',
+                'A plain-English verdict with the fix for anything found',
+            ],
+            'duration' => 'Instant',
+            'persists' => 'Nothing. Read-only - it counts tickets and reads table structure. It shows team, department and status names and ticket counts, never ticket content.',
+        ],
     ];
 }
 
-/** Find one tool by its slug (e.g. 'd001'). Returns null if not found. */
+/**
+ * Find one tool by its slug (e.g. 'd001'). Returns null if not found.
+ *
+ * @param mixed $slug  the tool's slug, e.g. 'd001', as the tool page sets it
+ */
 function getDebugToolBySlug($slug) {
     foreach (getDebugTools() as $tool) {
         if ($tool['slug'] === $slug) return $tool;
@@ -418,8 +478,35 @@ function getDebugToolBySlug($slug) {
 }
 
 /**
+ * D018's analyst picker: "you" first, then every active analyst. An empty list
+ * (database unreachable) still leaves "you", so the page always renders.
+ */
+function debugToolAnalystOptions(): array {
+    $opts = [['value' => '', 'label' => 'You']];
+    try {
+        require_once __DIR__ . '/../../../includes/functions.php';
+        $rows = connectToDatabase()->query("SELECT id, full_name FROM analysts WHERE is_active = 1 ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) $opts[] = ['value' => (string)$r['id'], 'label' => $r['full_name']];
+    } catch (Throwable $e) {
+    }
+    return $opts;
+}
+
+/** D014's feature picker: every AI feature, plus "all" (GH #171). */
+function debugToolAiFeatureOptions(): array {
+    require_once __DIR__ . '/../../../includes/ai_settings.php';
+    $opts = [['value' => '', 'label' => 'Every feature (each distinct setup once)']];
+    foreach (aiSettingsRegistry() as $ns => $entry) {
+        $opts[] = ['value' => $ns, 'label' => $entry['label']];
+    }
+    return $opts;
+}
+
+/**
  * Inline SVG markup for a debug-tool icon key. Unknown keys render a neutral
  * wrench so a typo never breaks the page. Sizing/colour come from CSS.
+ *
+ * @param mixed $key  the icon key from a tool's entry, e.g. 'ticket', 'sso'; unknown keys draw a wrench
  */
 function debugToolIcon($key) {
     $icons = [
@@ -430,6 +517,7 @@ function debugToolIcon($key) {
         'shield' => '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline>',
         'people' => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
         'sync'   => '<polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>',
+        'count'  => '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>',
         'clip'   => '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>',
     ];
     $inner = $icons[$key] ?? '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>';

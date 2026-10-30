@@ -31,6 +31,14 @@ if ($rfpId <= 0) {
 
 $conn = connectToDatabase();
 
+// The RFP's company (3.5.0): one this analyst cannot reach does not exist.
+require_once '../../includes/rfp_scope.php';
+if (!rfpCanView($conn, (int)$_SESSION['analyst_id'], $rfpId)) {
+    http_response_code(404);
+    echo 'RFP not found';
+    exit;
+}
+
 $rfpStmt = $conn->prepare("SELECT name, status FROM rfps WHERE id = ?");
 $rfpStmt->execute([$rfpId]);
 $rfp = $rfpStmt->fetch(PDO::FETCH_ASSOC);
@@ -66,7 +74,7 @@ $today = DateFmt::render(new DateTime('now', new DateTimeZone(Tz::current())), '
 <head>
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
-    <title><?= htmlspecialchars(t('contracts.rfp.preview.title_prefix') . ' · ' . $rfp['name'], ENT_QUOTES) ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('contracts', t('contracts.nav.rfp_builder'), t('contracts.rfp.preview.title_prefix') . ' · ' . $rfp['name'])); ?></title>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <style>

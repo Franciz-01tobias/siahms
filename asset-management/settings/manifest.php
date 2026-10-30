@@ -97,6 +97,13 @@ return [
                                'asset_lease_surface', 'asset_lease_days'],
         ],
         [
+            // Assets -> Leases (3.5.0): what can become of a leased asset.
+            'id'        => 'leasing',
+            'cap'       => Cap::ASSETS_LEASING,
+            'label_key' => 'asset-management.leases.settings_tab',
+            'grant'     => 'Manage lease outcomes',
+        ],
+        [
             // Designing the handover document (discussion #56). Note this gates
             // DESIGNING it, not producing one — printing a handover for somebody
             // is plain module access, the same as viewing their equipment.
@@ -114,12 +121,54 @@ return [
             'setting_keys' => ['vcenter_server', 'vcenter_user', 'vcenter_password'],
         ],
         [
+            'id'           => 'asset-tags',
+            'cap'          => Cap::ASSETS_TAGS,
+            'label_key'    => 'asset-management.settings.tab_asset_tags',
+            'grant'        => 'Configure asset tag auto-generation and numbering sequence',
+            'setting_keys' => ['asset_tag_autogen_enabled', 'asset_tag_format', 'asset_tag_start', 'asset_tag_scope'],
+        ],
+        [
+            'id'           => 'reconciliation',
+            'cap'          => Cap::ASSETS_RECONCILIATION,
+            'label_key'    => 'asset-management.settings.tab_reconciliation',
+            'grant'        => 'Configure asset discovery, identity reconciliation and ignored serials',
+            'setting_keys' => ['asset_reconciliation_ignored_serials'],
+        ],
+        [
+            'id'           => 'asset-labels',
+            'cap'          => Cap::ASSETS_LABELS,
+            'label_key'    => 'asset-management.settings.tab_asset_labels',
+            'grant'        => 'Configure physical asset labels, layout and QR code branding',
+            'setting_keys' => ['asset_label_title', 'asset_label_fields', 'asset_label_footer',
+                               'asset_label_logo_enabled', 'asset_label_logo_path',
+                               'asset_label_show_field_labels'],
+        ],
+        [
             'id'           => 'intune',
             'cap'          => Cap::ASSETS_INTUNE,
             'label_key'    => 'asset-management.settings.tab_intune',
             'grant'        => 'Configure the Intune connection and run syncs, including its credentials',
             'sensitive'    => true,
-            'setting_keys' => ['intune_tenant_id', 'intune_client_id', 'intune_client_secret', 'intune_verify_ssl', 'intune_app_batch_size'],
+            'setting_keys' => ['intune_tenant_id', 'intune_client_id', 'intune_client_secret', 'intune_verify_ssl', 'intune_app_batch_size', 'intune_company_id', 'intune_sync_hostnames'],
+        ],
+        [
+            // Several Proxmox VE servers. Their credentials live in proxmox_connections,
+            // not system_settings, so there are no setting_keys for this tab.
+            'id'           => 'proxmox',
+            'cap'          => Cap::ASSETS_PROXMOX,
+            'label_key'    => 'asset-management.settings.tab_proxmox',
+            'grant'        => 'Configure Proxmox VE servers, including their credentials, and run syncs',
+            'sensitive'    => true,
+            'setting_keys' => [],
+        ],
+        [
+            // Several VMware Cloud Director servers. Credentials live in vcloud_connections.
+            'id'           => 'vcloud',
+            'cap'          => Cap::ASSETS_VCLOUD,
+            'label_key'    => 'asset-management.settings.tab_vcloud',
+            'grant'        => 'Configure VMware Cloud Director servers, including their credentials, and run syncs',
+            'sensitive'    => true,
+            'setting_keys' => [],
         ],
         [
             // A per-analyst display preference — where your sidebar sits. Not

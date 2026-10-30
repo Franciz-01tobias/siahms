@@ -74,6 +74,7 @@ $primaryKeys = [
     // ⚠️ No auto-increment id on purpose: counter_key being the PK is what lets
     // the read-and-increment happen in one statement (#1147).
     'ticket_number_counters'    => 'counter_key',
+    'asset_tag_counters'        => 'counter_key',   // the same design, for asset tags (PR #164)
     'attachment_text'           => 'attachment_id',
     'document_text'             => 'document_id',
     'system_settings'           => 'setting_key',
@@ -92,12 +93,16 @@ $primaryKeys = [
     // silently — the table simply fell through to PRIMARY KEY (`id`).
     'knowledge_article_tags'    => ['article_id', 'tag_id'],
     'task_tag_map'              => ['task_id', 'tag_id'],
+    // 3.3.0: one row per project, day and status - the cumulative flow diagram.
+    'project_task_flow'         => ['project_id', 'day', 'status_id'],
     // 🔴 GH #123. Both of these were missed, and the warning above is the one
     // they were missed in spite of. A table is only safe to leave out of this
     // map if its PK is literally `id`; neither of these has an `id` column at
     // all, so verification could not create them on a fresh install and
     // reported "Key column 'id' doesn't exist in table" twice, every run.
     'knowledge_gap_tickets'         => 'ticket_id',
+    // Feature Bingo's "Not for us" list: one row per card, keyed on the card.
+    'feature_bingo_dismissed'       => 'card_id',
     'knowledge_gap_cluster_tickets' => ['cluster_id', 'ticket_id'],
 ];
 
@@ -129,6 +134,64 @@ try {
         $tkProbe = $conn->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'tickets' AND column_name = 'tenant_id'");
         $tkProbe->execute([$dbName]);
         $ticketsTenantColWasMissing = ((int)$tkProbe->fetchColumn() === 0);
+    } catch (Exception $e) {}
+
+    // Contracts and RFPs get an owning company (3.5.0). Was contracts.tenant_id
+    // absent before this run? If so, the post-schema section files each existing
+    // CUSTOMER contract under its customer's company - ONLY this once. Until now a
+    // customer contract was hidden by its customer's company (#153), so this keeps
+    // every analyst seeing exactly what they saw before. Supplier contracts and every
+    // RFP stay NULL, which is the Default company. Never re-run: afterwards a contract
+    // in Default with a customer elsewhere is a deliberate choice.
+    $contractsTenantColWasMissing = false;
+    try {
+        $ctProbe = $conn->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'contracts' AND column_name = 'tenant_id'");
+        $ctProbe->execute([$dbName]);
+        $contractsTenantColWasMissing = ((int)$ctProbe->fetchColumn() === 0);
+    } catch (Exception $e) {}
+
+    // GH #160 stage 2: was contracts.cost_centre_id absent before this run? If so,
+    // the post-schema section links each contract's old free-text cost centre to
+    // the real one with that CODE in the contract's company - only this once.
+    // Text that matches nothing stays, shown as "previously recorded" until
+    // somebody chooses a cost centre.
+    // GH #188: the same for domains.cost_centre_id.
+    $domainsCcColWasMissing = false;
+    try {
+        $dcProbe = $conn->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'domains' AND column_name = 'cost_centre_id'");
+        $dcProbe->execute([$dbName]);
+        $domainsCcColWasMissing = ((int)$dcProbe->fetchColumn() === 0);
+    } catch (Exception $e) {}
+
+    $contractsCcColWasMissing = false;
+    try {
+        $ccProbe = $conn->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'contracts' AND column_name = 'cost_centre_id'");
+        $ccProbe->execute([$dbName]);
+        $contractsCcColWasMissing = ((int)$ccProbe->fetchColumn() === 0);
+    } catch (Exception $e) {}
+
+    // SSO JIT split (discussion #155): was auth_providers.auto_create_analysts
+    // absent before this run? Before the split, auto_create_users ALSO meant
+    // "create an analyst" on the analyst login, so on the run that adds the new
+    // column we copy the old value across. Only this once: after that the two
+    // switches are set deliberately and must never be re-synced.
+    $providerAutoAnalystsColWasMissing = false;
+    try {
+        $aaProbe = $conn->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'auth_providers' AND column_name = 'auto_create_analysts'");
+        $aaProbe->execute([$dbName]);
+        $providerAutoAnalystsColWasMissing = ((int)$aaProbe->fetchColumn() === 0);
+    } catch (Exception $e) {}
+
+    // Did change_approvals exist before this run? If not, every change already past
+    // submission predates approval records and gets a 'legacy' round (below), once.
+    // Running it on every Verify would be wrong: a change moved straight to Scheduled
+    // in Record mode after the upgrade has no round, and must not be dressed up as
+    // "approved before records were kept".
+    $changeApprovalsWasMissing = false;
+    try {
+        $caProbe = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'change_approvals'");
+        $caProbe->execute([$dbName]);
+        $changeApprovalsWasMissing = ((int)$caProbe->fetchColumn() === 0);
     } catch (Exception $e) {}
 
     // Was analysts.is_admin absent *before* this run added it? If so, every existing
@@ -229,6 +292,31 @@ try {
         }
     } catch (Exception $e) {
         // Non-fatal: ticket history keeps working; only the workflow action stays broken.
+    }
+
+    // `asset_history.analyst_id` was NOT NULL, so a change nobody on the desk
+    // made - an Intune rename, an inventory agent reporting a new hostname
+    // (PR #164) - had no way to be recorded, and the write failed the whole
+    // request. Same probe-then-MODIFY shape as ticket_audit above, and safe for
+    // the same reason: every existing row already has an analyst. The foreign
+    // key is left exactly as it is - a NULL never violates it.
+    try {
+        $ahCol = $conn->prepare(
+            "SELECT IS_NULLABLE FROM information_schema.columns
+             WHERE table_schema = ? AND table_name = 'asset_history' AND column_name = 'analyst_id'"
+        );
+        $ahCol->execute([$dbName]);
+        $ahRow = $ahCol->fetch(PDO::FETCH_ASSOC);
+        if ($ahRow && strtoupper($ahRow['IS_NULLABLE']) === 'NO') {
+            $conn->exec("ALTER TABLE `asset_history` MODIFY `analyst_id` INT NULL");
+            $results[] = [
+                'table'   => 'asset_history',
+                'status'  => 'updated',
+                'details' => ["analyst_id: NOT NULL → NULL (Intune and the inventory agent record changes no analyst made)"],
+            ];
+        }
+    } catch (Exception $e) {
+        // Non-fatal: asset history keeps working for people; only automated entries stay broken.
     }
 
     // `users_assets.user_id` was NOT NULL, so an asset could only ever be
@@ -438,6 +526,21 @@ try {
         ];
     }
 
+    // One-time SSO JIT split (discussion #155). Keeps every existing provider
+    // behaving exactly as it did before the upgrade:
+    //  - analyst JIT stays on wherever the old single switch was on
+    //  - someone with no analyst account is refused, as before, rather than
+    //    being offered the portal; admins can choose 'confirm' deliberately
+    if ($providerAutoAnalystsColWasMissing) {
+        $copied = $conn->exec("UPDATE auth_providers SET auto_create_analysts = auto_create_users");
+        $conn->exec("UPDATE auth_providers SET analyst_fallback_mode = 'block'");
+        $results[] = [
+            'table'   => 'auth_providers',
+            'status'  => 'updated',
+            'details' => ['Kept the auto-create setting for ' . (int)$copied . ' sign-in provider(s) (one-time upgrade)']
+        ];
+    }
+
     // One-time grandfather: if is_admin was just added, promote every existing
     // analyst to admin so the upgrade preserves today's behaviour (all analysts
     // could reach System) rather than locking everyone out. Admins then demote
@@ -586,6 +689,17 @@ try {
         }
     }
 
+    // Leases (3.5.0): the four starting outcomes, when the list is empty. Renamed,
+    // added to or switched off in Assets -> Settings -> Leasing afterwards.
+    try {
+        if ($conn->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = " . $conn->quote(DB_NAME) . " AND table_name = 'lease_outcomes'")->fetchColumn()
+            && (int)$conn->query("SELECT COUNT(*) FROM lease_outcomes")->fetchColumn() === 0) {
+            $conn->exec("INSERT INTO lease_outcomes (name, kind, is_default, display_order) VALUES
+                ('On lease', 'active', 1, 1), ('Extended', 'active', 0, 2), ('Returned', 'closed', 0, 3), ('Bought out', 'closed', 0, 4)");
+            $results[] = ['table' => 'lease_outcomes', 'status' => 'seeded', 'details' => ['Added the four starting lease outcomes']];
+        }
+    } catch (Exception $e) {}
+
     // Seed default dashboard widgets if table is empty
     $widgetCheck = $conn->prepare("SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = 'asset_dashboard_widgets'");
     $widgetCheck->execute([DB_NAME]);
@@ -711,6 +825,40 @@ try {
     // above (GitHub #42): a fresh install landed with an empty Type dropdown because
     // types were only ever created by the demo data. Global defaults (tenant_id NULL);
     // only ever seeded into an empty table, so a deliberately-cleared list is respected.
+    // Seed the project roles (3.2.0) into an empty table only, so an edited list
+    // is never put back. Same words as the freeitsm.sql seed.
+    if ($tableExists('project_roles')) {
+        if ((int) $conn->query("SELECT COUNT(*) FROM project_roles")->fetchColumn() === 0) {
+            $conn->exec("INSERT INTO project_roles (name, description, display_order) VALUES
+                ('Executive', 'Owns the business case and makes the final call at each gate', 1),
+                ('Senior User', 'Speaks for the people who will use what the project delivers', 2),
+                ('Senior Supplier', 'Speaks for the people building or supplying it', 3),
+                ('Project Manager', 'Runs the project day to day', 4),
+                ('Team Manager', 'Leads a team delivering part of the work', 5),
+                ('Project Assurance', 'Checks independently that the project is being run properly', 6),
+                ('Project Support', 'Helps with plans, records and admin', 7),
+                ('Team member', 'Does the work', 8),
+                ('Stakeholder', 'Needs to be kept informed', 9)");
+            $results[] = ['table' => 'project_roles', 'status' => 'seeded', 'details' => ['Inserted 9 default project roles']];
+        }
+    }
+
+    // Seed default domain statuses (#154) into an empty table only, the same rule
+    // as ticket types below. "Letting lapse" and "Cancelled" carry
+    // alerts_enabled = 0: choosing them is how an operator stops the reminders.
+    if ($tableExists('domain_statuses')) {
+        $cnt = (int) $conn->query("SELECT COUNT(*) FROM domain_statuses")->fetchColumn();
+        if ($cnt === 0) {
+            $conn->exec("INSERT INTO domain_statuses (name, colour, alerts_enabled, display_order) VALUES
+                ('Active',               '#16a34a', 1, 1),
+                ('Transfer in progress', '#2563eb', 1, 2),
+                ('Parked',               '#64748b', 1, 3),
+                ('Letting lapse',        '#d97706', 0, 4),
+                ('Cancelled',            '#dc2626', 0, 5)");
+            $results[] = ['table' => 'domain_statuses', 'status' => 'seeded', 'details' => ['Inserted 5 default domain statuses']];
+        }
+    }
+
     if ($tableExists('ticket_types')) {
         $cnt = (int) $conn->query("SELECT COUNT(*) FROM ticket_types")->fetchColumn();
         if ($cnt === 0) {
@@ -758,6 +906,20 @@ try {
         if (!$fkExists('lms_answers', 'fk_lms_answers_question')) {
             try { $conn->exec("ALTER TABLE lms_answers ADD CONSTRAINT fk_lms_answers_question FOREIGN KEY (question_id) REFERENCES lms_questions (id) ON DELETE CASCADE"); } catch (Exception $e) {}
         }
+    }
+
+    // Competency tests (3.0.0). A sitting outlives its test (SET NULL): its
+    // snapshot holds everything the result needs, so deleting a test never
+    // deletes a candidate's result - retention does that, on its own clock.
+    $ctFks = [
+        ['lms_ct_test_skills',    'fk_lcts_test',     "ALTER TABLE lms_ct_test_skills ADD CONSTRAINT fk_lcts_test FOREIGN KEY (test_id) REFERENCES lms_ct_tests (id) ON DELETE CASCADE"],
+        ['lms_ct_test_questions', 'fk_lcttq_test',    "ALTER TABLE lms_ct_test_questions ADD CONSTRAINT fk_lcttq_test FOREIGN KEY (test_id) REFERENCES lms_ct_tests (id) ON DELETE CASCADE"],
+        ['lms_ct_test_questions', 'fk_lcttq_question',"ALTER TABLE lms_ct_test_questions ADD CONSTRAINT fk_lcttq_question FOREIGN KEY (question_id) REFERENCES lms_ct_questions (id) ON DELETE CASCADE"],
+        ['lms_ct_sittings',       'fk_lcs_test',      "ALTER TABLE lms_ct_sittings ADD CONSTRAINT fk_lcs_test FOREIGN KEY (test_id) REFERENCES lms_ct_tests (id) ON DELETE SET NULL"],
+    ];
+    foreach ($ctFks as [$tbl, $name, $sql]) {
+        if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;
+        try { $conn->exec($sql); } catch (Exception $e) {}
     }
 
     // Documents. Deleting the document takes its links with it. Note the cascade
@@ -818,6 +980,35 @@ try {
         ['tickets',                 'fk_tickets_resolution_code',          'ticket_resolution_codes', 'resolution_code_id',  'id', null],
     ];
     foreach ($ticketClassificationFks as [$table, $name, $refTable, $col, $refCol, $onDelete]) {
+        if ($tableExists($table) && $tableExists($refTable) && !$fkExists($table, $name)) {
+            $action = $onDelete ? " ON DELETE {$onDelete}" : '';
+            try {
+                $conn->exec("ALTER TABLE {$table} ADD CONSTRAINT {$name} FOREIGN KEY ({$col}) REFERENCES {$refTable} ({$refCol}){$action}");
+            } catch (Exception $e) {}
+        }
+    }
+
+    // Change approvals and evidence (#180). A revision goes with its change, and
+    // outlives its editor (SET NULL): the text stays in the evidence when the person
+    // who wrote it has left.
+    $changeEvidenceFks = [
+        ['change_text_revisions', 'fk_ctr_change', 'changes',  'change_id', 'id', 'CASCADE'],
+        ['change_text_revisions', 'fk_ctr_editor', 'analysts', 'editor_id', 'id', 'SET NULL'],
+        // TRAP: no ON DELETE action = RESTRICT, deliberately. A change that has approval
+        // records is evidence; a stray DELETE must fail rather than wipe them.
+        ['change_approvals',      'fk_change_approvals_change',     'changes',          'change_id',     'id', null],
+        ['change_approvals',      'fk_change_approvals_opened_by',  'analysts',         'opened_by_id',  'id', 'SET NULL'],
+        ['change_approvals',      'fk_change_approvals_decided_by', 'analysts',         'decided_by_id', 'id', 'SET NULL'],
+        ['change_approval_votes', 'fk_cav_approval',                'change_approvals', 'approval_id',   'id', 'CASCADE'],
+        ['change_approval_votes', 'fk_cav_analyst',                 'analysts',         'analyst_id',    'id', 'SET NULL'],
+        // Templates (#180 §8): versions RESTRICT their template (evidence); teams go with it.
+        ['change_template_versions', 'fk_ctv_template',    'change_templates', 'template_id',    'id', null],
+        ['change_template_versions', 'fk_ctv_created_by',  'analysts',         'created_by_id',  'id', 'SET NULL'],
+        ['change_template_versions', 'fk_ctv_approved_by', 'analysts',         'approved_by_id', 'id', 'SET NULL'],
+        ['change_template_teams',    'fk_ctt_template',    'change_templates', 'template_id',    'id', 'CASCADE'],
+        ['change_template_teams',    'fk_ctt_team',        'teams',            'team_id',        'id', 'CASCADE'],
+    ];
+    foreach ($changeEvidenceFks as [$table, $name, $refTable, $col, $refCol, $onDelete]) {
         if ($tableExists($table) && $tableExists($refTable) && !$fkExists($table, $name)) {
             $action = $onDelete ? " ON DELETE {$onDelete}" : '';
             try {
@@ -993,6 +1184,20 @@ try {
             try { $conn->exec("ALTER TABLE rbac_analyst_roles ADD CONSTRAINT fk_rar_role FOREIGN KEY (role_id) REFERENCES rbac_roles (id) ON DELETE CASCADE"); } catch (Exception $e) {}
         }
     }
+    // 3.5.0: SSO group -> team mappings and seen groups go with their provider / team.
+    foreach ([['sso_group_teams', 'fk_sso_group_teams_provider', 'provider_id', 'auth_providers'],
+              ['sso_group_teams', 'fk_sso_group_teams_team', 'team_id', 'teams'],
+              ['sso_groups_seen', 'fk_sso_groups_seen_provider', 'provider_id', 'auth_providers']] as [$t, $fk, $col, $ref]) {
+        if ($tableExists($t) && $tableExists($ref) && !$fkExists($t, $fk)) {
+            try { $conn->exec("ALTER TABLE $t ADD CONSTRAINT $fk FOREIGN KEY ($col) REFERENCES $ref (id) ON DELETE CASCADE"); } catch (Exception $e) {}
+        }
+    }
+    // 3.5.0 (PR #174): an API-managed role goes with the analyst it belongs to.
+    if ($tableExists('rbac_roles') && $tableExists('analysts')) {
+        if (!$fkExists('rbac_roles', 'fk_rbac_roles_managed_analyst')) {
+            try { $conn->exec("ALTER TABLE rbac_roles ADD CONSTRAINT fk_rbac_roles_managed_analyst FOREIGN KEY (managed_for_analyst_id) REFERENCES analysts (id) ON DELETE CASCADE"); } catch (Exception $e) {}
+        }
+    }
     // Search corpus. The cascade is the point, not tidiness: a corpus row holds a
     // COPY of ticket content that is searchable outside the ticket's own access
     // check, so a deleted ticket whose text is still findable would be a
@@ -1051,6 +1256,33 @@ try {
         }
         if (!$fkExists('messaging_templates', 'fk_messaging_templates_tenant')) {
             try { $conn->exec("ALTER TABLE messaging_templates ADD CONSTRAINT fk_messaging_templates_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"); } catch (Exception $e) {}
+        }
+    }
+    // Telegram chat-identity links (PR #159). CASCADE both ways: deleting the
+    // matched person, or the channel, drops the link rather than leaving it
+    // dangling - a dangling link would resolve a chat to an id that is gone.
+    // Proxmox servers: nodes and VMs belong to one server and go with it on delete.
+    foreach (['proxmox_nodes', 'proxmox_vms'] as $pxTable) {
+        $pxFk = 'fk_' . $pxTable . '_connection';
+        if ($tableExists($pxTable) && $tableExists('proxmox_connections') && !$fkExists($pxTable, $pxFk)) {
+            try { $conn->exec("ALTER TABLE {$pxTable} ADD CONSTRAINT {$pxFk} FOREIGN KEY (connection_id) REFERENCES proxmox_connections (id) ON DELETE CASCADE"); } catch (Exception $e) {}
+        }
+    }
+    // vCloud Director servers: VMs and edge gateways belong to one server.
+    foreach (['vcloud_vms', 'vcloud_edge_gateways'] as $vcTable) {
+        $vcFk = 'fk_' . $vcTable . '_connection';
+        if ($tableExists($vcTable) && $tableExists('vcloud_connections') && !$fkExists($vcTable, $vcFk)) {
+            try { $conn->exec("ALTER TABLE {$vcTable} ADD CONSTRAINT {$vcFk} FOREIGN KEY (connection_id) REFERENCES vcloud_connections (id) ON DELETE CASCADE"); } catch (Exception $e) {}
+        }
+    }
+    if ($tableExists('messaging_identity_links') && $tableExists('users') && $colExists('messaging_identity_links', 'user_id')) {
+        if (!$fkExists('messaging_identity_links', 'fk_messaging_identity_links_user')) {
+            try { $conn->exec("ALTER TABLE messaging_identity_links ADD CONSTRAINT fk_messaging_identity_links_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE"); } catch (Exception $e) {}
+        }
+    }
+    if ($tableExists('messaging_identity_links') && $tableExists('messaging_channels') && $colExists('messaging_identity_links', 'channel_id')) {
+        if (!$fkExists('messaging_identity_links', 'fk_messaging_identity_links_channel')) {
+            try { $conn->exec("ALTER TABLE messaging_identity_links ADD CONSTRAINT fk_messaging_identity_links_channel FOREIGN KEY (channel_id) REFERENCES messaging_channels (id) ON DELETE CASCADE"); } catch (Exception $e) {}
         }
     }
     // Web chat widget → its messaging channel (1:1). CASCADE so deleting the channel
@@ -1313,6 +1545,17 @@ try {
                 $results[] = ['table' => 'ticket_origins', 'status' => 'updated', 'details' => ['Seeded the Slack ticket origin']];
             }
         } catch (Exception $e) {}
+        // Telegram origin (PR #159 shipped without one). Same reason as Slack:
+        // getChannelOriginId() looks the origin up BY NAME - ucfirst('telegram') -
+        // and without this row every Telegram ticket has no origin at all.
+        try {
+            $chk = $conn->prepare("SELECT COUNT(*) FROM ticket_origins WHERE name = 'Telegram' AND tenant_id IS NULL");
+            $chk->execute();
+            if ((int) $chk->fetchColumn() === 0) {
+                $conn->exec("INSERT INTO ticket_origins (name, description, display_order, is_active, tenant_id) VALUES ('Telegram', 'Messages received via a Telegram bot', 53, 1, NULL)");
+                $results[] = ['table' => 'ticket_origins', 'status' => 'updated', 'details' => ['Seeded the Telegram ticket origin']];
+            }
+        } catch (Exception $e) {}
     }
     // Per-company config: the generic "hide" layer + per-entity tenant_id columns.
     if ($tableExists('tenant_config_hidden') && $tableExists('tenants')) {
@@ -1396,6 +1639,15 @@ try {
             try { $conn->exec("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_recurrence FOREIGN KEY (recurrence_id) REFERENCES task_recurrences (id) ON DELETE SET NULL"); } catch (Exception $e) {}
         }
     }
+    // Contractors (3.3.0): a task's supplier and contact go to NULL if either is deleted.
+    if ($tableExists('tasks') && $colExists('tasks', 'assigned_supplier_id')) {
+        if (!$fkExists('tasks', 'fk_tasks_supplier')) {
+            try { $conn->exec("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_supplier FOREIGN KEY (assigned_supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL"); } catch (Exception $e) {}
+        }
+        if (!$fkExists('tasks', 'fk_tasks_contact')) {
+            try { $conn->exec("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_contact FOREIGN KEY (assigned_contact_id) REFERENCES contacts (id) ON DELETE SET NULL"); } catch (Exception $e) {}
+        }
+    }
     if ($tableExists('tasks') && $colExists('tasks', 'recurrence_master_id')) {
         if (!$fkExists('tasks', 'fk_tasks_recurrence_master')) {
             try { $conn->exec("ALTER TABLE tasks ADD CONSTRAINT fk_tasks_recurrence_master FOREIGN KEY (recurrence_master_id) REFERENCES tasks (id) ON DELETE SET NULL"); } catch (Exception $e) {}
@@ -1451,6 +1703,64 @@ try {
             try { $conn->exec("ALTER TABLE team_tenant_access ADD CONSTRAINT fk_tta_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE"); } catch (Exception $e) {}
         }
     }
+    // contracts.tenant_id - the ONE-TIME filing of customer contracts under their
+    // customer's company (see $contractsTenantColWasMissing). Only when the install
+    // had the old setting at its default ('company'): an install that opened
+    // customer contracts to everyone ('all') keeps them in Default, where everyone
+    // with the Default company still sees them.
+    if ($contractsTenantColWasMissing && $tableExists('contracts') && $colExists('contracts', 'tenant_id')
+        && $colExists('contracts', 'party_type')) {
+        try {
+            $vis = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'contracts_customer_visibility'")->fetchColumn();
+            if ($vis !== 'all') {
+                $n = $conn->exec(
+                    "UPDATE contracts c
+                        SET c.tenant_id = COALESCE(c.customer_tenant_id, (SELECT u.tenant_id FROM users u WHERE u.id = c.customer_user_id))
+                      WHERE c.party_type = 'customer' AND c.tenant_id IS NULL");
+                // The Default company is stored as NULL, like every other scoped table.
+                $def = (int)($conn->query("SELECT id FROM tenants WHERE is_default = 1 ORDER BY id LIMIT 1")->fetchColumn() ?: 0);
+                if ($def > 0) $conn->exec("UPDATE contracts SET tenant_id = NULL WHERE tenant_id = $def");
+                if ($n > 0) {
+                    $results[] = ['table' => 'contracts', 'status' => 'updated', 'details' => ["Filed $n customer contract(s) under their customer's company (contracts now belong to a company)"]];
+                }
+            }
+        } catch (Exception $e) {}
+    }
+
+    // contracts.cost_centre_id - the ONE-TIME link of the old free text (see
+    // $contractsCcColWasMissing). Matched on code, in the contract's own company
+    // (codes are unique per company, ignoring case - the column's collation).
+    if ($contractsCcColWasMissing && $tableExists('cost_centres') && $colExists('contracts', 'cost_centre_id')) {
+        try {
+            $def = (int)($conn->query("SELECT id FROM tenants WHERE is_default = 1 ORDER BY id LIMIT 1")->fetchColumn() ?: 0);
+            $tenantExpr = $colExists('contracts', 'tenant_id') ? "COALESCE(c.tenant_id, $def)" : (string)$def;
+            $n = $conn->exec(
+                "UPDATE contracts c
+                   JOIN cost_centres cc ON cc.tenant_id = $tenantExpr AND cc.code = TRIM(c.cost_centre)
+                    SET c.cost_centre_id = cc.id, c.cost_centre = NULL
+                  WHERE c.cost_centre IS NOT NULL AND TRIM(c.cost_centre) <> '' AND c.cost_centre_id IS NULL");
+            if ($n > 0) {
+                $results[] = ['table' => 'contracts', 'status' => 'updated', 'details' => ["Linked the typed-in cost centre of $n contract(s) to the matching cost centre"]];
+            }
+        } catch (Exception $e) {}
+    }
+
+    // domains.cost_centre_id (GH #188) - the ONE-TIME link of the old free text,
+    // exactly as for contracts above: on the code, in the domain's own company.
+    if ($domainsCcColWasMissing && $tableExists('cost_centres') && $colExists('domains', 'cost_centre_id')) {
+        try {
+            $def = (int)($conn->query("SELECT id FROM tenants WHERE is_default = 1 ORDER BY id LIMIT 1")->fetchColumn() ?: 0);
+            $n = $conn->exec(
+                "UPDATE domains d
+                   JOIN cost_centres cc ON cc.tenant_id = COALESCE(d.tenant_id, $def) AND cc.code = TRIM(d.cost_centre)
+                    SET d.cost_centre_id = cc.id, d.cost_centre = NULL
+                  WHERE d.cost_centre IS NOT NULL AND TRIM(d.cost_centre) <> '' AND d.cost_centre_id IS NULL");
+            if ($n > 0) {
+                $results[] = ['table' => 'domains', 'status' => 'updated', 'details' => ["Linked the typed-in cost centre of $n domain(s) to the matching cost centre"]];
+            }
+        } catch (Exception $e) {}
+    }
+
     // tickets.tenant_id — index + FK + a ONE-TIME backfill of existing tickets to
     // the Default company. Like target_mailboxes (and unlike a naive sweep), we
     // backfill ONLY when the column was just added ($ticketsTenantColWasMissing):
@@ -1667,6 +1977,9 @@ try {
             // (sla.warning / sla.breached come from the SLA cron instead.)
             'workflow_cron_token'             => bin2hex(random_bytes(16)),
             'workflow_cron_min_interval_seconds' => '300',
+            // Domains (cron/domains.php, #154): registry lookups, checks, alerts.
+            // Its own lock (GET_LOCK) stops overlapping runs, so no interval floor.
+            'domain_cron_token'               => bin2hex(random_bytes(16)),
             // External issue trackers (cron/integration_poll.php): refreshes the
             // cached status of every linked issue. A 60s floor rather than the
             // webhook worker's 20s because this makes an outbound API call per
@@ -1674,12 +1987,30 @@ try {
             // more eager than the poll_interval_minutes set per connection.
             'integration_cron_token'          => bin2hex(random_bytes(16)),
             'integration_cron_min_interval_seconds' => '60',
+            // LMS training reminders (cron/lms_reminders.php). Never seeded before
+            // #182, so its web address could not be used on any install - the HTTP
+            // door was shut because the secret did not exist.
+            'lms_reminder_cron_token'         => bin2hex(random_bytes(16)),
+            // Background job health (#182): when run recording began on this install.
+            // #181's evidence report says "run history not available" for anything
+            // earlier, rather than "no recorded run" - an absence of records from
+            // before recording existed proves nothing about the scheduler.
+            'job_runs_recording_since'        => gmdate('Y-m-d H:i:s'),
+            'job_runs_retention_months'       => '13',
             // Watchtower: flag tickets stuck in a paused-SLA status longer than this
             // (wall-clock hours since last status change). Guardrail against analysts
             // parking tickets in On Hold to escape the SLA clock.
             'watchtower_paused_too_long_hours' => '24',
             // Tasks calendar: how multi-day tasks render — deadline | span | repeat
             'tasks_calendar_span_mode'        => 'deadline',
+            // Repeating task evidence (#181), Tasks -> Settings -> Evidence. Each
+            // defaults to the more forgiving choice so an upgrade changes nothing;
+            // the record is kept either way. skip_status_id empty = the last closed
+            // status in the admin's order, worked out when it is needed.
+            'tasks_evidence_completed_checklist' => 'allow',      // allow | refuse
+            'tasks_evidence_delete_occurrence'   => 'allow',      // allow | refuse
+            'tasks_evidence_skip_status_id'      => '',
+            'tasks_evidence_report_access'       => 'anyone',     // anyone | permission
             // CSAT (customer satisfaction surveys on ticket closure)
             // mode: off | auto | manual
             //   off    — feature disabled, no survey ever sent
@@ -1695,6 +2026,11 @@ try {
             // If 1, a reopened-then-closed ticket only gets a new survey when the analyst
             // manually triggers it (stops survey-spamming a flaky ticket). If 0, every close fires.
             'csat_one_per_ticket'             => '1',
+            // PR #166: ask chat customers in their chat. OFF on an upgrade - an
+            // install that has emailed every survey for months must not start
+            // messaging its chat customers the day it upgrades. freeitsm.sql
+            // seeds '1' first on a new install, and INSERT IGNORE keeps it.
+            'csat_in_channel'                 => '0',
             // Shared HMAC secret for tokenising survey URLs. Random per install — leaking it
             // would let anyone post ratings on behalf of users, so it stays in system_settings
             // rather than going to a public file or being printed in error pages.
@@ -1738,6 +2074,17 @@ try {
             // increments), and unlike the settings above, turning it on silently at
             // upgrade would lock people out of their own service desk.
             'password_expiry_days'            => '0',
+            'intune_company_id'                 => null,
+            // OFF on upgrade (a new install's freeitsm.sql seeds '1' first, and
+            // INSERT IGNORE keeps it): turning it on renames every asset whose
+            // device has been renamed in Intune since it was linked (PR #164).
+            'intune_sync_hostnames'             => '0',
+            'asset_reconciliation_ignored_serials' => "TO BE FILLED BY O.E.M.\nDEFAULT STRING\nNONE\nSYSTEM SERIAL NUMBER\nNOT SPECIFIED\n123456789",
+            // Asset tags (PR #164): off until somebody switches them on.
+            'asset_tag_autogen_enabled'          => '0',
+            'asset_tag_format'                   => 'AST-{#####}',
+            'asset_tag_start'                    => '1',
+            'asset_tag_scope'                    => 'per_company',
         ];
         // Secrets are seeded already encrypted. The whole block is best-effort: an
         // install that has no encryption key yet must still be able to build its
@@ -1860,6 +2207,23 @@ try {
             $results[] = ['table' => 'email_attachments', 'status' => 'warning',
                           'details' => ['Could not rename legacy attachments: ' . $e->getMessage()]];
         }
+    }
+
+    // GH #115: every upload folder's .htaccess used to carry an unguarded
+    // `php_flag engine off`. On Apache with PHP-FPM that is an unknown command,
+    // and Apache answers every file in the folder with a 500 - the logo, the
+    // portal logo and LMS courses never load. Updating FreeITSM fixes the files it
+    // ships; this fixes the ones it WROTE (one per attachment folder, the portal
+    // logo folder, per-form image folders). Idempotent: a repaired file is skipped.
+    try {
+        $htFixed = uploadRepairHtaccessTree(dirname(__DIR__, 2));
+        if ($htFixed > 0) {
+            $results[] = ['table' => 'upload folders', 'status' => 'migrated',
+                          'details' => ["Repaired $htFixed .htaccess file(s) so they no longer break Apache with PHP-FPM"]];
+        }
+    } catch (Throwable $e) {
+        $results[] = ['table' => 'upload folders', 'status' => 'warning',
+                      'details' => ['Could not check the upload folders\' .htaccess files: ' . $e->getMessage()]];
     }
 
     // Same migration for target_mailboxes. token_data was absent from
@@ -2165,18 +2529,39 @@ try {
     if ($tableExists('change_statuses')) {
         $cnt = (int) $conn->query("SELECT COUNT(*) FROM change_statuses")->fetchColumn();
         if ($cnt === 0) {
-            $conn->exec("INSERT INTO change_statuses (name, is_closed, colour, is_default, display_order) VALUES
-                ('Draft',            0, '#9e9e9e', 1, 10),
-                ('Submitted',        0, '#2563eb', 0, 20),
-                ('Pending Approval', 0, '#e65100', 0, 30),
-                ('Approved',         0, '#2e7d32', 0, 40),
-                ('Rejected',         1, '#c62828', 0, 50),
-                ('Scheduled',        0, '#9333ea', 0, 60),
-                ('In Progress',      0, '#1565c0', 0, 70),
-                ('Completed',        1, '#1b5e20', 0, 80),
-                ('Failed',           1, '#c62828', 0, 90),
-                ('Cancelled',        1, '#bdbdbd', 0, 100)");
+            $conn->exec("INSERT INTO change_statuses (name, stage, is_closed, colour, is_default, display_order) VALUES
+                ('Draft',            'draft',        0, '#9e9e9e', 1, 10),
+                ('Submitted',        'draft',        0, '#2563eb', 0, 20),
+                ('Pending Approval', 'awaiting',     0, '#e65100', 0, 30),
+                ('Approved',         'approved',     0, '#2e7d32', 0, 40),
+                ('Rejected',         'stopped',      1, '#c62828', 0, 50),
+                ('Scheduled',        'implementing', 0, '#9333ea', 0, 60),
+                ('In Progress',      'implementing', 0, '#1565c0', 0, 70),
+                ('Completed',        'done',         1, '#1b5e20', 0, 80),
+                ('Failed',           'done',         1, '#c62828', 0, 90),
+                ('Cancelled',        'stopped',      1, '#bdbdbd', 0, 100)");
             $results[] = ['table' => 'change_statuses', 'status' => 'seeded', 'details' => ['Inserted 10 default change statuses']];
+        }
+
+        // Give every status that still carries a seeded name its stage. Idempotent and
+        // never overrides a stage somebody chose; a renamed or custom status is left
+        // without one, for an administrator to decide in Settings → Statuses.
+        require_once __DIR__ . '/../../includes/changes/approvals.php';
+        $classified = changeStagesBackfill($conn);
+        if ($classified > 0) {
+            $results[] = ['table' => 'change_statuses', 'status' => 'updated', 'details' => ['Gave ' . $classified . ' change status(es) their stage']];
+        }
+
+        // One-time: rounds for the changes that were past submission before approval
+        // records existed (#180 §8 Legacy). Needs the stages above, so it runs after them.
+        if ($changeApprovalsWasMissing && $tableExists('change_approvals') && $tableExists('change_approval_votes')) {
+            [$legacyApproved, $legacyOpen] = changeApprovalBackfillLegacy($conn);
+            if ($legacyApproved + $legacyOpen > 0) {
+                $results[] = ['table' => 'change_approvals', 'status' => 'updated', 'details' => [
+                    'Recorded ' . $legacyApproved . ' change(s) as approved before approval records were kept, and opened '
+                    . $legacyOpen . ' round(s) for changes awaiting approval (one-time upgrade)'
+                ]];
+            }
         }
     }
 
@@ -2565,6 +2950,10 @@ try {
         // Tickets ↔ assets (#57)
         ['table_views',                 'fk_tv_owner',             "ALTER TABLE table_views ADD CONSTRAINT fk_tv_owner FOREIGN KEY (owner_id) REFERENCES analysts (id) ON DELETE SET NULL"],
         ['table_views',                 'fk_tv_team',              "ALTER TABLE table_views ADD CONSTRAINT fk_tv_team FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE SET NULL"],
+        // Report Packs
+        ['report_packs',                'fk_rp_owner',             "ALTER TABLE report_packs ADD CONSTRAINT fk_rp_owner FOREIGN KEY (owner_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['report_packs',                'fk_rp_updater',           "ALTER TABLE report_packs ADD CONSTRAINT fk_rp_updater FOREIGN KEY (updated_by) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['report_pack_shares',          'fk_rps_pack',             "ALTER TABLE report_pack_shares ADD CONSTRAINT fk_rps_pack FOREIGN KEY (pack_id) REFERENCES report_packs (id) ON DELETE CASCADE"],
         ['contract_assets',             'fk_ca_contract',          "ALTER TABLE contract_assets ADD CONSTRAINT fk_ca_contract FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE"],
         ['contract_assets',             'fk_ca_asset',             "ALTER TABLE contract_assets ADD CONSTRAINT fk_ca_asset FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE"],
         ['contract_assets',             'fk_ca_analyst',           "ALTER TABLE contract_assets ADD CONSTRAINT fk_ca_analyst FOREIGN KEY (linked_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
@@ -2618,6 +3007,24 @@ try {
         ['contracts',            'fk_contracts_supplier',         "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL"],
         ['contracts',            'fk_contracts_owner',            "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_owner FOREIGN KEY (contract_owner_id) REFERENCES analysts (id) ON DELETE SET NULL"],
         ['contracts',            'fk_contracts_status',           "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_status FOREIGN KEY (contract_status_id) REFERENCES contract_statuses (id) ON DELETE SET NULL"],
+        ['contracts',            'fk_contracts_customer_tenant',  "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_customer_tenant FOREIGN KEY (customer_tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        ['contracts',            'fk_contracts_tenant',           "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        ['rfps',                 'fk_rfps_tenant',                "ALTER TABLE rfps ADD CONSTRAINT fk_rfps_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        // GH #160 stage 2: what a cost centre is charged with. SET NULL as a backstop -
+        // CostCentresService refuses to delete one that is still in use.
+        ['contracts',            'fk_contracts_cost_centre',      "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_cost_centre FOREIGN KEY (cost_centre_id) REFERENCES cost_centres (id) ON DELETE SET NULL"],
+        ['assets',               'fk_assets_cost_centre',         "ALTER TABLE assets ADD CONSTRAINT fk_assets_cost_centre FOREIGN KEY (cost_centre_id) REFERENCES cost_centres (id) ON DELETE SET NULL"],
+        ['users',                'fk_users_cost_centre',          "ALTER TABLE users ADD CONSTRAINT fk_users_cost_centre FOREIGN KEY (cost_centre_id) REFERENCES cost_centres (id) ON DELETE SET NULL"],
+        // Leases (3.5.0). Scoped data: a removed company or supplier leaves the lease.
+        ['leases',               'fk_leases_tenant',              "ALTER TABLE leases ADD CONSTRAINT fk_leases_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        ['leases',               'fk_leases_supplier',            "ALTER TABLE leases ADD CONSTRAINT fk_leases_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL"],
+        ['leases',               'fk_leases_cost_centre',         "ALTER TABLE leases ADD CONSTRAINT fk_leases_cost_centre FOREIGN KEY (cost_centre_id) REFERENCES cost_centres (id) ON DELETE SET NULL"],
+        ['leases',               'fk_leases_contract',            "ALTER TABLE leases ADD CONSTRAINT fk_leases_contract FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE SET NULL"],
+        ['lease_schedules',      'fk_lease_schedules_lease',      "ALTER TABLE lease_schedules ADD CONSTRAINT fk_lease_schedules_lease FOREIGN KEY (lease_id) REFERENCES leases (id) ON DELETE CASCADE"],
+        ['lease_assets',         'fk_lease_assets_schedule',      "ALTER TABLE lease_assets ADD CONSTRAINT fk_lease_assets_schedule FOREIGN KEY (schedule_id) REFERENCES lease_schedules (id) ON DELETE CASCADE"],
+        ['lease_assets',         'fk_lease_assets_asset',         "ALTER TABLE lease_assets ADD CONSTRAINT fk_lease_assets_asset FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE"],
+        ['lease_assets',         'fk_lease_assets_outcome',       "ALTER TABLE lease_assets ADD CONSTRAINT fk_lease_assets_outcome FOREIGN KEY (outcome_id) REFERENCES lease_outcomes (id) ON DELETE SET NULL"],
+        ['contracts',            'fk_contracts_customer_user',    "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_customer_user FOREIGN KEY (customer_user_id) REFERENCES users (id) ON DELETE SET NULL"],
         ['contracts',            'fk_contracts_payment_schedule', "ALTER TABLE contracts ADD CONSTRAINT fk_contracts_payment_schedule FOREIGN KEY (payment_schedule_id) REFERENCES payment_schedules (id) ON DELETE SET NULL"],
         ['contract_term_values', 'fk_ctv_contract',               "ALTER TABLE contract_term_values ADD CONSTRAINT fk_ctv_contract FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE"],
         ['contract_term_values', 'fk_ctv_term_tab',               "ALTER TABLE contract_term_values ADD CONSTRAINT fk_ctv_term_tab FOREIGN KEY (term_tab_id) REFERENCES contract_term_tabs (id) ON DELETE CASCADE"],
@@ -2625,6 +3032,195 @@ try {
     foreach ($contractFks as [$tbl, $name, $sql]) {
         if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;
         try { $conn->exec($sql); } catch (Exception $e) {}
+    }
+
+    // Domains-module foreign keys (#154). Names + rules match freeitsm.sql. Every
+    // reference out of `domains` is SET NULL — removing a supplier, an analyst or a
+    // company must never take a domain record with it — and the child tables
+    // cascade, although DomainsService::deleteDomain() also deletes them by hand
+    // because an install whose FKs failed to add has no cascade to rely on.
+    $domainFks = [
+        ['domain_registrar_accounts', 'fk_dra_tenant',              "ALTER TABLE domain_registrar_accounts ADD CONSTRAINT fk_dra_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        ['domain_registrar_accounts', 'fk_dra_supplier',            "ALTER TABLE domain_registrar_accounts ADD CONSTRAINT fk_dra_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL"],
+        ['domain_registrar_accounts', 'fk_dra_owner',               "ALTER TABLE domain_registrar_accounts ADD CONSTRAINT fk_dra_owner FOREIGN KEY (owner_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_tenant',          "ALTER TABLE domains ADD CONSTRAINT fk_domains_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_status',          "ALTER TABLE domains ADD CONSTRAINT fk_domains_status FOREIGN KEY (status_id) REFERENCES domain_statuses (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_registrar',       "ALTER TABLE domains ADD CONSTRAINT fk_domains_registrar FOREIGN KEY (registrar_supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_account',         "ALTER TABLE domains ADD CONSTRAINT fk_domains_account FOREIGN KEY (registrar_account_id) REFERENCES domain_registrar_accounts (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_owner',           "ALTER TABLE domains ADD CONSTRAINT fk_domains_owner FOREIGN KEY (owner_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_tech_contact',    "ALTER TABLE domains ADD CONSTRAINT fk_domains_tech_contact FOREIGN KEY (tech_contact_id) REFERENCES contacts (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_customer_user',   "ALTER TABLE domains ADD CONSTRAINT fk_domains_customer_user FOREIGN KEY (customer_user_id) REFERENCES users (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_customer_supplier', "ALTER TABLE domains ADD CONSTRAINT fk_domains_customer_supplier FOREIGN KEY (customer_supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_customer_contact', "ALTER TABLE domains ADD CONSTRAINT fk_domains_customer_contact FOREIGN KEY (customer_contact_id) REFERENCES contacts (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_tech_analyst',    "ALTER TABLE domains ADD CONSTRAINT fk_domains_tech_analyst FOREIGN KEY (tech_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_contract',        "ALTER TABLE domains ADD CONSTRAINT fk_domains_contract FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE SET NULL"],
+        ['domains',                   'fk_domains_cost_centre',     "ALTER TABLE domains ADD CONSTRAINT fk_domains_cost_centre FOREIGN KEY (cost_centre_id) REFERENCES cost_centres (id) ON DELETE SET NULL"],   // GH #188
+        ['domain_audit',              'fk_domain_audit_domain',     "ALTER TABLE domain_audit ADD CONSTRAINT fk_domain_audit_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['domain_alerts_sent',        'fk_domain_alerts_domain',    "ALTER TABLE domain_alerts_sent ADD CONSTRAINT fk_domain_alerts_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['domain_lookalikes',         'fk_domain_lookalikes_domain', "ALTER TABLE domain_lookalikes ADD CONSTRAINT fk_domain_lookalikes_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['domain_certificates',       'fk_domain_certificates_domain', "ALTER TABLE domain_certificates ADD CONSTRAINT fk_domain_certificates_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        // Domains joined to the rest of FreeITSM (3.0.0). Every link goes with
+        // either side; the analyst who made it can leave without taking it.
+        ['domain_cmdb_objects',       'fk_dco_domain',      "ALTER TABLE domain_cmdb_objects ADD CONSTRAINT fk_dco_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['domain_cmdb_objects',       'fk_dco_cmdb_object', "ALTER TABLE domain_cmdb_objects ADD CONSTRAINT fk_dco_cmdb_object FOREIGN KEY (cmdb_object_id) REFERENCES cmdb_objects (id) ON DELETE CASCADE"],
+        ['domain_cmdb_objects',       'fk_dco_analyst',     "ALTER TABLE domain_cmdb_objects ADD CONSTRAINT fk_dco_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['domain_status_services',    'fk_dss_domain',      "ALTER TABLE domain_status_services ADD CONSTRAINT fk_dss_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['domain_status_services',    'fk_dss_service',     "ALTER TABLE domain_status_services ADD CONSTRAINT fk_dss_service FOREIGN KEY (service_id) REFERENCES status_services (id) ON DELETE CASCADE"],
+        ['domain_status_services',    'fk_dss_analyst',     "ALTER TABLE domain_status_services ADD CONSTRAINT fk_dss_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['ticket_domains',            'fk_td_ticket',       "ALTER TABLE ticket_domains ADD CONSTRAINT fk_td_ticket FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE"],
+        ['ticket_domains',            'fk_td_domain',       "ALTER TABLE ticket_domains ADD CONSTRAINT fk_td_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['ticket_domains',            'fk_td_analyst',      "ALTER TABLE ticket_domains ADD CONSTRAINT fk_td_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['domain_knowledge_articles', 'fk_dka_domain',      "ALTER TABLE domain_knowledge_articles ADD CONSTRAINT fk_dka_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['domain_knowledge_articles', 'fk_dka_article',     "ALTER TABLE domain_knowledge_articles ADD CONSTRAINT fk_dka_article FOREIGN KEY (article_id) REFERENCES knowledge_articles (id) ON DELETE CASCADE"],
+        ['domain_knowledge_articles', 'fk_dka_analyst',     "ALTER TABLE domain_knowledge_articles ADD CONSTRAINT fk_dka_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['domain_status_incidents',   'fk_dsi_domain',      "ALTER TABLE domain_status_incidents ADD CONSTRAINT fk_dsi_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE"],
+        ['domain_status_incidents',   'fk_dsi_incident',    "ALTER TABLE domain_status_incidents ADD CONSTRAINT fk_dsi_incident FOREIGN KEY (incident_id) REFERENCES status_incidents (id) ON DELETE CASCADE"],
+    ];
+    foreach ($domainFks as [$tbl, $name, $sql]) {
+        if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;
+        try { $conn->exec($sql); } catch (Exception $e) {}
+    }
+
+    // Projects foreign keys (3.2.0). Names + rules match freeitsm.sql. A task keeps
+    // its work when its project or stage goes (SET NULL, never CASCADE); a project's
+    // own stages and history go with it.
+    $projectFks = [
+        ['projects',       'fk_projects_tenant',        "ALTER TABLE projects ADD CONSTRAINT fk_projects_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        ['projects',       'fk_projects_owner',         "ALTER TABLE projects ADD CONSTRAINT fk_projects_owner FOREIGN KEY (owner_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['projects',       'fk_projects_created_by',    "ALTER TABLE projects ADD CONSTRAINT fk_projects_created_by FOREIGN KEY (created_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['projects',       'fk_projects_approval_by',   "ALTER TABLE projects ADD CONSTRAINT fk_projects_approval_by FOREIGN KEY (approval_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['projects',       'fk_projects_submission',    "ALTER TABLE projects ADD CONSTRAINT fk_projects_submission FOREIGN KEY (form_submission_id) REFERENCES form_submissions (id) ON DELETE SET NULL"],
+        ['project_stages', 'fk_project_stages_project', "ALTER TABLE project_stages ADD CONSTRAINT fk_project_stages_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_audit',  'fk_project_audit_project',  "ALTER TABLE project_audit ADD CONSTRAINT fk_project_audit_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['tasks',          'fk_tasks_project',          "ALTER TABLE tasks ADD CONSTRAINT fk_tasks_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL"],
+        ['tasks',          'fk_tasks_project_stage',    "ALTER TABLE tasks ADD CONSTRAINT fk_tasks_project_stage FOREIGN KEY (project_stage_id) REFERENCES project_stages (id) ON DELETE SET NULL"],
+        // Phase 2.
+        ['project_members', 'fk_pmem_project', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_members', 'fk_pmem_analyst', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_analyst FOREIGN KEY (analyst_id) REFERENCES analysts (id) ON DELETE CASCADE"],
+        ['project_members', 'fk_pmem_team', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_team FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE CASCADE"],
+        ['project_members', 'fk_pmem_user', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE"],
+        ['project_members', 'fk_pmem_role', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_role FOREIGN KEY (role_id) REFERENCES project_roles (id) ON DELETE SET NULL"],
+        ['project_members', 'fk_pmem_created_by', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_created_by FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_items', 'fk_pitem_project', "ALTER TABLE project_items ADD CONSTRAINT fk_pitem_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_items', 'fk_pitem_parent', "ALTER TABLE project_items ADD CONSTRAINT fk_pitem_parent FOREIGN KEY (parent_id) REFERENCES project_items (id) ON DELETE SET NULL"],
+        ['project_items', 'fk_pitem_stage', "ALTER TABLE project_items ADD CONSTRAINT fk_pitem_stage FOREIGN KEY (stage_id) REFERENCES project_stages (id) ON DELETE SET NULL"],
+        ['project_raci', 'fk_praci_project', "ALTER TABLE project_raci ADD CONSTRAINT fk_praci_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_raci', 'fk_praci_item', "ALTER TABLE project_raci ADD CONSTRAINT fk_praci_item FOREIGN KEY (item_id) REFERENCES project_items (id) ON DELETE CASCADE"],
+        ['project_raci', 'fk_praci_member', "ALTER TABLE project_raci ADD CONSTRAINT fk_praci_member FOREIGN KEY (member_id) REFERENCES project_members (id) ON DELETE CASCADE"],
+        ['project_raid', 'fk_praid_project', "ALTER TABLE project_raid ADD CONSTRAINT fk_praid_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_raid', 'fk_praid_owner', "ALTER TABLE project_raid ADD CONSTRAINT fk_praid_owner FOREIGN KEY (owner_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_raid', 'fk_praid_ticket', "ALTER TABLE project_raid ADD CONSTRAINT fk_praid_ticket FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE SET NULL"],
+        ['project_raid', 'fk_praid_raised_by', "ALTER TABLE project_raid ADD CONSTRAINT fk_praid_raised_by FOREIGN KEY (raised_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_raid', 'fk_praid_article', "ALTER TABLE project_raid ADD CONSTRAINT fk_praid_article FOREIGN KEY (knowledge_article_id) REFERENCES knowledge_articles (id) ON DELETE SET NULL"],
+        ['project_raid', 'fk_praid_escalated_by', "ALTER TABLE project_raid ADD CONSTRAINT fk_praid_escalated_by FOREIGN KEY (escalated_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_raid_tasks', 'fk_prt_raid', "ALTER TABLE project_raid_tasks ADD CONSTRAINT fk_prt_raid FOREIGN KEY (raid_id) REFERENCES project_raid (id) ON DELETE CASCADE"],
+        ['project_raid_tasks', 'fk_prt_task', "ALTER TABLE project_raid_tasks ADD CONSTRAINT fk_prt_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE"],
+        ['project_tolerances', 'fk_ptol_project', "ALTER TABLE project_tolerances ADD CONSTRAINT fk_ptol_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_tolerances', 'fk_ptol_stage', "ALTER TABLE project_tolerances ADD CONSTRAINT fk_ptol_stage FOREIGN KEY (stage_id) REFERENCES project_stages (id) ON DELETE CASCADE"],
+        ['project_asset_targets', 'fk_patg_project', "ALTER TABLE project_asset_targets ADD CONSTRAINT fk_patg_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_asset_targets', 'fk_patg_type', "ALTER TABLE project_asset_targets ADD CONSTRAINT fk_patg_type FOREIGN KEY (scope_type_id) REFERENCES asset_types (id) ON DELETE SET NULL"],
+        ['project_asset_targets', 'fk_patg_created_by', "ALTER TABLE project_asset_targets ADD CONSTRAINT fk_patg_created_by FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_asset_target_snapshots', 'fk_patgs_target', "ALTER TABLE project_asset_target_snapshots ADD CONSTRAINT fk_patgs_target FOREIGN KEY (target_id) REFERENCES project_asset_targets (id) ON DELETE CASCADE"],
+        ['project_templates', 'fk_ptpl_created_by', "ALTER TABLE project_templates ADD CONSTRAINT fk_ptpl_created_by FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_milestones', 'fk_pms_project', "ALTER TABLE project_milestones ADD CONSTRAINT fk_pms_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_milestones', 'fk_pms_stage', "ALTER TABLE project_milestones ADD CONSTRAINT fk_pms_stage FOREIGN KEY (stage_id) REFERENCES project_stages (id) ON DELETE SET NULL"],
+        ['project_milestones', 'fk_pms_done_by', "ALTER TABLE project_milestones ADD CONSTRAINT fk_pms_done_by FOREIGN KEY (done_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_milestones', 'fk_pms_created_by', "ALTER TABLE project_milestones ADD CONSTRAINT fk_pms_created_by FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        // Change control (3.3.0)
+        ['project_baselines', 'fk_pbase_project', "ALTER TABLE project_baselines ADD CONSTRAINT fk_pbase_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_baselines', 'fk_pbase_stage', "ALTER TABLE project_baselines ADD CONSTRAINT fk_pbase_stage FOREIGN KEY (stage_id) REFERENCES project_stages (id) ON DELETE SET NULL"],
+        ['project_baselines', 'fk_pbase_created_by', "ALTER TABLE project_baselines ADD CONSTRAINT fk_pbase_created_by FOREIGN KEY (created_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_change_requests', 'fk_pcr_project', "ALTER TABLE project_change_requests ADD CONSTRAINT fk_pcr_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_change_requests', 'fk_pcr_raised_by', "ALTER TABLE project_change_requests ADD CONSTRAINT fk_pcr_raised_by FOREIGN KEY (raised_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_change_requests', 'fk_pcr_decided_by', "ALTER TABLE project_change_requests ADD CONSTRAINT fk_pcr_decided_by FOREIGN KEY (decided_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        // Task flow (3.3.0)
+        ['project_task_flow', 'fk_ptf_project', "ALTER TABLE project_task_flow ADD CONSTRAINT fk_ptf_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        // Task dependencies (3.3.0)
+        ['task_dependencies', 'fk_tdep_task', "ALTER TABLE task_dependencies ADD CONSTRAINT fk_tdep_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE"],
+        ['task_dependencies', 'fk_tdep_on', "ALTER TABLE task_dependencies ADD CONSTRAINT fk_tdep_on FOREIGN KEY (depends_on_id) REFERENCES tasks (id) ON DELETE CASCADE"],
+        // Gate checklists (3.3.0)
+        ['project_gate_items', 'fk_pgi_project', "ALTER TABLE project_gate_items ADD CONSTRAINT fk_pgi_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_gate_items', 'fk_pgi_stage', "ALTER TABLE project_gate_items ADD CONSTRAINT fk_pgi_stage FOREIGN KEY (stage_id) REFERENCES project_stages (id) ON DELETE CASCADE"],
+        ['project_gate_items', 'fk_pgi_analyst', "ALTER TABLE project_gate_items ADD CONSTRAINT fk_pgi_analyst FOREIGN KEY (analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_gate_items', 'fk_pgi_done_by', "ALTER TABLE project_gate_items ADD CONSTRAINT fk_pgi_done_by FOREIGN KEY (done_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        // Benefits (3.3.0)
+        ['project_benefits', 'fk_pben_project', "ALTER TABLE project_benefits ADD CONSTRAINT fk_pben_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_benefits', 'fk_pben_owner', "ALTER TABLE project_benefits ADD CONSTRAINT fk_pben_owner FOREIGN KEY (owner_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_benefit_measures', 'fk_pbm_benefit', "ALTER TABLE project_benefit_measures ADD CONSTRAINT fk_pbm_benefit FOREIGN KEY (benefit_id) REFERENCES project_benefits (id) ON DELETE CASCADE"],
+        ['project_benefit_measures', 'fk_pbm_recorded_by', "ALTER TABLE project_benefit_measures ADD CONSTRAINT fk_pbm_recorded_by FOREIGN KEY (recorded_by_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_change_requests', 'fk_pcr_baseline', "ALTER TABLE project_change_requests ADD CONSTRAINT fk_pcr_baseline FOREIGN KEY (baseline_id) REFERENCES project_baselines (id) ON DELETE SET NULL"],
+        // Connections - every link goes with either side.
+        ['project_assets', 'fk_pas_project', "ALTER TABLE project_assets ADD CONSTRAINT fk_pas_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_assets', 'fk_pas_target', "ALTER TABLE project_assets ADD CONSTRAINT fk_pas_target FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE"],
+        ['project_assets', 'fk_pas_analyst', "ALTER TABLE project_assets ADD CONSTRAINT fk_pas_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_changes', 'fk_pch_project', "ALTER TABLE project_changes ADD CONSTRAINT fk_pch_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_changes', 'fk_pch_target', "ALTER TABLE project_changes ADD CONSTRAINT fk_pch_target FOREIGN KEY (change_id) REFERENCES changes (id) ON DELETE CASCADE"],
+        ['project_changes', 'fk_pch_analyst', "ALTER TABLE project_changes ADD CONSTRAINT fk_pch_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_tickets', 'fk_ptk_project', "ALTER TABLE project_tickets ADD CONSTRAINT fk_ptk_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_tickets', 'fk_ptk_target', "ALTER TABLE project_tickets ADD CONSTRAINT fk_ptk_target FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE"],
+        ['project_tickets', 'fk_ptk_analyst', "ALTER TABLE project_tickets ADD CONSTRAINT fk_ptk_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_contracts', 'fk_pco_project', "ALTER TABLE project_contracts ADD CONSTRAINT fk_pco_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_contracts', 'fk_pco_target', "ALTER TABLE project_contracts ADD CONSTRAINT fk_pco_target FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE"],
+        ['project_contracts', 'fk_pco_analyst', "ALTER TABLE project_contracts ADD CONSTRAINT fk_pco_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_cmdb_objects', 'fk_pcm_project', "ALTER TABLE project_cmdb_objects ADD CONSTRAINT fk_pcm_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_cmdb_objects', 'fk_pcm_target', "ALTER TABLE project_cmdb_objects ADD CONSTRAINT fk_pcm_target FOREIGN KEY (cmdb_object_id) REFERENCES cmdb_objects (id) ON DELETE CASCADE"],
+        ['project_cmdb_objects', 'fk_pcm_analyst', "ALTER TABLE project_cmdb_objects ADD CONSTRAINT fk_pcm_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_knowledge_articles', 'fk_pka_project', "ALTER TABLE project_knowledge_articles ADD CONSTRAINT fk_pka_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_knowledge_articles', 'fk_pka_target', "ALTER TABLE project_knowledge_articles ADD CONSTRAINT fk_pka_target FOREIGN KEY (article_id) REFERENCES knowledge_articles (id) ON DELETE CASCADE"],
+        ['project_knowledge_articles', 'fk_pka_analyst', "ALTER TABLE project_knowledge_articles ADD CONSTRAINT fk_pka_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['project_problems', 'fk_ppr_project', "ALTER TABLE project_problems ADD CONSTRAINT fk_ppr_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_problems', 'fk_ppr_target', "ALTER TABLE project_problems ADD CONSTRAINT fk_ppr_target FOREIGN KEY (problem_id) REFERENCES problems (id) ON DELETE CASCADE"],
+        // 3.3.0: in freeitsm.sql since 3.2.0 but never listed here, so an upgraded install had none of them.
+        ['project_budget_lines', 'fk_pbl_project', "ALTER TABLE project_budget_lines ADD CONSTRAINT fk_pbl_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_budget_lines', 'fk_pbl_contract', "ALTER TABLE project_budget_lines ADD CONSTRAINT fk_pbl_contract FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE SET NULL"],
+        ['project_budget_lines', 'fk_pbl_cost_centre', "ALTER TABLE project_budget_lines ADD CONSTRAINT fk_pbl_cost_centre FOREIGN KEY (cost_centre_id) REFERENCES cost_centres (id) ON DELETE SET NULL"],
+        // A contractor on a project team (3.3.0): the member goes with its supplier or contact.
+        ['project_members', 'fk_pmem_supplier', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE"],
+        ['project_members', 'fk_pmem_contact', "ALTER TABLE project_members ADD CONSTRAINT fk_pmem_contact FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE"],
+        // The AI project assistant (3.3.0).
+        ['project_ai_threads', 'fk_pait_project', "ALTER TABLE project_ai_threads ADD CONSTRAINT fk_pait_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_ai_threads', 'fk_pait_analyst', "ALTER TABLE project_ai_threads ADD CONSTRAINT fk_pait_analyst FOREIGN KEY (analyst_id) REFERENCES analysts (id) ON DELETE CASCADE"],
+        ['project_ai_messages', 'fk_paim_thread', "ALTER TABLE project_ai_messages ADD CONSTRAINT fk_paim_thread FOREIGN KEY (thread_id) REFERENCES project_ai_threads (id) ON DELETE CASCADE"],
+        ['project_ai_messages', 'fk_paim_analyst', "ALTER TABLE project_ai_messages ADD CONSTRAINT fk_paim_analyst FOREIGN KEY (analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['status_planned', 'fk_sp_project', "ALTER TABLE status_planned ADD CONSTRAINT fk_sp_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL"],
+        ['project_reports', 'fk_prep_project',"ALTER TABLE project_reports ADD CONSTRAINT fk_prep_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE"],
+        ['project_problems', 'fk_ppr_analyst', "ALTER TABLE project_problems ADD CONSTRAINT fk_ppr_analyst FOREIGN KEY (created_by_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+    ];
+    foreach ($projectFks as [$tbl, $name, $sql]) {
+        if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;
+        if ($tbl === 'tasks' && !$tableExists('projects')) continue;
+        try { $conn->exec($sql); } catch (Exception $e) {}
+    }
+
+    // Files. Names + rules match freeitsm.sql. files_audit has none on purpose:
+    // the trail must outlive the folders, files and people it names.
+    $filesFks = [
+        ['files_folders', 'fk_files_folders_parent', "ALTER TABLE files_folders ADD CONSTRAINT fk_files_folders_parent FOREIGN KEY (parent_id) REFERENCES files_folders (id) ON DELETE CASCADE"],
+        ['files_items', 'fk_files_items_folder', "ALTER TABLE files_items ADD CONSTRAINT fk_files_items_folder FOREIGN KEY (folder_id) REFERENCES files_folders (id) ON DELETE CASCADE"],
+        ['files_versions', 'fk_files_versions_item', "ALTER TABLE files_versions ADD CONSTRAINT fk_files_versions_item FOREIGN KEY (item_id) REFERENCES files_items (id) ON DELETE CASCADE"],
+        ['files_shortcuts', 'fk_files_shortcuts_folder', "ALTER TABLE files_shortcuts ADD CONSTRAINT fk_files_shortcuts_folder FOREIGN KEY (folder_id) REFERENCES files_folders (id) ON DELETE CASCADE"],
+        ['files_permissions', 'fk_files_permissions_folder', "ALTER TABLE files_permissions ADD CONSTRAINT fk_files_permissions_folder FOREIGN KEY (folder_id) REFERENCES files_folders (id) ON DELETE CASCADE"],
+    ];
+    foreach ($filesFks as [$tbl, $name, $sql]) {
+        if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;
+        try { $conn->exec($sql); } catch (Exception $e) {}
+    }
+
+    // Cost centres (GH #160). Names + rules match freeitsm.sql: a company takes
+    // its cost centres with it; a parent going leaves its children at the top
+    // level (CostCentresService refuses to delete a parent first anyway).
+    $costCentreFks = [
+        ['cost_centres', 'fk_cost_centres_parent', "ALTER TABLE cost_centres ADD CONSTRAINT fk_cost_centres_parent FOREIGN KEY (parent_id) REFERENCES cost_centres (id) ON DELETE SET NULL"],
+        ['cost_centres', 'fk_cost_centres_tenant', "ALTER TABLE cost_centres ADD CONSTRAINT fk_cost_centres_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE"],
+    ];
+    foreach ($costCentreFks as [$tbl, $name, $sql]) {
+        if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;
+        try { $conn->exec($sql); } catch (Exception $e) {}
+    }
+
+    // Photo Album: an analyst's pictures go with them.
+    if ($tableExists('photo_album') && !$fkExists('photo_album', 'fk_photo_album_analyst')) {
+        try { $conn->exec("ALTER TABLE photo_album ADD CONSTRAINT fk_photo_album_analyst FOREIGN KEY (analyst_id) REFERENCES analysts (id) ON DELETE CASCADE"); } catch (Exception $e) {}
     }
 
     // Forms-module foreign keys (db_verify $schema only builds columns + PK;
@@ -3538,6 +4134,40 @@ try {
         }
     }
 
+    // ---- Repeating task evidence (#181): baselines ----------------------------
+    //
+    // A series that existed before rule versions were recorded gets ONE version,
+    // marked 'baseline', holding the rule as found now. The evidence report works
+    // out missing occurrences only from the first recorded version onwards and
+    // says "not recorded" before it - so the baseline is honest about being a
+    // starting point, not a history. Likewise each checklist template gets version 1.
+    // Idempotent: only rows with no version yet are touched.
+    if ($tableExists('task_recurrence_versions') && $tableExists('task_recurrences')) {
+        try {
+            $series = $conn->query(
+                "SELECT r.* FROM task_recurrences r
+                  WHERE NOT EXISTS (SELECT 1 FROM task_recurrence_versions v WHERE v.recurrence_id = r.id)"
+            )->fetchAll(PDO::FETCH_ASSOC);
+            if ($series) {
+                require_once '../../includes/services/task_history.php';
+                foreach ($series as $r) TaskHistory::recordRuleVersion($conn, (int)$r['id'], 'baseline', null, $r);
+                $results[] = ['table' => 'task_recurrence_versions', 'status' => 'updated',
+                              'details' => ['Recorded the current rule of ' . count($series) . ' repeating series as their first version (#181)']];
+            }
+        } catch (Exception $e) { /* non-fatal: the report says "not recorded" without it */ }
+    }
+    if ($tableExists('checklist_template_versions') && $colExists('checklist_templates', 'version_no')) {
+        try {
+            $tpls = $conn->query("SELECT id FROM checklist_templates WHERE version_no = 0")->fetchAll(PDO::FETCH_COLUMN);
+            if ($tpls) {
+                require_once '../../includes/services/checklists.php';
+                foreach ($tpls as $tid) ChecklistsService::recordTemplateVersion($conn, (int)$tid, null);
+                $results[] = ['table' => 'checklist_template_versions', 'status' => 'updated',
+                              'details' => ['Recorded ' . count($tpls) . ' checklist template(s) as version 1 (#181)']];
+            }
+        } catch (Exception $e) { /* non-fatal */ }
+    }
+
     // ---- Comprehensive named-index backfill --------------------------------
     // freeitsm.sql creates every secondary index at CREATE TABLE time, but a
     // GROWN install only ever received the indexes db_verify was explicitly told
@@ -3629,6 +4259,14 @@ try {
         ];
     }
 
+    // #194: preserve existing observations while allowing per-source coexistence.
+    require_once '../../includes/db_verify_inventory.php';
+    try {
+        $inventoryChanges=dbVerifyInventoryUpgrade($conn);
+        if ($inventoryChanges) $results[]=['table'=>'software_inventory_detail','status'=>'updated','details'=>$inventoryChanges];
+    } catch (Throwable $e) {
+        $results[]=['table'=>'software_inventory_detail','status'=>'error','details'=>['Inventory schema upgrade failed: ' . $e->getMessage()]];
+    }
     $allNamedIndexes = require '../../includes/db_verify_indexes.php';
     $resultPosByTable = [];
     foreach ($results as $ri => $rr) {

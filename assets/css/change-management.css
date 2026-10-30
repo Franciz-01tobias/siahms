@@ -868,6 +868,43 @@ body.cm-editor-open .editor-form {
     gap: 10px;
 }
 
+/* Text history viewer (#180 Part 2) - assets/js/change-revisions.js */
+.rev-modal { max-width: 1100px; width: 95%; }
+.rev-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; padding: 16px 20px; }
+.rev-sidebar-head { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted, #666); margin-bottom: 8px; }
+.rev-list { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
+.rev-item { display: flex; justify-content: space-between; gap: 8px; text-align: left; padding: 8px 10px; border: 1px solid var(--border-soft, #eee); border-radius: 6px; background: var(--surface, #fff); color: var(--text, #333); cursor: pointer; font-size: 13px; }
+.rev-item:hover { background: var(--surface-hover, #f5f5f5); }
+.rev-item.active { border-color: var(--cm-accent, #00897b); background: var(--cm-accent-soft, #e0f2f1); }
+.rev-item.baseline .rev-item-who { font-style: italic; }
+.rev-item-meta { color: var(--text-muted, #888); font-size: 12px; white-space: nowrap; }
+.rev-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.rev-tabs { display: flex; gap: 4px; }
+.rev-tab { padding: 6px 12px; border: 1px solid var(--border, #ddd); border-radius: 6px; background: var(--surface, #fff); color: var(--text, #333); cursor: pointer; font-size: 13px; }
+.rev-tab.active { background: var(--cm-accent, #00897b); border-color: var(--cm-accent, #00897b); color: #fff; }
+.rev-compare { font-size: 13px; color: var(--text-muted, #666); display: flex; align-items: center; gap: 6px; }
+.rev-compare select { max-width: 320px; }
+.rev-body { max-height: 60vh; overflow-y: auto; }
+.rev-loading { padding: 20px; color: var(--text-muted, #888); }
+.rev-baseline-note { padding: 10px 12px; margin-bottom: 12px; border-radius: 6px; background: var(--warning-bg, #fff8e1); border: 1px solid var(--warning-border, #ffcc80); color: var(--warning-text, #8a5a00); font-size: 13px; }
+.rev-diff { white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: var(--text, #333); }
+.rev-diff del { background: var(--danger-bg, #fde8e8); color: var(--danger-text, #b42318); text-decoration: line-through; }
+.rev-diff ins { background: var(--success-bg, #e6f4ea); color: var(--success-text, #1e7e34); text-decoration: none; }
+.rev-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.rev-pane { border: 1px solid var(--border-soft, #eee); border-radius: 6px; overflow: hidden; }
+.rev-pane-head { padding: 8px 10px; font-size: 12px; color: var(--text-muted, #666); background: var(--surface-hover, #fafafa); border-bottom: 1px solid var(--border-soft, #eee); }
+.rev-pane-body { padding: 10px 12px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.rev-plain { white-space: pre-wrap; font-family: inherit; margin: 0; }
+.rev-empty { color: var(--text-muted, #888); }
+.detail-history-link { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--cm-accent, #00897b); cursor: pointer; background: none; border: none; padding: 0; }
+.timeline-view-link { margin-left: 6px; font-size: 12px; color: var(--cm-accent, #00897b); cursor: pointer; background: none; border: none; padding: 0; }
+/* A phone: the versions above the text, the two panes stacked (the sheet itself is LAYER 3's). */
+@media (max-width: 768px) {
+    .rev-layout { grid-template-columns: minmax(0, 1fr); }
+    .rev-list { max-height: 30vh; }
+    .rev-side { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Sticky change detail header (buttons + info + meta) */
 .change-detail-sticky-header {
     position: sticky;
@@ -1388,6 +1425,48 @@ body.cm-editor-open .editor-form {
 }
 
 /* ============ CAB Review Panel (Detail View) ============ */
+
+/* Read only access (#180): the controls the server would refuse are not offered. The
+   vote and the approver's decision stay - approving is identity, not a write. */
+body.module-read-only .comment-input-area,
+body.module-read-only button[onclick="editCurrentChange()"],
+body.module-read-only button[onclick="deleteCurrentChange()"],
+body.module-read-only button[onclick="cancelCurrentChange()"],
+body.module-read-only button[onclick="openLinkIncidentModal()"],
+body.module-read-only .linked-incident-btn.danger,
+body.module-read-only #fileUploadArea { display: none !important; }
+.read-only-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: middle;
+    background: var(--warning-bg, #fff8e1); color: var(--warning-text, #8a5a00); border: 1px solid var(--warning-border, #ffcc80); }
+
+/* Approval panel (#180) - wraps the CAB review, or the named approver's decision */
+.approval-section {
+    background: #f0faf9;
+    border: 1px solid #b2dfdb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+[data-theme-mode="dark"] .approval-section { background: #15302d; border-color: #1f4a44; }
+.approval-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.approval-header h3 { margin: 0; font-size: 16px; }
+.approval-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.approval-badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); color: var(--text, #333); }
+.approval-badge.state-approved { background: var(--success-bg, #e6f4ea); color: var(--success-text, #1e7e34); border-color: transparent; }
+.approval-badge.state-rejected { background: var(--danger-bg, #fde8e8); color: var(--danger-text, #b42318); border-color: transparent; }
+.approval-badge.state-open { background: var(--warning-bg, #fff8e1); color: var(--warning-text, #8a5a00); border-color: transparent; }
+.approval-badge.not-independent { background: var(--warning-bg, #fff8e1); color: var(--warning-text, #8a5a00); border-color: var(--warning-border, #ffcc80); }
+.approval-round-no { font-size: 12px; color: var(--text-muted, #777); }
+.approval-earlier, .approval-stale { padding: 10px 12px; margin-bottom: 12px; border-radius: 6px; background: var(--warning-bg, #fff8e1); border: 1px solid var(--warning-border, #ffcc80); color: var(--warning-text, #8a5a00); font-size: 13px; }
+.approval-note { font-size: 13px; color: var(--text-muted, #666); margin: 8px 0; }
+.approval-override { margin-top: 10px; }
+.approval-history { margin-top: 12px; font-size: 13px; }
+.approval-history summary { cursor: pointer; color: var(--cm-accent, #00897b); }
+.approval-history ul { margin: 8px 0 0; padding-left: 18px; }
+.approval-history li { margin-bottom: 4px; }
+.cab-vote-flag { font-size: 11px; color: var(--warning-text, #8a5a00); margin-top: 4px; }
+/* Inside the Approval panel the CAB review is a part, not a box of its own. */
+.approval-section .cab-review-section { background: none; border: none; padding: 0; margin: 8px 0 0; }
+[data-theme-mode="dark"] .approval-section .cab-review-section { background: none; }
 
 .cab-review-section {
     background: #f0faf9;

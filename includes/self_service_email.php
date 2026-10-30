@@ -9,6 +9,7 @@
  */
 require_once __DIR__ . '/encryption.php';       // decryptMailboxRow
 require_once __DIR__ . '/template_email.php';   // templateGetValidAccessToken, templateSendViaGraph
+require_once __DIR__ . '/session_security.php';  // requestScheme() — proxy-aware (GH #152)
 
 /** First active, send-capable mailbox (has credentials), decrypted. Null if none. */
 function ssGetSendingMailbox(PDO $conn): ?array {
@@ -27,6 +28,11 @@ function ssGetSendingMailbox(PDO $conn): ?array {
  * Send a system email to one recipient. Returns true on success, false if no
  * mailbox is configured or the send fails (caller decides what to do — the
  * verification flow fails closed rather than pretend it sent).
+ *
+ * @param string $to  the recipient's email address
+ * @param string $subject  the email subject
+ * @param string $htmlBody  the email body as HTML, already escaped by the caller
+ * @param string $route  a key of EMAIL_LOG_ROUTES for the send log, e.g. 'portal' or 'training'
  */
 function ssSendSystemEmail(PDO $conn, string $to, string $subject, string $htmlBody, string $route = 'portal'): bool {
     require_once __DIR__ . '/email_log.php';
@@ -90,9 +96,13 @@ function ssSendSystemEmail(PDO $conn, string $to, string $subject, string $htmlB
     }
 }
 
-/** Absolute URL to the self-service email-verification page for a raw token. */
+/**
+ * Absolute URL to the self-service email-verification page for a raw token.
+ *
+ * @param string $rawToken  the unhashed verification token that goes in the link
+ */
 function ssBuildVerifyUrl(string $rawToken): string {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $scheme = requestScheme();
     $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
     $appRoot = rtrim(str_replace('\\', '/', realpath(__DIR__ . '/..')), '/');
@@ -107,9 +117,11 @@ function ssBuildVerifyUrl(string $rawToken): string {
  * links are sent by the same code to the same people, and a reset that lands on
  * a different host from the confirmation is the sort of thing that gets read as
  * a phishing attempt.
+ *
+ * @param string $rawToken  the unhashed password-reset token that goes in the link
  */
 function ssBuildResetUrl(string $rawToken): string {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $scheme = requestScheme();
     $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
     $appRoot = rtrim(str_replace('\\', '/', realpath(__DIR__ . '/..')), '/');
@@ -124,6 +136,10 @@ function ssBuildResetUrl(string $rawToken): string {
  * who will receive it this is the FIRST password they have ever had: a contact
  * created by the service desk has no password at all, and telling them to
  * "reset" one they never set reads as a mistake or a scam (GH #134).
+ *
+ * @param string $displayName  the recipient's name for the greeting; '' greets them as 'there'
+ * @param string $link  the reset link from ssBuildResetUrl()
+ * @param int $validHours  how long the link lasts, in hours, as stated in the email
  */
 function ssResetEmailBody(string $displayName, string $link, int $validHours = 1): string {
     $name = htmlspecialchars($displayName !== '' ? $displayName : 'there', ENT_QUOTES, 'UTF-8');
@@ -141,7 +157,12 @@ function ssResetEmailBody(string $displayName, string $link, int $validHours = 1
         . '</div>';
 }
 
-/** HTML body for the verification email. */
+/**
+ * HTML body for the verification email.
+ *
+ * @param string $displayName  the recipient's name for the greeting; '' greets them as 'there'
+ * @param string $link  the verification link from ssBuildVerifyUrl()
+ */
 function ssVerifyEmailBody(string $displayName, string $link): string {
     $name = htmlspecialchars($displayName !== '' ? $displayName : 'there', ENT_QUOTES, 'UTF-8');
     $safeLink = htmlspecialchars($link, ENT_QUOTES, 'UTF-8');

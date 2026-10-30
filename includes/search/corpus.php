@@ -68,6 +68,9 @@ function searchCorpusArticleScope(?int $tenantId): array {
  * Order matters: <script> and <style> bodies have to go BEFORE tags are
  * stripped, or their contents survive as text and every ticket ends up
  * "containing" a stylesheet.
+ *
+ * @param ?string $html  the stored HTML (a message body, note or article); null or '' gives ''
+ * @param int $maxChars  the most characters to keep; 0 or less keeps everything
  */
 function searchCorpusPlainText(?string $html, int $maxChars = 1000000): string {
     if ($html === null || $html === '') return '';
@@ -125,7 +128,12 @@ function searchCorpusUpsert(PDO $conn, array $doc): void {
     ]);
 }
 
-/** Remove one source's row. Safe to call for something never indexed. */
+/**
+ * Remove one source's row. Safe to call for something never indexed.
+ *
+ * @param string $sourceType  the source type, a SEARCH_SOURCE_* value such as 'email' or 'document'
+ * @param int $sourceId  the source row's id in its own table
+ */
 function searchCorpusDelete(PDO $conn, string $sourceType, int $sourceId): void {
     $conn->prepare("DELETE FROM search_documents WHERE source_type = ? AND source_id = ?")
          ->execute([$sourceType, $sourceId]);

@@ -21,8 +21,10 @@ $path_prefix = '../../';
 $translationNamespaces = ['common', 'system'];
 
 // The live base URL of the v1 API for this deployment.
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = requestScheme();
 $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 'api/v1';
+// The MCP server (3.2.0) - api/mcp/, same keys, its own permission.
+$mcpUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 'api/mcp/';
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -30,9 +32,9 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('system.api.browser_title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.api.browser_title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <style>
@@ -145,7 +147,7 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
         [data-theme-mode="dark"] .table-action-btn.danger:hover { background: #3a1a1d; color: #fca5a5; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
 </head>
@@ -157,7 +159,7 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
         <p class="page-subtitle"><?php echo htmlspecialchars(t('system.api.subtitle')); ?></p>
 
         <div class="settings-card">
-            <h3><?php echo htmlspecialchars(t('system.api.base_url')); ?></h3>
+            <h3 id="base-url"><?php echo htmlspecialchars(t('system.api.base_url')); ?></h3>
             <p class="card-desc"><?php echo t('system.api.base_url_desc'); ?></p>
             <div class="base-url-box">
                 <code id="apiBaseUrl"><?php echo htmlspecialchars($apiBaseUrl); ?></code>
@@ -170,7 +172,7 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
         </div>
 
         <div class="settings-card">
-            <h3><?php echo htmlspecialchars(t('system.api.openapi')); ?></h3>
+            <h3 id="openapi"><?php echo htmlspecialchars(t('system.api.openapi')); ?></h3>
             <p class="card-desc">
                 <?php echo t('system.api.openapi_desc'); ?>
             </p>
@@ -182,9 +184,21 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
         </div>
 
         <div class="settings-card">
+            <h3 id="mcp"><?php echo htmlspecialchars(t('system.api.mcp')); ?></h3>
+            <p class="card-desc"><?php echo t('system.api.mcp_desc'); ?></p>
+            <div class="base-url-box">
+                <code id="mcpUrl"><?php echo htmlspecialchars($mcpUrl); ?></code>
+            </div>
+            <p class="card-desc" style="margin-top:14px;"><?php echo htmlspecialchars(t('system.api.mcp_claude_code')); ?></p>
+            <div class="base-url-box">
+                <code style="white-space:pre-wrap;word-break:break-all;">claude mcp add --transport http freeitsm <?php echo htmlspecialchars($mcpUrl); ?> --header "Authorization: Bearer YOUR_KEY"</code>
+            </div>
+        </div>
+
+        <div class="settings-card">
             <div class="keys-head">
                 <div>
-                    <h3 style="margin:0;"><?php echo htmlspecialchars(t('system.api.keys')); ?></h3>
+                    <h3 id="api-keys" style="margin:0;"><?php echo htmlspecialchars(t('system.api.keys')); ?></h3>
                     <p class="card-desc" style="margin:4px 0 0;"><?php echo htmlspecialchars(t('system.api.keys_desc')); ?></p>
                 </div>
                 <button class="add-btn" id="addKeyBtn"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -503,6 +517,6 @@ $apiBaseUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_UR
 
     loadKeys();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

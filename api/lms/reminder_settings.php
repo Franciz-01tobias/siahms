@@ -116,7 +116,16 @@ try {
     if ($action === 'run') {
         // Run it now, for somebody who does not want to wait for the schedule.
         // Guarded by the same capability as everything else on this screen.
-        $result = lmsRemindersRun($conn, false);
+        // #182: a MANUAL run - recorded, but never proof that the schedule is alive.
+        require_once __DIR__ . '/../../includes/job_runs.php';
+        $runId = JobRun::start($conn, 'lms_reminders', 'manual', $analystId);
+        try {
+            $result = lmsRemindersRun($conn, false);
+        } catch (Throwable $e) {
+            JobRun::fail($conn, $runId, $e);
+            throw $e;
+        }
+        lmsRemindersJobFinish($conn, $runId, $result);
         echo json_encode(['success' => true, 'result' => $result]);
         exit;
     }

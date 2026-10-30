@@ -32,9 +32,15 @@ const LMSPlayer = (() => {
     let finished = false;
     let startedAt = Date.now();
 
+    /** Escapes text for safe use in HTML. */
     const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+    /** Seconds since the time count was last sent to the server. */
     const elapsed = () => Math.round((Date.now() - startedAt) / 1000);
 
+    /**
+     * Loads the course and its lessons, registers the attempt and resumes at the saved bookmark, then
+     * draws the contents list and the lesson. Saves a bookmark when the page is closed before finishing.
+     */
     async function init() {
         const r = await fetch(`${API}course_content.php?course_id=${COURSE_ID}${AS_Q}`);
         const d = await r.json();
@@ -65,6 +71,10 @@ const LMSPlayer = (() => {
         });
     }
 
+    /**
+     * Draws the lesson contents list (current and done lessons marked) and updates the progress bar and
+     * "step n of m" label.
+     */
     function renderToc() {
         document.getElementById('toc').innerHTML = lessons.map((l, i) => `
             <button class="lms-toc-item ${i === index ? 'active' : ''} ${i < index ? 'done' : ''}" data-i="${i}">
@@ -83,6 +93,10 @@ const LMSPlayer = (() => {
             window.t('lms.player.step', { current: index + 1, total: lessons.length });
     }
 
+    /**
+     * Shows the current lesson's body and its quiz questions, keeping answers already given, and sets the
+     * Previous / Next (or Finish) buttons.
+     */
     function renderLesson() {
         const l = lessons[index];
 
@@ -141,6 +155,7 @@ const LMSPlayer = (() => {
         return n;
     }
 
+    /** Moves to lesson i, saving a bookmark first. */
     function go(i) {
         if (finished || i < 0 || i >= lessons.length) return;
         index = i;
@@ -149,13 +164,19 @@ const LMSPlayer = (() => {
         renderLesson();
     }
 
+    /** Moves to the next lesson, or finishes the course on the last one. */
     function next() {
         if (index < lessons.length - 1) { go(index + 1); return; }
         finish();
     }
 
+    /** Moves back one lesson. */
     function prev() { go(index - 1); }
 
+    /**
+     * Saves the current lesson and the time spent through native_progress.php; when the page is closing it
+     * uses sendBeacon so the request survives.
+     */
     async function saveBookmark(unloading) {
         const body = JSON.stringify({ course_id: COURSE_ID, bookmark: String(lessons[index].id), elapsed_seconds: elapsed() });
         startedAt = Date.now();   // time is accumulated server-side; don't double-count it
@@ -173,6 +194,10 @@ const LMSPlayer = (() => {
         } catch (e) { /* a lost bookmark is not worth interrupting the learner for */ }
     }
 
+    /**
+     * Submits every answer for grading through native_progress.php, asking first when some questions are
+     * unanswered, then shows the result.
+     */
     async function finish() {
         const missing = unanswered();
         if (missing > 0) {
@@ -204,6 +229,11 @@ const LMSPlayer = (() => {
         renderResult(d);
     }
 
+    /**
+     * Shows the graded result - passed, failed or completed with the score and pass mark - then the review
+     * of each question with the correct answer and explanation, and the Finish (and Retry on a fail)
+     * buttons.
+     */
     function renderResult(d) {
         document.getElementById('navBar').style.display = 'none';
         document.getElementById('progressFill').style.width = '100%';

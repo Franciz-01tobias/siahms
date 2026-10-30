@@ -48,6 +48,7 @@ const SEARCH_INDEX_MAX_BODY = 200000;
  * a deleted ticket's words are removed rather than left sitting in a searchable
  * table.
  *
+ * @param int $maxBody  the most characters of any one body (message, note, attachment) to index
  * @return array{tickets:int,emails:int,notes:int,attachments:int,skipped:int}
  */
 function searchIndexTicket(PDO $conn, int $ticketId, int $maxBody = SEARCH_INDEX_MAX_BODY): array
@@ -147,6 +148,8 @@ function searchIndexTicket(PDO $conn, int $ticketId, int $maxBody = SEARCH_INDEX
  * rebuilding the index never means re-reading a single file — which for tier 2's
  * PDFs and OCR would be hours of work and, with a paid extractor, a bill.
  *
+ * @param string $scope  the ticket's corpus tenant_scope, SEARCH_SCOPE_DEFAULT or SEARCH_SCOPE_COMPANY
+ * @param int $maxBody  the most characters of extracted text kept per attachment; longer text is truncated
  * @return int corpus rows written
  */
 function searchIndexTicketAttachments(PDO $conn, int $ticketId, ?int $tenantId, string $scope, int $maxBody): int
@@ -325,6 +328,9 @@ function searchIndexTicketAttachments(PDO $conn, int $ticketId, ?int $tenantId, 
  * An archived or deleted article has its row removed rather than hidden: the
  * command palette excludes archived articles, so leaving them searchable would
  * disagree with the rest of the product.
+ *
+ * @param int $articleId  the knowledge article to index; 0 or less does nothing
+ * @param int $maxBody  the most characters of the article body to index
  */
 function searchIndexArticle(PDO $conn, int $articleId, int $maxBody = SEARCH_INDEX_MAX_BODY): bool
 {
@@ -381,6 +387,9 @@ function searchIndexArticle(PDO $conn, int $articleId, int $maxBody = SEARCH_IND
  *
  * Never throws: a search index that cannot be updated must not cost anybody
  * their ticket, their note or their reply.
+ *
+ * @param string $event  the workflow event name, e.g. 'ticket.note_added'; most are ignored
+ * @param array $payload  the event payload; the ticket id is read from ['ticket']['id'] or ['ticket_id']
  */
 function searchIndexHandleEvent(string $event, array $payload): void
 {

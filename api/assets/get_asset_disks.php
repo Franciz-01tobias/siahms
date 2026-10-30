@@ -21,6 +21,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireModuleAccessJson('assets');
 
 $asset_id = $_GET['asset_id'] ?? '';
 
@@ -38,7 +39,7 @@ try {
         exit;
     }
 
-    $sql = "SELECT drive, label, file_system, size_bytes, free_bytes, used_percent
+    $sql = "SELECT drive, label, file_system, size_bytes, free_bytes, used_percent, source
             FROM asset_disks
             WHERE asset_id = ?
             ORDER BY drive ASC";

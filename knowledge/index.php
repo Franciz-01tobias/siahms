@@ -8,6 +8,7 @@ require_once '../includes/functions.php';
 require_once '../includes/i18n.php';
 require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
+require_once '../includes/money.php';
 I18n::initFromSession();
 Tz::init();
 
@@ -16,6 +17,10 @@ requireModuleAccess('knowledge');
 $current_page = 'knowledge';
 $path_prefix = '../';
 $translationNamespaces = ['common', 'knowledge'];
+// Domains an article is a runbook for (3.0.0) - Domains' data, so only for
+// analysts who can open Domains.
+$showDomains = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'domains');
+if ($showDomains) $translationNamespaces[] = 'domains';
 
 // Read the per-analyst sidebar preference server-side so the .sidebar-hover
 // class is on the HTML from the first paint — avoids the flash where the
@@ -44,10 +49,12 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('knowledge.browser_title.main')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../assets/css/knowledge.css?v=26">
+    <title><?php echo htmlspecialchars(pageTitle('knowledge')); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/knowledge.css?v=27">
+    <link rel="stylesheet" href="../assets/css/domain-links.css?v=1">
+    <link rel="stylesheet" href="../assets/css/project-links.css?v=1">
     <!-- Prism.js for code syntax highlighting -->
     <link rel="stylesheet" href="../assets/css/vendor/prism-tomorrow.min.css">
     <link rel="stylesheet" href="../assets/css/vendor/prism-toolbar.min.css">
@@ -55,12 +62,17 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
+    <?php echo Money::scriptTag(); ?>
+    <script src="../assets/js/money.js?v=1"></script>
     <script src="../assets/js/tinymce/tinymce.min.js"></script>
     <!-- Mobile-friendly overrides (LAYER 17). Linked LAST so its @media rules win ties against knowledge.css. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
+    <?php /* The action row (#185): New moved here from the foot of the sidebar - on a phone that was inside the Tags sheet. */ ?>
+    <?php require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('knowledge.title'), [actionRowNew('openCreateArticle()', t('knowledge.sidebar.new_article_tip'))], ['accent' => 'kb']); ?>
 
     <div class="knowledge-container<?php echo $sidebarHoverClass; ?>">
         <!-- Sidebar with search and tags -->
@@ -89,9 +101,6 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
                     <div class="loading"><div class="spinner"></div></div>
                 </div>
             </div>
-            <div class="sidebar-section">
-                <button class="btn btn-primary btn-full" onclick="openCreateArticle()"><?php echo htmlspecialchars(t('knowledge.sidebar.new_article')); ?></button>
-            </div>
             <!-- Shown only to someone who may manage access; see knowledge.js. -->
             <div class="sidebar-section" id="kbExceptionsSection" style="display:none;">
                 <button class="btn btn-secondary btn-full" onclick="openExceptionsModal()"><?php echo htmlspecialchars(t('knowledge.exceptions.button')); ?></button>
@@ -106,8 +115,10 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
 
         <!-- Main content area -->
         <div class="knowledge-main">
-            <!-- Article list view -->
-            <div class="article-list-view" id="articleListView">
+            <!-- Article list view. Hidden from the start when the link names an
+                 article, so it does not flash up before the article replaces it
+                 (knowledge.js shows it again if the article cannot be opened). -->
+            <div class="article-list-view" id="articleListView"<?php if (!empty($_GET['article']) || !empty($_GET['id'])) echo ' style="display:none"'; ?>>
                 <!-- Where you are, when you are inside a folder. Hidden at "All
                      articles", which is not a place you can be inside. -->
                 <nav class="kb-breadcrumb" id="kbBreadcrumb" style="display:none;"></nav>
@@ -305,6 +316,8 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
                              attachment needs something to attach to. -->
                         <div class="editor-documents" id="kbEditorDocumentsWrap">
                             <div id="kbEditorDocuments"></div>
+                            <?php if ($showDomains): ?><div id="kbEditorDomains" style="margin-top:16px;"></div><?php endif; ?>
+                            <div id="kbEditorProjects" style="margin-top:16px;"></div>
                             <p class="field-hint" id="kbEditorDocumentsHint" style="display:none;"><?php echo htmlspecialchars(t('knowledge.editor.documents_after_save')); ?></p>
                         </div>
                     </div>
@@ -313,6 +326,8 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
                     <button class="btn btn-secondary" onclick="cancelEdit()"><?php echo htmlspecialchars(t('knowledge.editor.cancel')); ?></button>
                     <button class="btn btn-primary" onclick="saveArticle()"><?php echo htmlspecialchars(t('knowledge.editor.save')); ?></button>
                     <button class="btn btn-primary" id="btnSaveAsVersion" onclick="saveAsNewVersion()" style="display:none;"><?php echo htmlspecialchars(t('knowledge.editor.version')); ?></button>
+                    <!-- Just the editor, nothing else (desktop only - hidden on a phone in knowledge.css). -->
+                    <button class="btn btn-secondary kb-fullscreen-btn" onclick="kbEditorFullScreen()" title="<?php echo htmlspecialchars(t('knowledge.editor.fullscreen_title')); ?>"><?php echo htmlspecialchars(t('knowledge.editor.fullscreen')); ?></button>
                 </div>
             </div>
         </div>
@@ -547,7 +562,10 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <!-- jsPDF for searchable PDF generation -->
     <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
     <script>window.API_BASE = '../api/knowledge/';</script>
-    <script src="../assets/js/knowledge.js?v=56"></script>
+    <script>window.KB_SHOW_DOMAINS = <?php echo $showDomains ? 'true' : 'false'; ?>; window.KB_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects') ? 'true' : 'false'; ?>; window.KB_BASE = <?php echo json_encode(BASE_URL); ?>;</script>
+    <script src="../assets/js/domain-links.js?v=2"></script>
+    <script src="../assets/js/project-links.js?v=1"></script>
+    <script src="../assets/js/knowledge.js?v=62"></script>
     <!-- Prism.js for code syntax highlighting when viewing articles -->
     <script src="../assets/js/vendor/prism.min.js"></script>
     <script src="../assets/js/vendor/prism-powershell.min.js"></script>
@@ -559,6 +577,6 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <script src="../assets/js/vendor/prism-json.min.js"></script>
     <script src="../assets/js/vendor/prism-toolbar.min.js"></script>
     <script src="../assets/js/vendor/prism-copy-to-clipboard.min.js"></script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

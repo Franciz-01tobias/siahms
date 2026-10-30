@@ -74,6 +74,8 @@ function signatureMergeCodes(): array
  * `[requester_first_name]` sits in an editor where an analyst reads it before
  * sending, whereas an analyst who has not filled in a mobile number would otherwise
  * have `[my_mobile]` appear at the bottom of every email they ever send.
+ *
+ * @param string $body  the signature's stored HTML, with [my_*] merge codes
  */
 function renderSignature(PDO $conn, string $body, int $analystId): string
 {
@@ -130,6 +132,8 @@ function defaultSignatureForAnalyst(PDO $conn, int $analystId): ?array
  * Two statements, not one: clearing every flag and then setting one is what keeps
  * "exactly one" true even if a previous write left two set. The analyst_id clause on
  * both is what stops this touching anybody else's signatures.
+ *
+ * @param int $signatureId  the signature (analyst_signatures.id) to make the default; one of another analyst's matches nothing
  */
 function setDefaultSignature(PDO $conn, int $analystId, int $signatureId): void
 {

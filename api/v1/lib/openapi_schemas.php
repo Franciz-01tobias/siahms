@@ -7,6 +7,141 @@
 return array (
   'schemas' => 
   array (
+    'ChangeEvidenceAttachment' => [
+      'type'=>'object',
+      'properties'=>[
+        'id'=>['type'=>'integer'], 'change_id'=>['type'=>'integer'],
+        'file_name'=>['type'=>'string'], 'file_size'=>['type'=>'integer','nullable'=>true],
+        'file_type'=>['type'=>'string','nullable'=>true], 'sha256'=>['type'=>'string','nullable'=>true],
+        'uploaded_by_id'=>['type'=>'integer','nullable'=>true], 'uploaded_at'=>['type'=>'string','format'=>'date-time'],
+        'client_reference'=>['type'=>'string','nullable'=>true], 'content_url'=>['type'=>'string'],
+      ],
+    ],
+    'InventorySoftwareItem'=>[
+      'type'=>'object',
+      'properties'=>[
+        'display_name'=>['type'=>'string', 'maxLength'=>512],
+        'publisher'=>['type'=>'string', 'maxLength'=>512, 'nullable'=>true],
+        'display_version'=>['type'=>'string', 'maxLength'=>100, 'nullable'=>true],
+        'install_date'=>['type'=>'string', 'maxLength'=>50, 'nullable'=>true],
+        'uninstall_string'=>['type'=>'string', 'maxLength'=>8192, 'nullable'=>true],
+        'install_location'=>['type'=>'string', 'maxLength'=>8192, 'nullable'=>true],
+        'estimated_size'=>['type'=>'string', 'maxLength'=>100, 'nullable'=>true],
+        'system_component'=>['type'=>'boolean', 'default'=>false]
+      ],
+      'required'=>['display_name'],
+      'additionalProperties'=>false
+    ],
+    'InventoryDiskItem'=>[
+      'type'=>'object',
+      'properties'=>[
+        'external_id'=>['type'=>'string', 'maxLength'=>128],
+        'drive'=>['type'=>'string', 'maxLength'=>10, 'nullable'=>true],
+        'label'=>['type'=>'string', 'maxLength'=>100, 'nullable'=>true],
+        'file_system'=>['type'=>'string', 'maxLength'=>20, 'nullable'=>true],
+        'size_bytes'=>['type'=>'integer', 'format'=>'int64', 'minimum'=>0, 'nullable'=>true],
+        'free_bytes'=>['type'=>'integer', 'format'=>'int64', 'minimum'=>0, 'nullable'=>true],
+        'used_percent'=>['type'=>'number', 'minimum'=>0, 'maximum'=>100, 'nullable'=>true]
+      ],
+      'required'=>['external_id'],
+      'additionalProperties'=>false
+    ],
+    'InventoryAdapterItem'=>[
+      'type'=>'object',
+      'properties'=>[
+        'external_id'=>['type'=>'string', 'maxLength'=>128],
+        'name'=>['type'=>'string', 'maxLength'=>255, 'nullable'=>true],
+        'mac_address'=>['type'=>'string', 'maxLength'=>17, 'nullable'=>true],
+        'ip_address'=>['type'=>'string', 'maxLength'=>45, 'nullable'=>true],
+        'subnet_mask'=>['type'=>'string', 'maxLength'=>45, 'nullable'=>true],
+        'gateway'=>['type'=>'string', 'maxLength'=>45, 'nullable'=>true],
+        'dhcp_enabled'=>['type'=>'boolean', 'nullable'=>true]
+      ],
+      'required'=>['external_id'],
+      'additionalProperties'=>false
+    ],
+    'AssetInventorySnapshot'=>[
+      'type'=>'object',
+      'properties'=>[
+        'schema_version'=>['type'=>'integer', 'enum'=>[1]],
+        'source'=>['type'=>'string', 'maxLength'=>48, 'pattern'=>'^[a-z0-9][a-z0-9._-]*$', 'description'=>'Your tool\'s name. Owned by the first analyst to write it in the company; built-in names (agent, intune, proxmox, vcloud, vcenter, manual, api, system, freeitsm) are refused.'],
+        'source_device_ref'=>['type'=>'string', 'maxLength'=>128, 'description'=>'Your tool\'s own id for the device; linked to one asset per company.'],
+        'observed_at'=>['type'=>'string', 'format'=>'date-time', 'description'=>'Original observation: RFC3339 seconds and explicit timezone, at most five minutes in future.'],
+        'sections'=>[
+          'type'=>'object',
+          'properties'=>[
+            'software'=>[
+              'type'=>'object',
+              'properties'=>['complete'=>['type'=>'boolean'], 'items'=>['type'=>'array', 'maxItems'=>10000, 'items'=>['$ref'=>'#/components/schemas/InventorySoftwareItem']]],
+              'required'=>['complete', 'items'],
+              'additionalProperties'=>false
+            ],
+            'disks'=>[
+              'type'=>'object',
+              'properties'=>['complete'=>['type'=>'boolean'], 'items'=>['type'=>'array', 'maxItems'=>10000, 'items'=>['$ref'=>'#/components/schemas/InventoryDiskItem']]],
+              'required'=>['complete', 'items'],
+              'additionalProperties'=>false
+            ],
+            'network_adapters'=>[
+              'type'=>'object',
+              'properties'=>['complete'=>['type'=>'boolean'], 'items'=>['type'=>'array', 'maxItems'=>10000, 'items'=>['$ref'=>'#/components/schemas/InventoryAdapterItem']]],
+              'required'=>['complete', 'items'],
+              'additionalProperties'=>false
+            ]
+          ],
+
+          'additionalProperties'=>false,
+          'minProperties'=>1
+        ]
+      ],
+      'required'=>['schema_version', 'source', 'source_device_ref', 'observed_at', 'sections'],
+      'additionalProperties'=>false
+    ],
+    'AssetInventoryResult'=>[
+      'type'=>'object',
+      'properties'=>[
+        'asset_id'=>['type'=>'integer'],
+        'source'=>['type'=>'string'],
+        'source_device_ref'=>['type'=>'string'],
+        'observed_at'=>['type'=>'string', 'format'=>'date-time'],
+        'sections'=>[
+          'type'=>'object',
+          'description'=>'One entry per section sent, keyed software / disks / network_adapters.',
+          'additionalProperties'=>[
+            'type'=>'object',
+            'properties'=>[
+              'result'=>['type'=>'string', 'enum'=>['applied', 'replayed', 'stale', 'failed']],
+              'added'=>['type'=>'integer'], 'updated'=>['type'=>'integer'], 'removed'=>['type'=>'integer'],
+              'newer_observed_at'=>['type'=>'string', 'format'=>'date-time', 'description'=>'stale: the observation already applied'],
+              'error'=>['type'=>'object', 'properties'=>['code'=>['type'=>'string'], 'message'=>['type'=>'string']]],
+            ],
+            'required'=>['result'],
+          ],
+        ],
+      ],
+
+      'additionalProperties'=>false
+    ],
+    'AssetInventoryProvenance'=>[
+      'type'=>'object',
+      'properties'=>[
+        'source'=>['type'=>'string'],
+        'source_device_ref'=>['type'=>'string'],
+        'owner_analyst_id'=>['type'=>'integer', 'nullable'=>true],
+        'sections'=>[
+          'type'=>'object',
+          'additionalProperties'=>[
+            'type'=>'object',
+            'properties'=>['observed_at'=>['type'=>'string', 'format'=>'date-time'], 'imported_at'=>['type'=>'string', 'format'=>'date-time'], 'imported_by_id'=>['type'=>'integer']],
+            'required'=>['observed_at', 'imported_at', 'imported_by_id'],
+            'additionalProperties'=>false
+          ]
+        ]
+      ],
+
+      'additionalProperties'=>false
+    ],
+
     'Analyst' => 
     array (
       'type' => 'object',
@@ -23,6 +158,133 @@ return array (
         'email' => 
         array (
           'type' => 'string',
+        ),
+        'is_active' => 
+        array (
+          'type' => 'boolean',
+        ),
+      ),
+    ),
+    'AnalystAccess' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'is_admin' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'all_modules' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'modules' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'all_companies' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'companies' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'integer',
+          ),
+        ),
+        'capabilities' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'effective' => 
+        array (
+          'type' => 'object',
+          'properties' => 
+          array (
+            'modules' => 
+            array (
+              'type' => 'array',
+              'items' => 
+              array (
+                'type' => 'string',
+              ),
+              'nullable' => true,
+              'description' => 'null = every module',
+            ),
+            'companies' => 
+            array (
+              'type' => 'array',
+              'items' => 
+              array (
+                'type' => 'integer',
+              ),
+            ),
+            'capabilities' => 
+            array (
+              'type' => 'array',
+              'items' => 
+              array (
+                'type' => 'string',
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    'AnalystDetail' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'username' => 
+        array (
+          'type' => 'string',
+        ),
+        'name' => 
+        array (
+          'type' => 'string',
+        ),
+        'email' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'is_active' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'is_admin' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'auth_provider_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'last_login_at' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
         ),
       ),
     ),
@@ -230,6 +492,29 @@ return array (
                 array (
                   'type' => 'string',
                 ),
+              ),
+            ),
+            // 3.5.0: the lease dates (lease_start new; lease_expiry was not exposed before).
+            'lease_start' =>
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'lease_expiry' =>
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            // GH #160: the cost centre it is charged to.
+            'cost_centre' =>
+            array (
+              'type' => 'object',
+              'nullable' => true,
+              'properties' =>
+              array (
+                'id' => array ('type' => 'integer'),
+                'code' => array ('type' => 'string'),
+                'name' => array ('type' => 'string'),
               ),
             ),
             'order_number' => 
@@ -710,6 +995,29 @@ return array (
                     ),
                   ),
                 ),
+                // 3.5.0: the lease dates (lease_start new; lease_expiry was not exposed before).
+                'lease_start' =>
+                array (
+                  'type' => 'string',
+                  'nullable' => true,
+                ),
+                'lease_expiry' =>
+                array (
+                  'type' => 'string',
+                  'nullable' => true,
+                ),
+                // GH #160: the cost centre it is charged to.
+                'cost_centre' =>
+                array (
+                  'type' => 'object',
+                  'nullable' => true,
+                  'properties' =>
+                  array (
+                    'id' => array ('type' => 'integer'),
+                    'code' => array ('type' => 'string'),
+                    'name' => array ('type' => 'string'),
+                  ),
+                ),
                 'order_number' => 
                 array (
                   'type' => 'string',
@@ -791,6 +1099,11 @@ return array (
       'type' => 'object',
       'properties' => 
       array (
+        'source'=>['type'=>'string'],
+        'observed_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'imported_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'external_id'=>['type'=>'string', 'maxLength'=>128, 'nullable'=>true],
+
         'id' => 
         array (
           'type' => 'integer',
@@ -941,6 +1254,11 @@ return array (
       'type' => 'object',
       'properties' => 
       array (
+        'source'=>['type'=>'string'],
+        'observed_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'imported_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'external_id'=>['type'=>'string', 'maxLength'=>128, 'nullable'=>true],
+
         'id' => 
         array (
           'type' => 'integer',
@@ -982,6 +1300,10 @@ return array (
       'type' => 'object',
       'properties' => 
       array (
+        'source'=>['type'=>'string'],
+        'observed_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'imported_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+
         'id' => 
         array (
           'type' => 'integer',
@@ -1609,7 +1931,7 @@ return array (
     'ChangeCabVoteResult' => 
     array (
       'type' => 'object',
-      'description' => 'Returned by POST /changes/{id}/cab/vote. new_status is set only when the vote triggered an auto-transition (Draft on a required Reject, Approved once the threshold is met).',
+      'description' => 'Returned by POST /changes/{id}/cab/vote. new_status is set only when the vote decided the round - the name of the status it moved to (a Draft-stage status on a required Reject, the first Approved-stage status once the threshold is met). counted is false for a vote by one of the change\'s own people in Enforce mode; was_current is false for a vote cast against an earlier version (null = not stated).',
       'properties' => 
       array (
         'change_id' => 
@@ -1634,11 +1956,420 @@ return array (
         array (
           'type' => 'string',
           'nullable' => true,
+        ),
+        'counted' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'was_current' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+      ),
+    ),    'ChangeApproval' => 
+    array (
+      'type' => 'object',
+      'description' => 'The current approval round of a change (#180), and current_version - the fingerprint of its material content that a vote or decision sends back as content_hash. id is null when the change has no current round.',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'round_no' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'route' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
           'enum' => 
           array (
-            0 => 'Draft',
-            1 => 'Approved',
+            0 => 'cab',
+            1 => 'approver',
+            2 => 'manual',
+            3 => 'emergency',
+            4 => 'override',
+            5 => 'pre_authorised',
+            6 => 'legacy',
           ),
+        ),
+        'state' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'open',
+            1 => 'approved',
+            2 => 'rejected',
+            3 => 'withdrawn',
+            4 => 'superseded',
+          ),
+        ),
+        'is_independent' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'current_version' => 
+        array (
+          'type' => 'string',
+        ),
+        'content_changed' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'changed_fields' => 
+        array (
+          'type' => 'object',
+          'description' => 'Long field => the revision id the round was given, for the fields that changed since.',
+          'additionalProperties' => 
+          array (
+            'type' => 'integer',
+          ),
+        ),
+        'mode' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'record',
+            1 => 'enforce',
+          ),
+        ),
+      ),
+    ),
+    'ChangeApprovalVote' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'analyst_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'analyst_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'vote' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'Approve',
+            1 => 'Reject',
+            2 => 'Abstain',
+          ),
+        ),
+        'comment' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'is_required' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'is_counted' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'content_hash' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'was_current' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'voted_at' => 
+        array (
+          'type' => 'string',
+        ),
+      ),
+    ),
+    'ChangeApprovalRound' => 
+    array (
+      'type' => 'object',
+      'description' => 'One approval round of a change (#180).',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'round_no' => 
+        array (
+          'type' => 'integer',
+        ),
+        'route' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'cab',
+            1 => 'approver',
+            2 => 'manual',
+            3 => 'emergency',
+            4 => 'override',
+            5 => 'pre_authorised',
+            6 => 'legacy',
+          ),
+        ),
+        'state' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'open',
+            1 => 'approved',
+            2 => 'rejected',
+            3 => 'withdrawn',
+            4 => 'superseded',
+          ),
+        ),
+        'is_independent' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'content_hash' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'snapshot' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'material (the field keys), values (short fields by value, long by sha256), revisions (long field => revision id), template_version_id.',
+        ),
+        'opened_by_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'opened_by_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'opened_at' => 
+        array (
+          'type' => 'string',
+        ),
+        'decided_by_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'decided_by_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'decided_at' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'decision_note' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'closed_reason' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'votes' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            '$ref' => '#/components/schemas/ChangeApprovalVote',
+          ),
+        ),
+      ),
+    ),
+    'ChangeApprovalDecideResult' => 
+    array (
+      'type' => 'object',
+      'description' => 'Returned by POST /changes/{id}/approval/decide.',
+      'properties' => 
+      array (
+        'change_id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'decision' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'approve',
+            1 => 'reject',
+          ),
+        ),
+        'status_changed' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'new_status' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+      ),
+    ),
+    'ChangeRevision' => 
+    array (
+      'type' => 'object',
+      'description' => 'One saved version of a long-text field (#180), without its content.',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'field' => 
+        array (
+          'type' => 'string',
+        ),
+        'format' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'html',
+            1 => 'text',
+          ),
+        ),
+        'content_hash' => 
+        array (
+          'type' => 'string',
+        ),
+        'is_baseline' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'editor_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'editor_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'source' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'ui',
+            1 => 'api',
+            2 => 'system',
+            3 => 'upgrade',
+            4 => 'deleted',
+          ),
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+        ),
+        'length' => 
+        array (
+          'type' => 'integer',
+        ),
+      ),
+    ),
+    'ChangeRevisionDetail' => 
+    array (
+      'type' => 'object',
+      'description' => 'One saved version of a long-text field (#180), with its full content and the id of the version before it.',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'field' => 
+        array (
+          'type' => 'string',
+        ),
+        'format' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'html',
+            1 => 'text',
+          ),
+        ),
+        'content_hash' => 
+        array (
+          'type' => 'string',
+        ),
+        'is_baseline' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'editor_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'editor_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'source' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'ui',
+            1 => 'api',
+            2 => 'system',
+            3 => 'upgrade',
+            4 => 'deleted',
+          ),
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+        ),
+        'length' => 
+        array (
+          'type' => 'integer',
+        ),
+        'content' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'previous_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
         ),
       ),
     ),
@@ -1750,9 +2481,13 @@ return array (
     'ChangeDetail' => 
     array (
       'type' => 'object',
-      'description' => 'The full change detail returned by GET /changes/{id}: every Change field plus bodies, PIR, attachments and linked problems.',
+      'description' => 'The full change detail returned by GET /changes/{id}: every Change field plus bodies, PIR, attachments and linked problems, and the current approval round.',
       'properties' => 
       array (
+        'approval' => 
+        array (
+          '$ref' => '#/components/schemas/ChangeApproval',
+        ),
         'id' => 
         array (
           'type' => 'integer',
@@ -2941,16 +3676,65 @@ return array (
           'type' => 'string',
           'example' => 'Managed print services',
         ),
+        // The company that owns the contract (3.5.0) - never null: the Default company when unset.
+        'company' =>
+        array (
+          '$ref' => '#/components/schemas/LookupRef',
+        ),
         'description' => 
         array (
           'type' => 'string',
           'nullable' => true,
         ),
-        'supplier' => 
+        'party_type' =>
+        array (
+          'type' => 'string',
+          'enum' =>
+          array (
+            0 => 'supplier',
+            1 => 'customer',
+          ),
+          'example' => 'supplier',
+        ),
+        'supplier' =>
         array (
           '$ref' => '#/components/schemas/LookupRef',
         ),
-        'owner' => 
+        'customer' =>
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'Set when party_type is customer: the company, the person, or both.',
+          'properties' =>
+          array (
+            'company' =>
+            array (
+              '$ref' => '#/components/schemas/LookupRef',
+            ),
+            'person' =>
+            array (
+              'type' => 'object',
+              'nullable' => true,
+              'properties' =>
+              array (
+                'id' =>
+                array (
+                  'type' => 'integer',
+                ),
+                'name' =>
+                array (
+                  'type' => 'string',
+                ),
+                'email' =>
+                array (
+                  'type' => 'string',
+                  'nullable' => true,
+                ),
+              ),
+            ),
+          ),
+        ),
+        'owner' =>
         array (
           '$ref' => '#/components/schemas/LookupRef',
         ),
@@ -2970,7 +3754,18 @@ return array (
         array (
           '$ref' => '#/components/schemas/ContractValue',
         ),
-        'cost_centre' => 
+        // GH #160: the linked cost centre's CODE, or the free text recorded before 3.5.0 when none is linked.
+        'cost_centre' =>
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'cost_centre_id' =>
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'cost_centre_name' =>
         array (
           'type' => 'string',
           'nullable' => true,
@@ -3123,8 +3918,1604 @@ return array (
         array (
           'type' => 'string',
           'nullable' => true,
-          'description' => '3-letter code.',
+          'description' => 'An ISO 4217 code such as GBP, EUR or IDR. Any currency in use is accepted; anything else is refused.',
           'example' => 'GBP',
+        ),
+      ),
+    ),
+    // Domains (#154)
+    'Domain' => 
+    array (
+      'type' => 'object',
+      'description' => 'A domain in the register. Auth codes are never returned - see auth_code_set.',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'domain_name' => 
+        array (
+          'type' => 'string',
+        ),
+        'display_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'status' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'purpose' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'primary',
+            1 => 'secondary',
+            2 => 'redirect',
+            3 => 'email_only',
+            4 => 'defensive',
+            5 => 'parked',
+            6 => 'campaign',
+          ),
+        ),
+        'registrar' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'registrar_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'registrar_account' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'registration_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'expiry_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'days_remaining' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'last_renewed_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'registry_updated_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'renewal_mode' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'auto',
+            1 => 'manual',
+            2 => 'do_not_renew',
+            3 => 'unknown',
+          ),
+        ),
+        'transfer_lock' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'registry_lock' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'dnssec' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'registry_statuses' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'registrant_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'owner' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The person the domain is looked after for (#153): a user in the domain\'s own company.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+            ),
+            'email' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'tech_contact' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'tech_analyst' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The technical contact when it is one of your analysts (#162). At most one of tech_contact and tech_analyst is set.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer_supplier' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The customer when it is a supplier (#162). Never set together with customer.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer_contact' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The supplier contact the domain is for (#162), usually alongside customer_supplier.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'email' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'nameservers' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'dns_provider' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'hosting_provider' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'ssl_hosts' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'dkim_selectors' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'cost' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+        ),
+        'currency' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'billing_years' => 
+        array (
+          'type' => 'integer',
+        ),
+        'cost_centre' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'contract_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'tags' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'notes' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'monitoring_enabled' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'security_grade' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'A+',
+            1 => 'A',
+            2 => 'B',
+            3 => 'C',
+            4 => 'D',
+            5 => 'F',
+          ),
+        ),
+        'security_score' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'ssl_expiry_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'ssl_issuer' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'lookup_source' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'rdap',
+            1 => 'whois',
+            2 => 'manual',
+          ),
+        ),
+        'last_lookup_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'last_lookup_error' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'last_check_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'auth_code_set' => 
+        array (
+          'type' => 'boolean',
+          'description' => 'Whether an auth code is stored. The code itself is never returned by the API.',
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'updated_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+      ),
+    ),
+    'DomainWithChanges' => 
+    array (
+      'type' => 'object',
+      'description' => 'A domain after a registry lookup, with what the lookup changed.',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'domain_name' => 
+        array (
+          'type' => 'string',
+        ),
+        'display_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'status' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'purpose' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'primary',
+            1 => 'secondary',
+            2 => 'redirect',
+            3 => 'email_only',
+            4 => 'defensive',
+            5 => 'parked',
+            6 => 'campaign',
+          ),
+        ),
+        'registrar' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'registrar_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'registrar_account' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'registration_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'expiry_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'days_remaining' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'last_renewed_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'registry_updated_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'renewal_mode' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'auto',
+            1 => 'manual',
+            2 => 'do_not_renew',
+            3 => 'unknown',
+          ),
+        ),
+        'transfer_lock' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'registry_lock' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'dnssec' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'registry_statuses' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'registrant_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'owner' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The person the domain is looked after for (#153): a user in the domain\'s own company.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+            ),
+            'email' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'tech_contact' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'tech_analyst' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The technical contact when it is one of your analysts (#162). At most one of tech_contact and tech_analyst is set.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer_supplier' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The customer when it is a supplier (#162). Never set together with customer.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer_contact' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The supplier contact the domain is for (#162), usually alongside customer_supplier.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'email' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'nameservers' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'dns_provider' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'hosting_provider' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'ssl_hosts' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'dkim_selectors' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'cost' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+        ),
+        'currency' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'billing_years' => 
+        array (
+          'type' => 'integer',
+        ),
+        'cost_centre' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'contract_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'tags' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'notes' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'monitoring_enabled' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'security_grade' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'A+',
+            1 => 'A',
+            2 => 'B',
+            3 => 'C',
+            4 => 'D',
+            5 => 'F',
+          ),
+        ),
+        'security_score' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'ssl_expiry_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'ssl_issuer' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'lookup_source' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'rdap',
+            1 => 'whois',
+            2 => 'manual',
+          ),
+        ),
+        'last_lookup_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'last_lookup_error' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'last_check_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'auth_code_set' => 
+        array (
+          'type' => 'boolean',
+          'description' => 'Whether an auth code is stored. The code itself is never returned by the API.',
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'updated_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'changes' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            '$ref' => '#/components/schemas/DomainChange',
+          ),
+        ),
+      ),
+    ),
+    'DomainCheckResult' => 
+    array (
+      'type' => 'object',
+      'description' => 'A domain after its checks ran: the findings, and what change detection saw move.',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'domain_name' => 
+        array (
+          'type' => 'string',
+        ),
+        'display_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'status' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'purpose' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'primary',
+            1 => 'secondary',
+            2 => 'redirect',
+            3 => 'email_only',
+            4 => 'defensive',
+            5 => 'parked',
+            6 => 'campaign',
+          ),
+        ),
+        'registrar' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'registrar_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'registrar_account' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'registration_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'expiry_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'days_remaining' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'last_renewed_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'registry_updated_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'renewal_mode' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'auto',
+            1 => 'manual',
+            2 => 'do_not_renew',
+            3 => 'unknown',
+          ),
+        ),
+        'transfer_lock' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'registry_lock' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'dnssec' => 
+        array (
+          'type' => 'boolean',
+          'nullable' => true,
+        ),
+        'registry_statuses' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'registrant_name' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'owner' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The person the domain is looked after for (#153): a user in the domain\'s own company.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+            ),
+            'email' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'tech_contact' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'tech_analyst' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The technical contact when it is one of your analysts (#162). At most one of tech_contact and tech_analyst is set.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer_supplier' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The customer when it is a supplier (#162). Never set together with customer.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'customer_contact' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'The supplier contact the domain is for (#162), usually alongside customer_supplier.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'email' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'nameservers' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'dns_provider' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'hosting_provider' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'ssl_hosts' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'dkim_selectors' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'cost' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+        ),
+        'currency' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'billing_years' => 
+        array (
+          'type' => 'integer',
+        ),
+        'cost_centre' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'contract_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'tags' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+        ),
+        'notes' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'monitoring_enabled' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'security_grade' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'A+',
+            1 => 'A',
+            2 => 'B',
+            3 => 'C',
+            4 => 'D',
+            5 => 'F',
+          ),
+        ),
+        'security_score' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'ssl_expiry_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'ssl_issuer' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'lookup_source' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'rdap',
+            1 => 'whois',
+            2 => 'manual',
+          ),
+        ),
+        'last_lookup_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'last_lookup_error' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'last_check_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'auth_code_set' => 
+        array (
+          'type' => 'boolean',
+          'description' => 'Whether an auth code is stored. The code itself is never returned by the API.',
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'updated_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'findings' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            '$ref' => '#/components/schemas/DomainFinding',
+          ),
+        ),
+        'changes' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            '$ref' => '#/components/schemas/DomainChange',
+          ),
+        ),
+      ),
+    ),
+    'DomainFinding' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'key' => 
+        array (
+          'type' => 'string',
+        ),
+        'area' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'registration',
+            1 => 'dns',
+            2 => 'email',
+            3 => 'web',
+          ),
+        ),
+        'level' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'pass',
+            1 => 'info',
+            2 => 'warn',
+            3 => 'fail',
+          ),
+        ),
+        'points' => 
+        array (
+          'type' => 'integer',
+        ),
+        'title' => 
+        array (
+          'type' => 'string',
+        ),
+        'advice' => 
+        array (
+          'type' => 'string',
+        ),
+        'params' => 
+        array (
+          'type' => 'object',
+          'additionalProperties' => true,
+          'description' => 'The values the title and advice were filled from.',
+        ),
+      ),
+    ),
+    'DomainChange' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'field' => 
+        array (
+          'type' => 'string',
+        ),
+        'old' => 
+        array (
+          'description' => 'Previous value (string, number or null)',
+        ),
+        'new' => 
+        array (
+          'description' => 'New value (string, number or null)',
+        ),
+      ),
+    ),
+    'DomainHistoryEntry' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'field' => 
+        array (
+          'type' => 'string',
+        ),
+        'old_value' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'new_value' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'source' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'app',
+            1 => 'api',
+            2 => 'lookup',
+            3 => 'check',
+            4 => 'monitor',
+            5 => 'import',
+          ),
+        ),
+        'analyst' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+      ),
+    ),
+    'DomainStatus' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'name' => 
+        array (
+          'type' => 'string',
+        ),
+        'colour' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'alerts_enabled' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'is_active' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'display_order' => 
+        array (
+          'type' => 'integer',
+        ),
+      ),
+    ),
+    'DomainRegistrarAccount' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'account_name' => 
+        array (
+          'type' => 'string',
+        ),
+        'account_reference' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'login_url' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'two_factor_holder' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'registrar' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'owner' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'domain_count' => 
+        array (
+          'type' => 'integer',
         ),
       ),
     ),
@@ -3135,8 +5526,8 @@ return array (
       array (
         'id' => 
         array (
-          'type' => 'string',
-          'description' => 'Echoes the id/entry_id path segment verbatim (not cast to int).',
+          'type' => 'integer',
+          'description' => 'The id from the path. The router casts every path segment to an integer before the handler runs, so it is a number.',
         ),
         'deleted' => 
         array (
@@ -5902,6 +8293,23 @@ return array (
           'nullable' => true,
           'description' => 'Company this requester belongs to. null = not known; tickets they raise in the self-service portal go to triage.',
         ),
+        'is_active' =>
+        array (
+          'type' => 'boolean',
+          'description' => 'false = marked as left: kept on record, cannot sign in to the portal (3.5.0).',
+        ),
+        // GH #160: the cost centre they are charged to.
+        'cost_centre' =>
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' =>
+          array (
+            'id' => array ('type' => 'integer'),
+            'code' => array ('type' => 'string'),
+            'name' => array ('type' => 'string'),
+          ),
+        ),
         'created_at' =>
         array (
           'type' => 'string',
@@ -5940,6 +8348,18 @@ return array (
           'type' => 'object',
           'properties' => 
           array (
+            // GH #160: the cost centre they are charged to.
+            'cost_centre' =>
+            array (
+              'type' => 'object',
+              'nullable' => true,
+              'properties' =>
+              array (
+                'id' => array ('type' => 'integer'),
+                'code' => array ('type' => 'string'),
+                'name' => array ('type' => 'string'),
+              ),
+            ),
             'tickets' => 
             array (
               '$ref' => '#/components/schemas/RequesterTicketCounts',
@@ -5968,6 +8388,11 @@ return array (
               'type' => 'integer',
               'nullable' => true,
               'description' => 'Company this requester belongs to. null = not known; tickets they raise in the self-service portal go to triage.',
+            ),
+            'is_active' =>
+            array (
+              'type' => 'boolean',
+              'description' => 'false = marked as left: kept on record, cannot sign in to the portal (3.5.0).',
             ),
             'created_at' =>
             array (
@@ -6518,6 +8943,10 @@ return array (
       'description' => 'A machine an application is installed on.',
       'properties' => 
       array (
+        'source'=>['type'=>'string'],
+        'observed_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'imported_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+
         'asset_id' => 
         array (
           'type' => 'integer',
@@ -6798,7 +9227,7 @@ return array (
     'StatusLookupItem' => 
     array (
       'type' => 'object',
-      'description' => 'A closeable, coloured status lookup, shared by change statuses and problem statuses.',
+      'description' => 'A closeable, coloured status lookup, shared by change statuses and problem statuses. Change statuses also carry their stage (#180).',
       'properties' => 
       array (
         'id' => 
@@ -6826,13 +9255,19 @@ return array (
         array (
           'type' => 'boolean',
         ),
+        'stage' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'description' => 'Change statuses only: draft, awaiting, approved, implementing, done or stopped; null = not yet classified.',
+        ),
       ),
     ),
     'StatusRef' => 
     array (
       'type' => 'object',
       'nullable' => true,
-      'description' => 'An id/name status reference with its closed flag. Null when unset.',
+      'description' => 'An id/name status reference with its closed flag. Null when unset. A change status also carries its stage (#180).',
       'properties' => 
       array (
         'id' => 
@@ -6847,6 +9282,12 @@ return array (
         'is_closed' => 
         array (
           'type' => 'boolean',
+        ),
+        'stage' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'description' => 'Change statuses only: draft, awaiting, approved, implementing, done or stopped; null = not yet classified.',
         ),
       ),
     ),
@@ -7640,6 +10081,40 @@ return array (
             ),
           ),
         ),
+        'contractor' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'contractor_contact' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
         'start_date' => 
         array (
           'type' => 'string',
@@ -7651,6 +10126,12 @@ return array (
           'type' => 'string',
           'format' => 'date',
           'nullable' => true,
+        ),
+        'estimate_hours' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+          'description' => 'How long the task should take, in hours (3.3.0).',
         ),
         'parent_task_id' => 
         array (
@@ -8080,6 +10561,40 @@ return array (
                 ),
               ),
             ),
+            'contractor' => 
+            array (
+              'type' => 'object',
+              'nullable' => true,
+              'properties' => 
+              array (
+                'id' => 
+                array (
+                  'type' => 'integer',
+                ),
+                'name' => 
+                array (
+                  'type' => 'string',
+                  'nullable' => true,
+                ),
+              ),
+            ),
+            'contractor_contact' => 
+            array (
+              'type' => 'object',
+              'nullable' => true,
+              'properties' => 
+              array (
+                'id' => 
+                array (
+                  'type' => 'integer',
+                ),
+                'name' => 
+                array (
+                  'type' => 'string',
+                  'nullable' => true,
+                ),
+              ),
+            ),
             'start_date' => 
             array (
               'type' => 'string',
@@ -8412,6 +10927,12 @@ return array (
         array (
           'type' => 'string',
           'nullable' => true,
+        ),
+        'custom_fields' =>
+        array (
+          'type' => 'object',
+          'additionalProperties' => true,
+          'description' => 'Custom fields (Tickets -> Settings -> Custom fields), keyed by field key: every field this ticket has, null when unanswered. Returned by GET /tickets/{id}, POST and PATCH. Send the same object on POST or PATCH to set them; "" clears one.',
         ),
       ),
     ),
@@ -9618,9 +12139,1392 @@ return array (
         ),
       ),
     ),
+    'Project' => 
+    array (
+      'type' => 'object',
+      'description' => 'A project (3.2.0). health is worked out, not stored - the health the portfolio shows.',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'code' => 
+        array (
+          'type' => 'string',
+          'description' => 'The reference people say out loud, e.g. PRJ-0042.',
+        ),
+        'name' => 
+        array (
+          'type' => 'string',
+        ),
+        'summary' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'goal' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'null = the Default company.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'methodology' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'simple',
+            1 => 'staged',
+            2 => 'agile',
+          ),
+        ),
+        'status' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'proposed',
+            1 => 'active',
+            2 => 'on_hold',
+            3 => 'closed',
+            4 => 'cancelled',
+          ),
+        ),
+        'health' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'green',
+            1 => 'amber',
+            2 => 'red',
+          ),
+          'description' => 'null for a closed or cancelled project.',
+        ),
+        'health_mode' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'auto',
+            1 => 'manual',
+          ),
+          'description' => 'auto = worked out; manual = set by hand.',
+        ),
+        'health_note' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'priority' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'low',
+            1 => 'medium',
+            2 => 'high',
+            3 => 'critical',
+          ),
+          'description' => 'How much the project matters next to the others (3.3.0). The words shown for each are a setting.',
+        ),
+        'visibility' =>
+        array (
+          'type' => 'string',
+          'enum' =>
+          array (
+            0 => 'everyone',
+            1 => 'members',
+          ),
+          'description' => 'Who can see it (3.3.0): everyone with Projects, or its team and people who manage Projects. A members-only project the key\'s analyst may not see is not found.',
+        ),
+        'approval' =>
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'pending',
+            1 => 'approved',
+            2 => 'rejected',
+          ),
+          'description' => '3.3.0. Where a proposal\'s approval stands; null when the project needed none.',
+        ),
+        'project_manager' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'start_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'target_end_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'actual_end_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'colour' => 
+        array (
+          'type' => 'string',
+        ),
+        'icon' => 
+        array (
+          'type' => 'string',
+        ),
+        'tools' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'string',
+          ),
+          'description' => 'The tools switched on: people, scope, raci, raid, gates, budget.',
+        ),
+        'progress' => 
+        array (
+          'type' => 'object',
+          'properties' => 
+          array (
+            'percent' => 
+            array (
+              'type' => 'integer',
+            ),
+            'tasks_total' => 
+            array (
+              'type' => 'integer',
+            ),
+            'tasks_done' => 
+            array (
+              'type' => 'integer',
+            ),
+            'tasks_overdue' => 
+            array (
+              'type' => 'integer',
+            ),
+          ),
+        ),
+        'active_stage' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'exceptions' => 
+        array (
+          'type' => 'array',
+          'description' => 'Tolerances exceeded now. kind: time, stage_time, risk or cost.',
+          'items' => 
+          array (
+            'type' => 'object',
+            'properties' => 
+            array (
+              'kind' => 
+              array (
+                'type' => 'string',
+                'enum' => 
+                array (
+                  0 => 'time',
+                  1 => 'stage_time',
+                  2 => 'risk',
+                  3 => 'cost',
+                ),
+              ),
+              'allowed' => 
+              array (
+                'type' => 'integer',
+              ),
+              'late_days' => 
+              array (
+                'type' => 'integer',
+                'nullable' => true,
+              ),
+              'score' => 
+              array (
+                'type' => 'integer',
+                'nullable' => true,
+              ),
+              'over_pct' => 
+              array (
+                'type' => 'integer',
+                'nullable' => true,
+              ),
+            ),
+          ),
+        ),
+        'budget' => 
+        array (
+          'type' => 'object',
+          'description' => 'Totals in the project\'s currency; see GET /projects/{id}/budget for the detail.',
+          'properties' => 
+          array (
+            'currency' => 
+            array (
+              'type' => 'string',
+            ),
+            'planned' => 
+            array (
+              'type' => 'number',
+            ),
+            'actual' => 
+            array (
+              'type' => 'number',
+            ),
+            'forecast' => 
+            array (
+              'type' => 'number',
+              'description' => '3.3.0. What it is now expected to cost.',
+            ),
+          ),
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+        ),
+        'updated_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+        ),
+        'closed_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+      ),
+    ),
+    'ProjectDeleteResult' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+          'description' => 'The project id from the path.',
+        ),
+        'deleted' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'tasks_detached' => 
+        array (
+          'type' => 'integer',
+          'description' => 'Its tasks are kept, taken out of the project.',
+        ),
+      ),
+    ),
+    'ProjectStage' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'kind' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'phase',
+            1 => 'stage',
+            2 => 'sprint',
+          ),
+        ),
+        'name' => 
+        array (
+          'type' => 'string',
+        ),
+        'goal' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'status' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'planned',
+            1 => 'active',
+            2 => 'closed',
+          ),
+        ),
+        'position' => 
+        array (
+          'type' => 'integer',
+        ),
+        'start_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'end_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'tasks_total' => 
+        array (
+          'type' => 'integer',
+        ),
+        'tasks_done' => 
+        array (
+          'type' => 'integer',
+        ),
+        'gate' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'decision' => 
+            array (
+              'type' => 'string',
+              'enum' => 
+              array (
+                0 => 'go',
+                1 => 'go_with_conditions',
+                2 => 'stop',
+              ),
+            ),
+            'notes' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'decided_by' => 
+            array (
+              'type' => 'integer',
+              'nullable' => true,
+            ),
+            'decided_at' => 
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+          ),
+        ),
+      ),
+    ),
+    'ProjectGateResult' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'stage' => 
+        array (
+          '$ref' => '#/components/schemas/ProjectStage',
+        ),
+        'closed' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'next_stage' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'description' => 'The stage this decision started, if any.',
+        ),
+      ),
+    ),
+    'ProjectItem' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'title' => 
+        array (
+          'type' => 'string',
+        ),
+        'description' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'acceptance_criteria' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'moscow' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'must',
+            1 => 'should',
+            2 => 'could',
+            3 => 'wont',
+          ),
+        ),
+        'status' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'proposed',
+            1 => 'agreed',
+            2 => 'in_progress',
+            3 => 'accepted',
+            4 => 'dropped',
+          ),
+        ),
+        'stage' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'position' => 
+        array (
+          'type' => 'integer',
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+        ),
+        'updated_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+        ),
+      ),
+    ),
+    'ProjectRaidEntry' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'type' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'risk',
+            1 => 'assumption',
+            2 => 'issue',
+            3 => 'decision',
+            4 => 'lesson',
+            5 => 'dependency',
+          ),
+        ),
+        'title' => 
+        array (
+          'type' => 'string',
+        ),
+        'description' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'status' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'open',
+            1 => 'closed',
+          ),
+        ),
+        'probability' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'impact' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'score' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+          'description' => 'probability x impact, risks only.',
+        ),
+        'response' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'avoid',
+            1 => 'reduce',
+            2 => 'transfer',
+            3 => 'accept',
+            4 => 'share',
+          ),
+        ),
+        'response_plan' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'owner' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'due_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'ticket' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'number' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'subject' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'raised_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'updated_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'closed_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+        'escalation' =>
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'Set while the entry is escalated (3.3.0).',
+          'properties' =>
+          array (
+            'at' =>
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+            'by' =>
+            array (
+              'type' => 'object',
+              'nullable' => true,
+              'properties' =>
+              array (
+                'id' =>
+                array (
+                  'type' => 'integer',
+                ),
+                'name' =>
+                array (
+                  'type' => 'string',
+                  'nullable' => true,
+                ),
+              ),
+            ),
+            'note' =>
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'decided_by' =>
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'description' => 'Decisions: who decided (a name).',
+        ),
+        'decided_date' =>
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'rationale' =>
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'actions' =>
+        array (
+          'type' => 'array',
+          'description' => 'Follow-up actions - project tasks (3.3.0).',
+          'items' =>
+          array (
+            'type' => 'object',
+            'properties' =>
+            array (
+              'task_id' =>
+              array (
+                'type' => 'integer',
+              ),
+              'title' =>
+              array (
+                'type' => 'string',
+              ),
+              'done' =>
+              array (
+                'type' => 'boolean',
+              ),
+              'due_date' =>
+              array (
+                'type' => 'string',
+                'format' => 'date',
+                'nullable' => true,
+              ),
+              'assignee' =>
+              array (
+                'type' => 'string',
+                'nullable' => true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    'ProjectBudgetLine' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'title' => 
+        array (
+          'type' => 'string',
+        ),
+        'category' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'hardware',
+            1 => 'software',
+            2 => 'services',
+            3 => 'labour',
+            4 => 'travel',
+            5 => 'other',
+          ),
+        ),
+        'planned' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+        ),
+        'actual' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+          'description' => 'What counts: the amount entered, else the contract\'s value in the same currency.',
+        ),
+        'actual_entered' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+        ),
+        'actual_source' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+          'enum' => 
+          array (
+            0 => 'typed',
+            1 => 'contract',
+          ),
+        ),
+        'currency_mismatch' => 
+        array (
+          'type' => 'boolean',
+          'description' => 'true = its contract is in another currency: shown, not counted.',
+        ),
+        'contract' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'title' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'number' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'value' => 
+            array (
+              'type' => 'number',
+              'nullable' => true,
+            ),
+            'currency' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'cost_centre' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'code' => 
+            array (
+              'type' => 'string',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+            ),
+          ),
+        ),
+        'notes' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'planned_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+          'description' => '3.3.0. When the money is expected to go out.',
+        ),
+        'spent_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+          'description' => '3.3.0. When it went out.',
+        ),
+        'forecast' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+          'description' => '3.3.0. What the line is now expected to cost: forecast_entered, otherwise the larger of planned and actual. null when it has neither.',
+        ),
+        'forecast_entered' => 
+        array (
+          'type' => 'number',
+          'nullable' => true,
+          'description' => '3.3.0. The forecast somebody typed, or null.',
+        ),
+      ),
+    ),
+    'ProjectBudget' => 
+    array (
+      'type' => 'object',
+      'description' => 'In the project\'s currency. Amounts in different currencies are never added.',
+      'properties' => 
+      array (
+        'currency' => 
+        array (
+          'type' => 'string',
+        ),
+        'planned' => 
+        array (
+          'type' => 'number',
+        ),
+        'actual' => 
+        array (
+          'type' => 'number',
+        ),
+        'remaining' => 
+        array (
+          'type' => 'number',
+        ),
+        'forecast' => 
+        array (
+          'type' => 'number',
+          'description' => '3.3.0. What the project is now expected to cost (estimate at completion).',
+        ),
+        'cost_basis' => 
+        array (
+          'type' => 'string',
+          'enum' => 
+          array (
+            0 => 'actual',
+            1 => 'forecast',
+          ),
+          'description' => '3.3.0. What the overspend tolerance measures.',
+        ),
+        'labour' => 
+        array (
+          'type' => 'object',
+          'properties' => 
+          array (
+            'mode' => 
+            array (
+              'type' => 'string',
+              'enum' => 
+              array (
+                0 => 'hours',
+                1 => 'rate',
+                2 => 'analyst',
+              ),
+            ),
+            'minutes' => 
+            array (
+              'type' => 'integer',
+            ),
+            'cost' => 
+            array (
+              'type' => 'number',
+              'nullable' => true,
+              'description' => 'null when labour is shown in hours.',
+            ),
+            'unpriced_minutes' => 
+            array (
+              'type' => 'integer',
+            ),
+            'to_come_hours' => 
+            array (
+              'type' => 'number',
+              'description' => '3.3.0. Hours left on open tasks\' estimates.',
+            ),
+            'to_come_cost' => 
+            array (
+              'type' => 'number',
+              'nullable' => true,
+              'description' => '3.3.0. Those hours priced at today\'s rate; null in hours mode, with no rate, or when estimates are left out of the forecast.',
+            ),
+          ),
+        ),
+        'lines' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            '$ref' => '#/components/schemas/ProjectBudgetLine',
+          ),
+        ),
+      ),
+    ),
+    'ProjectTaskSummary' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'title' => 
+        array (
+          'type' => 'string',
+        ),
+        'stage_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
+        ),
+        'status' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'is_done' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'due_date' => 
+        array (
+          'type' => 'string',
+          'format' => 'date',
+          'nullable' => true,
+        ),
+        'assignee' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+      ),
+    ),
+    'ProjectLinks' => 
+    array (
+      'type' => 'object',
+      'description' => 'By kind - asset, change, ticket, contract, cmdb, article, problem - only those the key\'s analyst may open.',
+      'additionalProperties' => 
+      array (
+        'type' => 'array',
+        'items' => 
+        array (
+          'type' => 'object',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'label' => 
+            array (
+              'type' => 'string',
+            ),
+            'detail' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+            'status' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+      ),
+    ),
+    'ProjectHistoryEntry' => 
+    array (
+      'type' => 'object',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'field' => 
+        array (
+          'type' => 'string',
+        ),
+        'old_value' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'new_value' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'source' => 
+        array (
+          'type' => 'string',
+        ),
+        'analyst' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+            ),
+          ),
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+        ),
+      ),
+    ),
+    'CostCentre' => 
+    array (
+      'type' => 'object',
+      'description' => 'A cost centre (GH #160). Always one company\'s. The code is text, returned exactly as stored - "0010" stays "0010".',
+      'properties' => 
+      array (
+        'id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'code' => 
+        array (
+          'type' => 'string',
+          'description' => 'Unique per company, ignoring capitals.',
+        ),
+        'name' => 
+        array (
+          'type' => 'string',
+        ),
+        'description' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
+        'parent' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'null = top level.',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'code' => 
+            array (
+              'type' => 'string',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+            ),
+          ),
+        ),
+        'is_active' => 
+        array (
+          'type' => 'boolean',
+          'description' => 'false = not offered for new assignments; kept on anything already charged to it.',
+        ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'properties' => 
+          array (
+            'id' => 
+            array (
+              'type' => 'integer',
+            ),
+            'name' => 
+            array (
+              'type' => 'string',
+            ),
+          ),
+        ),
+        'child_count' => 
+        array (
+          'type' => 'integer',
+        ),
+        'created_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+        ),
+        'updated_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+        ),
+      ),
+    ),
+    'CostCentreSyncResult' => 
+    array (
+      'type' => 'object',
+      'description' => 'What a sync did (or, with dry_run, would do).',
+      'properties' => 
+      array (
+        'company_id' => 
+        array (
+          'type' => 'integer',
+        ),
+        'applied' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'dry_run' => 
+        array (
+          'type' => 'boolean',
+        ),
+        'counts' => 
+        array (
+          'type' => 'object',
+          'properties' => 
+          array (
+            'create' => 
+            array (
+              'type' => 'integer',
+            ),
+            'update' => 
+            array (
+              'type' => 'integer',
+            ),
+            'unchanged' => 
+            array (
+              'type' => 'integer',
+            ),
+            'deactivate' => 
+            array (
+              'type' => 'integer',
+            ),
+          ),
+        ),
+        'changes' => 
+        array (
+          'type' => 'array',
+          'items' => 
+          array (
+            'type' => 'object',
+            'properties' => 
+            array (
+              'line' => 
+              array (
+                'type' => 'integer',
+                'nullable' => true,
+                'description' => '1-based position in cost_centres; null for one made inactive because it was missing from the list.',
+              ),
+              'code' => 
+              array (
+                'type' => 'string',
+              ),
+              'name' => 
+              array (
+                'type' => 'string',
+              ),
+              'action' => 
+              array (
+                'type' => 'string',
+                'enum' => 
+                array (
+                  0 => 'create',
+                  1 => 'update',
+                  2 => 'deactivate',
+                ),
+              ),
+              'changes' => 
+              array (
+                'type' => 'array',
+                'items' => 
+                array (
+                  'type' => 'string',
+                  'enum' => 
+                  array (
+                    0 => 'code',
+                    1 => 'name',
+                    2 => 'description',
+                    3 => 'is_active',
+                    4 => 'parent',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   ),
   'responses' => 
   array (
+    'GET /changes/{id}/attachments' => ['type'=>'array','items'=>['$ref'=>'#/components/schemas/ChangeEvidenceAttachment']],
+    'POST /changes/{id}/attachments' => ['$ref'=>'#/components/schemas/ChangeEvidenceAttachment'],
+    'GET /assets/{id}/inventory'=>['type'=>'array','items'=>['$ref'=>'#/components/schemas/AssetInventoryProvenance']],
+    'POST /assets/{id}/inventory'=>['$ref'=>'#/components/schemas/AssetInventoryResult'],
+    'DELETE /assets/{id}/inventory/{source}'=>['type'=>'object', 'properties'=>[
+      'asset_id'=>['type'=>'integer'], 'source'=>['type'=>'string'],
+      'removed'=>['type'=>'object', 'properties'=>['software'=>['type'=>'integer'], 'disks'=>['type'=>'integer'], 'network_adapters'=>['type'=>'integer']]],
+    ]],
+    'DELETE /domains/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/DeleteAck',
+    ),
+    'GET /domain-registrar-accounts' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/DomainRegistrarAccount',
+      ),
+    ),
+    'GET /domain-statuses' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/DomainStatus',
+      ),
+    ),
+    'GET /domains' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/Domain',
+      ),
+    ),
+    'GET /domains/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/Domain',
+    ),
+    'GET /domains/{id}/findings' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/DomainFinding',
+      ),
+    ),
+    'GET /domains/{id}/history' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/DomainHistoryEntry',
+      ),
+    ),
+    'PATCH /analysts/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/AnalystDetail',
+    ),
+    'PATCH /analysts/{id}/access' => 
+    array (
+      '$ref' => '#/components/schemas/AnalystAccess',
+    ),
+    'PATCH /domains/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/Domain',
+    ),
+    'POST /analysts' => 
+    array (
+      '$ref' => '#/components/schemas/AnalystDetail',
+    ),
+    'POST /domains' => 
+    array (
+      '$ref' => '#/components/schemas/Domain',
+    ),
+    'POST /domains/{id}/check' => 
+    array (
+      '$ref' => '#/components/schemas/DomainCheckResult',
+    ),
+    'POST /domains/{id}/lookup' => 
+    array (
+      '$ref' => '#/components/schemas/DomainWithChanges',
+    ),
     'DELETE /assets/{id}/assignments/{user_id}' => 
     array (
       '$ref' => '#/components/schemas/AssetAssignmentDeleted',
@@ -9764,6 +13668,14 @@ return array (
       array (
         '$ref' => '#/components/schemas/Analyst',
       ),
+    ),
+    'GET /analysts/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/AnalystDetail',
+    ),
+    'GET /analysts/{id}/access' => 
+    array (
+      '$ref' => '#/components/schemas/AnalystAccess',
     ),
     'GET /asset-locations' => 
     array (
@@ -9948,6 +13860,26 @@ return array (
     'GET /changes/{id}/cab' => 
     array (
       '$ref' => '#/components/schemas/ChangeCab',
+    ),
+    'GET /changes/{id}/approvals' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/ChangeApprovalRound',
+      ),
+    ),
+    'GET /changes/{id}/revisions' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/ChangeRevision',
+      ),
+    ),
+    'GET /changes/{id}/revisions/{revision_id}' => 
+    array (
+      '$ref' => '#/components/schemas/ChangeRevisionDetail',
     ),
     'GET /changes/{id}/comments' => 
     array (
@@ -10406,6 +14338,24 @@ return array (
                     'nullable' => true,
                   ),
                 ),
+                'change_approvals' => 
+                array (
+                  'type' => 'array',
+                  'items' => 
+                  array (
+                    'type' => 'string',
+                    'nullable' => true,
+                  ),
+                ),
+                'change_revisions' => 
+                array (
+                  'type' => 'array',
+                  'items' => 
+                  array (
+                    'type' => 'string',
+                    'nullable' => true,
+                  ),
+                ),
                 'knowledge' => 
                 array (
                   'type' => 'array',
@@ -10478,7 +14428,39 @@ return array (
                     'nullable' => true,
                   ),
                 ),
-                'contracts' => 
+                'domains' =>
+                array (
+                  'type' => 'array',
+                  'items' =>
+                  array (
+                    'type' => 'string',
+                  ),
+                ),
+                'cost_centres' =>
+                array (
+                  'type' => 'array',
+                  'items' =>
+                  array (
+                    'type' => 'string',
+                  ),
+                ),
+                'projects' =>
+                array (
+                  'type' => 'array',
+                  'items' =>
+                  array (
+                    'type' => 'string',
+                  ),
+                ),
+                'mcp' =>
+                array (
+                  'type' => 'array',
+                  'items' =>
+                  array (
+                    'type' => 'string',
+                  ),
+                ),
+                'contracts' =>
                 array (
                   'type' => 'array',
                   'items' => 
@@ -10632,6 +14614,15 @@ return array (
                   ),
                 ),
                 'analysts' => 
+                array (
+                  'type' => 'array',
+                  'items' => 
+                  array (
+                    'type' => 'string',
+                    'nullable' => true,
+                  ),
+                ),
+                'analyst_access' => 
                 array (
                   'type' => 'array',
                   'items' => 
@@ -11132,6 +15123,14 @@ return array (
     array (
       '$ref' => '#/components/schemas/ChangeCabVoteResult',
     ),
+    'POST /changes/{id}/approval/decide' => 
+    array (
+      '$ref' => '#/components/schemas/ChangeApprovalDecideResult',
+    ),
+    'POST /changes/{id}/cancel' => 
+    array (
+      '$ref' => '#/components/schemas/ChangeDetail',
+    ),
     'POST /changes/{id}/comments' => 
     array (
       '$ref' => '#/components/schemas/ChangeCommentCreateResult',
@@ -11296,8 +15295,205 @@ return array (
     array (
       '$ref' => '#/components/schemas/WorkflowFireResult',
     ),
+    'GET /projects' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/Project',
+      ),
+    ),
+    'POST /projects' => 
+    array (
+      '$ref' => '#/components/schemas/Project',
+    ),
+    'GET /projects/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/Project',
+    ),
+    'PATCH /projects/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/Project',
+    ),
+    'DELETE /projects/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectDeleteResult',
+    ),
+    'GET /projects/{id}/stages' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/ProjectStage',
+      ),
+    ),
+    'POST /projects/{id}/stages' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectStage',
+    ),
+    'PATCH /projects/{id}/stages/{stage_id}' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectStage',
+    ),
+    'DELETE /projects/{id}/stages/{stage_id}' => 
+    array (
+      '$ref' => '#/components/schemas/DeleteAck',
+    ),
+    'POST /projects/{id}/stages/{stage_id}/gate' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectGateResult',
+    ),
+    'GET /projects/{id}/items' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/ProjectItem',
+      ),
+    ),
+    'POST /projects/{id}/items' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectItem',
+    ),
+    'PATCH /projects/{id}/items/{item_id}' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectItem',
+    ),
+    'DELETE /projects/{id}/items/{item_id}' => 
+    array (
+      '$ref' => '#/components/schemas/DeleteAck',
+    ),
+    'GET /projects/{id}/raid' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/ProjectRaidEntry',
+      ),
+    ),
+    'POST /projects/{id}/raid' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectRaidEntry',
+    ),
+    'PATCH /projects/{id}/raid/{raid_id}' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectRaidEntry',
+    ),
+    'DELETE /projects/{id}/raid/{raid_id}' => 
+    array (
+      '$ref' => '#/components/schemas/DeleteAck',
+    ),
+    'GET /projects/{id}/budget' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectBudget',
+    ),
+    'POST /projects/{id}/budget-lines' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectBudgetLine',
+    ),
+    'PATCH /projects/{id}/budget-lines/{line_id}' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectBudgetLine',
+    ),
+    'DELETE /projects/{id}/budget-lines/{line_id}' => 
+    array (
+      '$ref' => '#/components/schemas/DeleteAck',
+    ),
+    'GET /projects/{id}/tasks' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/ProjectTaskSummary',
+      ),
+    ),
+    'GET /projects/{id}/links' => 
+    array (
+      '$ref' => '#/components/schemas/ProjectLinks',
+    ),
+    'GET /projects/{id}/history' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/ProjectHistoryEntry',
+      ),
+    ),
+    'DELETE /cost-centres/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/DeleteAck',
+    ),
+    'GET /cost-centres' => 
+    array (
+      'type' => 'array',
+      'items' => 
+      array (
+        '$ref' => '#/components/schemas/CostCentre',
+      ),
+    ),
+    'GET /cost-centres/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/CostCentre',
+    ),
+    'PATCH /cost-centres/{id}' => 
+    array (
+      '$ref' => '#/components/schemas/CostCentre',
+    ),
+    'POST /cost-centres' => 
+    array (
+      '$ref' => '#/components/schemas/CostCentre',
+    ),
+    'POST /cost-centres/sync' => 
+    array (
+      '$ref' => '#/components/schemas/CostCentreSyncResult',
+    ),
   ),
   'requestBodies' => 
   array (
+    // Custom fields are dynamic, so their keys/types come from the asset's
+    // field catalogue. Other existing core input properties remain accepted.
+    'POST /assets' => [
+      'type' => 'object',
+      'required' => ['hostname'],
+      'properties' => [
+        'hostname' => ['type' => 'string', 'maxLength' => 50],
+        'fields' => [
+          'type' => 'object',
+          'description' => 'Custom values keyed by applicable field_key. Omitted keys are kept; null or an empty string clears a non-required value. An empty object changes nothing. Unknown/inapplicable keys and invalid values are 422. Core and custom edits are atomic.',
+          'additionalProperties' => ['oneOf' => [
+            ['type' => 'string', 'nullable' => true], ['type' => 'number'], ['type' => 'boolean'],
+          ]],
+        ],
+      ],
+      'additionalProperties' => true,
+    ],
+    'PATCH /assets/{id}' => [
+      'type' => 'object',
+      'properties' => [
+        'fields' => [
+          'type' => 'object',
+          'description' => 'Partial custom-field map, with the same validation and clear semantics as POST /assets. Values not supplied remain unchanged. An empty object changes nothing. Invalid custom values roll back core edits too.',
+          'additionalProperties' => ['oneOf' => [
+            ['type' => 'string', 'nullable' => true], ['type' => 'number'], ['type' => 'boolean'],
+          ]],
+        ],
+      ],
+      'additionalProperties' => true,
+    ],
+    'POST /changes/{id}/attachments' => [
+      'type'=>'object', 'required'=>['file'],
+      'properties'=>[
+        'file'=>['type'=>'string','format'=>'binary'],
+        'client_reference'=>['type'=>'string','maxLength'=>128,'pattern'=>'^[A-Za-z0-9._:-]{1,128}$',
+          'description'=>'Optional retry key, unique per change and acting analyst. Same filename/bytes returns the original (200); conflicting reuse is 409.'],
+      ],
+    ],
+    'POST /assets/{id}/inventory'=>['$ref'=>'#/components/schemas/AssetInventorySnapshot'],
   ),
+  'requestContentTypes' => ['POST /changes/{id}/attachments'=>'multipart/form-data'],
+  'responseContents' => [
+    'GET /changes/{id}/attachments/{attachment_id}/content'=>[
+      'application/octet-stream'=>['schema'=>['type'=>'string','format'=>'binary']],
+    ],
+  ],
 );

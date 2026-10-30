@@ -21,7 +21,10 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 // Preferences is every analyst's own page; the rest of System is admin-only.
-if (($current_page ?? '') !== 'preferences' && !sessionIsAdmin()) {
+// Asked of the database, not the session flag (3.5.0): an admin demoted or
+// deactivated since signing in is turned away here too, not only by the APIs.
+if (($current_page ?? '') !== 'preferences'
+    && !analystIsAdmin(connectToDatabase(), (int)$_SESSION['analyst_id'])) {
     header('Location: ' . BASE_URL);
     exit;
 }

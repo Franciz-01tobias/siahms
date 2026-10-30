@@ -81,6 +81,30 @@ return [
             'setting_keys' => ['tasks_collaborator_completion'],
         ],
         [
+            // Checklists on tasks (discussion #138, round three). Off by default:
+            // the author of the module thought subtasks and checklists side by side
+            // would confuse some teams, so it is offered rather than imposed - the
+            // same shape as time recording.
+            'id'           => 'checklists',
+            'cap'          => Cap::TASKS_CHECKLISTS,
+            'label_key'    => 'tasks.settings.tab_checklists',
+            'grant'        => 'Switch checklists, forms and procedures on tasks on or off',
+            'setting_keys' => ['tasks_checklists_enabled', 'tasks_forms_enabled', 'tasks_procedures_enabled'],
+        ],
+        [
+            // Repeating task evidence (#181): what deleting an occurrence and changing a
+            // finished task's checklist do, which status a skipped occurrence moves to,
+            // and whether running the evidence report needs its own permission. Sensitive:
+            // these decide what an audit trail allows.
+            'id'           => 'evidence',
+            'cap'          => Cap::TASKS_EVIDENCE,
+            'label_key'    => 'tasks.settings.tab_evidence',
+            'grant'        => 'Configure repeating task evidence: deleting occurrences, changing finished checklists, who runs the report',
+            'sensitive'    => true,
+            'setting_keys' => ['tasks_evidence_completed_checklist', 'tasks_evidence_delete_occurrence',
+                               'tasks_evidence_skip_status_id', 'tasks_evidence_report_access', 'tasks_evidence_open_followups'],
+        ],
+        [
             // Deleting tags and configuring them. Creating one inline from the board is
             // everyday work and deliberately stays on plain module access.
             'id'           => 'tags',
@@ -93,6 +117,23 @@ return [
             'id'        => 'left-panel',
             'cap'       => null,
             'label_key' => 'common.left_panel.tab',
+        ],
+    ],
+
+    // Everyday work (#181) - not a tab. Bites only once Settings -> Evidence ->
+    // "Who can run the evidence report" is set to the permission.
+    'actions' => [
+        [
+            'cap'      => Cap::TASKS_EVIDENCE_REPORT,
+            'grant'    => 'Run the evidence report for a repeating task, and export it (print and CSV)',
+            'restrict' => ['setting' => 'tasks_evidence_report_access', 'value' => 'permission'],
+        ],
+        [
+            // GH #190 decision 4: task access alone never reveals form answers. This grants
+            // exactly those on the occurrences you can see - nothing else in Forms.
+            'cap'      => Cap::TASKS_FORM_ANSWERS,
+            'grant'    => 'Read the form answers on tasks you can see, without access to the Forms module',
+            'restrict' => null,
         ],
     ],
 ];

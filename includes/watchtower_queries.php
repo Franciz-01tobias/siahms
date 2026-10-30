@@ -13,6 +13,9 @@ require_once __DIR__ . '/timezone.php';   // naive_now(), for the change-window 
  * $analystId is optional and only used to scope the Knowledge card to the
  * company the analyst has switched to. Omitted (or 0) = unscoped, which is the
  * behaviour every other card on this dashboard still has.
+ *
+ * @param mixed $analystId  the analyst viewing, for the Knowledge card's company and the scope; 0 = unscoped
+ * @param mixed $scope  WT_SCOPE_MINE, WT_SCOPE_TEAM or WT_SCOPE_ALL; anything else, or no analyst, means all
  */
 function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
     $today = date('Y-m-d');
@@ -22,6 +25,8 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
     // "due today" must not change its answer for the hour either side of UTC
     // midnight. Morning Checks above already binds $today for exactly this reason.
     $todaySql = naive_today_sql();
+    // Planned maintenance due now becomes an incident before the cards count them.
+    try { require_once __DIR__ . '/service_status_planned.php'; statusPlannedDue($conn); } catch (Throwable $e) { /* never break the dashboard */ }
 
     // Whose work this dashboard is answering about (#58). 'all' reproduces the
     // behaviour every card had before, so nothing changes for anyone who never
@@ -296,21 +301,20 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
     // Failed, Cancelled) that list caught exactly one, so completed and failed
     // changes were counted as upcoming work. is_closed is the fact it wanted.
 
-    // Awaiting approval is a recorded fact, not a status name: not yet approved,
-    // not finished, and no longer sitting in the status it started in. Reading it
-    // from the approval itself means an extra approval stage added to the
-    // workflow is counted without being listed in here.
+    // Awaiting approval = the status is in the AWAITING stage (Settings → Statuses),
+    // not yet approved. The stage is what the approval rules themselves read
+    // (includes/changes/approvals.php), so this count and the Approvals page can
+    // never disagree, and renaming Pending Approval changes neither.
     //
-    // is_default = 0 is doing real work. A change still in its starting status is
-    // a DRAFT — nobody has submitted it, so it is not waiting on anyone, and
-    // putting it on an "awaiting approval" count would nag about something that
-    // is nobody's turn. The first version of this counted drafts, which is how
-    // the number went from 0 to 1 on a database with one unsubmitted draft in it.
+    // It used to be "no approval date, not closed, not the default status". That
+    // counted a Draft-stage status such as Submitted, and every change moved to
+    // Scheduled by hand, because a manual approval never recorded its date (F1 on
+    // the #180 design). Drafts stay out either way: nobody has asked for a decision.
     $chUnapprovedStmt = $conn->prepare(
         "SELECT COUNT(*)
          FROM changes c
          JOIN change_statuses cs ON cs.id = c.status_id
-         WHERE c.approval_datetime IS NULL AND cs.is_closed = 0 AND cs.is_default = 0{$chScopeSql}"
+         WHERE c.approval_datetime IS NULL AND cs.stage = 'awaiting'{$chScopeSql}"
     );
     $chUnapprovedStmt->execute($chScopeArgs);
     $chUnapproved = (int)$chUnapprovedStmt->fetchColumn();
@@ -379,9 +383,18 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
     $chOverrunningStmt->execute(array_merge([$chNow], $chScopeArgs));
     $chOverrunning = (int)$chOverrunningStmt->fetchColumn();
 
+    // Emergency changes that went ahead and still await their retrospective decision
+    // (#180): an approve-afterwards change must not quietly stay unapproved.
+    $chEmergencyOpen = 0;
+    try {
+        require_once __DIR__ . '/changes/approvals.php';
+        $chEmergencyOpen = changeApprovalEmergencyOpenCount($conn, $chScopeSql, $chScopeArgs);
+    } catch (Throwable $e) { /* never break the dashboard (approval tables not created yet) */ }
+
     $changes = [
         'upcoming_7d'       => $chUpcoming,
         'unapproved'        => $chUnapproved,
+        'emergency_unapproved' => $chEmergencyOpen,
         'in_progress_today' => $chInProgress,
         'overrunning'       => $chOverrunning,
         'by_status'         => $chStatuses,
@@ -472,22 +485,21 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
     ];
 
     // -- Contracts --
+    // Customer contracts outside the viewer's companies are not counted (#153).
+    require_once __DIR__ . '/contract_party.php';
+    [$ctVis, $ctArgs] = contractVisibilitySql($conn, (int)$analystId, 'k');
+    $ctCount = function (string $where) use ($conn, $ctVis, $ctArgs): int {
+        $s = $conn->prepare("SELECT COUNT(*) FROM contracts k WHERE $where$ctVis");
+        $s->execute($ctArgs);
+        return (int)$s->fetchColumn();
+    };
 
-    $ctExp30 = (int)$conn->query(
-        "SELECT COUNT(*) FROM contracts
-         WHERE is_active = 1 AND contract_end BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 30 DAY)"
-    )->fetchColumn();
+    $ctExp30 = $ctCount("k.is_active = 1 AND k.contract_end BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 30 DAY)");
 
-    $ctExp90 = (int)$conn->query(
-        "SELECT COUNT(*) FROM contracts
-         WHERE is_active = 1 AND contract_end BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 90 DAY)"
-    )->fetchColumn();
+    $ctExp90 = $ctCount("k.is_active = 1 AND k.contract_end BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 90 DAY)");
 
-    $ctNotice = (int)$conn->query(
-        "SELECT COUNT(*) FROM contracts
-         WHERE is_active = 1 AND notice_date IS NOT NULL
-           AND notice_date BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 30 DAY)"
-    )->fetchColumn();
+    $ctNotice = $ctCount("k.is_active = 1 AND k.notice_date IS NOT NULL
+           AND k.notice_date BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 30 DAY)");
 
     $contracts = [
         'expiring_30d'       => $ctExp30,
@@ -571,6 +583,91 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
         'notice_periods_30d' => $swNotice,
         'show'               => $swShow
     ];
+
+    // -- Domains (#154) --
+    //
+    // The first card here that is scoped by company AND by module access, both of
+    // which the other cards leave to the page (see the note on Knowledge below):
+    // domains are a client's property on an MSP install, and "3 of our clients'
+    // domains lapse this week" is not something another client's analyst should
+    // be told. $analystId 0 (the browser-extension API with no analyst) is
+    // unscoped, as Knowledge treats it.
+    //
+    // Honours domain_expiry_surface exactly as Software honours its own setting.
+    // 3.0.0: certificates have their own surface setting (domain_cert_surface),
+    // so the card shows if EITHER kind asks for the dashboard, and each figure
+    // only under its own setting. Certificates use the operator's own warning
+    // window (domain_ssl_warn_days) rather than a fixed 21 days, and skip a
+    // domain being deliberately let go, as renewals always did. "Services at
+    // risk" counts the Service Status services linked to a domain in trouble.
+    $dm = ['total' => 0, 'expired' => 0, 'expiring_30d' => 0, 'expiring_90d' => 0, 'ssl_expiring' => 0, 'unlocked' => 0, 'weak' => 0,
+           'services_at_risk' => 0, 'show' => false, 'show_expiry' => false, 'show_cert' => false];
+    try {
+        require_once __DIR__ . '/domains/settings.php';
+        $dmS = domainSettings($conn);
+        $dmShowExpiry = in_array($dmS['domain_expiry_surface'], ['dashboard', 'both'], true);
+        $dmShowCert   = in_array($dmS['domain_cert_surface'], ['dashboard', 'both'], true);
+        $dmAllowed = $analystId <= 0 || analystCanAccessModule($conn, $analystId, 'domains');
+        if ($dmAllowed && ($dmShowExpiry || $dmShowCert)) {
+            [$dmT, $dmA] = $analystId > 0 ? activeTenantFilter($conn, $analystId, 'd') : ['', []];
+            // A status with alerts off ("Letting lapse") and "Do not renew" are
+            // somebody's deliberate decision, not something to shout about.
+            $live = "(s.id IS NULL OR s.alerts_enabled = 1) AND d.renewal_mode <> 'do_not_renew'";
+            $sslDays = max(1, (int)$dmS['domain_ssl_warn_days']);
+            $st = $conn->prepare(
+                "SELECT COUNT(*) AS total,
+                        SUM($live AND d.expiry_date < {$todaySql}) AS expired,
+                        SUM($live AND d.expiry_date BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 30 DAY)) AS exp30,
+                        SUM($live AND d.expiry_date BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 90 DAY)) AS exp90,
+                        SUM($live AND d.ssl_expiry_date IS NOT NULL AND d.ssl_expiry_date <= DATE_ADD({$todaySql}, INTERVAL {$sslDays} DAY)) AS ssl_expiring,
+                        SUM(d.transfer_lock = 0) AS unlocked,
+                        SUM(d.security_grade IN ('D', 'F')) AS weak
+                   FROM domains d LEFT JOIN domain_statuses s ON s.id = d.status_id
+                  WHERE 1=1{$dmT}"
+            );
+            $st->execute($dmA);
+            $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+            $dm = [
+                'total' => (int)($r['total'] ?? 0),
+                'expired' => $dmShowExpiry ? (int)($r['expired'] ?? 0) : 0,
+                'expiring_30d' => $dmShowExpiry ? (int)($r['exp30'] ?? 0) : 0,
+                'expiring_90d' => $dmShowExpiry ? (int)($r['exp90'] ?? 0) : 0,
+                'ssl_expiring' => $dmShowCert ? (int)($r['ssl_expiring'] ?? 0) : 0,
+                'unlocked' => (int)($r['unlocked'] ?? 0),
+                'weak' => (int)($r['weak'] ?? 0), 'services_at_risk' => 0,
+                'show' => ((int)($r['total'] ?? 0)) > 0, 'show_expiry' => $dmShowExpiry, 'show_cert' => $dmShowCert,
+            ];
+            // Services at risk: linked to a domain whose trouble Service Status is
+            // set to report (the same test as includes/domains/status_link.php).
+            if ($dmS['domain_status_mode'] !== 'off') {
+                $why = [];
+                if ($dmS['domain_status_on_expired'] === '1') $why[] = "d.expiry_date < {$todaySql}";
+                if ($dmS['domain_status_on_cert'] === '1') {
+                    $cd = (int)$dmS['domain_status_cert_days'];
+                    $why[] = $cd > 0 ? "d.ssl_expiry_date <= DATE_ADD({$todaySql}, INTERVAL {$cd} DAY)" : "d.ssl_expiry_date < {$todaySql}";
+                }
+                if ($why) {
+                    try {
+                        $sr = $conn->prepare(
+                            "SELECT COUNT(DISTINCT ds.service_id)
+                               FROM domain_status_services ds
+                               JOIN domains d ON d.id = ds.domain_id
+                               JOIN status_services ss ON ss.id = ds.service_id AND ss.is_active = 1
+                          LEFT JOIN domain_statuses s ON s.id = d.status_id
+                              WHERE $live AND (" . implode(' OR ', $why) . "){$dmT}");
+                        $sr->execute($dmA);
+                        $dm['services_at_risk'] = (int)$sr->fetchColumn();
+                    } catch (Throwable $e) { /* links not created yet: nothing at risk to report */ }
+                }
+            }
+        }
+    } catch (Exception $e) {
+        $dm['show'] = false;   // tables not there yet — draw nothing rather than zeroes
+    }
+    // `allowed` lets the page hide the card from somebody who cannot open Domains
+    // rather than tell them "no domains", which would be a false all-clear.
+    $dm['allowed'] = $dmAllowed ?? true;
+    $domainsWt = $dm;
 
     // -- Knowledge --
 
@@ -669,7 +766,10 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
     $asLease = 0;
     if ($wtShowLease) {
         try {
-            $l = $conn->prepare("SELECT COUNT(*) FROM assets WHERE lease_expiry IS NOT NULL AND lease_expiry <= DATE_ADD({$todaySql}, INTERVAL ? DAY)");
+            // Machines already handed back keep their lease_expiry as a record - not due back.
+            require_once __DIR__ . '/leases.php';
+            $goneBack = leaseReady($conn) ? ' AND NOT ' . leaseGoneBackSql('a') : '';
+            $l = $conn->prepare("SELECT COUNT(*) FROM assets a WHERE a.lease_expiry IS NOT NULL AND a.lease_expiry <= DATE_ADD({$todaySql}, INTERVAL ? DAY){$goneBack}");
             $l->execute([$ltDays]);
             $asLease = (int)$l->fetchColumn();
         } catch (Exception $e) { $wtShowLease = false; }
@@ -743,6 +843,70 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
         'by_status'   => $taskStatuses,
         'total_open'  => $taskTotalOpen
     ];
+
+    // -- Projects (3.2.0) --
+    //
+    // Live projects (proposed or active) by the health the portfolio shows -
+    // worked out by the SAME projectDecorate() the Projects screens use, so the
+    // card can never call a project green that its own page calls red - plus the
+    // stages ending in the next 7 days. Names the off-track ones, as the
+    // Workflows card names its failing rules: "2 off track" says less than which.
+    //
+    // 🔑 SCOPED, unlike contracts or domains: a project HAS an owner whose
+    // workload it is, the project manager. Mine = the projects I manage, Team =
+    // those my teams' analysts manage. Company-scoped and module-gated like
+    // Domains; $analystId 0 (the browser extension with no analyst) sees all.
+    $pj = ['live' => 0, 'green' => 0, 'amber' => 0, 'red' => 0, 'breaches' => 0, 'stages_week' => 0, 'milestones_week' => 0, 'milestones_missed' => 0, 'off_track' => [], 'show' => false];
+    $pjAllowed = $analystId <= 0 || analystCanAccessModule($conn, $analystId, 'projects');
+    if ($pjAllowed) {
+        try {
+            require_once __DIR__ . '/projects/read.php';
+            [$pjT, $pjTA] = $analystId > 0 ? activeTenantFilter($conn, $analystId, 'p') : ['', []];
+            [$pjS, $pjSA] = wtScopeClause($conn, $analystId, $scope, 'p.owner_analyst_id');
+            require_once __DIR__ . '/projects/visibility.php';   // members-only (3.3.0)
+            [$pjV, $pjVA] = projectVisibleSql($conn, $analystId, 'p');
+            $pjS .= $pjV; $pjSA = array_merge($pjSA, $pjVA);
+            $st = $conn->prepare(
+                "SELECT p.id, p.tenant_id, p.name, p.methodology, p.status, p.health, p.owner_analyst_id, p.target_end_date, p.tailoring,
+                        " . projectExceptionColumns($conn) . "
+                   FROM projects p
+                  WHERE p.status IN ('proposed', 'active'){$pjT}{$pjS}");
+            $st->execute(array_merge($pjTA, $pjSA));
+            $pjRows = $st->fetchAll(PDO::FETCH_ASSOC);
+            $pjStats = projectTaskStats($conn, array_column($pjRows, 'id'));
+            $pjCfg = projectHealthConfig($conn);
+            foreach ($pjRows as $p) {
+                $p = projectDecorate($p, $pjStats[(int)$p['id']] ?? [], $pjCfg);
+                $pj['live']++;
+                if (isset($pj[$p['shown_health']])) $pj[$p['shown_health']]++;
+                if ($p['exceptions']) $pj['breaches']++;
+                $pj['milestones_missed'] += $p['milestones_missed'];
+                if ($p['shown_health'] === 'red') $pj['off_track'][] = ['id' => (int)$p['id'], 'name' => $p['name'], 'code' => $p['code']];
+            }
+            $pj['off_track'] = array_slice($pj['off_track'], 0, 3);
+            if ($pjRows) {
+                $ids = wtIdListSql(array_column($pjRows, 'id'));
+                $pj['stages_week'] = (int)$conn->query(
+                    "SELECT COUNT(*) FROM project_stages
+                      WHERE project_id IN $ids AND status <> 'closed'
+                        AND end_date BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 7 DAY)"
+                )->fetchColumn();
+                // Milestones (3.3.0) - its own try: the table may predate Verification.
+                try {
+                    $pj['milestones_week'] = (int)$conn->query(
+                        "SELECT COUNT(*) FROM project_milestones
+                          WHERE project_id IN $ids AND done_date IS NULL
+                            AND due_date BETWEEN {$todaySql} AND DATE_ADD({$todaySql}, INTERVAL 7 DAY)"
+                    )->fetchColumn();
+                } catch (Throwable $e) { /* no milestones yet */ }
+            }
+            $pj['show'] = true;
+        } catch (Throwable $e) {
+            $pj['show'] = false;   // tables not there yet - draw nothing rather than zeroes
+        }
+    }
+    $pj['allowed'] = $pjAllowed;
+    $projectsWt = $pj;
 
     // -- Workflows --
     // A failing workflow is silent by design: the engine swallows its own errors
@@ -825,13 +989,16 @@ function getWatchtowerData($conn, $analystId = 0, $scope = WT_SCOPE_ALL) {
         'service_status' => $serviceStatus,
         'contracts'      => $contracts,
         'software'       => $software,
+        'domains'        => $domainsWt,
         'knowledge'      => $knowledge,
         'assets'         => $assets,
         'tasks'          => $tasksWt,
+        'projects'       => $projectsWt,
         'workflows'      => $wf,
         // Which cards this installation wants on screen. Every card is visible
         // unless somebody has said otherwise, so an install that never opens
         // Watchtower → Settings sees exactly what it saw before.
-        'cards'          => wtVisibleCards($conn)
+        // Domains is hidden outright from anybody who cannot open the module.
+        'cards'          => array_merge(wtVisibleCards($conn), ($dmAllowed ?? true) ? [] : ['domains' => false], $pjAllowed ? [] : ['projects' => false])
     ];
 }

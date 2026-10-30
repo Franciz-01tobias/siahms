@@ -137,7 +137,12 @@ function writeupSettings(PDO $conn): array
     return $out;
 }
 
-/** Strip HTML, entities, quoted reply chains and signatures down to readable text. */
+/**
+ * Strip HTML, entities, quoted reply chains and signatures down to readable text.
+ *
+ * @param ?string $html  an email body or note as stored (HTML or plain); null or '' gives ''
+ * @param int $maxChars  the most characters kept before an ellipsis is added
+ */
 function writeupPlainText(?string $html, int $maxChars = 4000): string
 {
     $s = (string)$html;
@@ -186,6 +191,8 @@ function writeupPlainText(?string $html, int $maxChars = 4000): string
  * there was a diagnosis rather than a single exchange (turns), and it took real
  * time. Time is the most honest of the four — a two-minute ticket is a password
  * reset no matter how many words were typed.
+ *
+ * @param array $p  message_count, notes_len, resolution_len, minutes (ints) and has_problem (bool); missing keys count as 0
  */
 function writeupRichness(array $p): int
 {
@@ -356,6 +363,8 @@ function writeupTicketBundle(PDO $conn, int $ticketId): ?array
  * troubleshooting that followed. Feeding the whole thread in makes every long
  * ticket look similar to every other long ticket, and clusters collapse into
  * "difficult ones".
+ *
+ * @param ?string $subject  the ticket's subject if the caller has it; null reads it from tickets
  */
 function writeupEmbeddingText(PDO $conn, int $ticketId, ?string $subject = null): string
 {
@@ -417,6 +426,8 @@ function writeupStopWords(): array
  * Deliberately not a full Porter implementation: this runs over subject lines of
  * a dozen words, and the failure mode of over-stemming (two unrelated words
  * colliding) is much worse here than under-stemming.
+ *
+ * @param string $w  one lower-case word from a subject line
  */
 function writeupStem(string $w): string
 {
@@ -461,6 +472,8 @@ function writeupStem(string $w): string
  * boot" are the same question, and leaving the asset tags in makes them look
  * like different ones — exactly the mistake that would hide the biggest
  * recurring gaps behind a wall of unique-looking subjects.
+ *
+ * @param string $subject  a ticket subject or article title
  */
 function writeupSubjectTokens(string $subject): array
 {
@@ -501,6 +514,9 @@ function writeupSubjectTokens(string $subject): array
  * server" would cluster on the word "server". Requiring two shared tokens costs
  * nothing real — no genuine recurring question is identified by one word — and
  * removes the whole class of false cluster.
+ *
+ * @param array $a  a token list from writeupSubjectTokens()
+ * @param array $b  another token list from writeupSubjectTokens()
  */
 function writeupTokenSimilarity(array $a, array $b): float
 {
@@ -546,6 +562,10 @@ function writeupTokenSimilarity(array $a, array $b): float
  *
  * O(n²) and unapologetic: n is gap CANDIDATES inside a 90-day window — hundreds,
  * not millions — and a real clustering library is not worth a dependency here.
+ *
+ * @param array $items  candidates sorted best seed first; each needs an 'id' plus whatever $simFn reads
+ * @param callable $simFn  function(item, item): float - how alike two items are, 0-1
+ * @param float $threshold  the lowest similarity that joins an item to a cluster
  */
 function writeupCluster(array $items, callable $simFn, float $threshold): array
 {
@@ -589,6 +609,8 @@ function writeupCluster(array $items, callable $simFn, float $threshold): array
 /**
  * Tidy a ticket subject into something that reads as a knowledge-base heading.
  * Cosmetic only — the model writes the real title when it drafts.
+ *
+ * @param string $subject  the ticket subject to tidy into a heading
  */
 function writeupCleanLabel(string $subject): string
 {
@@ -619,6 +641,8 @@ function writeupCleanLabel(string $subject): string
  * The response protocol is a single first line, `VERDICT: ARTICLE` or
  * `VERDICT: NOT_ENOUGH`, so the front end can branch while still streaming the
  * rest token by token.
+ *
+ * @param string $mode  'single' (one ticket), 'cluster' (a recurring question) or 'answers' (the analyst has replied)
  */
 function writeupSystemPrompt(string $mode = 'single'): string
 {
@@ -722,7 +746,12 @@ missing, then your questions, each on its own line starting with "- ". No HTML.
 TXT;
 }
 
-/** Build the user message for a single-ticket write-up. */
+/**
+ * Build the user message for a single-ticket write-up.
+ *
+ * @param array $bundle  the ticket bundle from writeupTicketBundle() - only 'text' is used
+ * @param string $answers  the analyst's answers to the model's questions; '' for a first attempt
+ */
 function writeupUserMessage(array $bundle, string $answers = ''): string
 {
     $msg  = "RESOLVED TICKET\n\n" . $bundle['text'];
@@ -735,6 +764,11 @@ function writeupUserMessage(array $bundle, string $answers = ''): string
 /**
  * Build the user message for a cluster write-up: the richest ticket as the
  * source, the rest as evidence of how the question gets asked.
+ *
+ * @param array $bundle  the bundle of the cluster's richest ticket, from writeupTicketBundle()
+ * @param array $otherSubjects  the subjects of the other tickets in the cluster; the first 15 non-blank are sent
+ * @param int $count  how many tickets are in the cluster
+ * @param string $answers  the analyst's answers to the model's questions; '' for a first attempt
  */
 function writeupClusterUserMessage(array $bundle, array $otherSubjects, int $count, string $answers = ''): string
 {
@@ -762,6 +796,8 @@ function writeupClusterUserMessage(array $bundle, array $otherSubjects, int $cou
  * The one thing we never do is GUESS a verdict — an unrecognised response is
  * treated as NOT_ENOUGH, because the failure mode of wrongly publishing is worse
  * than the failure mode of wrongly asking.
+ *
+ * @param string $raw  the model's whole response text
  */
 function writeupParseResponse(string $raw): array
 {
@@ -779,7 +815,11 @@ function writeupParseResponse(string $raw): array
     return ['verdict' => 'not_enough', 'body' => trim($s)];
 }
 
-/** Pull the "- " question lines out of a NOT_ENOUGH body. */
+/**
+ * Pull the "- " question lines out of a NOT_ENOUGH body.
+ *
+ * @param string $body  the body of a NOT_ENOUGH response, from writeupParseResponse()
+ */
 function writeupExtractQuestions(string $body): array
 {
     $out = [];
@@ -795,7 +835,11 @@ function writeupExtractQuestions(string $body): array
     return $out;
 }
 
-/** The prose part of a NOT_ENOUGH body, with the question lines removed. */
+/**
+ * The prose part of a NOT_ENOUGH body, with the question lines removed.
+ *
+ * @param string $body  the body of a NOT_ENOUGH response, from writeupParseResponse()
+ */
 function writeupExtractExplanation(string $body): string
 {
     $keep = [];

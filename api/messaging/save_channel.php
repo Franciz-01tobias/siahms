@@ -35,7 +35,11 @@ if (!($isSlackRequest && sessionIsAdmin())) {
     requireCapabilityJson(Cap::TICKETS_MESSAGING);
 }
 
-/** Treat blank or all-asterisk values as "unchanged" so masked secrets aren't wiped. */
+/**
+ * Treat blank or all-asterisk values as "unchanged" so masked secrets aren't wiped.
+ *
+ * @param mixed $v  a submitted secret field; blank or all asterisks (the masked value) means unchanged
+ */
 function provided($v): bool
 {
     $v = trim((string) $v);
@@ -63,14 +67,33 @@ try {
     if ($name === '') {
         throw new Exception('Name is required');
     }
-    if (!in_array($provider, ['twilio', 'meta', 'slack'], true)) {
+    if (!in_array($provider, ['twilio', 'meta', 'slack', 'telegram', 'teams', 'mattermost'], true)) {
         throw new Exception('Unknown provider');
     }
-    // Slack is always a slack-type channel; nothing else may claim that type.
+    // Slack and Telegram are each always their own channel type; nothing else
+    // may claim either type (same reasoning as the Slack-only rule below).
     if ($provider === 'slack') {
         $channelType = 'slack';
     } elseif ($channelType === 'slack') {
         throw new Exception('Only the Slack provider can create a Slack channel');
+    } elseif ($provider === 'telegram') {
+        $channelType = 'telegram';
+    } elseif ($channelType === 'telegram') {
+        throw new Exception('Only the Telegram provider can create a Telegram channel');
+    } elseif ($provider === 'teams') {
+        $channelType = 'teams';
+    } elseif ($channelType === 'teams') {
+        throw new Exception('Only the Teams provider can create a Teams channel');
+    } elseif ($provider === 'mattermost') {
+        $channelType = 'mattermost';
+    } elseif ($channelType === 'mattermost') {
+        throw new Exception('Only the Mattermost provider can create a Mattermost channel');
+    }
+
+    // Mattermost: the support channel id is the reply/filter target, not a secret.
+    $mmChannelId = trim((string)($data['mm_channel_id'] ?? ''));
+    if ($provider === 'mattermost' && !preg_match('/^[a-z0-9]{26}$/', $mmChannelId)) {
+        throw new Exception('The Mattermost channel ID must be 26 letters and digits (copy it from the channel\'s details).');
     }
 
     $conn = connectToDatabase();
@@ -126,6 +149,19 @@ try {
         } else {
             unset($creds['watch_channel']);
         }
+    } elseif ($provider === 'telegram') {
+        if (provided($data['bot_token'] ?? '')) $creds['bot_token'] = trim($data['bot_token']);
+    } elseif ($provider === 'mattermost') {
+        $serverIn = rtrim(trim((string)($data['mm_server_url'] ?? '')), '/');
+        if ($serverIn !== '') $creds['server_url'] = $serverIn; else unset($creds['server_url']);
+        if (provided($data['mm_bot_token'] ?? '')) $creds['bot_token'] = trim($data['mm_bot_token']);
+    } elseif ($provider === 'teams') {
+        // Azure Bot App ID and tenant are identifiers; only the secret is write-only.
+        $appIdIn = trim((string)($data['teams_app_id'] ?? ''));
+        if ($appIdIn !== '') $creds['app_id'] = $appIdIn; else unset($creds['app_id']);
+        $tenantIn = trim((string)($data['teams_tenant_id'] ?? ''));
+        if ($tenantIn !== '') $creds['tenant_id'] = $tenantIn; else unset($creds['tenant_id']);
+        if (provided($data['teams_app_secret'] ?? '')) $creds['app_secret'] = trim($data['teams_app_secret']);
     } else { // meta
         if (provided($data['phone_number_id'] ?? '')) $creds['phone_number_id'] = trim($data['phone_number_id']);
         if (provided($data['access_token'] ?? ''))     $creds['access_token']     = trim($data['access_token']);
@@ -145,28 +181,62 @@ try {
     // existing value if the field came in blank/masked on edit (write-only fields).
     $verifyPlain = provided($verifyToken) ? $verifyToken : (string) ($cur['verify_token'] ?? '');
     $relayPlain  = provided($relaySecret) ? $relaySecret : (string) ($cur['relay_secret'] ?? '');
+
+    // Telegram's secret token (stored in verify_token): required, because
+    // TelegramProvider::verifyWebhook() refuses every message without one, and
+    // checked against Telegram's own rule (1-256 of A-Z a-z 0-9 _ -) here, where
+    // the admin can fix it, rather than at Connect time as a Telegram error.
+    if ($provider === 'telegram') {
+        if ($verifyPlain === '') {
+            throw new Exception('A secret token is required for Telegram - type one or click Generate.');
+        }
+        if (!preg_match('/^[A-Za-z0-9_-]{1,256}$/', $verifyPlain)) {
+            throw new Exception('The secret token may only use letters, numbers, - and _ (Telegram\'s rule), up to 256 characters.');
+        }
+        if (!$id && !provided($data['bot_token'] ?? '')) {
+            throw new Exception('The bot token is required - copy it from @BotFather.');
+        }
+    }
+    if ($provider === 'mattermost') {
+        if ($verifyPlain === '') {
+            throw new Exception('An outgoing webhook token is required for Mattermost - copy it from the webhook you created, or click Generate.');
+        }
+        if (!preg_match('/^[A-Za-z0-9]{8,64}$/', $verifyPlain)) {
+            throw new Exception('The webhook token must be 8-64 letters and digits.');
+        }
+        if (!$id && !provided($data['mm_bot_token'] ?? '')) {
+            throw new Exception('The bot access token is required.');
+        }
+    }
     $verifyToken = $verifyPlain === '' ? null : encryptValue($verifyPlain);
     $relaySecret = $relayPlain === ''  ? null : encryptValue($relayPlain);
+
+    // channel_ref: Mattermost's support channel id.
+    // TRAP: only write channel_ref for a provider that owns it here. Other
+    //   providers keep their own value in it (Slack's workspace id), and a save
+    //   that blanked it for them would quietly break a working channel.
+    $setRef = $provider === 'mattermost';
 
     if ($id) {
         $sql = "UPDATE messaging_channels SET
                     name = ?, channel_type = ?, provider = ?, phone_number = ?,
                     credentials = ?, verify_token = ?, ingress_mode = ?,
-                    relay_secret = ?, tenant_id = ?, is_active = ?
+                    relay_secret = ?, tenant_id = ?, is_active = ?" . ($setRef ? ", channel_ref = ?" : "") . "
                 WHERE id = ?";
-        $conn->prepare($sql)->execute([
-            $name, $channelType, $provider, $phone, $credsEncrypted, $verifyToken,
-            $ingress, $relaySecret, $tenantId, $isActive, (int) $id,
-        ]);
+        $args = [$name, $channelType, $provider, $phone, $credsEncrypted, $verifyToken,
+                 $ingress, $relaySecret, $tenantId, $isActive];
+        if ($setRef) $args[] = $mmChannelId;
+        $args[] = (int) $id;
+        $conn->prepare($sql)->execute($args);
         echo json_encode(['success' => true, 'id' => (int) $id, 'message' => 'Channel saved']);
     } else {
         $sql = "INSERT INTO messaging_channels
                     (name, channel_type, provider, phone_number, credentials,
-                     verify_token, ingress_mode, relay_secret, tenant_id, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                     verify_token, ingress_mode, relay_secret, tenant_id, is_active, channel_ref)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $conn->prepare($sql)->execute([
             $name, $channelType, $provider, $phone, $credsEncrypted, $verifyToken,
-            $ingress, $relaySecret, $tenantId, $isActive,
+            $ingress, $relaySecret, $tenantId, $isActive, $setRef ? $mmChannelId : null,
         ]);
         echo json_encode(['success' => true, 'id' => (int) $conn->lastInsertId(), 'message' => 'Channel created']);
     }

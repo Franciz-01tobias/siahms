@@ -24,6 +24,8 @@ require_once __DIR__ . '/timezone.php';     // fmt_local(), for the [created_dat
  * safe default for any event added later: an email that reaches the customer
  * when it should not have is a bad day, but an internal notification quietly
  * sent to nobody is a feature that looks broken.
+ *
+ * @param string $eventTrigger  the template event, e.g. 'new_ticket_email', 'analyst_assigned', 'ticket_closed'
  */
 function templateEventAudience(string $eventTrigger): string
 {
@@ -37,6 +39,10 @@ function templateEventAudience(string $eventTrigger): string
  *
  * $extraMergeData allows callers (e.g. the CSAT flow) to inject additional
  * placeholders like `csat_link` that aren't derivable from the ticket alone.
+ *
+ * @param string $eventTrigger  the template event: 'new_ticket_email', 'ticket_assigned', 'analyst_assigned', 'ticket_closed',
+ *     'csat_request' or 'note_shared'
+ * @param array $extraMergeData  more merge codes the ticket alone cannot supply, as [code => value], e.g. ['csat_link' => url]
  */
 function sendTemplateEmail(PDO $conn, int $ticketId, string $eventTrigger, array $extraMergeData = []): void {
     try {
@@ -221,6 +227,9 @@ function sendTemplateEmail(PDO $conn, int $ticketId, string $eventTrigger, array
 
 /**
  * Get the first active template for a given event trigger.
+ *
+ * @param string $eventTrigger  the template event, e.g. 'ticket_closed'
+ * @param ?string $recipientEmail  the requester's address, matched against sender rules; null or '' matches unrestricted templates only
  */
 function getActiveTemplate(PDO $conn, string $eventTrigger, ?string $recipientEmail = null): ?array {
     return templateSelectForRecipient($conn, $eventTrigger, $recipientEmail)['template'];
@@ -250,6 +259,9 @@ function getActiveTemplate(PDO $conn, string $eventTrigger, ?string $recipientEm
  * reason is what the simulator shows and what is written to the send log when
  * nothing matches, so the answer to "why did nobody get a reply?" survives the
  * twelve months after everyone forgets this screen exists.
+ *
+ * @param string $eventTrigger  the template event, e.g. 'ticket_closed'
+ * @param ?string $recipientEmail  the requester's address, matched against sender rules; null or '' matches unrestricted templates only
  */
 function templateSelectForRecipient(PDO $conn, string $eventTrigger, ?string $recipientEmail = null): array
 {
@@ -302,7 +314,11 @@ function templateSelectForRecipient(PDO $conn, string $eventTrigger, ?string $re
     return ['template' => null, 'reason' => 'no_match', 'matched' => null];
 }
 
-/** Sender rules for the given templates, keyed by template id, values lowercased. */
+/**
+ * Sender rules for the given templates, keyed by template id, values lowercased.
+ *
+ * @param array $templateIds  ticket_email_templates ids
+ */
 function templateRulesByTemplate(PDO $conn, array $templateIds): array
 {
     if (!$templateIds) return [];
@@ -408,6 +424,9 @@ function buildTicketMergeData(PDO $conn, int $ticketId): ?array {
 
 /**
  * Replace [merge_code] placeholders with actual values.
+ *
+ * @param string $template  the template text (subject or body) holding [merge_code] placeholders
+ * @param array $mergeData  [code => value]; values are put in as they are, not escaped
  */
 function resolveMergeCodes(string $template, array $mergeData): string {
     foreach ($mergeData as $code => $value) {
@@ -420,6 +439,13 @@ function resolveMergeCodes(string $template, array $mergeData): string {
  * Build the full HTML body with reply marker for threading.
  */
 /**
+ * Wraps a template email body in the house HTML, the "Please reply above this
+ * line" marker and the hidden SDREF tag that threads a reply back to the ticket.
+ *
+ * Plain-text bodies are escaped and their newlines turned into <br>.
+ *
+ * @param string $bodyContent  the merged body - HTML, or plain text which is escaped here
+ * @param string $ticketNumber  the ticket number written into the hidden SDREF reply tag
  * @param ?bool $isHtml Whether the TEMPLATE was HTML, decided before merge codes
  *                      were substituted. Pass it whenever you know: sniffing the
  *                      merged body means a data value containing a tag decides
@@ -472,6 +498,9 @@ function templateGetMailboxForTicket(PDO $conn, int $ticketId): ?array {
 
 /**
  * Get a valid access token, refreshing if expired.
+ *
+ * @param array $mailbox  the target_mailboxes row, decrypted (azure_tenant_id, azure_client_id, azure_client_secret, oauth_scopes)
+ * @param array $tokenData  the mailbox's decoded token_data: access_token, refresh_token, expires_at
  */
 function templateGetValidAccessToken(PDO $conn, array $mailbox, array $tokenData): ?string {
     if (isset($tokenData['expires_at']) && $tokenData['expires_at'] < (time() + 300)) {
@@ -542,6 +571,8 @@ function templateGetValidAccessToken(PDO $conn, array $mailbox, array $tokenData
  * in normal use because the mail poller re-mints the cached token as a side effect of
  * reading — so sends work until polling stops or an hour passes, then fail with a
  * misleading "failed to get access token".
+ *
+ * @param array $mailbox  the target_mailboxes row, decrypted
  */
 function templateGraphContext(PDO $conn, array $mailbox): ?array {
     require_once __DIR__ . '/mailbox_graph.php';
@@ -587,6 +618,10 @@ function templateGraphContext(PDO $conn, array $mailbox): ?array {
  * a default would reproduce exactly the silent wrong-endpoint bug this argument exists
  * to fix, and a missed caller should fail loudly at development time instead of quietly
  * sending from the wrong mailbox.
+ *
+ * @param string $accessToken  a valid Microsoft Graph access token, from templateGraphContext()
+ * @param array $message  the Graph sendMail body: ['message' => [...], 'saveToSentItems' => bool]
+ * @param string $graphBase  '/me' (delegated) or '/users/<address>' (app-only), from templateGraphContext()
  */
 function templateSendViaGraph(string $accessToken, array $message, string $graphBase): void {
     $ch = curl_init();
@@ -632,7 +667,10 @@ function templateSendViaGraph(string $accessToken, array $message, string $graph
  * escalation list must not stop the rest hearing about it - and the first failure
  * is thrown once they have all been tried.
  *
- * @param string[] $recipients
+ * @param string[] $recipients  the staff email addresses to send to, one email each
+ * @param string $subject  the email subject, plain text
+ * @param string $bodyHtml  the email body, HTML
+ * @param string $route  what the send log records it as, e.g. 'sla' or 'closure_alert'
  * @throws Exception when no mailbox can send, or when any recipient failed
  */
 function internalTicketEmail(PDO $conn, int $ticketId, array $recipients, string $subject, string $bodyHtml, string $route): void {
@@ -701,6 +739,11 @@ function internalTicketEmail(PDO $conn, int $ticketId, array $recipients, string
 
 /**
  * Save the sent template email to the emails table.
+ *
+ * @param array $mailbox  the target_mailboxes row it was sent from (id, target_mailbox, name)
+ * @param string $to  the recipient's address
+ * @param string $subject  the subject as sent
+ * @param string $body  the HTML body as sent
  */
 function templateSaveSentEmail(PDO $conn, int $ticketId, array $mailbox, string $to, string $subject, string $body): void {
     try {

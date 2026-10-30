@@ -16,7 +16,11 @@
 
 require_once __DIR__ . '/tenancy.php';
 
-/** Load the minimal ticket row we need (or null if missing/deleted). */
+/**
+ * Load the minimal ticket row we need (or null if missing/deleted).
+ *
+ * @param int $id  the ticket to load; a deleted ticket gives null
+ */
 function ticketLinkLoad(PDO $conn, int $id): ?array
 {
     $st = $conn->prepare("SELECT id, ticket_number, tenant_id FROM tickets WHERE id = ? AND deleted_datetime IS NULL");
@@ -25,6 +29,11 @@ function ticketLinkLoad(PDO $conn, int $id): ?array
     return $row ?: null;
 }
 
+/**
+ * A ticket's number for audit text, falling back to "#id" when it has none (deleted tickets included).
+ *
+ * @param int $id  the ticket whose number to show
+ */
 function ticketLinkNum(PDO $conn, int $id): string
 {
     $st = $conn->prepare("SELECT ticket_number FROM tickets WHERE id = ?");
@@ -32,6 +41,14 @@ function ticketLinkNum(PDO $conn, int $id): string
     return $st->fetchColumn() ?: ('#' . $id);
 }
 
+/**
+ * Writes one ticket_audit row for a link change, with no old value and the new
+ * value cut to 500 characters.
+ *
+ * @param string $field  the audit field: 'Linked ticket' or 'Unlinked ticket'
+ * @param string $newVal  what to record, e.g. 'Parent of ' and the other ticket's number; cut to 500 characters
+ * @writes ticket_audit - the link or unlink shows in the ticket's history
+ */
 function ticketLinkAudit(PDO $conn, int $ticketId, int $analystId, string $field, string $newVal): void
 {
     $conn->prepare(
@@ -43,6 +60,10 @@ function ticketLinkAudit(PDO $conn, int $ticketId, int $analystId, string $field
 /**
  * Create a link. $uiRelation is one of related|duplicate_of|parent_of|child_of,
  * expressed from $sourceId's perspective. Returns ['success'=>bool, 'error'=>?].
+ *
+ * @param int $sourceId  the ticket the link is made from (the one being looked at)
+ * @param int $targetId  the other ticket; must be visible to the analyst and in the same company
+ * @param string $uiRelation  'related', 'duplicate_of', 'parent_of' or 'child_of', from $sourceId's point of view
  */
 function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetId, string $uiRelation): array
 {
@@ -155,7 +176,11 @@ function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetI
     return ['success' => true];
 }
 
-/** Remove a link by id. */
+/**
+ * Remove a link by id.
+ *
+ * @param int $linkId  the link (ticket_links.id) to remove
+ */
 function ticketLinkRemove(PDO $conn, int $analystId, int $linkId): array
 {
     $st = $conn->prepare("SELECT source_ticket_id, target_ticket_id FROM ticket_links WHERE id = ?");
@@ -221,7 +246,12 @@ function ticketLinksFor(PDO $conn, int $ticketId): array
     return $out;
 }
 
-/** Ticket search for the link picker — scoped to the source ticket's company. */
+/**
+ * Ticket search for the link picker — scoped to the source ticket's company.
+ *
+ * @param int $sourceId  the ticket a link is being made from; only tickets in its company are listed
+ * @param string $q  search text matched against ticket number and subject; '' for the latest 50
+ */
 function ticketLinkableList(PDO $conn, int $analystId, int $sourceId, string $q): array
 {
     $source = ticketLinkLoad($conn, $sourceId);

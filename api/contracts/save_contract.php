@@ -16,6 +16,11 @@ requireModuleAccessJson('contracts');
 try {
     $conn = connectToDatabase();
     $data = json_decode(file_get_contents('php://input'), true) ?: [];
+    // A new contract belongs to the active company unless the form names one (3.5.0).
+    if (empty($data['id']) && empty($data['tenant_id'])) {
+        require_once '../../includes/tenancy.php';
+        if (isMultiTenant($conn)) $data['tenant_id'] = getActiveTenantId($conn, (int)$_SESSION['analyst_id']);
+    }
     // The UI already sends canonical snake_case keys.
     $res = ContractsService::saveContract($conn, ActorContext::fromSession($conn), $data);
     echo json_encode(['success' => true, 'id' => $res['id']]);

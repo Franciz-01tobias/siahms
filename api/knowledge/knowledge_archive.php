@@ -48,6 +48,12 @@ try {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 
+/**
+ * Lists the Knowledge recycle bin - archived articles the caller could see when they
+ * were live, most recently deleted first - with the retention period.
+ *
+ * Purges anything past the retention period first (purgeExpired).
+ */
 function handleList($conn) {
     // Auto-purge expired items first
     purgeExpired($conn);
@@ -83,18 +89,35 @@ function handleList($conn) {
     ]);
 }
 
+/**
+ * Restores an archived article through KnowledgeService.
+ *
+ * @param mixed $input  the decoded JSON request; id is the archived article to restore
+ */
 function handleRestore($conn, $input) {
     // Thin UI adapter over KnowledgeService (errors bubble to the caller's catch).
     KnowledgeService::restoreArticle($conn, ActorContext::fromSession($conn), (int)($input['id'] ?? 0));
     echo json_encode(['success' => true, 'message' => 'Article restored']);
 }
 
+/**
+ * Permanently deletes an archived article through KnowledgeService.
+ *
+ * @param mixed $input  the decoded JSON request; id is the archived article to delete for good
+ */
 function handleHardDelete($conn, $input) {
     // Thin UI adapter over KnowledgeService (errors bubble to the caller's catch).
     KnowledgeService::purgeArticle($conn, ActorContext::fromSession($conn), (int)($input['id'] ?? 0));
     echo json_encode(['success' => true, 'message' => 'Article permanently deleted']);
 }
 
+/**
+ * Permanently deletes articles that have been in the recycle bin longer than the
+ * retention period, with their versions and tags, then removes tags no article uses any
+ * more. A retention of 0 keeps them forever.
+ *
+ * @writes knowledge_article_versions, knowledge_article_tags, knowledge_articles, knowledge_tags - children first, since the versions foreign key has no cascade
+ */
 function purgeExpired($conn) {
     $days = getRetentionDays($conn);
     if ($days === 0) return; // 0 = keep forever
@@ -122,6 +145,10 @@ function purgeExpired($conn) {
     }
 }
 
+/**
+ * Returns how many days an article stays in the recycle bin before it is purged - the
+ * knowledge_recycle_bin_days setting, 30 when unset, 0 meaning forever.
+ */
 function getRetentionDays($conn) {
     $sql = "SELECT setting_value FROM system_settings WHERE setting_key = 'knowledge_recycle_bin_days'";
     $stmt = $conn->prepare($sql);

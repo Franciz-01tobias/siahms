@@ -31,9 +31,9 @@ if (!isset($_SESSION['analyst_id'])) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - Orphaned tickets</title>
-    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', 'Orphaned tickets')); ?></title>
+    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/inbox.css?v=79">
     <style>
         /* System module accent (blue-grey) — shared primitives pick this up. */
         body {
@@ -92,7 +92,7 @@ if (!isset($_SESSION['analyst_id'])) {
         [data-theme-mode="dark"] .orph-error { color: var(--danger-text, #fca5a5); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo $path_prefix; ?>assets/js/tz.js?v=5"></script>
 </head>
@@ -226,6 +226,6 @@ if (!isset($_SESSION['analyst_id'])) {
 
     load();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

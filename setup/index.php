@@ -34,6 +34,8 @@ $setupUnlocked        = false;
  * Keep the diagnostic part of a PDO connection error, drop the reconnaissance.
  * PDO reports e.g. "SQLSTATE[HY000] [1045] Access denied for user 'root'@'localhost'":
  * the code is what tells an installer what to fix, the tail names the account and host.
+ *
+ * @param string $message  the PDOException message; '' comes back when it has no SQLSTATE prefix
  */
 function setupSafeDbError(string $message): string {
     return preg_match('/^SQLSTATE\[[^\]]+\](?:\s*\[\d+\])?/', $message, $m) ? $m[0] : '';

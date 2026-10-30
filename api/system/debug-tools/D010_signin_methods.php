@@ -47,10 +47,23 @@ if (!$__dbgAdmin) {
 if (!headers_sent()) header('Content-Type: text/plain; charset=utf-8');
 
 $sections = [];
+/**
+ * Adds one titled section ("=== TITLE ===" and its lines) to the report; $body is a
+ * string or an array of lines.
+ *
+ * @param mixed $sections  the report so far, a list of section strings - appended to by reference
+ * @param mixed $title  the section heading, printed between === marks
+ * @param mixed $body  the section text - a string, or an array of lines
+ */
 function addSection(&$sections, $title, $body) {
     if (is_array($body)) $body = implode("\n", $body);
     $sections[] = "=== {$title} ===\n" . rtrim($body, "\n");
 }
+/**
+ * Formats a boolean as YES or NO for the report.
+ *
+ * @param mixed $v  any value, judged as true or false
+ */
 function yn($v) { return $v ? 'YES' : 'NO'; }
 
 // ---- masking ------------------------------------------------------------
@@ -58,6 +71,12 @@ function yn($v) { return $v ? 'YES' : 'NO'; }
 // human survives into the output. Kept just legible enough that the person who
 // generated it can recognise their own row.
 
+/**
+ * Masks a value for a report that will be sent on - all stars when very short, otherwise
+ * the first one or two characters (and the last, for a long value) with stars between.
+ *
+ * @param mixed $s  the value to mask; empty gives (empty)
+ */
 function mask($s) {
     $s = (string)$s;
     if ($s === '') return '(empty)';
@@ -66,7 +85,11 @@ function mask($s) {
     return substr($s, 0, 2) . str_repeat('*', 6) . substr($s, -1);
 }
 
-/** Local part masked, domain kept — the domain is the diagnostic half. */
+/**
+ * Local part masked, domain kept — the domain is the diagnostic half.
+ *
+ * @param mixed $s  an email address; without an @ the whole value is masked
+ */
 function maskEmail($s) {
     $s = trim((string)$s);
     if ($s === '') return '(empty)';
@@ -81,6 +104,8 @@ function maskEmail($s) {
  * so mask every attribute VALUE and keep every attribute NAME and the commas.
  * "CN=svc_freeitsm,OU=Service Accounts,DC=cnss,DC=local"
  *   -> "CN=sv******m,OU=Se******s,DC=cn***,DC=lo***"
+ *
+ * @param mixed $s  an LDAP distinguished name; empty gives (not set)
  */
 function maskDn($s) {
     $s = trim((string)$s);
@@ -98,6 +123,8 @@ function maskDn($s) {
  * A tenant GUID in an issuer URL names the ORGANISATION, which is more than this
  * report needs to be useful — and D003 already masks them for the same reason.
  * The rest of the URL (which IdP, which realm shape) is the diagnostic half.
+ *
+ * @param mixed $s  text that may contain GUIDs, such as an issuer URL; each GUID is shortened
  */
 function maskGuids($s) {
     return preg_replace_callback('/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/', function ($m) {
@@ -105,7 +132,11 @@ function maskGuids($s) {
     }, (string)$s);
 }
 
-/** A hostname is infrastructure, not a person — but strip any user@ prefix. */
+/**
+ * A hostname is infrastructure, not a person — but strip any user@ prefix.
+ *
+ * @param mixed $s  a host name, possibly with a user@ prefix that gets masked
+ */
 function maskHost($s) {
     $s = trim((string)$s);
     if ($s === '') return '(not set)';
@@ -113,6 +144,12 @@ function maskHost($s) {
     return $at === false ? $s : mask(substr($s, 0, $at)) . '@' . substr($s, $at + 1);
 }
 
+/**
+ * Prints every section, separated by blank lines, and stops - the end of the report, and
+ * the early exit when a check cannot go on.
+ *
+ * @param mixed $sections  the report, a list of section strings as built by addSection()
+ */
 function emit_and_exit($sections) {
     echo implode("\n\n", $sections) . "\n";
     exit;
@@ -143,6 +180,14 @@ try {
 // An installation older than a feature has no column for it, and every question
 // below then answers "no" for a reason that has nothing to do with configuration.
 
+/**
+ * Whether a column exists in this database - false on any error, so an older install
+ * reads as not ready rather than breaking the report.
+ *
+ * @param PDO $c  the database connection
+ * @param mixed $table  the table name to look for
+ * @param mixed $col  the column name to look for
+ */
 function colExists(PDO $c, $table, $col) {
     try {
         $s = $c->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -151,6 +196,13 @@ function colExists(PDO $c, $table, $col) {
         return (int)$s->fetchColumn() > 0;
     } catch (Throwable $e) { return false; }
 }
+/**
+ * Whether a table exists in this database - false on any error, so an older install
+ * reads as not ready rather than breaking the report.
+ *
+ * @param PDO $c  the database connection
+ * @param mixed $table  the table name to look for
+ */
 function tableExists(PDO $c, $table) {
     try {
         $s = $c->prepare("SELECT COUNT(*) FROM information_schema.TABLES
@@ -166,7 +218,7 @@ $schema = ["auth_providers table            : " . ($hasProviders ? 'OK' : 'MISSI
 $syncCols = ['sync_enabled', 'sync_base_dn', 'sync_ou_includes', 'sync_ou_excludes', 'sync_brake_percent', 'sync_last_run_datetime'];
 $missingSync = [];
 if ($hasProviders) {
-    foreach (['protocol', 'enabled', 'ldap_host', 'ldap_base_dn', 'auto_create_users'] as $c) {
+    foreach (['protocol', 'enabled', 'ldap_host', 'ldap_base_dn', 'auto_create_users', 'auto_create_analysts', 'profile_sync_mode'] as $c) {
         $schema[] = str_pad("  column {$c}", 33) . ': ' . (colExists($conn, 'auth_providers', $c) ? 'OK' : 'MISSING');
     }
     foreach ($syncCols as $c) {
@@ -320,7 +372,17 @@ if (!$providers) {
         if (array_key_exists('tenant_id', $p)) {
             $b[] = '  Company              : ' . ($p['tenant_id'] ? ('#' . (int)$p['tenant_id']) : 'all companies');
         }
-        $b[] = '  Create people on first sign-in (JIT): ' . yn(!empty($p['auto_create_users']));
+        $b[] = '  Create portal requesters on first sign-in (JIT): ' . yn(!empty($p['auto_create_users']));
+        // Split out of the switch above in discussion #155. Absent until
+        // Database Verification adds it, when the old switch still decides.
+        $b[] = '  Create analysts on first sign-in (JIT)         : '
+             . (array_key_exists('auto_create_analysts', $p)
+                ? yn(!empty($p['auto_create_analysts']))
+                : yn(!empty($p['auto_create_users'])) . ' (column not added yet - run Database Verification)');
+        if (($p['protocol'] ?? '') === 'oidc' && array_key_exists('profile_sync_mode', $p)) {
+            $b[] = '  No analyst account on the analyst login        : ' . ($p['analyst_fallback_mode'] ?? '?');
+            $b[] = '  Profile sync                                   : ' . $p['profile_sync_mode'];
+        }
 
         if ($isLdap) {
             $b[] = '  Host                 : ' . maskHost($p['ldap_host'] ?? '') . ':' . ((int)($p['ldap_port'] ?? 0) ?: '(no port)');

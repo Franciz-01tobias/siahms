@@ -5,6 +5,7 @@
  */
 (() => {
     const API = window.API_BASE;
+    /** Escapes text for safe use in HTML. */
     const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
     /* The layout choice is remembered per analyst, the same way and through the
@@ -23,13 +24,22 @@
         failed:      () => window.t('lms.status.failed'),
     };
 
+    /**
+     * The coloured status pill for one of the learner's courses - Overdue when past the deadline,
+     * otherwise the stored status.
+     */
     function statusPill(row) {
         // 'overdue' is a derived display state, not a stored status.
         if (row.is_overdue) return `<span class="lms-status overdue">${esc(window.t('lms.status.overdue'))}</span>`;
+        /** The translated label for the course's status, or the raw status when there is no translation for it. */
         const label = (STATUS_LABEL[row.status] || (() => row.status))();
         return `<span class="lms-status ${esc(row.status)}">${esc(label)}</span>`;
     }
 
+    /**
+     * The launch button's label for a course status - Review when passed or completed, Resume when
+     * incomplete or failed, otherwise Start.
+     */
     function launchLabel(status) {
         if (status === 'passed' || status === 'completed') return window.t('lms.my.review');
         if (status === 'incomplete' || status === 'failed') return window.t('lms.my.resume');
@@ -69,6 +79,10 @@
         </div>`;
     }
 
+    /**
+     * HTML for one assigned course - title, description, status pill, score when passed or failed,
+     * deadline, progress bar and the launch button.
+     */
     function cardHtml(row) {
         const deadline = row.deadline
             // ⚠️ fmtNaiveDate, not fmtDate. A deadline is a picked calendar DAY
@@ -95,6 +109,7 @@
         </div>`;
     }
 
+    /** Draws the learner's courses in the chosen layout, or the empty-state message when none are assigned. */
     function render() {
         const list = document.getElementById('mycList');
         if (!list || !mycRows) return;
@@ -113,6 +128,7 @@
         list.innerHTML = mycRows.map(cardHtml).join('');
     }
 
+    /** Marks the active layout button and redraws the list; when asked, saves the choice as the user's preference. */
     function applyLayout(save) {
         document.querySelectorAll('.myc-layout-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.layout === mycLayout);
@@ -127,12 +143,14 @@
         }
     }
 
+    /** Switches My courses to the list or cards layout (called from the layout buttons) and remembers the choice. */
     window.setMycLayout = function (mode) {
         if (!LAYOUTS.includes(mode)) return;
         mycLayout = mode;
         applyLayout(true);
     };
 
+    /** Reads the user's saved My courses layout, falling back to the list layout. */
     async function loadLayoutPreference() {
         try {
             const r = await fetch('../api/system/get_user_preference.php?key=' + encodeURIComponent(LAYOUT_KEY), { credentials: 'same-origin' });
@@ -143,6 +161,10 @@
         }
     }
 
+    /**
+     * Loads the layout preference and the learner's assigned courses (my_courses.php) together, then draws
+     * the page or shows the error.
+     */
     async function load() {
         const list = document.getElementById('mycList');
         // The preference and the courses are independent, so fetch both at once

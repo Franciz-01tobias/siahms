@@ -16,7 +16,7 @@ require_once __DIR__ . '/encryption.php';
 function intuneGetSettings(PDO $conn): ?array {
     $stmt = $conn->prepare(
         "SELECT setting_key, setting_value FROM system_settings
-          WHERE setting_key IN ('intune_tenant_id','intune_client_id','intune_client_secret','intune_verify_ssl','intune_php_exe')"
+          WHERE setting_key IN ('intune_tenant_id','intune_client_id','intune_client_secret','intune_verify_ssl','intune_php_exe','intune_company_id','intune_sync_hostnames')"
     );
     $stmt->execute();
 
@@ -39,12 +39,16 @@ function intuneGetSettings(PDO $conn): ?array {
         'client_secret' => $values['intune_client_secret'],
         'verify_ssl'    => ($values['intune_verify_ssl'] ?? '1') !== '0',
         'php_exe'       => $values['intune_php_exe'] ?? null,
+        'company_id'    => (!empty($values['intune_company_id']) && is_numeric($values['intune_company_id'])) ? (int)$values['intune_company_id'] : null,
+        'sync_hostnames' => ($values['intune_sync_hostnames'] ?? '0') === '1',
     ];
 }
 
 /**
  * Acquire a Graph access token via client-credentials. Cached for the lifetime
  * of the PHP process (token TTL is ~1h).
+ *
+ * @param array $settings  the connection settings from intuneGetSettings() (tenant_id, client_id, client_secret are used)
  */
 function intuneGetToken(array $settings): string {
     static $token = null;
@@ -92,6 +96,10 @@ function intuneGetToken(array $settings): string {
 
 /**
  * GET a Graph URL, retrying on 429/5xx with Retry-After honoured.
+ *
+ * @param string $url  the full Graph URL, including any query string or an @odata.nextLink
+ * @param array $settings  the connection settings from intuneGetSettings(), used to get the token
+ * @param int $maxRetries  how many attempts in all before giving up on a 429, 5xx or network failure
  */
 function intuneGraphGet(string $url, array $settings, int $maxRetries = 5): array {
     for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
@@ -152,6 +160,8 @@ function intuneGraphGet(string $url, array $settings, int $maxRetries = 5): arra
 /**
  * Convert a Graph ISO-8601 timestamp ("2025-04-30T08:14:22Z") to a MySQL
  * DATETIME string ("2025-04-30 08:14:22"), in UTC. Returns null for empty input.
+ *
+ * @param ?string $iso  a Graph ISO-8601 timestamp; null or '' gives null
  */
 function intuneIsoToMysql(?string $iso): ?string {
     if ($iso === null || $iso === '') return null;
@@ -164,6 +174,8 @@ function intuneIsoToMysql(?string $iso): ?string {
 
 /**
  * Upsert a single Graph managedDevice into intune_devices. Keyed on intune_id.
+ *
+ * @param array $d  one managedDevice object from Graph, decoded (id, deviceName, serialNumber, ...); stored whole in raw_json
  */
 function intuneUpsertDevice(PDO $conn, array $d): void {
     static $stmt = null;
@@ -250,22 +262,67 @@ function intuneUpsertDevice(PDO $conn, array $d): void {
 }
 
 /**
- * Link intune_devices to assets by hostname (case-insensitive), then create
- * stub asset rows for any intune_devices still unlinked. Returns counts so
- * the sync job message can show what happened.
+ * Link intune_devices to assets, then create stub assets for any device still
+ * unlinked. Returns counts so the sync job message can show what happened.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 🔑 AN EXISTING LINK IS TRUSTED, WHEREVER THE ASSET NOW IS (PR #164)
+ *
+ * Multi-tenancy: Intune is a single MSP-level connection that can hold machines
+ * from several client companies, so there is no per-key company to derive here
+ * (unlike the agent ingest paths). The workflow this supports: a stub lands in
+ * one company - the Default company unless Assets -> Settings -> Intune names
+ * another - and an analyst MOVES it to the client it belongs to. A link made by
+ * an earlier sync is therefore never second-guessed because its asset is now in
+ * a different company: a person put it there. Doing otherwise cleared the link
+ * of every moved machine and made a duplicate stub on the next sync.
+ *
+ * The company setting decides only NEW things: which company's assets an
+ * unlinked device may be matched to, and where a new stub goes. Unset - every
+ * install after upgrade - matches across all companies, exactly as the old
+ * hostname-only link did, and creates stubs in the Default company.
+ *
+ * Matching itself is AssetsService::reconcileAsset(): serial first, then
+ * hostname, with the placeholder-serial list and the laptop-refresh rule.
+ *
+ * @param ?int $companyId  the company new stubs go in and unlinked devices may match within; null uses the Intune setting
  */
-function intuneLinkDevicesToAssets(PDO $conn): array {
-    // Step 1: link any device whose name matches an existing asset hostname.
-    $conn->exec(
-        "UPDATE intune_devices id
-            JOIN assets a
-              ON LOWER(a.hostname) = LOWER(id.device_name)
-             SET id.asset_id = a.id
-           WHERE id.device_name IS NOT NULL
-             AND id.device_name <> ''"
-    );
+function intuneLinkDevicesToAssets(PDO $conn, ?int $companyId = null): array {
+    require_once __DIR__ . '/services/assets.php';
+    require_once __DIR__ . '/tenancy.php';
 
-    // Step 2: find still-unlinked devices with a usable name and create stubs.
+    $settings = intuneGetSettings($conn) ?? [];
+    if ($companyId === null) {
+        $companyId = $settings['company_id'] ?? null;
+    }
+    // The Default company is stored as NULL on assets, as AssetsService does.
+    if ($companyId !== null && $companyId === getDefaultTenantId($conn)) {
+        $companyId = null;
+    }
+    $anyCompany  = $companyId === null;   // no company chosen: today's behaviour
+    $ctx         = ActorContext::system('Intune');
+    $ignoredTags = AssetsService::getIgnoredServiceTags($conn);
+
+    // Step 1: devices already linked whose Intune name has changed - apply the
+    // rename to the asset they are linked to. One query finds just those, rather
+    // than re-checking every linked device on every sync.
+    //
+    // ⚠️ Behind a setting, OFF after an upgrade: on a real install 65 of 582
+    // linked devices had been renamed or reassigned in Intune since they were
+    // linked, so switching this on renames that many assets at the next sync.
+    // That is the right result, but it is the administrator's to choose.
+    $renamed = empty($settings['sync_hostnames']) ? [] : $conn->query(
+        "SELECT d.asset_id, d.device_name
+           FROM intune_devices d
+           JOIN assets a ON a.id = d.asset_id
+          WHERE d.device_name IS NOT NULL AND d.device_name <> ''
+            AND LOWER(LEFT(d.device_name, 50)) <> LOWER(COALESCE(a.hostname, ''))"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($renamed as $row) {
+        AssetsService::updateAssetHostname($conn, $ctx, (int)$row['asset_id'], (string)$row['device_name'], 'Intune');
+    }
+
+    // Step 2: unlinked devices - match, or create a stub.
     $unlinked = $conn->query(
         "SELECT id, device_name, manufacturer, model, operating_system, last_sync_datetime, serial_number
            FROM intune_devices
@@ -275,50 +332,42 @@ function intuneLinkDevicesToAssets(PDO $conn): array {
     )->fetchAll(PDO::FETCH_ASSOC);
 
     $stubsCreated = 0;
-    if ($unlinked) {
-        // Multi-tenancy: Intune is a single MSP-level connection that can hold
-        // machines from several client companies, so there's no per-key company
-        // to derive here (unlike the agent ingest paths). Stubs are therefore
-        // created with tenant_id NULL = the Default company — the "needs a
-        // company" state. Assigning synced machines to their real company (per
-        // connection, by domain, or via a triage queue) is a deliberate later
-        // slice; see the multi-tenancy plan.
-        $insert = $conn->prepare(
-            "INSERT INTO assets (hostname, manufacturer, model, operating_system, service_tag, first_seen, last_seen)
-             VALUES (:hostname, :manufacturer, :model, :operating_system, :service_tag, UTC_TIMESTAMP(), :last_seen)"
-        );
-        $linkOne = $conn->prepare("UPDATE intune_devices SET asset_id = :asset_id WHERE id = :id");
+    $linkOne = $conn->prepare("UPDATE intune_devices SET asset_id = :asset_id WHERE id = :id");
+    foreach ($unlinked as $row) {
+        // assets.hostname is VARCHAR(50); Intune device_name can be 256.
+        // Truncate to fit. Same goes for service_tag (VARCHAR(50)).
+        $hostname  = substr((string)$row['device_name'], 0, 50);
+        $serialTag = $row['serial_number'] !== null ? substr((string)$row['serial_number'], 0, 50) : null;
 
-        foreach ($unlinked as $row) {
-            // assets.hostname is VARCHAR(50); Intune device_name can be 256.
-            // Truncate to fit. Same goes for service_tag (VARCHAR(50)).
-            $hostname  = substr((string)$row['device_name'], 0, 50);
-            $serialTag = $row['serial_number'] !== null ? substr((string)$row['serial_number'], 0, 50) : null;
-
-            $insert->execute([
-                ':hostname'         => $hostname,
-                ':manufacturer'     => $row['manufacturer'] !== null ? substr((string)$row['manufacturer'], 0, 50) : null,
-                ':model'            => $row['model'] !== null ? substr((string)$row['model'], 0, 50) : null,
-                ':operating_system' => $row['operating_system'] !== null ? substr((string)$row['operating_system'], 0, 50) : null,
-                ':service_tag'      => $serialTag,
-                ':last_seen'        => $row['last_sync_datetime'],
-            ]);
-            $newAssetId = (int)$conn->lastInsertId();
-            $linkOne->execute([':asset_id' => $newAssetId, ':id' => $row['id']]);
+        $res = AssetsService::reconcileAsset($conn, $ctx, ['service_tag' => $serialTag, 'hostname' => $hostname],
+                                             $companyId, 'Intune', false, $ignoredTags, $anyCompany);
+        $assetId = $res['asset_id'];
+        if ($assetId === null) {
+            $assetId = AssetsService::createDiscoveredAsset($conn, $ctx, [
+                'hostname'         => $hostname,
+                'manufacturer'     => $row['manufacturer'] !== null ? substr((string)$row['manufacturer'], 0, 50) : null,
+                'model'            => $row['model'] !== null ? substr((string)$row['model'], 0, 50) : null,
+                'operating_system' => $row['operating_system'] !== null ? substr((string)$row['operating_system'], 0, 50) : null,
+                'service_tag'      => $serialTag,
+                'last_seen'        => $row['last_sync_datetime'],
+            ], $companyId, 'Intune', $res['hostname_reused']);
             $stubsCreated++;
         }
+        $linkOne->execute([':asset_id' => $assetId, ':id' => $row['id']]);
     }
 
     // Recount how many ended up linked total for the message.
     $linked = (int)$conn->query("SELECT COUNT(*) FROM intune_devices WHERE asset_id IS NOT NULL")->fetchColumn();
-
     return ['linked' => $linked, 'stubs_created' => $stubsCreated];
 }
+
 
 /**
  * Map an Intune operating_system string to a sensible "drive" label for
  * asset_disks. Intune only gives us a single device-level total/free figure,
  * so we fake a single drive entry whose name reflects the platform.
+ *
+ * @param ?string $os  Intune's operating_system text, e.g. 'Windows' or 'iOS'; null or '' gives 'System'
  */
 function intuneOsToDrive(?string $os): string {
     if ($os === null || $os === '') return 'System';
@@ -388,6 +437,8 @@ function intuneSyncDisks(PDO $conn): int {
 /**
  * Run the full sync for a given job id. Updates intune_sync_jobs as it goes
  * so the UI progress bar can poll. Designed for CLI worker use.
+ *
+ * @param int $jobId  the intune_sync_jobs id whose progress this updates
  */
 function intuneRunSync(PDO $conn, int $jobId): void {
     $logFile = __DIR__ . '/../logs/intune_sync.log';
@@ -487,6 +538,8 @@ function intuneRunSync(PDO $conn, int $jobId): void {
  * Locate a usable PHP CLI binary so the web request can spawn a worker.
  * Tries: explicit setting → PHP_BINARY's directory → known WAMP layout → 'php' from PATH.
  * Returns the path or throws if nothing works.
+ *
+ * @param ?string $override  a PHP CLI path from the intune_php_exe setting, tried first; null or '' to search
  */
 function intuneFindPhpExe(?string $override): string {
     $isWindows = stripos(PHP_OS_FAMILY, 'Windows') === 0 || PHP_OS_FAMILY === 'Windows';
@@ -513,6 +566,9 @@ function intuneFindPhpExe(?string $override): string {
 
 /**
  * Spawn the CLI worker so it survives the web request. Returns true on success.
+ *
+ * @param int $jobId  the intune_sync_jobs id passed to the worker on its command line
+ * @param ?string $phpExeOverride  a PHP CLI path from the settings, or null to search - see intuneFindPhpExe()
  */
 function intuneSpawnWorker(int $jobId, ?string $phpExeOverride): bool {
     return intuneSpawnGenericWorker('intune_worker.php', $jobId, $phpExeOverride);
@@ -520,6 +576,10 @@ function intuneSpawnWorker(int $jobId, ?string $phpExeOverride): bool {
 
 /**
  * Generic spawn helper used by both the device sync and the app sync workers.
+ *
+ * @param string $workerScriptName  the worker's file name inside scripts/, e.g. 'intune_worker.php'
+ * @param int $jobId  the job id passed to the worker on its command line
+ * @param ?string $phpExeOverride  a PHP CLI path from the settings, or null to search - see intuneFindPhpExe()
  */
 function intuneSpawnGenericWorker(string $workerScriptName, int $jobId, ?string $phpExeOverride): bool {
     $worker = realpath(__DIR__ . '/../scripts/' . $workerScriptName);
@@ -564,6 +624,8 @@ function intuneGetAppBatchSize(PDO $conn): int {
  *   - Have NO 'agent'-sourced rows in software_inventory_detail (agent wins)
  *   - Aren't already pending/running in another job
  * Ordered: assets that have never been Intune-synced first, then oldest synced.
+ *
+ * @param int $limit  the most assets to return (the app sync batch size)
  */
 function intuneGetAppSyncCandidates(PDO $conn, int $limit): array {
     $sql = "
@@ -651,6 +713,9 @@ function intuneCreateAppSyncJob(PDO $conn): array {
 
 /**
  * Fetch the detectedApps array for a single Intune-managed device.
+ *
+ * @param string $intuneId  the device's Graph managedDevice id (intune_devices.intune_id)
+ * @param array $settings  the connection settings from intuneGetSettings()
  */
 function intuneFetchDeviceApps(string $intuneId, array $settings): array {
     $url = 'https://graph.microsoft.com/beta/deviceManagement/managedDevices/'
@@ -663,6 +728,8 @@ function intuneFetchDeviceApps(string $intuneId, array $settings): array {
  * Wipe and re-write the source='intune' software rows for a single asset.
  * Apps catalogue (software_inventory_apps) is shared with the agent — we
  * dedupe on (display_name, publisher).
+ *
+ * @param array $apps  Graph detectedApps entries (displayName, publisher, version, sizeInByte); entries with no name are skipped
  */
 function intuneUpsertSoftwareForAsset(PDO $conn, int $assetId, array $apps): int {
     // Wipe previous Intune rows for this asset so the import is idempotent.
@@ -723,6 +790,8 @@ function intuneUpsertSoftwareForAsset(PDO $conn, int $assetId, array $apps): int
  * Run an app-sync job: iterate its child rows, fetch detectedApps from Graph
  * for each asset, upsert into software_inventory_*, and tick progress.
  * Designed for CLI worker use.
+ *
+ * @param int $jobId  the intune_app_sync_jobs id whose pending assets are synced
  */
 function intuneRunAppSyncJob(PDO $conn, int $jobId): void {
     $logFile = __DIR__ . '/../logs/intune_app_sync.log';
@@ -858,6 +927,9 @@ function intuneRunAppSyncJob(PDO $conn, int $jobId): void {
 
 /**
  * Spawn the CLI app-sync worker.
+ *
+ * @param int $jobId  the intune_app_sync_jobs id passed to the worker on its command line
+ * @param ?string $phpExeOverride  a PHP CLI path from the settings, or null to search - see intuneFindPhpExe()
  */
 function intuneSpawnAppWorker(int $jobId, ?string $phpExeOverride): bool {
     return intuneSpawnGenericWorker('intune_app_worker.php', $jobId, $phpExeOverride);

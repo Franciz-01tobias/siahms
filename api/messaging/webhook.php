@@ -48,6 +48,11 @@ function webhookHeaders(): array
 function webhookFullUrl(): string
 {
     $proto = 'http';
+    // ⚠️ Deliberately NOT requestIsHttps() (GH #152): this must rebuild the
+    // EXACT address the provider called, because the provider signs it. Behind a
+    // TLS-terminating proxy without TRUST_PROXY_HTTPS the stricter rule says
+    // http, the signature check fails, and inbound messages stop. Trusting the
+    // header here costs nothing: a forged request still lacks the secret.
     if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')) {
         $proto = 'https';
@@ -57,6 +62,12 @@ function webhookFullUrl(): string
     return $proto . '://' . $host . $uri;
 }
 
+/**
+ * Sends an HTTP status and {success: false, error} as JSON, then stops.
+ *
+ * @param int $code  the HTTP status to send
+ * @param string $msg  the error message
+ */
 function webhookFail(int $code, string $msg): void
 {
     http_response_code($code);

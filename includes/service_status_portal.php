@@ -60,7 +60,11 @@ function ssPortalSettings(PDO $conn): array
     return $out;
 }
 
-/** One setting, falling back to its default. */
+/**
+ * One setting, falling back to its default.
+ *
+ * @param string $key  one of the SS_PORTAL_DEFAULTS keys, e.g. 'service_status_portal_mode'
+ */
 function ssPortalSetting(PDO $conn, string $key): string
 {
     return ssPortalSettings($conn)[$key] ?? '';
@@ -77,6 +81,8 @@ function ssPortalUpdatesEnabled(PDO $conn): bool
  *
  * Returns [] when the feature is switched off, which is the default — so a
  * caller that forgets to check gets nothing rather than everything.
+ *
+ * @param int $limit  the most incidents to return
  */
 function ssPortalIncidents(PDO $conn, int $limit = 25): array
 {
@@ -182,6 +188,8 @@ function ssPortalIncidents(PDO $conn, int $limit = 25): array
  *
  * Returns [] when the feature is off, or when the incident has no external
  * updates — which is the same answer as "no such incident", deliberately.
+ *
+ * @param int $incidentId  the status_incidents row whose external updates to list
  */
 function ssPortalIncidentUpdates(PDO $conn, int $incidentId): array
 {

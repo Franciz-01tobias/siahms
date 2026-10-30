@@ -38,8 +38,10 @@
     var started = false;      // conversation created (have a token) and chat view shown
     var closed = false;
 
+    /** The full address of one of the web chat endpoints, next to this script. */
     function api(path) { return BASE + path; }
 
+    /** Escapes text for safe use inside HTML. */
     function esc(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -54,6 +56,7 @@
 
     var accent = '#2563eb';
 
+    /** The widget's CSS, injected into its Shadow DOM so the host page's styles cannot reach it. */
     function styles() {
         return '' +
         ':host, * { box-sizing: border-box; }' +
@@ -115,6 +118,7 @@
         '@keyframes wc-blink { 0%, 80%, 100% { opacity: .3; } 40% { opacity: 1; } }';
     }
 
+    /** Adds the styles, the launcher button and the (closed) chat panel to the Shadow DOM. */
     function build() {
         var wrap = document.createElement('div');
         wrap.innerHTML =
@@ -130,13 +134,19 @@
         root.appendChild(wrap);
     }
 
+    /** Finds the first element inside the widget's Shadow DOM that matches a selector. */
     function el(sel) { return root.querySelector(sel); }
 
+    /** Scrolls the message list to the newest message. */
     function scrollDown() {
         var b = el('.body');
         if (b) { b.scrollTop = b.scrollHeight; }
     }
 
+    /**
+     * Shows the three-dot typing indicator while a reply is expected, removing it by
+     * itself after 30 seconds if none arrives.
+     */
     function showTyping() {
         var body = el('.body');
         if (!body || el('.typing')) { return; }
@@ -150,12 +160,17 @@
         typingTimer = setTimeout(hideTyping, 30000);
     }
 
+    /** Removes the typing indicator. */
     function hideTyping() {
         clearTimeout(typingTimer);
         var t = el('.typing');
         if (t && t.parentNode) { t.parentNode.removeChild(t); }
     }
 
+    /**
+     * The "Talk to a person" / "Email me back" buttons, when the AI assistant is on and
+     * the widget offers them - empty otherwise.
+     */
     function escBarHtml() {
         if (!cfg || !cfg.ai_enabled || (!cfg.ai_offer_agent && !cfg.ai_offer_email)) { return ''; }
         var b = '<div class="esc">';
@@ -164,6 +179,11 @@
         return b + '</div>';
     }
 
+    /**
+     * Draws the chat view - message list, escalation buttons and the message box (Enter
+     * sends, Shift+Enter is a new line) - then shows the greeting and, out of hours, the
+     * offline message.
+     */
     function renderChatShell() {
         el('.scroll').innerHTML =
             '<div class="body"></div>' +
@@ -190,11 +210,13 @@
         }
     }
 
+    /** Removes the escalation buttons once the visitor has chosen one. */
     function hideEscBar() {
         var bar = el('.esc');
         if (bar && bar.parentNode) { bar.parentNode.removeChild(bar); }
     }
 
+    /** Draws the start form that asks for the visitor's name and email before the chat begins. */
     function renderIntro() {
         el('.scroll').innerHTML =
             '<div class="intro">' +
@@ -207,6 +229,10 @@
         el('.start').addEventListener('click', onStart);
     }
 
+    /**
+     * Adds one message to the list - a centred system notice, or a bubble from the agent
+     * (with their name) or the visitor - and scrolls down unless scroll is false.
+     */
     function addMessage(m, scroll) {
         var body = el('.body');
         if (!body) { return; }
@@ -226,6 +252,10 @@
         if (scroll !== false) { scrollDown(); }
     }
 
+    /**
+     * Asks for a person ('agent') or an email reply ('email') through escalate.php, then
+     * removes the buttons and polls for the confirmation note.
+     */
     function onEscalate(mode) {
         if (!token) { return; }
         var ea = el('.esc-agent'); var ee = el('.esc-email');
@@ -248,6 +278,7 @@
     }
 
     // ---- networking ------------------------------------------------------
+    /** Fetches the widget's settings (name, colour, greeting, hours, AI options) from config.php. */
     function loadConfig() {
         return fetch(api('config.php?key=' + encodeURIComponent(KEY)))
             .then(function (r) { return r.json(); })
@@ -259,6 +290,11 @@
             });
     }
 
+    /**
+     * Starts a conversation through start.php with the name and email given, keeps its
+     * token in sessionStorage so the chat survives page navigation, then shows the chat
+     * and starts polling.
+     */
     function onStart(e) {
         if (e) { e.preventDefault(); }
         var name = el('.in-name') ? el('.in-name').value.trim() : '';
@@ -286,6 +322,13 @@
         });
     }
 
+    /**
+     * Sends the visitor's message through send.php, showing it at once and a typing
+     * indicator while an AI reply is expected.
+     *
+     * Polling is held off until the message's id comes back, so the follow-up poll
+     * fetches only the reply rather than a duplicate of what was just typed.
+     */
     function onSend(e) {
         if (e) { e.preventDefault(); }
         var ta = el('.foot textarea');
@@ -327,6 +370,14 @@
         });
     }
 
+    /**
+     * Fetches any messages newer than the last one seen from poll.php and adds them;
+     * when the conversation has been closed it says so, disables the message box and
+     * stops polling.
+     *
+     * Skipped while a poll or a send is already in flight, which would otherwise show
+     * messages twice.
+     */
     function poll() {
         // Guard against overlapping polls: the immediate poll() fired after a send or an
         // escalation can otherwise race the 3s interval poll, and both append the same new
@@ -361,14 +412,21 @@
             }).catch(function () { pollInFlight = false; /* transient */ });
     }
 
+    /** Polls once straight away, then every 3 seconds. */
     function startPolling() {
         poll();
         stopPolling();
         pollTimer = setInterval(poll, 3000);
     }
+    /** Stops the 3-second poll. */
     function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
     // ---- open / close ----------------------------------------------------
+    /**
+     * Opens the chat panel - straight back into the conversation when there is a token,
+     * to the start form when an email is required, otherwise starting a conversation at
+     * once.
+     */
     function openPanel() {
         opened = true;
         el('.launcher').style.display = 'none';
@@ -386,6 +444,7 @@
         }
     }
 
+    /** Closes the chat panel, shows the launcher again and stops polling. */
     function closePanel() {
         opened = false;
         el('.panel').classList.remove('open');

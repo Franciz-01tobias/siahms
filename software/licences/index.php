@@ -8,6 +8,7 @@ require_once '../../includes/functions.php';
 require_once '../../includes/i18n.php';
 require_once '../../includes/theme.php';
 require_once '../../includes/timezone.php';
+require_once '../../includes/money.php';
 I18n::initFromSession();
 Tz::init();
 
@@ -23,13 +24,15 @@ $translationNamespaces = ['common', 'software'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('software.licences.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('software', t('software.nav.licences'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <?php echo Money::scriptTag(); ?>
+    <script src="../../assets/js/money.js?v=1"></script>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* Module accent (indigo). */
         body { --accent: var(--sw-accent, #5c6bc0); --accent-hover: var(--sw-accent-hover, #3f51b5); }
@@ -420,7 +423,7 @@ $translationNamespaces = ['common', 'software'];
             font-weight: 500;
         }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include '../includes/header.php'; ?>
@@ -520,11 +523,8 @@ $translationNamespaces = ['common', 'software'];
                     </div>
                     <div class="form-group">
                         <label class="form-label"><?php echo htmlspecialchars(t('software.licences.field_currency')); ?></label>
-                        <select class="form-input" id="licenceCurrency">
-                            <option value="GBP">GBP (£)</option>
-                            <option value="USD">USD ($)</option>
-                            <option value="EUR">EUR (€)</option>
-                        </select>
+                        <?php /* Filled by Money.fill() - every currency, favourites first (GH #189). */ ?>
+                        <select class="form-input" id="licenceCurrency"></select>
                     </div>
                 </div>
 
@@ -723,11 +723,10 @@ $translationNamespaces = ['common', 'software'];
             return 'renewal-ok';
         }
 
+        /** A licence cost in the viewer's format (System -> Currencies, GH #189); a dash when there is none. */
         function formatCost(cost, currency) {
             if (cost == null || cost === '') return '\u2014';
-            const symbols = { GBP: '\u00A3', USD: '$', EUR: '\u20AC' };
-            const symbol = symbols[currency] || currency + ' ';
-            return symbol + parseFloat(cost).toFixed(2);
+            return Money.format(cost, currency);
         }
 
         function formatDate(dateStr) {
@@ -745,7 +744,7 @@ $translationNamespaces = ['common', 'software'];
             document.getElementById('licenceQuantity').value = '';
             document.getElementById('licenceKey').value = '';
             document.getElementById('licenceCost').value = '';
-            document.getElementById('licenceCurrency').value = 'GBP';
+            Money.fill(document.getElementById('licenceCurrency'), Money.def());
             document.getElementById('licencePurchaseDate').value = '';
             document.getElementById('licenceRenewalDate').value = '';
             document.getElementById('licenceNoticeDays').value = '';
@@ -776,7 +775,7 @@ $translationNamespaces = ['common', 'software'];
                     document.getElementById('licenceQuantity').value = licence.quantity != null ? licence.quantity : '';
                     document.getElementById('licenceKey').value = licence.licence_key || '';
                     document.getElementById('licenceCost').value = licence.cost != null ? licence.cost : '';
-                    document.getElementById('licenceCurrency').value = licence.currency || 'GBP';
+                    Money.fill(document.getElementById('licenceCurrency'), licence.currency || Money.def());
                     document.getElementById('licencePurchaseDate').value = licence.purchase_date || '';
                     document.getElementById('licenceRenewalDate').value = licence.renewal_date || '';
                     document.getElementById('licenceNoticeDays').value = licence.notice_period_days != null ? licence.notice_period_days : '';
@@ -980,6 +979,6 @@ $translationNamespaces = ['common', 'software'];
             if (e.key === 'Escape') closeLicenceModal();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

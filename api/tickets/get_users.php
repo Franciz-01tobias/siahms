@@ -16,6 +16,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
+requireAnyModuleAccessJson(['tickets', 'assets']);
 
 // Get search parameter
 $search = $_GET['search'] ?? '';
@@ -88,6 +89,7 @@ try {
                 u.mobile,
                 u.employee_id,
                 u.manager_id,
+                u.is_active,     -- the shared editor's manager picker offers active people
                 -- ⚠️ Load-bearing, not decoration. The edit form refuses to SEND the
                 -- directory-owned fields on a managed record, because save_user.php
                 -- refuses to accept them. Without this column the form would assume

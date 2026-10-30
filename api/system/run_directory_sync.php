@@ -65,7 +65,7 @@ try {
         }
         // The password is encrypted at rest; cardDavConfigFromProvider()
         // unwraps it at the point of use, so nothing is decrypted here.
-        $run = cardDavSyncRun($conn, $provider, $mode, (int)$_SESSION['analyst_id']);
+        $run = directorySyncRecorded($conn, $provider, $mode, fn() => cardDavSyncRun($conn, $provider, $mode, (int)$_SESSION['analyst_id']));
         echo json_encode(['success' => true, 'run' => $run]);
         exit;
     }
@@ -83,11 +83,41 @@ try {
     // like a wrong password rather than an un-decrypted one.
     $provider['ldap_bind_password'] = decryptValue($provider['ldap_bind_password'] ?? '');
 
-    $run = directorySyncRun($conn, $provider, $mode, (int)$_SESSION['analyst_id']);
+    $run = directorySyncRecorded($conn, $provider, $mode, fn() => directorySyncRun($conn, $provider, $mode, (int)$_SESSION['analyst_id']));
 
     echo json_encode(['success' => true, 'run' => $run]);
 
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+}
+
+/**
+ * Runs one provider's sync as a MANUAL run of the directory-sync job (#182): recorded, and
+ * it can clear that provider's failure, but it never makes the schedule look alive. A preview
+ * writes nothing and is recorded as skipped - a dry run proves nothing.
+ *
+ * @param string $mode  'live' or 'preview'
+ * @param callable $work  runs the sync and returns its run row
+ */
+function directorySyncRecorded(PDO $conn, array $provider, string $mode, callable $work): array
+{
+    require_once __DIR__ . '/../../includes/job_runs.php';
+    $who = (int)$_SESSION['analyst_id'];
+    if ($mode === 'preview') {
+        JobRun::skipped($conn, 'directory_sync', 'manual', 'Dry run (Preview): nothing written.', $who);
+        return $work();
+    }
+    $runId = JobRun::start($conn, 'directory_sync', 'manual', $who);
+    try {
+        $run = $work();
+    } catch (Throwable $e) {
+        JobRun::fail($conn, $runId, $e);
+        throw $e;
+    }
+    JobRun::source($conn, $runId, 'directory_sync', 'provider:' . (int)$provider['id'],
+        (string)($provider['display_name'] ?: ('provider ' . $provider['id'])),
+        !in_array($run['status'] ?? '', ['failed', 'stopped'], true), $run['message'] ?? null);
+    JobRun::finish($conn, $runId);
+    return $run;
 }

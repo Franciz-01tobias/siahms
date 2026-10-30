@@ -52,13 +52,16 @@
         }[p] || propertyLabel(p);
     }
 
+    /** Returns the translated title for a series property (Status or Priority). */
     function seriesLabel(s) {
         return { status: we('form.prop_status', 'Status'), priority: we('form.prop_priority', 'Priority') }[s] || s;
     }
+    /** Returns the series property as it reads inside a sentence ("status", "priority"). */
     function seriesInSentence(s) {
         return { status: we('auto_desc.of_status', 'status'), priority: we('auto_desc.of_priority', 'priority') }[s] || s;
     }
 
+    /** Returns the translated label for a time grouping (Daily, Monthly, Yearly). */
     function timeGroupingLabel(g) {
         return {
             day:   we('auto_desc.grouping_daily', 'Daily'),
@@ -76,6 +79,7 @@
         }[g] || g;
     }
 
+    /** Returns the translated label for a date-range code ('' is All time, '7d' is Last 7 days, and so on). */
     function dateRangeLabel(r) {
         return {
             '':           we('form.range_all', 'All time'),
@@ -88,6 +92,7 @@
             'this_year':  we('form.range_this_year', 'This year')
         }[r] || r;
     }
+    /** Returns a date-range code as it reads inside a sentence ("last 7 days"), falling back to the label. */
     function dateRangeInSentence(r) {
         return {
             '7d':         we('auto_desc.in_7d', 'last 7 days'),
@@ -124,6 +129,9 @@
     let descriptionManuallyEdited = false;
     let apiBase = '';
 
+    /**
+     * Returns the chart types that fit the choice - bar or line for a series or a time aggregate, otherwise bar, doughnut or pie.
+     */
     function getValidChartTypes(aggProp, seriesProp) {
         const isTime = TIME_AGGREGATES.includes(aggProp);
         if (seriesProp) return ['bar', 'line'];
@@ -131,12 +139,16 @@
         return ['bar', 'doughnut', 'pie'];
     }
 
+    /** Escapes text for safe use in HTML. */
     function escapeHtml(str) {
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
     }
 
+    /**
+     * Builds the automatic widget description from the form - property, series, time unit, date range and any department subset - as one translated sentence.
+     */
     function generateDescription() {
         const prop = document.getElementById('editProperty').value;
         const series = document.getElementById('editSeries').value;
@@ -185,11 +197,13 @@
         return desc;
     }
 
+    /** Rewrites the description field with the generated sentence, unless the analyst has typed their own. */
     function autoFillDescription() {
         if (descriptionManuallyEdited) return;
         document.getElementById('editDescription').value = generateDescription();
     }
 
+    /** Draws one checkbox per active department for the department filter. */
     function buildDeptCheckboxes() {
         const container = document.getElementById('deptCheckboxes');
         if (!container) return;
@@ -201,6 +215,9 @@
         ).join('');
     }
 
+    /**
+     * Reacts to a new aggregate property - rebuilds the allowed series options, shows or hides the series and time-grouping fields, then refreshes chart types, the filterable tick and the description.
+     */
     function onPropertyChange() {
         const prop = document.getElementById('editProperty').value;
         const seriesSelect = document.getElementById('editSeries');
@@ -241,6 +258,9 @@
         autoFillDescription();
     }
 
+    /**
+     * Limits the chart-type list to the types valid for the property and series, keeping the current choice when it is still allowed.
+     */
     function updateChartTypeOptions() {
         const prop = document.getElementById('editProperty').value;
         const series = document.getElementById('editSeries').value;
@@ -265,6 +285,7 @@
         }
     }
 
+    /** Hides and unticks "status filterable" when the series is status; shows it otherwise. */
     function updateFilterableVisibility() {
         var series = document.getElementById('editSeries').value;
         var filterableGroup = document.getElementById('filterableGroup');
@@ -276,6 +297,7 @@
         }
     }
 
+    /** Wires the form fields so every change refreshes the dependent options and the automatic description. */
     function bindEventListeners() {
         document.getElementById('editProperty').addEventListener('change', onPropertyChange);
 
@@ -295,6 +317,7 @@
         });
     }
 
+    /** Sets the API base, loads the active departments for the filter checkboxes, and wires the form events. */
     async function init(base) {
         apiBase = base;
         var deptRes = await fetch(apiBase + 'get_departments.php')
@@ -307,6 +330,7 @@
         bindEventListeners();
     }
 
+    /** Fills the form from an existing widget row, including its department filter (stored as JSON). */
     function populateForm(w) {
         document.getElementById('editId').value = w.id || '';
         document.getElementById('editTitle').value = w.title || '';
@@ -334,6 +358,7 @@
         descriptionManuallyEdited = !!(w.description || '').trim();
     }
 
+    /** Clears the form to the defaults for a new widget. */
     function resetForm() {
         document.getElementById('editId').value = '';
         document.getElementById('editTitle').value = '';
@@ -351,6 +376,9 @@
         onPropertyChange();
     }
 
+    /**
+     * Reads the form into the payload save_ticket_dashboard_widget.php expects; time_grouping is sent only for time aggregates.
+     */
     function collectFormData() {
         var aggregate_property = document.getElementById('editProperty').value;
         var department_filter = [...document.querySelectorAll('.dept-checkbox:checked')]
@@ -371,6 +399,7 @@
         };
     }
 
+    /** Checks the title is filled and a time aggregate has a grouping, toasting the first problem. */
     function validateForm() {
         var data = collectFormData();
         if (!data.title) {
@@ -384,6 +413,7 @@
         return true;
     }
 
+    /** Validates, then posts the widget to save_ticket_dashboard_widget.php and returns the JSON reply. */
     async function saveWidget() {
         if (!validateForm()) return { success: false };
         var data = collectFormData();

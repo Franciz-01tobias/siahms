@@ -11,6 +11,8 @@
  * ⚠️ Mirrors includes/form_logic.php, which is the source of truth — the server
  * re-evaluates visibility on submit, because a browser can simply not run this.
  * Change one, change the other; tests/forms-logic runs the same cases through both.
+ *
+ * @wiki Form-Sections-and-Conditional-Logic-Developer-Guide
  */
 (function (global) {
     'use strict';
@@ -53,6 +55,7 @@
         return (c && typeof c === 'object') ? c : {};
     }
 
+    /** The record type a lookup field searches (its config's lookup_source), or '' when none is set. */
     function lookupSource(field) {
         var c = configOf(field);
         return c.lookup_source ? String(c.lookup_source) : '';
@@ -90,7 +93,9 @@
      * collects an answer and still cannot be a condition trigger.
      */
     function isAnswerable(type) { return PRESENTATIONAL.indexOf(type) === -1; }
+    /** Whether a field type carries a list of options - drop-down, radio buttons or tickboxes. */
     function hasOptions(type)   { return WITH_OPTIONS.indexOf(type) !== -1; }
+    /** Whether a field type's answer is a list of several values rather than one. */
     function isMultiValue(type) { return MULTI_VALUE.indexOf(type) !== -1; }
 
     /**
@@ -260,6 +265,13 @@
         return { scalar: scalar, list: list };
     }
 
+    /**
+     * Tests one visibility condition against the current answers.
+     *
+     * @param rule             {field, op, value} - the field it depends on, the comparison and the value to compare with
+     * @param valuesByFieldId  the current answers, keyed by field id
+     * @return true when the condition holds
+     */
     function testRule(rule, valuesByFieldId) {
         var refId = parseInt(rule.field, 10) || 0;
         var op    = rule.op || 'equals';
@@ -359,8 +371,12 @@
             var fieldId = box.getAttribute('data-lookup-field');
             var timer   = null;
 
+            /** Hides and empties this lookup box's results list. */
             function close() { results.hidden = true; results.innerHTML = ''; }
 
+            /**
+             * Stores the chosen record as {id, label} in the hidden input, shows its label and fires change so visibility rules re-run.
+             */
             function choose(id, label) {
                 hidden.value = JSON.stringify({ id: id, label: label });
                 box.value = label;
@@ -371,6 +387,7 @@
                 hidden.dispatchEvent(new Event('change', { bubbles: true }));
             }
 
+            /** Clears any earlier choice, then fetches matches for the typed text and lists them as buttons. */
             function search() {
                 var q = box.value.trim();
                 // Anything typed invalidates a previous choice: the box no

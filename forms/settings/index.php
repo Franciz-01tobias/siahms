@@ -44,14 +44,14 @@ $translationNamespaces = ['common', 'forms'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('forms.settings.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('forms', t('forms.nav.settings'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/ai-settings.js?v=2"></script>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <script src="../../assets/js/ai-settings.js?v=4"></script>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* Module accent (teal) — tabs, toggles, focus rings, shared buttons. */
         body { --accent: var(--forms-accent, #00897b); --accent-hover: var(--forms-accent-hover, #00695c); }
@@ -374,7 +374,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -532,6 +532,42 @@ $translationNamespaces = ['common', 'forms'];
             </form>
         </div>
     </div>
+        <?php if (settingsTabVisible($visibleTabs, 'access')): ?>
+        <!-- Access (#180) - who may design forms. Designing includes choosing who approves a
+             request and what happens next, so an approver role must be able to leave it out. -->
+        <?php
+            // Who would keep the ability if it were restricted now: holders of Design forms
+            // (or the Forms umbrella), and administrators. Shown BEFORE the switch, so
+            // "nobody can design forms" is seen rather than discovered.
+            $accConn = connectToDatabase();
+            $designers = [];
+            foreach ($accConn->query("SELECT id, full_name FROM analysts WHERE is_active = 1 ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC) as $an) {
+                if (analystHasCapability($accConn, (int)$an['id'], Cap::FORMS_DESIGN)) $designers[] = $an['full_name'];
+            }
+        ?>
+        <div class="tab-content<?php echo $activeTabId === 'access' ? ' active' : ''; ?>" id="access-tab" data-capability="<?php echo Cap::FORMS_ACCESS; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('forms.settings.access_heading')); ?></h2>
+            </div>
+            <p style="color: var(--text-muted, #666); margin-bottom: 24px;"><?php echo htmlspecialchars(t('forms.settings.access_intro')); ?></p>
+            <div class="form-group">
+                <label for="designRestricted"><?php echo htmlspecialchars(t('forms.settings.design_who')); ?></label>
+                <select id="designRestricted" class="form-input" style="max-width: 420px;">
+                    <option value="0"><?php echo htmlspecialchars(t('forms.settings.design_everyone')); ?></option>
+                    <option value="1"><?php echo htmlspecialchars(t('forms.settings.design_permission')); ?></option>
+                </select>
+                <small><?php echo htmlspecialchars(t('forms.settings.design_help')); ?></small>
+            </div>
+            <div class="form-group">
+                <small><strong><?php echo htmlspecialchars(t('forms.settings.design_holders', ['count' => count($designers)])); ?></strong>
+                <?php echo htmlspecialchars(implode(', ', $designers)); ?></small>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="saveAccessSettings()"><?php echo htmlspecialchars(t('forms.settings.save')); ?></button>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <?php if (settingsTabVisible($visibleTabs, 'ai')): ?>
         <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo Cap::FORMS_AI; ?>">
             <div class="section-header">
@@ -591,6 +627,8 @@ $translationNamespaces = ['common', 'forms'];
                 if (data.success && data.settings) {
                     const align = data.settings.logo_alignment || 'center';
                     selectAlignment(align);
+                    const dr = document.getElementById('designRestricted');
+                    if (dr) dr.value = data.settings.design_restricted === '1' ? '1' : '0';
                 }
             } catch (e) {
                 console.error(e);
@@ -893,6 +931,22 @@ $translationNamespaces = ['common', 'forms'];
             }
         }
 
+        // Access tab: only its own key - the endpoint checks a capability per key.
+        async function saveAccessSettings() {
+            try {
+                const res = await fetch(API_BASE + 'save_settings.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings: { design_restricted: document.getElementById('designRestricted').value } })
+                });
+                const data = await res.json();
+                if (data.success) showToast(window.t('forms.toast.settings_saved'), 'success');
+                else showToast(window.t('forms.toast.error_prefix', { message: data.error }), 'error');
+            } catch (e) {
+                showToast(window.t('forms.toast.settings_save_failed'), 'error');
+            }
+        }
+
         async function saveSettings() {
             try {
                 const res = await fetch(API_BASE + 'save_settings.php', {
@@ -914,6 +968,6 @@ $translationNamespaces = ['common', 'forms'];
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -37,6 +37,9 @@ class ProblemsService
     /**
      * Create a problem in the given (adapter-resolved) tenant. Returns the id.
      * The adapter has already resolved + scope-checked $tenantId.
+     *
+     * @param array $in  the fields: title (required), description, status_id or status (name), priority_id or priority,
+     *     assigned_analyst_id, root_cause, workaround, is_known_error
      */
     public static function createProblem(PDO $conn, ActorContext $ctx, int $tenantId, array $in): int
     {
@@ -103,7 +106,12 @@ class ProblemsService
         return $problemId;
     }
 
-    /** Apply a partial set of updates to a problem. Returns void; adapter reloads. */
+    /**
+     * Apply a partial set of updates to a problem. Returns void; adapter reloads.
+     *
+     * @param int $problemId  the problem to change
+     * @param array $in  only the fields to change - same keys as createProblem(); a key present with '' or null clears it
+     */
     public static function updateProblem(PDO $conn, ActorContext $ctx, int $problemId, array $in): void
     {
         $current = self::loadProblem($conn, $ctx, $problemId);   // 404 if gone / out of scope
@@ -224,7 +232,11 @@ class ProblemsService
         }
     }
 
-    /** Delete a problem permanently (tidies change_relations, cascades children). */
+    /**
+     * Delete a problem permanently (tidies change_relations, cascades children).
+     *
+     * @param int $problemId  the problem to delete
+     */
     public static function deleteProblem(PDO $conn, ActorContext $ctx, int $problemId): void
     {
         $row = self::loadProblem($conn, $ctx, $problemId);   // 404 if gone / out of scope
@@ -240,7 +252,12 @@ class ProblemsService
     //  Notes
     // ======================================================================
 
-    /** Append a journal note. Returns the note id (read AFTER touch, mirroring the API). */
+    /**
+     * Append a journal note. Returns the note id (read AFTER touch, mirroring the API).
+     *
+     * @param int $problemId  the problem the note goes on
+     * @param array $in  note - the note text (required)
+     */
     public static function addNote(PDO $conn, ActorContext $ctx, int $problemId, array $in): int
     {
         self::loadProblem($conn, $ctx, $problemId);   // 404 if gone / out of scope
@@ -258,7 +275,12 @@ class ProblemsService
     //  Incident (ticket) linking
     // ======================================================================
 
-    /** Link an incident. Returns [problem_id, ticket_id, ticket_number, linked]. */
+    /**
+     * Link an incident. Returns [problem_id, ticket_id, ticket_number, linked].
+     *
+     * @param int $problemId  the problem to link to
+     * @param array $in  ticket_id - the incident (ticket) to link; must be in the actor's scope and the same company
+     */
     public static function linkTicket(PDO $conn, ActorContext $ctx, int $problemId, array $in): array
     {
         $problem = self::loadProblem($conn, $ctx, $problemId);   // 404
@@ -303,7 +325,11 @@ class ProblemsService
         return ['problem_id' => $problemId, 'ticket_id' => $ticketId, 'ticket_number' => $ticket['ticket_number'], 'linked' => true];
     }
 
-    /** Unlink an incident. 404 if not linked. */
+    /**
+     * Unlink an incident. 404 if not linked.
+     *
+     * @param int $problemId  the problem to unlink from
+     */
     public static function unlinkTicket(PDO $conn, ActorContext $ctx, int $problemId, int $ticketId): void
     {
         self::loadProblem($conn, $ctx, $problemId);   // 404
@@ -320,7 +346,12 @@ class ProblemsService
     //  Change linking (shared change_relations table, related_type='problem')
     // ======================================================================
 
-    /** Link the change that fixes a problem. Returns [problem_id, change_id, title, linked]. */
+    /**
+     * Link the change that fixes a problem. Returns [problem_id, change_id, title, linked].
+     *
+     * @param int $problemId  the problem to link to
+     * @param array $in  change_id - the change that fixes the problem
+     */
     public static function linkChange(PDO $conn, ActorContext $ctx, int $problemId, array $in): array
     {
         self::loadProblem($conn, $ctx, $problemId);   // 404
@@ -357,7 +388,12 @@ class ProblemsService
         return ['problem_id' => $problemId, 'change_id' => $changeId, 'title' => $change['title'], 'linked' => true];
     }
 
-    /** Unlink a change. 404 if not linked. */
+    /**
+     * Unlink a change. 404 if not linked.
+     *
+     * @param int $problemId  the problem to unlink from
+     * @param int $changeId  the change to unlink
+     */
     public static function unlinkChange(PDO $conn, ActorContext $ctx, int $problemId, int $changeId): void
     {
         self::loadProblem($conn, $ctx, $problemId);   // 404
@@ -381,6 +417,8 @@ class ProblemsService
     /**
      * Load the joined problem row, enforcing the actor's company scope; 404 if
      * the problem is unknown OR outside scope (indistinguishable, by design).
+     *
+     * @param int $problemId  the problem to load
      */
     private static function loadProblem(PDO $conn, ActorContext $ctx, int $problemId): array
     {
@@ -413,6 +451,9 @@ class ProblemsService
      * May the actor access this row of a tenant-scoped table (by its company)?
      * Generic mirror of apiKeyCanAccessTenantRow / analystCanAccessTicket. $table
      * is a developer literal, never user input.
+     *
+     * @param string $table  the tenant-scoped table to look in - a developer literal, never user input
+     * @param int $rowId  the id of the row in that table; 0 or less is always false
      */
     private static function canAccessTenantRow(PDO $conn, ActorContext $ctx, string $table, int $rowId): bool
     {
@@ -432,6 +473,15 @@ class ProblemsService
         return in_array($tid, $ctx->companyScope, true);
     }
 
+    /**
+     * Records one action or field change in the problem's audit trail.
+     *
+     * @param int $problemId  the problem the audit row belongs to
+     * @param string $actionType  'created' or 'modified'
+     * @param ?string $field  the field key that changed, e.g. 'status', 'linked_incident'; null for 'created'
+     * @param ?string $old  the value before (cut to 1000 characters); null when none
+     * @param ?string $new  the value after (cut to 1000 characters); null when none
+     */
     private static function auditWrite(PDO $conn, int $problemId, int $analystId, string $actionType, ?string $field, ?string $old, ?string $new): void
     {
         $conn->prepare(
@@ -444,12 +494,21 @@ class ProblemsService
         ]);
     }
 
+    /**
+     * Sets the problem's updated time to now.
+     *
+     * @param int $problemId  the problem to touch
+     */
     private static function touch(PDO $conn, int $problemId): void
     {
         $conn->prepare("UPDATE problems SET updated_datetime = UTC_TIMESTAMP() WHERE id = ?")->execute([$problemId]);
     }
 
-    /** Resolve a problem status by name or id. Returns [id, name, is_closed] or null. */
+    /**
+     * Resolve a problem status by name or id. Returns [id, name, is_closed] or null.
+     *
+     * @param array $in  the request: status_id wins over status (a name); neither given returns null
+     */
     private static function resolveStatus(PDO $conn, array $in): ?array
     {
         if (isset($in['status_id']) && $in['status_id'] !== '' && $in['status_id'] !== null) {
@@ -468,7 +527,11 @@ class ProblemsService
         return [(int)$row['id'], $row['name'], (int)$row['is_closed']];
     }
 
-    /** Resolve a problem priority by name or id. Explicit null/'' clears. */
+    /**
+     * Resolve a problem priority by name or id. Explicit null/'' clears.
+     *
+     * @param array $in  the request: priority_id (null or '' clears) wins over priority (a name); neither returns null
+     */
     private static function resolvePriority(PDO $conn, array $in): ?array
     {
         if (array_key_exists('priority_id', $in)) {

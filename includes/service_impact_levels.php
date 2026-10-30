@@ -21,6 +21,8 @@
  */
 
 /**
+ * The impact level a service shows when nothing is wrong with it.
+ *
  * @return array{id:?int,name:string,colour:?string} The default impact level.
  *         Per-connection cached — it is read several times to build one page.
  */

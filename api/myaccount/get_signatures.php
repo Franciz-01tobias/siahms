@@ -12,6 +12,7 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/signatures.php';
+require_once '../../includes/sso_identity.php';
 
 header('Content-Type: application/json');
 
@@ -28,6 +29,9 @@ try {
                               FROM analysts WHERE id = ?");
     $stmt->execute([$analystId]);
     $profile = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    // True when an OIDC provider rewrites these on every sign-in (#155), so the
+    // page shows them read-only. save_profile.php refuses the save as well.
+    $profile['sso_synced'] = ssoAnalystProfileLocked($conn, $analystId);
 
     // Rendered alongside the raw body so the editor can show a live preview without
     // reimplementing the substitution in the browser — the same reason the template

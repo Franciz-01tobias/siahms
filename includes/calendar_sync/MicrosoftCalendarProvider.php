@@ -32,6 +32,11 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
     // $conn (the optional PDO for persisting the token cache) is declared on the
     // base class, so assigning it is valid against the abstract type.
 
+    /**
+     * Microsoft Graph supports all-day events, HTML bodies, checking a mailbox exists, and change notifications.
+     *
+     * @param string $capability  a CalendarSyncProvider::CAP_* key
+     */
     public function supports(string $capability): bool
     {
         return in_array($capability, [
@@ -123,7 +128,13 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
 
     // ----------------------------------------------------------------- graph
 
-    /** One Graph call. Returns [httpCode, decodedBody]. */
+    /**
+     * One Graph call. Returns [httpCode, decodedBody].
+     *
+     * @param string $method  the HTTP method - GET, POST, PATCH or DELETE
+     * @param string $path  the Graph path after /v1.0, e.g. '/users/{address}/events', already URL-encoded where needed
+     * @param ?array $body  the JSON body to send; null sends none
+     */
     private function call(string $method, string $path, ?array $body = null): array
     {
         $ch = curl_init(self::GRAPH . $path);
@@ -157,6 +168,8 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
      *    after the last day. We store all-day as 00:00–23:59:59 so that readers
      *    ignoring the flag still see a sensible block, so it has to be converted
      *    here. Sending 23:59:59 with isAllDay:true is rejected outright.
+     *
+     * @param array $event  the canonical event shape (see CalendarSyncProvider) - naive start/end plus timezone
      */
     private function toGraphEvent(array $event): array
     {
@@ -191,6 +204,12 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
 
     // -------------------------------------------------------------- outbound
 
+    /**
+     * Creates the event in the mailbox's calendar through Graph and returns Graph's event id.
+     *
+     * @param string $calendarAddress  the analyst's mailbox address (UPN), as Graph knows it
+     * @param array $event  the canonical event shape (see CalendarSyncProvider)
+     */
     public function createEvent(string $calendarAddress, array $event): string
     {
         [$http, $data, $raw] = $this->call(
@@ -202,6 +221,13 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
         return (string)$data['id'];
     }
 
+    /**
+     * PATCHes the event through Graph; throws CalendarEventMissing on a 404 so the caller can create a fresh one.
+     *
+     * @param string $calendarAddress  the analyst's mailbox address (UPN), as Graph knows it
+     * @param string $remoteEventId  Graph's event id, as createEvent() returned it
+     * @param array $event  the canonical event shape (see CalendarSyncProvider)
+     */
     public function updateEvent(string $calendarAddress, string $remoteEventId, array $event): void
     {
         [$http, , $raw] = $this->call(
@@ -220,6 +246,12 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
         }
     }
 
+    /**
+     * Deletes the event through Graph; a 404 counts as success.
+     *
+     * @param string $calendarAddress  the analyst's mailbox address (UPN), as Graph knows it
+     * @param string $remoteEventId  Graph's event id, as createEvent() returned it
+     */
     public function deleteEvent(string $calendarAddress, string $remoteEventId): void
     {
         [$http, , $raw] = $this->call(
@@ -250,6 +282,9 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
      * window is deliberately narrow — recent past to a few months ahead — since
      * a wider one makes the first sync enormous for no benefit; nobody edits
      * last year's appointments.
+     *
+     * @param string $calendarAddress  the analyst's mailbox address (UPN), as Graph knows it
+     * @param ?string $token  the full deltaLink the last poll returned; null or '' takes a baseline
      */
     public function pollChanges(string $calendarAddress, ?string $token): array
     {
@@ -310,7 +345,12 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
         return $out;
     }
 
-    /** Graph's {dateTime,timeZone} to a naive wall clock in $tz. */
+    /**
+     * Graph's {dateTime,timeZone} to a naive wall clock in $tz.
+     *
+     * @param array $slot  Graph's {dateTime, timeZone} pair for an event's start or end
+     * @param string $tz  the PHP time zone to give the naive wall-clock time in
+     */
     private function toLocal(array $slot, string $tz): string
     {
         $from = new DateTimeZone(($slot['timeZone'] ?? 'UTC') === 'UTC' ? 'UTC' : $slot['timeZone']);
@@ -319,7 +359,11 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
         return $dt->format('Y-m-d H:i:s');
     }
 
-    /** A GET against a URL Graph gave us (nextLink / deltaLink are absolute). */
+    /**
+     * A GET against a URL Graph gave us (nextLink / deltaLink are absolute).
+     *
+     * @param string $url  an absolute Graph URL - a nextLink, a deltaLink, or the first delta query
+     */
     private function callAbsolute(string $url): array
     {
         $ch = curl_init($url);
@@ -346,6 +390,14 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
      */
     const SUBSCRIPTION_MINUTES = 4100;
 
+    /**
+     * Subscribes to updates and deletions in the mailbox's calendar, posting to $notifyUrl with $secret as clientState, for SUBSCRIPTION_MINUTES.
+     *
+     * @param string $calendarAddress  the analyst's mailbox address (UPN), as Graph knows it
+     * @param string $notifyUrl  the public HTTPS endpoint Graph posts notifications to (Graph checks it during this call)
+     * @param string $secret  sent as clientState and echoed back in every notification, to prove it came from Graph
+     * @return array  ['id' => subscription id, 'expires' => naive local datetime]
+     */
     public function createSubscription(string $calendarAddress, string $notifyUrl, string $secret): array
     {
         [$http, $data, $raw] = $this->call('POST', '/subscriptions', [
@@ -365,6 +417,11 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
         return ['id' => (string)$data['id'], 'expires' => $this->expiryToLocal($data['expirationDateTime'] ?? null)];
     }
 
+    /**
+     * Extends a Graph subscription by SUBSCRIPTION_MINUTES; throws CalendarSubscriptionMissing when it has already lapsed.
+     *
+     * @param string $subscriptionId  Graph's subscription id, as createSubscription() returned it
+     */
     public function renewSubscription(string $subscriptionId): array
     {
         [$http, $data, $raw] = $this->call('PATCH', '/subscriptions/' . rawurlencode($subscriptionId), [
@@ -381,6 +438,11 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
         return ['id' => $subscriptionId, 'expires' => $this->expiryToLocal($data['expirationDateTime'] ?? null)];
     }
 
+    /**
+     * Removes a Graph subscription; one already gone counts as success.
+     *
+     * @param string $subscriptionId  Graph's subscription id, as createSubscription() returned it
+     */
     public function deleteSubscription(string $subscriptionId): void
     {
         [$http, , $raw] = $this->call('DELETE', '/subscriptions/' . rawurlencode($subscriptionId));
@@ -388,7 +450,11 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
         throw new Exception('Could not remove the subscription (HTTP ' . $http . '): ' . $this->briefly($raw));
     }
 
-    /** Graph's UTC expiry to the naive local datetime the column stores. */
+    /**
+     * Graph's UTC expiry to the naive local datetime the column stores.
+     *
+     * @param ?string $utc  Graph's expirationDateTime (UTC, ISO 8601); null uses now plus SUBSCRIPTION_MINUTES
+     */
     private function expiryToLocal(?string $utc): string
     {
         $ts = $utc ? strtotime($utc) : (time() + self::SUBSCRIPTION_MINUTES * 60);
@@ -397,6 +463,11 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
 
     // ------------------------------------------------------------- discovery
 
+    /**
+     * True when Graph can read the mailbox's calendar - i.e. the address exists and the app can reach it.
+     *
+     * @param string $calendarAddress  the mailbox address (UPN) to check
+     */
     public function verifyTarget(string $calendarAddress): bool
     {
         try {
@@ -411,6 +482,8 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
      * Graph error bodies are long and carry request ids. Keep enough to diagnose
      * without putting a wall of JSON in last_error, which is 500 characters and
      * is shown to a human.
+     *
+     * @param ?string $raw  the raw response body from Graph or the token endpoint
      */
     private function briefly(?string $raw): string
     {

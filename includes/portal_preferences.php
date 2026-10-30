@@ -21,6 +21,8 @@
 /**
  * One preference for one portal user, or $default.
  *
+ * @param int $userId  the portal user (users id); 0 or less gives $default
+ * @param string $key  the preference_key, e.g. 'kb_layout'; '' gives $default
  * @param string $default returned when unset, unreadable, or the table is absent
  */
 function portalPrefGet(PDO $conn, int $userId, string $key, string $default = ''): string
@@ -46,6 +48,10 @@ function portalPrefGet(PDO $conn, int $userId, string $key, string $default = ''
  * Store one preference. Returns false if it could not be stored — the caller
  * decides whether that is worth telling anybody, and for a layout toggle it is
  * not: the layout still changed, only the memory of it failed.
+ *
+ * @param int $userId  the portal user (users id); 0 or less stores nothing
+ * @param string $key  the preference_key, e.g. 'kb_layout'; '' stores nothing
+ * @param string $value  the value to store, as text
  */
 function portalPrefSet(PDO $conn, int $userId, string $key, string $value): bool
 {
@@ -86,7 +92,11 @@ const PORTAL_KB_LAYOUTS = ['cards', 'list', 'tree', 'table'];
 const PORTAL_KB_LAYOUT_DEFAULT = 'cards';
 const PORTAL_KB_LAYOUT_KEY = 'kb_layout';
 
-/** The layout this portal user should see. Always one of PORTAL_KB_LAYOUTS. */
+/**
+ * The layout this portal user should see. Always one of PORTAL_KB_LAYOUTS.
+ *
+ * @param int $userId  the portal user (users id)
+ */
 function portalKbLayout(PDO $conn, int $userId): string
 {
     $v = portalPrefGet($conn, $userId, PORTAL_KB_LAYOUT_KEY, PORTAL_KB_LAYOUT_DEFAULT);

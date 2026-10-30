@@ -14,6 +14,9 @@
 
 require_once __DIR__ . '/contract_assets.php';
 
+/**
+ * Returns the contract equipment report's stylesheet as a string, so it can be inlined into the printable page and the emailed copy.
+ */
 function contractReportCss(): string
 {
     // Deliberately plain and self-contained: no custom properties, no theme.
@@ -124,6 +127,9 @@ function contractReportBody(array $contract, array $assets): string
  * A hostname is the usual answer and a SIM card has none, so the fallbacks
  * matter. Falling through to a bare id would be a line nobody can identify —
  * which on a printed report nobody can then look up either.
+ *
+ * @param array $a  an asset row as contractAssetsFor() returns it (hostname, asset_tag, service_tag,
+ *     manufacturer, model, asset_id)
  */
 function contractReportAssetName(array $a): string
 {
@@ -136,17 +142,28 @@ function contractReportAssetName(array $a): string
 /**
  * The contract, with the supplier and owner names the report shows.
  * Returns null when there is no such contract.
+ *
+ * @param int $contractId  contracts.id to load
  */
-function contractReportLoad(PDO $conn, int $contractId): ?array
+function contractReportLoad(PDO $conn, int $contractId, ?int $analystId = null): ?array
 {
+    // A customer contract this analyst cannot see loads as nothing (#153).
+    require_once __DIR__ . '/contract_party.php';
+    [$partyCols, $partyJoins] = contractPartySql($conn, 'c');
+    [$vis, $visParams] = $analystId !== null ? contractVisibilitySql($conn, $analystId, 'c') : ['', []];
     $stmt = $conn->prepare(
         "SELECT c.*, s.legal_name AS supplier_name, s.trading_name AS supplier_trading_name,
                 a.full_name AS owner_name, a.email AS owner_email
+                $partyCols
            FROM contracts c
       LEFT JOIN suppliers s ON s.id = c.supplier_id
       LEFT JOIN analysts  a ON a.id = c.contract_owner_id
-          WHERE c.id = ?"
+                $partyJoins
+          WHERE c.id = ?$vis"
     );
-    $stmt->execute([$contractId]);
-    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    $stmt->execute(array_merge([$contractId], $visParams));
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return null;
+    $row['party_label'] = contractPartyLabel($row);
+    return $row;
 }

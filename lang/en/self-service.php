@@ -63,6 +63,7 @@ return [
     'nav' => [
         'dashboard'   => 'Dashboard',
         'tickets'     => 'My Tickets',
+        'team_tickets' => 'Team tickets',   // shown only to managers (discussion #62)
         'help_centre' => 'Knowledge',
         'equipment'   => 'My equipment',
         'training'    => 'Training',
@@ -102,6 +103,7 @@ return [
         'forgot_password'    => 'Forgot your password?',
         'create_account'     => 'Create an account',
         'analyst_login'      => 'Analyst login',
+        'powered_by'         => 'Powered by FreeITSM',
         'login_failed'       => 'Login failed. Please try again.',
         'mfa_desc'           => 'Enter the 6-digit code from your authenticator app',
         'verify'             => 'Verify',
@@ -169,6 +171,10 @@ return [
     // Incidents on the status panel (#99)
     'status' => [
         'incidents_heading'   => 'What is happening',
+        // Planned maintenance (3.2.0)
+        'planned_heading'     => 'Planned maintenance',
+        'planned_range'       => '{start} to {end}',
+        'planned_open'        => 'From {start}',
         'show_updates'        => 'Show updates ({n})',
         'hide_updates'        => 'Hide updates',
         'loading'             => 'Loading…',
@@ -252,7 +258,10 @@ return [
     ],
 
     'new_ticket' => [
-        'title'              => 'IT Help Desk - New Ticket',
+        'title'              => 'Self-Service Portal - New Ticket',
+        // Discussion #62
+        'confidential'       => 'This is confidential',
+        'confidential_hint'  => 'Turn this on if your ticket is personal - about your health, say, or a complaint. Confidential tickets are kept from managers. The service desk still sees them.',
         'heading'            => 'New Ticket',
         'mailbox'            => 'Mailbox *',
         'mailbox_loading'    => 'Loading...',
@@ -266,6 +275,10 @@ return [
         // what the analyst's "category at close" exists to correct.
         'category'           => 'What is this about?',
         'category_none'      => 'Not sure',
+        // Ticket type (#179). Shown only when choosing one changes what the
+        // requester is asked - see api/self-service/get_ticket_fields.php.
+        'ticket_type'        => 'What kind of request is it?',
+        'ticket_type_none'   => 'Not sure',
 
         'priority'           => 'Priority',
         'priority_low'       => 'Low',
@@ -293,10 +306,18 @@ return [
     'tickets' => [
         'title'         => 'IT Help Desk — My Tickets',
         'heading'       => 'My Tickets',
+        // Managers (discussion #62)
+        'team_heading'  => 'My team\'s tickets',
+        'team_none'     => 'Nobody you manage has a ticket you can see.',
+        'stub_subject'  => 'Confidential ticket',
         'filter_open'   => 'Open',
         'filter_closed' => 'Closed',
         'filter_all'    => 'All',
         'filter_label'  => 'Filter by status',
+        'team_person_all'   => 'Everyone',
+        'team_person_label' => 'Filter by person',
+        'load_more'     => 'Load more',
+        'showing_of'    => 'Showing {shown} of {total}',
         'loading'       => 'Loading...',
         'load_failed'   => 'Could not load your tickets. Please try again.',
         'none'          => 'Nothing here',
@@ -305,6 +326,27 @@ return [
     ],
 
     'ticket' => [
+        // ── Seen as a manager (discussion #62, step 3) ───────────────────
+        'mgr_banner'              => '{name}\'s ticket. You can see it because you manage them.',
+        'mgr_can_view'            => 'You can read it, but not reply or close it.',
+        'mgr_can_reply'           => 'You can read it and reply.',
+        'mgr_can_close'           => 'You can read it and close it.',
+        'mgr_can_both'            => 'You can read it, reply and close it.',
+        'stub_title'              => 'Confidential ticket',
+        'stub_body'               => 'This ticket is confidential. Its details are kept from managers.',
+        // ── Who has seen this ticket (discussion #62, step 2) ────────────
+        'seen_title'              => 'Who has seen this ticket',
+        'seen_nobody'             => 'Nobody outside the service desk has looked at it.',
+        'seen_times'              => '{count} times',
+        'seen_help'               => 'Anyone other than you who opens this ticket in the portal - a manager, say - is listed here, with when they looked. The service desk is not listed: they see every ticket as part of their job.',
+        // ── Confidential (discussion #62) ───────────────────────────────
+        'confidential'            => 'Confidential',
+        'confidential_hint'       => 'Kept from managers. The service desk still sees it.',
+        'mark_confidential'       => 'Mark confidential',
+        'mark_confidential_title' => 'Make this ticket confidential?',
+        'mark_confidential_confirm' => 'Confidential tickets are kept from managers. Only the service desk can make a ticket normal again, so you cannot undo this yourself.',
+        'mark_confidential_done'  => 'This ticket is now confidential.',
+        'mark_confidential_failed'=> 'The ticket could not be updated just now. Please try again in a minute.',
         // ── Closing your own ticket (off unless an admin turns it on) ───
         'self_close'              => 'Close ticket',
         'self_close_hint'         => 'Close this ticket if you have sorted it yourself or no longer need help',
@@ -320,6 +362,8 @@ return [
         'load_failed'        => 'Failed to load ticket',
         'load_detail_failed' => 'Failed to load ticket details',
         'created'            => 'Created {date}',
+        // The answers the requester gave in the extra fields (discussion #193).
+        'details_heading'    => 'Your details',
         'screen_recordings'  => 'Screen recordings',
         // Singular: recordings now sit against the message they came with,
         // rather than in one list at the top of the ticket.
@@ -376,6 +420,14 @@ return [
         'no_results_hint'    => 'Try a different word, or raise a ticket and the IT team will help.',
         'no_articles'        => 'No articles yet',
         'no_articles_hint'   => 'The IT team has not published any guides here yet. Raise a ticket and they will help you directly.',
+        // Documents attached to an article (GH #177).
+        'documents'          => 'Documents',
+        'doc_download'       => 'Download',
+        'doc_open'           => 'Open',
+        'doc_link'           => 'Link',
+        'doc_file'           => 'File',
+        'doc_count_one'      => '1 document',
+        'doc_count_many'     => '{n} documents',
     ],
 
     'help' => [
@@ -401,6 +453,7 @@ return [
         'kb_li1'             => 'Click <strong>Knowledge</strong> in the top navigation.',
         'kb_li2'             => 'Type what you are stuck on into the search box — a word or two is usually enough (<em>vpn</em>, <em>printer</em>, <em>password</em>).',
         'kb_li3'             => 'Click an article to read it. You can link straight to one, so it is easy to share with a colleague.',
+        'kb_li4'             => 'Some articles come with documents - a form to fill in, or a guide as a PDF. They are listed under the article; click one to download it. An article with documents shows a paperclip in the list.',
         'kb_p2'              => 'You will also see suggestions <em>while you are raising a ticket</em>: start typing the subject and any matching guides appear underneath it. Reading one costs you nothing, and if it solves the problem you can simply close the page — nothing is submitted until you press Submit.',
         'kb_tip'             => '<strong>Nothing showing?</strong> Either your search found no match, or your IT team has not published any guides yet. Raise a ticket as normal and they will help you directly.',
         'st_title'   => 'Knowing whether something is down',
@@ -424,6 +477,8 @@ return [
         // The portal category picker (#1546). Optional and only shown when the
         // organisation has switched the field on and has portal-visible categories.
         's3_li_category'     => '<strong>What is this about?</strong> — a short list your IT team has set up ("Printing", "Access requests") to get the ticket to the right person faster. It only appears if they have chosen to offer it, it is always optional, and picking <em>Not sure</em> is a perfectly good answer — an analyst confirms the real category when the ticket is dealt with.',
+        // Discussion #62
+        's3_li_confidential' => '<strong>This is confidential</strong> — turn it on if the ticket is personal: about your health, say, or a complaint. Confidential tickets are kept from managers; the service desk still sees them. You can also mark a ticket confidential later with <em>Mark confidential</em> at the top of it, but only the service desk can undo that.',
         's3_p2'              => 'Click <strong>Submit</strong>. You\'ll see a confirmation with your ticket reference (something like <em>LVB-805-40499</em>) — quote that if you ever need to chase it up.',
         's3_tip'             => 'A picture is worth 1000 words. A screenshot or recording (see below) is worth 1000 pictures. Don\'t be shy — the more visual context you can attach, the quicker the IT team can identify the problem.',
 
@@ -450,6 +505,8 @@ return [
         's5_li5'             => 'Any screen recordings, playing where you sent them — a video you attached to a later reply sits with that reply, not back at the start.',
         's5_li6'             => 'Notes the analyst chose to share with you (internal-only notes stay hidden).',
         's5_li7'             => 'The current status, priority, and assigned analyst.',
+        // Discussion #62, step 2
+        's5_li_seen'         => '<strong>Who has seen this ticket</strong> — anyone other than you who has opened it in the portal, such as a manager, with when they last looked. The service desk is not listed; looking at tickets is their job.',
         's5_p3'              => 'To reply or add information, use the reply box at the bottom of the conversation — you can attach files and record your screen from there too. Replying to the email notification you received works just as well; either way it lands on the same ticket.',
 
         // Training. Written to be readable by somebody whose portal has no
@@ -463,6 +520,16 @@ return [
         'tr_p2'    => 'Your progress is saved as you go, so you can do a course in several sittings, on any device, and pick up where you left off.',
         'tr_tip'   => '<strong>Deadlines and reminders:</strong> a course may have a date by which it should be done. You have the whole of that day. If your IT team has switched reminders on you will get an email as the date approaches, and again if it passes — those stop as soon as you finish the course.',
 
+        // Managers only (discussion #62) - the section is not drawn for anyone else.
+        'team_title'         => 'Team tickets',
+        'team_p1'            => 'You can see the tickets raised by the people you manage. They are under <strong>Team tickets</strong> in the menu, apart from your own under My Tickets.',
+        'team_li_who'        => '<strong>Who is on your team</strong> was set up by your IT team &mdash; from the Manager field in your organisation\'s directory, or chosen for you. Ask them if somebody is missing, or should not be there.',
+        'team_li_banner'     => '<strong>Each team ticket says whose it is</strong> and what you may do with it. You can always read it; your organisation decides whether you can also reply to it or close it.',
+        'team_li_conf'       => '<strong>Confidential tickets</strong> &mdash; a health matter, say &mdash; are kept from managers. Depending on your organisation you will not see them at all, or only that one exists, with its number and status and nothing it says.',
+        'team_li_filter'     => '<strong>Finding one</strong> &mdash; pick a person, a status, or both, above the list. The newest 50 are shown first; <strong>Load more</strong> at the bottom brings the next 50.',
+        'team_li_told'       => '<strong>Being told</strong> &mdash; your organisation may email you when someone on your team raises a ticket, or show it in the bell at the top of the portal. Confidential tickets never are.',
+        'team_li_seen'       => '<strong>Opening a team ticket is recorded.</strong> The person who raised it can see that you looked, and when.',
+        'team_tip'           => 'Open a colleague\'s ticket when you need to, not out of curiosity &mdash; they can see that you did.',
         's6_title'           => 'Account & security',
         's6_p1'              => 'Click your initials in the top-right corner to open the account menu. From there:',
         's6_li1'             => '<strong>My Account</strong> — set a <strong>preferred name</strong> (e.g. <em>"Ed"</em> instead of <em>"Ed Mozley"</em>) that\'s used when the system greets you in emails, keep your own <strong>contact details</strong> up to date, choose how the portal looks, and change your password.',
@@ -482,6 +549,7 @@ return [
     'menu' => [
         'my_account'    => 'My Account',
         'mfa'           => 'Multi-Factor Auth',
+        'analyst_console' => 'Analyst console',
         'logout'        => 'Logout',
         'logout_confirm'=> 'Are you sure you want to logout?',
         'mfa_on'        => 'On',

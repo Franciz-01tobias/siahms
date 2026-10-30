@@ -22,6 +22,9 @@ if (!isset($_SESSION['analyst_id'])) {
 // this, its endpoints never did. Any logged-in analyst could read, edit or delete
 // any RFP by calling the API directly. (Found by debug tool D005.)
 requireModuleAccessJson('contracts');
+// The RFP's company (3.5.0): one in a company this analyst cannot reach is "not found".
+require_once '../../includes/rfp_scope.php';
+rfpGate('section', 'id');
 try {
     $data = json_decode(file_get_contents('php://input'), true);
     $id = isset($data['id']) ? (int)$data['id'] : 0;

@@ -34,6 +34,14 @@ require_once dirname(__DIR__, 3) . '/includes/timezone.php';   // naive_today_sq
 // Apps (read-only inventory catalogue)
 // ---------------------------------------------------------------------------
 
+/**
+ * GET /software/apps - the discovered applications with install and licence counts,
+ * paginated.
+ *
+ * ?q= matches name or publisher, ?filter= is apps, components or all (the Software
+ * screen's tabs), and ?sort= takes name, publisher, install_count or id, with a leading
+ * - for descending.
+ */
 function apiSoftwareAppsList(PDO $conn, array $apiKey, array $params, array $body): void {
     $where  = ['1=1'];
     $args   = [];
@@ -107,6 +115,11 @@ function apiSoftwareAppsList(PDO $conn, array $apiKey, array $params, array $bod
     ]);
 }
 
+/**
+ * Loads one discovered application row, or answers 404 and stops.
+ *
+ * @param int $appId  the software_inventory_apps id
+ */
 function apiSoftwareLoadApp(PDO $conn, int $appId): array {
     $stmt = $conn->prepare("SELECT id, display_name, publisher, first_detected FROM software_inventory_apps WHERE id = ?");
     $stmt->execute([$appId]);
@@ -117,7 +130,11 @@ function apiSoftwareLoadApp(PDO $conn, int $appId): array {
     return $row;
 }
 
-/** Distinct non-system-component hosts for an app — the compliance install count. */
+/**
+ * Distinct non-system-component hosts for an app — the compliance install count.
+ *
+ * @param int $appId  the software_inventory_apps id
+ */
 function apiSoftwareInstallCount(PDO $conn, int $appId): int {
     $stmt = $conn->prepare(
         "SELECT COUNT(DISTINCT host_id) FROM software_inventory_detail
@@ -182,7 +199,7 @@ function apiSoftwareAppMachinesList(PDO $conn, array $apiKey, array $params, arr
     // hostnames to a key limited to one. Scope the asset side.
     [$scopeSql, $scopeArgs] = apiKeyTenantFilter($conn, $apiKey, 'h');
     $stmt = $conn->prepare(
-        "SELECT h.id AS asset_id, h.hostname, d.display_version, d.install_date, d.system_component, d.last_seen
+        "SELECT h.id AS asset_id, h.hostname, d.display_version, d.install_date, d.system_component, d.last_seen, d.source, d.observed_at, d.imported_at
          FROM software_inventory_detail d
          INNER JOIN assets h ON h.id = d.host_id
          WHERE d.app_id = ?" . $scopeSql . " ORDER BY h.hostname"
@@ -196,6 +213,7 @@ function apiSoftwareAppMachinesList(PDO $conn, array $apiKey, array $params, arr
             'install_date'     => $m['install_date'],
             'system_component' => (bool)$m['system_component'],
             'last_seen'        => apiIsoDate($m['last_seen']),
+            'source'=>$m['source'], 'observed_at'=>apiIsoDate($m['observed_at']), 'imported_at'=>apiIsoDate($m['imported_at']),
         ];
     }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
 }
@@ -204,6 +222,10 @@ function apiSoftwareAppMachinesList(PDO $conn, array $apiKey, array $params, arr
 // Licences
 // ---------------------------------------------------------------------------
 
+/**
+ * The SELECT for software licences, with the application's name and publisher, the
+ * creator's name and how many machines have the application installed.
+ */
 function apiSoftwareLicenceSelect(): string {
     return "SELECT l.*, a.display_name AS app_name, a.publisher AS app_publisher,
                    an.full_name AS created_by_name,
@@ -214,6 +236,13 @@ function apiSoftwareLicenceSelect(): string {
             LEFT JOIN analysts an ON an.id = l.created_by";
 }
 
+/**
+ * Shapes a licence row for the API, adding renewal_status - overdue, due_soon (inside
+ * the notice period, 30 days by default) or ok - computed the way the licence screen
+ * colours it.
+ *
+ * @param array $r  the software_licences row as apiSoftwareLicenceSelect() loads it, with app name, publisher, installs and creator
+ */
 function apiSerializeLicence(array $r): array {
     // The licence screen's client-side colour logic, computed server-side:
     // overdue = renewal passed; due_soon = within notice period (default 30).
@@ -253,6 +282,11 @@ function apiSerializeLicence(array $r): array {
     ];
 }
 
+/**
+ * Loads one licence row (apiSoftwareLicenceSelect), or answers 404 and stops.
+ *
+ * @param int $licenceId  the software_licences id
+ */
 function apiLoadLicence(PDO $conn, int $licenceId): array {
     $stmt = $conn->prepare(apiSoftwareLicenceSelect() . " WHERE l.id = ?");
     $stmt->execute([$licenceId]);
@@ -328,6 +362,7 @@ function apiSoftwareLicencesList(PDO $conn, array $apiKey, array $params, array 
     ]);
 }
 
+/** GET /software/licences/{id} - one licence. */
 function apiSoftwareLicencesGet(PDO $conn, array $apiKey, array $params, array $body): void {
     apiRespond(apiSerializeLicence(apiLoadLicence($conn, $params[0])));
 }

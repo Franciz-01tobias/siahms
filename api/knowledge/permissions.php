@@ -76,7 +76,11 @@ try {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 
-/** 'folder' or 'article', and an id that exists. Anything else is refused. */
+/**
+ * 'folder' or 'article', and an id that exists. Anything else is refused.
+ *
+ * @param array $src  the request ($_GET or the decoded JSON body) carrying object_type and object_id
+ */
 function requireObject(PDO $conn, array $src): array
 {
     $type = (string)($src['object_type'] ?? '');
@@ -102,6 +106,8 @@ function requireObject(PDO $conn, array $src): array
  * Returns the names as well as the ids: a list of "analyst 7, team 3" is not
  * something anybody can check, and a permissions screen you cannot read is a
  * permissions screen nobody will audit.
+ *
+ * @param array $src  the query string ($_GET): object_type ('folder' or 'article') and object_id
  */
 function handleGet(PDO $conn, array $src): void
 {
@@ -146,6 +152,9 @@ function handleGet(PDO $conn, array $src): void
  * case and deserves saying plainly rather than showing an empty list, because an
  * empty list and "no restrictions anywhere" look identical and mean opposite
  * things.
+ *
+ * @param string $type  'folder' or 'article'
+ * @param int $id  that folder's or article's id
  */
 function resolveInherited(PDO $conn, string $type, int $id): ?array
 {
@@ -200,6 +209,9 @@ function resolveInherited(PDO $conn, string $type, int $id): ?array
  * A principal whose row has since been deleted is named as such rather than
  * shown blank: an unexplained empty line in a permissions list is the sort of
  * thing people leave alone forever because they dare not remove it.
+ *
+ * @param string $type  the principal_type: 'analyst', 'team', 'user' or 'user_group'
+ * @param int $id  the principal's id in its own table
  */
 function principalName(PDO $conn, string $type, int $id): string
 {
@@ -230,6 +242,8 @@ function principalName(PDO $conn, string $type, int $id): string
  * ⚠️ A POLARITY CHANGE DELETES THE LIST. See the header. The count of what will
  * be dropped is returned so the interface can say so BEFORE asking again, rather
  * than reporting a loss after the fact.
+ *
+ * @param array $in  the decoded JSON request: object_type, object_id, and optionally is_restricted and inherits
  */
 function handleSetMode(PDO $conn, int $analystId, array $in): void
 {
@@ -259,6 +273,13 @@ function handleSetMode(PDO $conn, int $analystId, array $in): void
     echo json_encode(['success' => true, 'dropped' => $dropped]);
 }
 
+/**
+ * Adds an analyst, team, portal user or user group to a folder's or article's access
+ * list, and audits it. Adding someone already listed is treated as success.
+ *
+ * @param array $in  the decoded JSON request: object_type, object_id, principal_type and principal_id
+ * @writes knowledge_acl - one entry for the object
+ */
 function handleAdd(PDO $conn, int $analystId, array $in): void
 {
     [$type, $id] = requireObject($conn, $in);
@@ -283,6 +304,12 @@ function handleAdd(PDO $conn, int $analystId, array $in): void
     echo json_encode(['success' => true]);
 }
 
+/**
+ * Removes one entry from a folder's or article's access list and audits it. The reply's
+ * now_unreachable is true when a restricted object is left with nobody on its list.
+ *
+ * @param array $in  the decoded JSON request: object_type, object_id and entry_id (the knowledge_acl row)
+ */
 function handleRemove(PDO $conn, int $analystId, array $in): void
 {
     [$type, $id] = requireObject($conn, $in);
@@ -319,6 +346,8 @@ function handleRemove(PDO $conn, int $analystId, array $in): void
  *
  * All four kinds in one search rather than a type picker first: you know the
  * NAME of who you want, not which of four tables they live in.
+ *
+ * @param array $src  the query string ($_GET); q is the name to look for, at least 2 characters
  */
 function handleSearch(PDO $conn, array $src): void
 {
@@ -345,7 +374,13 @@ function handleSearch(PDO $conn, array $src): void
     echo json_encode(['success' => true, 'results' => $out]);
 }
 
-/** Permission changes are the rows people actually come looking for. Never silent. */
+/**
+ * Permission changes are the rows people actually come looking for. Never silent.
+ *
+ * @param string $type  'folder' or 'article'
+ * @param int $id  that folder's or article's id
+ * @param array $detail  what changed, stored as JSON on the audit row
+ */
 function permAudit(PDO $conn, string $type, int $id, int $analystId, array $detail): void
 {
     knowledgeAuditLog($conn, $type, $id, 'permissions', $analystId, $detail);

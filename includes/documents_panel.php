@@ -26,17 +26,24 @@ require_once __DIR__ . '/documents.php';
  * Separate from rendering so a page that mounts the panel itself — one whose
  * record changes in JavaScript, like the asset detail view — can still get the
  * assets without a server-rendered container.
+ *
+ * @param string $pathPrefix  '' from the web root, '../' from a module folder - put before the asset URLs
  */
 function documentsPanelAssets(string $pathPrefix = '../'): void
 {
     static $emitted = false;
     if ($emitted) return;
     $emitted = true;
-    echo '<link rel="stylesheet" href="' . htmlspecialchars($pathPrefix) . 'assets/css/documents.css?v=4">' . "\n";
-    echo '<script src="' . htmlspecialchars($pathPrefix) . 'assets/js/documents.js?v=6"></script>' . "\n";
+    echo '<link rel="stylesheet" href="' . htmlspecialchars($pathPrefix) . 'assets/css/documents.css?v=5">' . "\n";
+    echo '<script src="' . htmlspecialchars($pathPrefix) . 'assets/js/documents.js?v=8"></script>' . "\n";
 }
 
 /**
+ * Renders the attached-documents panel for one record, loading its CSS and JS once.
+ *
+ * Renders nothing for an unknown record type, or for an unsaved record (id 0)
+ * unless $jsVar is given so the page can point it at a record later.
+ *
  * @param string $parentType  a key from documentEntityRegistry()
  * @param int    $parentId    the record's id. 0 mounts an EMPTY panel, for a page
  *                            that will call panel.setParent() once the user picks

@@ -1,4 +1,17 @@
 <?php
+/**
+ * API: create or update a supplier contact.
+ *
+ * Fires the supplier_contact 'created' or 'updated' workflow event.
+ *
+ * @input  id           the contact to update - omit to create one
+ * @input  supplier_id  the supplier the contact works for (optional)
+ * @input  first_name   required
+ * @input  surname      required
+ * @input  email, mobile, job_title, direct_dial, switchboard  optional contact details
+ * @input  is_active    1 or 0 (default 1)
+ * @output {success, id}
+ */
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';

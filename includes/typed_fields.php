@@ -91,11 +91,21 @@ final class TypedFields
 
     // ---------------------------------------------------------------- types --
 
+    /**
+     * The storage class a field type is kept in (text, number, date, boolean or ref), or '' for an unknown type.
+     *
+     * @param string $type  a field type, one of TYPES
+     */
     public static function storageClass(string $type): string
     {
         return self::STORAGE[$type] ?? '';
     }
 
+    /**
+     * True when $type is one of the field types in TYPES.
+     *
+     * @param string $type  the field type to check
+     */
     public static function isKnownType(string $type): bool
     {
         return in_array($type, self::TYPES, true);
@@ -121,12 +131,20 @@ final class TypedFields
      * ⚠️ A handler answers "is this a real row of the right kind?" and nothing
      * more. It must never answer "may this actor see it" — that is the calling
      * service's job, every time.
+     *
+     * @param string $kind  the name a definition's ref_kind uses, e.g. 'cmdb_object', 'user', 'asset'
+     * @param array $handler  label, target_label, exists and (optionally) labels, as described above
      */
     public static function registerRefKind(string $kind, array $handler): void
     {
         self::$refKinds[$kind] = $handler;
     }
 
+    /**
+     * The handler registered for a ref kind by registerRefKind(), or null when none is.
+     *
+     * @param string $kind  the ref_kind name
+     */
     public static function refKind(string $kind): ?array
     {
         return self::$refKinds[$kind] ?? null;
@@ -144,6 +162,8 @@ final class TypedFields
      * field. Pre-existing violations are surfaced by an audit view instead.
      *
      * @param array $defs Canonical definitions, keyed by field key.
+     * @param array $values  [field key => raw value] being written; a key present with null, '' or [] counts as missing
+     * @param bool $isCreate  true on create, when a required field absent from $values is also an error
      */
     public static function checkRequired(array $defs, array $values, bool $isCreate): void
     {
@@ -171,6 +191,8 @@ final class TypedFields
      * 🔑 no row means "not set", which is what lets ten televisions carry three
      * smart-TV fields on three of them and nothing at all on the other seven.
      *
+     * @param array $schema  where the values live (see SHAPE OF A SCHEMA)
+     * @param int $ownerId  the row the values belong to (e.g. the CMDB object or asset id)
      * @param array $defs   Canonical definitions, keyed by field key.
      * @param array $values [field key => raw value]. Unknown keys throw.
      */
@@ -223,6 +245,11 @@ final class TypedFields
      *
      * Every message here is user-facing and deliberately unchanged from the
      * CMDB original — they are what the REST API has always returned.
+     *
+     * @param array $schema  where the values live (see SHAPE OF A SCHEMA); options and self_kind are read here
+     * @param array $def  one canonical definition (see SHAPE OF A DEFINITION)
+     * @param mixed $rawValue  the value as submitted, not yet trusted; never null or '' (those clear before this)
+     * @param int $ownerId  the row the value belongs to, so a ref cannot point at itself
      */
     public static function coerce(PDO $conn, array $schema, array $def, $rawValue, int $ownerId): ?array
     {
@@ -286,7 +313,12 @@ final class TypedFields
         }
     }
 
-    /** Existence + target check for a `ref` value, via the registry. */
+    /**
+     * Existence + target check for a `ref` value, via the registry.
+     *
+     * @param array $def  the ref field's canonical definition (ref_kind, ref_target, label)
+     * @param int $refId  the id the value points at, above 0
+     */
     private static function validateRef(PDO $conn, array $def, int $refId): void
     {
         $kind    = $def['ref_kind'] ?? '';
@@ -327,6 +359,7 @@ final class TypedFields
      * is the module's job, deliberately: the CMDB filters those joins by company,
      * and a generic labeller would happily read across one.
      *
+     * @param array $schema  where the values live (see SHAPE OF A SCHEMA)
      * @param array $defs      Canonical definitions, keyed by field key.
      * @param array $ownerIds  Owner row ids.
      * @return array [ownerId => [field key => value]]
@@ -373,7 +406,12 @@ final class TypedFields
         return $out;
     }
 
-    /** Stored string -> the PHP type a caller expects. */
+    /**
+     * Stored string -> the PHP type a caller expects.
+     *
+     * @param string $type  the field type
+     * @param mixed $raw  the stored column value, not null
+     */
     private static function castOut(string $type, $raw)
     {
         switch ($type) {
@@ -392,6 +430,8 @@ final class TypedFields
      * those rows is the caller's question. Pass only ids you have already
      * decided the actor may see.
      *
+     * @param string $kind  the ref_kind name; an unregistered kind, or one with no labels callable, gives []
+     * @param array $ids  the referenced ids, already cleared as visible to the actor
      * @return array [id => label] — ids with no row are simply absent.
      */
     public static function refLabels(PDO $conn, string $kind, array $ids): array
@@ -409,6 +449,9 @@ final class TypedFields
     /**
      * Parse a date/time to 'Y-m-d H:i:s' UTC (throwing twin of apiParseDate;
      * 400 on bad input).
+     *
+     * @param string $value  the submitted date or date-time, anything DateTimeImmutable reads; no zone means UTC
+     * @param string $field  the field key, named in the error message
      */
     public static function parseDate(string $value, string $field): string
     {

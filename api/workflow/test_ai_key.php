@@ -72,6 +72,16 @@ try {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 
+/**
+ * Sends a tiny prompt to the Anthropic Messages API to prove the key and model work, and
+ * returns the reply text with the token counts.
+ *
+ * Throws with the provider's own error message (or the HTTP code) when the call fails.
+ *
+ * @param string $apiKey  the plaintext key to test - typed in the form, or the decrypted saved key
+ * @param string $model  the model id typed in the form, already trimmed and non-empty
+ * @param bool $verifySsl  the form's verify-SSL tick; combined with SSL_VERIFY_PEER but not applied to the handle
+ */
 function wfTestAnthropic(string $apiKey, string $model, bool $verifySsl): array
 {
     $body = json_encode([
@@ -116,6 +126,16 @@ function wfTestAnthropic(string $apiKey, string $model, bool $verifySsl): array
     ];
 }
 
+/**
+ * Sends a tiny prompt to the OpenAI Chat Completions API to prove the key and model
+ * work, and returns the reply text with the token counts.
+ *
+ * Throws with the provider's own error message (or the HTTP code) when the call fails.
+ *
+ * @param string $apiKey  the plaintext key to test - typed in the form, or the decrypted saved key
+ * @param string $model  the model id typed in the form, already trimmed and non-empty
+ * @param bool $verifySsl  the form's verify-SSL tick; combined with SSL_VERIFY_PEER but not applied to the handle
+ */
 function wfTestOpenAI(string $apiKey, string $model, bool $verifySsl): array
 {
     $body = json_encode([

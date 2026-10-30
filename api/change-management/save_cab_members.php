@@ -16,6 +16,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('changes');
+requireModuleWriteJson('changes');   // Read only access (#180) changes nothing here
 
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 $changeId = (int)($input['change_id'] ?? 0);

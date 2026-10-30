@@ -10,6 +10,7 @@
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/rbac.php';
 require_once '../../includes/encryption.php';
 header('Content-Type: application/json');
 
@@ -18,6 +19,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('forms');
+requireCapabilityJson(Cap::FORMS_AI);   // settings tab - the same guard as test_ai_key.php; module access alone is not enough to rewrite a credential
 
 try {
     $data      = json_decode(file_get_contents('php://input'), true) ?: [];

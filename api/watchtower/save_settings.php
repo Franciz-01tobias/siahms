@@ -44,6 +44,18 @@ try {
         exit;
     }
 
+    // A section the analyst may not change is REFUSED, not quietly skipped: a
+    // "saved" reply for a change that was thrown away is worse than an error
+    // (GH #187). The settings page only sends the sections whose tab it shows,
+    // so an honest page never trips this.
+    $sentCards  = !empty($data['cards']) || array_key_exists('card_order', $data);
+    $sentCounts = !empty($data['items']) || isset($data['paused_hours']);
+    if (($sentCards && !$canCards) || ($sentCounts && !$canCounts)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'You do not have permission to change ' . ($sentCards && !$canCards ? 'the cards.' : 'what the counts include.')]);
+        exit;
+    }
+
     $conn->beginTransaction();
 
     // ---- Which cards appear -------------------------------------------------
@@ -57,6 +69,23 @@ try {
             // Absent means visible: a card can only be hidden by saying so.
             $visible = array_key_exists($card, $data['cards']) ? (int)(bool)$data['cards'][$card] : 1;
             $upsert->execute([WT_INSTALL_SCOPE, 'card.' . $card, $visible]);
+        }
+    }
+
+    // ---- The order of the cards (GH #187) ----------------------------------
+    // Shared by the whole install, guarded by the same permission as which cards
+    // appear. Stored only when it differs from the default, so an order that has
+    // been put back - or Reset (null) - lets a card added in a later release take
+    // its intended place. Unknown keys are dropped by the merge.
+    if ($canCards && array_key_exists('card_order', $data)) {
+        $order = is_array($data['card_order']) ? displayOrderMerge($data['card_order'], wtCardKeys()) : wtCardKeys();
+        if ($order === wtCardKeys()) {
+            $conn->prepare("DELETE FROM system_settings WHERE setting_key = 'watchtower_card_order'")->execute();
+        } else {
+            $conn->prepare(
+                "INSERT INTO system_settings (setting_key, setting_value) VALUES ('watchtower_card_order', ?)
+                 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+            )->execute([json_encode($order)]);
         }
     }
 

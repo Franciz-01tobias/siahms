@@ -17,10 +17,10 @@ $helpNav   = $helpNav  ?? ($helpTopic['sections'] ?? []);
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Help — <?php echo htmlspecialchars($helpHero); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../../assets/css/help.css?v=3">
+    <title><?php echo htmlspecialchars(pageTitle('system', 'Help', $helpHero)); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../../assets/css/help.css?v=6">
     <style>
         /* The only thing a help page should say for itself: its colour.
            See Help Page House Style §2 — help.css draws the hero, the badges,
@@ -41,7 +41,7 @@ $helpNav   = $helpNav  ?? ($helpTopic['sections'] ?? []);
         }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
 </head>

@@ -44,10 +44,16 @@ function knowledgeOpenAiKey(PDO $conn): string
  * Returns ['from','where','args'] as separate fragments — the cluster query has
  * to slot a LEFT JOIN between FROM and WHERE, and a single pre-joined blob makes
  * that impossible in a way that only breaks on one code path.
+ *
+ * @param int $lookbackDays  how many days back from now a ticket's closed_datetime may be
  */
 function gapWindowSql(PDO $conn, int $analystId, int $lookbackDays): array
 {
     [$tSql, $tArgs] = activeTenantFilter($conn, $analystId, 't');
+    // Every ticket in this window is sent to an embeddings provider, so a
+    // confidential one is left out of the analysis altogether (#62).
+    require_once __DIR__ . '/../ticket_sensitivity.php';
+    $tSql .= ticketAiExclusionSql($conn, 't');
     return [
         'from'  => "FROM tickets t
                     JOIN ticket_statuses s ON s.id = t.status_id AND s.is_closed = 1",
@@ -58,7 +64,11 @@ function gapWindowSql(PDO $conn, int $analystId, int $lookbackDays): array
     ];
 }
 
-/** Insert-or-update one knowledge_gap_tickets row from a partial field map. */
+/**
+ * Insert-or-update one knowledge_gap_tickets row from a partial field map.
+ *
+ * @param array $fields  knowledge_gap_tickets column => value to set; empty does nothing. Column names are not escaped - trusted keys only
+ */
 function gapUpsertTicket(PDO $conn, int $ticketId, array $fields): void
 {
     if (!$fields) {
@@ -73,7 +83,11 @@ function gapUpsertTicket(PDO $conn, int $ticketId, array $fields): void
     $conn->prepare($sql)->execute(array_merge([$ticketId], array_values($fields)));
 }
 
-/** How many tickets are in the window, and how many already have an embedding. */
+/**
+ * How many tickets are in the window, and how many already have an embedding.
+ *
+ * @param int $lookbackDays  how many days back from now a ticket's closed_datetime may be
+ */
 function gapWindowCounts(PDO $conn, int $analystId, int $lookbackDays): array
 {
     $w = gapWindowSql($conn, $analystId, $lookbackDays);
@@ -98,6 +112,10 @@ function gapWindowCounts(PDO $conn, int $analystId, int $lookbackDays): array
  *
  * Resumable by design — every vector is cached in knowledge_gap_tickets, so a
  * closed tab, a timeout or a rate limit costs only the batch in flight.
+ *
+ * @param int $lookbackDays  how many days back from now a ticket's closed_datetime may be
+ * @param int $batch  how many tickets to embed this call, clamped to 1-50
+ * @param string $openaiKey  the OpenAI key from knowledgeOpenAiKey(); '' skips the batch
  */
 function gapEmbedBatch(PDO $conn, int $analystId, int $lookbackDays, int $batch, string $openaiKey): array
 {
@@ -169,6 +187,8 @@ function gapEmbedBatch(PDO $conn, int $analystId, int $lookbackDays, int $batch,
  * $opts['force_wording'] runs the free engine even when a key exists — used by
  * the test harness so the clustering logic can be exercised without spending
  * money on synthetic data.
+ *
+ * @param array $opts  optional: lookback_days (int, else the setting) and force_wording (true runs the free wording engine)
  */
 function gapAnalyse(PDO $conn, int $analystId, array $opts = []): array
 {
@@ -334,6 +354,8 @@ function gapAnalyse(PDO $conn, int $analystId, array $opts = []): array
  * only ever compared against other tickets, never an absolute bar. The one place
  * an absolute bar IS applied (interview vs draft) uses the real plain-text
  * bundle from writeupTicketBundle() instead.
+ *
+ * @param array $ticketIds  the ticket ids to score; empty gives []
  */
 function gapBulkRichness(PDO $conn, array $ticketIds): array
 {
@@ -397,6 +419,8 @@ function gapBulkRichness(PDO $conn, array $ticketIds): array
  * changes as richer examples arrive, so any identity built on "same seed" or
  * "same subject" breaks on the next run and re-raises something the analyst has
  * already dismissed. Overlap survives both.
+ *
+ * @param array $clusters  clusters from writeupCluster() over gapAnalyse()'s candidates (seed + members of {item, similarity})
  */
 function gapPersistClusters(PDO $conn, array $clusters): int
 {
@@ -516,7 +540,13 @@ function gapClearOpenClusters(PDO $conn): void
     $conn->exec("DELETE FROM knowledge_gap_clusters WHERE status = 'open'");
 }
 
-/** The assistant's opening line, in plain English. */
+/**
+ * The assistant's opening line, in plain English.
+ *
+ * @param int $read  how many closed tickets were read
+ * @param int $days  the look-back window in days
+ * @param int $clusters  how many gap clusters were found
+ */
 function gapSummarySentence(int $read, int $days, int $clusters): string
 {
     $t = 'I read ' . number_format($read) . ' closed ' . ($read === 1 ? 'ticket' : 'tickets')

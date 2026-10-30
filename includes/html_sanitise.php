@@ -97,6 +97,9 @@ function sanitiseUserHtml(string $html): string {
 /**
  * Walk a node's children, removing or unwrapping anything not allow-listed.
  * Iterates over a SNAPSHOT of the child list because the loop mutates it.
+ *
+ * @param DOMDocument $doc  the document the user's HTML was loaded into
+ * @param DOMNode $node     the node whose children are cleaned, in place and recursively
  */
 function sanitiseUserHtmlNode(DOMDocument $doc, DOMNode $node): void {
     $children = [];

@@ -42,6 +42,7 @@ return [
         'tags_heading'       => 'Filter by Tags',
         'folders_heading'    => 'Folders',
         'new_article'        => '+ New Article',
+        'new_article_tip'    => 'New article',
         'recycle_bin'        => 'Recycle Bin',
         'no_tags'            => 'No tags yet',
     ],
@@ -135,6 +136,8 @@ return [
         // reader shipped. Keep it accurate.
         'audience_hint_customer' => 'Appears in the Help Centre of the self-service portal, so anyone signed in there can read it. The website chat will never use it, because a chat visitor is an anonymous stranger.',
         'audience_hint_public'   => 'The website chat can answer visitors from this article. Only mark things public that you would happily show a stranger.',
+        // GH #177: added to the hint when a change of audience would publish documents.
+        'audience_docs_warning'  => 'This article also has {n} document(s) shown in the Help Centre: once it is published and saved, customers who can read it can download them. Hide any you want to keep internal in the Documents section below.',
         'field_company'    => 'Company',
         'company_shared'   => 'Shared with all companies',
         'documents_after_save' => 'Save the article first, then reopen it to attach documents.',
@@ -142,6 +145,8 @@ return [
         'cancel'           => 'Cancel',
         'save'             => 'Save',
         'version'          => 'Version',
+        'fullscreen'       => 'Full screen',
+        'fullscreen_title' => 'Just the editor, filling the screen. Press Esc to come back.',
         'create_tag'       => 'Create "{name}"',
     ],
 
@@ -225,6 +230,9 @@ return [
         'detail_opened'     => 'Opened to everyone',
         'detail_wiped'      => 'Cleared {count} entries, because the list means the opposite thing in the other mode',
         'detail_moved'      => 'Into {folder}',
+        // GH #177: a document on the article shown in / hidden from the Help Centre.
+        'detail_doc_shown'  => '{name}: shown in the Help Centre',
+        'detail_doc_hidden' => '{name}: hidden from the Help Centre',
 
         'principal_analyst'   => 'analyst',
         'principal_team'      => 'team',
@@ -579,6 +587,10 @@ return [
 
     'help' => [
         'guide'          => 'Guide',
+        // The in-depth topic pages (knowledge/help/), first: documents in the Help Centre (GH #177).
+        'topics_title'   => 'In depth',
+        'topics_body'    => 'Longer guides to the parts of the knowledge base that need more explaining than a paragraph.',
+        'back_to_guide'  => 'Back to the Knowledge guide',
         'nav_overview'   => 'Overview',
         'nav_writing'    => 'Writing articles',
         'nav_review'     => 'Review workflow',
@@ -687,7 +699,7 @@ return [
 
         'writing_heading' => 'Writing articles — step by step',
         'writing_intro'   => "A good knowledge article answers a single question clearly and completely. Whether it's a how-to guide, a troubleshooting runbook, or a policy document, the goal is the same: someone who reads it should be able to act on it without needing to ask a colleague.",
-        'writing_step1'   => '<strong>Click "+ New Article"</strong> in the sidebar to open the article editor. This gives you a blank canvas with all the fields you need.',
+        'writing_step1'   => '<strong>Click New</strong> at the top right to open the article editor. This gives you a blank canvas with all the fields you need.',
         'writing_step2'   => '<strong>Give it a clear title</strong> &mdash; use the kind of phrasing someone would actually search for. "How to reset a user\'s password in Active Directory" is better than "Password Reset Procedure v2.1".',
         'writing_step3'   => '<strong>Add tags</strong> &mdash; type in the tag input and press Enter or comma to add. Tags let people find your article through filtering as well as search. Use a mix of broad tags (e.g. "Active Directory") and specific ones (e.g. "password-reset").',
         'writing_step4'   => '<strong>Assign an owner</strong> &mdash; the owner is the person responsible for keeping the article up to date. When it comes up for review, the owner gets notified.',
@@ -697,6 +709,7 @@ return [
         'writing_step7'   => "<strong>Save</strong> &mdash; your article is saved as a draft. You can come back and edit it anytime. When you're happy with it, submit it for review or publish it directly depending on your team's workflow.",
         'writing_visibility_callout' => '<strong>Why your chat widget might not be answering:</strong> every article starts as <em>Analysts only</em>, including ones written before this setting existed. The website chat can only use articles where <em>Also allow anyone on the internet</em> is ticked, so tick it on a few of your customer-facing ones and it will start using them. That default is deliberate &mdash; nothing you wrote for internal use gets shown to the public unless you say so.',
         'writing_tip'     => 'Every time you save significant changes, use the "Save as new version" option. This creates a versioned snapshot so you can always look back at what the article said previously. Version numbers display on the article view so readers know how current it is.',
+        'writing_fullscreen' => 'Want more room to write? <strong>Full screen</strong>, beside Save, shows just the editor filling the whole window. Press <strong>Esc</strong> to come back. (Desktop only.)',
 
         'review_heading' => 'Review workflow — getting articles approved',
         'review_intro'   => 'For teams that need quality control over published content, the review workflow ensures every article is checked by a second pair of eyes before it goes live. This is especially valuable for customer-facing documentation, compliance procedures, and technical runbooks where accuracy matters.',

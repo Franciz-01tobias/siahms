@@ -58,6 +58,8 @@ function webchatRequestOrigin(): string
  * Emit CORS + JSON headers. Pass the request's origin to echo it back (required for the
  * browser to accept the response on a cross-origin call); pass '*' when there is no
  * origin (same-origin / curl). Call once the origin has been authorised.
+ *
+ * @param ?string $allowOrigin  the origin to echo in Access-Control-Allow-Origin, or '*'; null or '' sends none
  */
 function webchatPublicHeaders(?string $allowOrigin = null): void
 {
@@ -83,7 +85,12 @@ function webchatHandlePreflight(): void
     }
 }
 
-/** Emit a JSON error and stop. */
+/**
+ * Emit a JSON error and stop.
+ *
+ * @param string $msg  the error text for the widget, safe to show a visitor
+ * @param int $code  the HTTP status code
+ */
 function webchatFail(string $msg, int $code = 400): void
 {
     http_response_code($code);
@@ -95,6 +102,8 @@ function webchatFail(string $msg, int $code = 400): void
  * Load the widget for a public request, enforce active + origin allowlist, and set the
  * CORS headers. Returns the widget row (joined to its channel). Exits with JSON on any
  * failure — so the caller can treat the return as authorised.
+ *
+ * @param string $key  the public widget key from the request - untrusted; '' fails with 404
  */
 function webchatPublicResolve(PDO $conn, string $key): array
 {
@@ -121,6 +130,9 @@ function webchatPublicResolve(PDO $conn, string $key): array
 /**
  * Load a conversation by its token, scoped to the widget's channel (so a token issued
  * for one widget can't be replayed against another). Null if not found.
+ *
+ * @param string $token  the conversation token the widget holds - untrusted; '' gives null
+ * @param int $channelId  the widget's messaging_channels id the conversation must belong to
  */
 function webchatLoadConversation(PDO $conn, string $token, int $channelId): ?array
 {
@@ -139,7 +151,11 @@ function webchatLoadConversation(PDO $conn, string $token, int $channelId): ?arr
     return $row ?: null;
 }
 
-/** Cap new conversations per IP per minute. Exits (429) on breach. */
+/**
+ * Cap new conversations per IP per minute. Exits (429) on breach.
+ *
+ * @param string $ip  the visitor's IP address; '' skips the check
+ */
 function webchatRateLimitStart(PDO $conn, string $ip): void
 {
     if ($ip === '') {

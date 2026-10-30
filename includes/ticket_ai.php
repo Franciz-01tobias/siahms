@@ -199,7 +199,11 @@ function ticketAiTranscript(PDO $conn, int $ticketId, array $opts = []): array
     ];
 }
 
-/** How many messages have arrived since the summary was written. */
+/**
+ * How many messages have arrived since the summary was written.
+ *
+ * @param ?int $lastEmailId  the last emails.id the summary read; null counts every message on the ticket
+ */
 function ticketAiMessagesSince(PDO $conn, int $ticketId, ?int $lastEmailId): int
 {
     if ($lastEmailId === null) {
@@ -217,7 +221,11 @@ function ticketAiMessagesSince(PDO $conn, int $ticketId, ?int $lastEmailId): int
 /** The two things this file stores, and the only two values `kind` may take. */
 const TICKET_AI_KINDS = ['summary', 'read'];
 
-/** The newest stored summary (or briefing) for a ticket, or null. */
+/**
+ * The newest stored summary (or briefing) for a ticket, or null.
+ *
+ * @param string $kind  'summary' or 'read'; anything else is treated as 'summary'
+ */
 function ticketAiLatestSummary(PDO $conn, int $ticketId, string $kind = 'summary'): ?array
 {
     // Never interpolated from a request: an unknown kind falls back rather than

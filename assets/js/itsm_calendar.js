@@ -16,6 +16,7 @@ let draggedEventId = null;
 function cal(key, english, params) {
     return window.tf ? window.tf('calendar.' + key, english, params) : english;
 }
+/** Translates a key from the shared common.calendar language section, or returns the English given at the call site. */
 function calCommon(key, english) {
     return window.tf ? window.tf('common.calendar.' + key, english) : english;
 }
@@ -33,12 +34,18 @@ const MONTH_KEYS = ['january', 'february', 'march', 'april', 'may', 'june',
 const MONTH_EN   = ['January', 'February', 'March', 'April', 'May', 'June',
                     'July', 'August', 'September', 'October', 'November', 'December'];
 
+/** Short weekday names, Sunday first, in the user's language. */
 function dayNames()   { return DAY_KEYS.map((k, i) => calCommon('weekdays_short.' + k, DAY_EN[i])); }
+/** Full month names, January first, in the user's language. */
 function monthNames() { return MONTH_KEYS.map((k, i) => calCommon('months.' + k, MONTH_EN[i])); }
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    loadCategories();
+    // ?new=1: New in the Table view's action row lands here (#185). After the
+    // categories, which the event form's category list is built from.
+    loadCategories().then(function () {
+        if (new URLSearchParams(location.search).get('new') === '1') openEventModal();
+    });
     renderCalendar();
 });
 
@@ -437,6 +444,7 @@ function formatEventTime(event) {
     const start = new Date(event.start_datetime.replace(' ', 'T'));
     const end = event.end_datetime ? new Date(event.end_datetime.replace(' ', 'T')) : null;
 
+    /** Formats a time as 12-hour clock with AM/PM, leaving out the minutes on the hour. */
     const formatTime = (d) => {
         let hours = d.getHours();
         const minutes = d.getMinutes();
@@ -723,6 +731,7 @@ function handleDragStart(eventId, e) {
     e.target.classList.add('dragging');
 }
 
+/** Clears the drag highlight from the month view and forgets the dragged event when a drag finishes. */
 function handleDragEnd(e) {
     e.target.classList.remove('dragging');
     document.querySelectorAll('.month-day.drag-over').forEach(el => {
@@ -731,6 +740,7 @@ function handleDragEnd(e) {
     draggedEventId = null;
 }
 
+/** Allows a drop on a month-view day and highlights that day as the only drop target. */
 function handleDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -743,6 +753,7 @@ function handleDragOver(e) {
     }
 }
 
+/** Removes the drop highlight when the pointer leaves a month-view day for somewhere outside it. */
 function handleDragLeave(e) {
     const dayCell = e.target.closest('.month-day');
     const relatedCell = e.relatedTarget ? e.relatedTarget.closest('.month-day') : null;
@@ -751,6 +762,10 @@ function handleDragLeave(e) {
     }
 }
 
+/**
+ * Moves the dropped event to the new day in the month view, keeping its times and length, saves it
+ * through save_event.php and redraws the calendar. Dropping on the same day does nothing.
+ */
 async function handleDrop(newDateStr, e) {
     e.preventDefault();
     e.stopPropagation();

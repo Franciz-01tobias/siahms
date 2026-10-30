@@ -53,7 +53,7 @@ return [
         'status_inactive'    => 'Inactive',
         'empty_none_title'   => 'No forms yet',
         'empty_match_title'  => 'No matching forms',
-        'empty_none_body'    => 'Click <strong>New form</strong> to create your first one.',
+        'empty_none_body'    => 'Click <strong>New</strong> to create your first one.',
         'empty_match_body'   => 'Try a different search term, or clear the search box.',
         'unknown_user'       => '—',
         'fill_title'         => 'Fill in this form',
@@ -143,7 +143,7 @@ return [
 
     // ── Editor / builder (forms/edit/index.php) ─────────────────────
     'editor' => [
-        'page_title'       => 'Service Desk - Edit form',
+        'page_title'       => 'Edit form',
         'title_new'        => 'New form',
         'title_edit'       => 'Edit form',
         'unsaved'          => 'Unsaved changes',
@@ -266,6 +266,9 @@ return [
         'drag_reorder'      => 'Drag to reorder',
         'option_ph'         => 'Option {n}',
         'default_option'    => 'Option 1',
+        // GH #190 phase 4: an answer that counts as an exception in a task's evidence.
+        'exception'       => 'Exception',
+        'exception_title' => 'Choosing this answer counts as an exception in a task\'s evidence report - Warning or Failure on a check, say',
         'add_option'        => '+ Add option',
         'label_ph'          => 'Field label...',
         'section_ph'        => 'Section heading...',
@@ -572,7 +575,7 @@ return [
 
     // ── Fill page (forms/fill.php) ──────────────────────────────────
     'fill' => [
-        'page_title'       => 'Service Desk - Fill Form',
+        'page_title'       => 'Fill Form',
         'loading'          => 'Loading form...',
         'no_id'            => 'No form ID specified',
         'logo_alt'         => 'Company Logo',
@@ -687,7 +690,7 @@ return [
         'none_yet'     => 'No collections exist yet. Create one in Forms settings.',
     ],
     'subs' => [
-        'page_title'        => 'Service Desk - Form Submissions',
+        'page_title'        => 'Form Submissions',
         'page_title_named'  => 'Service Desk - {title} Submissions',
         'back'              => 'Back',
         'heading'           => 'Submissions',
@@ -763,6 +766,14 @@ return [
         'tab_layout'        => 'Layout',
         'tab_collections'   => 'Collections',
         'tab_ai'            => 'AI',
+        'tab_access'        => 'Access',
+        'access_heading'    => 'Who can design forms',
+        'access_intro'      => 'Designing a form includes choosing who approves its requests and what happens after them. Restrict it to keep approvers and reviewers out of the designer.',
+        'design_who'        => 'Who can design forms',
+        'design_everyone'   => 'Everyone with Forms',
+        'design_permission' => 'Only people with "Design forms"',
+        'design_help'       => 'Build a role with "Design forms" in System → Roles and give it to the people who should keep designing, then choose the second option. Administrators always can.',
+        'design_holders'    => 'Would keep designing ({count}):',
         'layout_heading'    => 'Layout Settings',
         'layout_intro'      => 'Configure how forms appear when users fill them in and in the form preview.',
         'logo_alignment'    => 'Logo Alignment',
@@ -869,7 +880,7 @@ return [
         // Section 2: Building forms
         'building_title' => 'Building forms',
         'building_intro' => 'The form builder is where you design your forms. You start with a title and optional description, then add fields one by one. The builder gives you a live preview so you can see exactly how the finished form will look before sharing it.',
-        'building_step1' => '<strong>Create a new form</strong> &mdash; click the "New Form" button in the sidebar. Give your form a title and, optionally, a description that explains what the form is for.',
+        'building_step1' => '<strong>Create a new form</strong> &mdash; click <strong>New</strong> at the top right. Give your form a title and, optionally, a description that explains what the form is for.',
         'building_step2' => '<strong>Add fields</strong> &mdash; click the "Add" button to open the field type menu. There are eleven types: <strong>Text input</strong> for short answers, <strong>Text area</strong> for longer responses, <strong>Email</strong> and <strong>Number</strong> for values that need checking as they are typed, <strong>Dropdown</strong> and <strong>Radio buttons</strong> for one choice from a list, <strong>Checkbox</strong> for a single yes/no, <strong>Checkboxes</strong> for several answers at once, <strong>Date / time</strong>, <strong>Lookup</strong> to pick a real record from elsewhere in FreeITSM, and <strong>Section heading</strong> to break a long form into parts.',
         'building_step3' => '<strong>Configure each field</strong> &mdash; give every field a label and decide whether it should be required. For dropdowns, enter the list of options that users can choose from.',
         'building_step4' => '<strong>Reorder fields</strong> &mdash; drag and drop fields using the handle to arrange them in the order you want. The form will display fields in exactly this order when filled in.',
@@ -943,7 +954,14 @@ return [
         'settings_center_body'  => 'Logo centred above the form title. The default option, giving a balanced and symmetrical appearance.',
         'settings_right_title' => 'Right',
         'settings_right_body'  => 'Logo aligned to the right edge. Useful when form fields start on the left and you want the logo out of the way.',
-        'settings_tip'   => 'Navigate to Settings from the header navigation bar. Changes take effect immediately on any form that is opened after saving.',
+        'access_body'    => 'Who can do what in Forms:',
+        'access_design_title' => 'Who can design forms',
+        'access_design_body'  => 'Settings → Access can limit designing - including choosing approvers and what happens next - to people with "Design forms" in System → Roles. Administrators always can. The tab lists who would keep designing before you switch.',
+        'access_approvers_title' => 'Approvers need no Forms access',
+        'access_approvers_body'  => 'Somebody named as a form\'s approver opens Form approvals from the launcher and decides their own requests, without seeing the designer or anybody else\'s submissions.',
+        'access_readonly_title' => 'Read only',
+        'access_readonly_body'  => 'Give a reviewer Read only access to Forms in System → Modules: they can read forms and submissions and export them, and change nothing.',
+        'settings_tip'   =>'Navigate to Settings from the header navigation bar. Changes take effect immediately on any form that is opened after saving.',
 
         // Section 7: Quick tips
         'tips_title' => 'Quick tips',

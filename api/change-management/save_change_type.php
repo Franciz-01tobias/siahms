@@ -25,6 +25,13 @@ try {
     $is_default    = !empty($data['is_default']) ? 1 : 0;
     $display_order = (int)($data['display_order'] ?? 0);
     $is_active     = !empty($data['is_active']) ? 1 : 0;
+    // How it is approved (#180): review (the CAB or the approver decides first) or
+    // emergency (may go ahead; decided afterwards). Nothing becomes pre-authorised by
+    // its type - that only comes from an approved template.
+    $approval_route = (string)($data['approval_route'] ?? 'review');
+    if (!in_array($approval_route, ['review', 'emergency'], true)) {
+        throw new Exception('Unknown approval route');
+    }
 
     if ($name === '') {
         throw new Exception('Name is required');
@@ -44,15 +51,15 @@ try {
 
     if ($id) {
         $sql = "UPDATE change_types
-                   SET name = ?, colour = ?, is_default = ?, display_order = ?, is_active = ?
+                   SET name = ?, colour = ?, approval_route = ?, is_default = ?, display_order = ?, is_active = ?
                  WHERE id = ?";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$name, $colour ?: null, $is_default, $display_order, $is_active, $id]);
+        $stmt->execute([$name, $colour ?: null, $approval_route, $is_default, $display_order, $is_active, $id]);
     } else {
-        $sql = "INSERT INTO change_types (name, colour, is_default, display_order, is_active)
-                VALUES (?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO change_types (name, colour, approval_route, is_default, display_order, is_active)
+                VALUES (?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$name, $colour ?: null, $is_default, $display_order, $is_active]);
+        $stmt->execute([$name, $colour ?: null, $approval_route, $is_default, $display_order, $is_active]);
     }
 
     $hasDefault = (int) $conn->query("SELECT COUNT(*) FROM change_types WHERE is_default = 1")->fetchColumn();

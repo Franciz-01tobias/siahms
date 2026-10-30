@@ -29,7 +29,11 @@ require_once dirname(__DIR__, 3) . '/includes/service_context.php';
 require_once dirname(__DIR__, 3) . '/includes/services/service_status.php';
 require_once dirname(__DIR__, 3) . '/includes/service_impact_levels.php';
 
-/** Map a ServiceError raised by the shared service to the API's error response. */
+/**
+ * Map a ServiceError raised by the shared service to the API's error response.
+ *
+ * @param ServiceError $e  the error ServiceStatusService threw - its kind picks the status, errorCode and message pass through
+ */
 function apiServiceStatusFail(ServiceError $e): void {
     apiError(serviceErrorHttpStatus($e->kind), $e->errorCode, $e->getMessage());
 }
@@ -57,6 +61,7 @@ function apiServiceStatusSubquery(PDO $conn): string {
         LIMIT 1), $default)";
 }
 
+/** Every impact level's colour and severity order, keyed by name - read once per request and cached. */
 function apiServiceStatusImpactMeta(PDO $conn): array {
     static $cache = null;
     if ($cache === null) {
@@ -68,6 +73,12 @@ function apiServiceStatusImpactMeta(PDO $conn): array {
     return $cache;
 }
 
+/**
+ * Shapes a service row for the API, with its current status (the default impact level
+ * when nothing is affecting it) and that status's colour and severity.
+ *
+ * @param array $r  a status_services row, with current_status from apiServiceStatusSubquery() (null = default level)
+ */
 function apiSerializeService(PDO $conn, array $r): array {
     $meta = apiServiceStatusImpactMeta($conn);
     $statusName = $r['current_status'] ?? defaultImpactLevel($conn)['name'];
@@ -85,6 +96,11 @@ function apiSerializeService(PDO $conn, array $r): array {
     ];
 }
 
+/**
+ * Loads one service row with its current status, or answers 404 and stops.
+ *
+ * @param int $serviceId  the status_services id
+ */
 function apiLoadService(PDO $conn, int $serviceId): array {
     $stmt = $conn->prepare(
         "SELECT ss.*, " . apiServiceStatusSubquery($conn) . " AS current_status
@@ -98,6 +114,10 @@ function apiLoadService(PDO $conn, int $serviceId): array {
     return $row;
 }
 
+/**
+ * The SELECT for service incidents, with the status's name, colour and resolved flag and
+ * the creator's name.
+ */
 function apiServiceIncidentSelect(): string {
     return "SELECT si.*, st.name AS status_name, st.is_resolved AS status_is_resolved, st.colour AS status_colour,
                    a.full_name AS created_by_name
@@ -106,6 +126,12 @@ function apiServiceIncidentSelect(): string {
             LEFT JOIN analysts a ON a.id = si.created_by_id";
 }
 
+/**
+ * Shapes an incident row for the API, with every service it affects and the impact on
+ * each, worst first.
+ *
+ * @param array $r  the status_incidents row as apiServiceIncidentSelect() loads it, with status and creator names
+ */
 function apiSerializeIncident(PDO $conn, array $r): array {
     $svc = $conn->prepare(
         "SELECT sis.service_id, ss.name AS service_name,
@@ -145,6 +171,11 @@ function apiSerializeIncident(PDO $conn, array $r): array {
     ];
 }
 
+/**
+ * Loads one incident row (apiServiceIncidentSelect), or answers 404 and stops.
+ *
+ * @param int $incidentId  the status_incidents id
+ */
 function apiLoadIncident(PDO $conn, int $incidentId): array {
     $stmt = $conn->prepare(apiServiceIncidentSelect() . " WHERE si.id = ?");
     $stmt->execute([$incidentId]);
@@ -189,6 +220,10 @@ function apiStatusServicesList(PDO $conn, array $apiKey, array $params, array $b
     }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
 }
 
+/**
+ * GET /service-status/services/{id} - one service with its open (unresolved) incidents,
+ * most recently updated first.
+ */
 function apiStatusServicesGet(PDO $conn, array $apiKey, array $params, array $body): void {
     $service = apiSerializeService($conn, apiLoadService($conn, $params[0]));
 
@@ -208,6 +243,7 @@ function apiStatusServicesGet(PDO $conn, array $apiKey, array $params, array $bo
     apiRespond($service);
 }
 
+/** POST /service-status/services - creates a service through ServiceStatusService and returns it. */
 function apiStatusServicesCreate(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         $id = ServiceStatusService::saveService($conn, ActorContext::fromApiKey($apiKey), $body);
@@ -215,6 +251,10 @@ function apiStatusServicesCreate(PDO $conn, array $apiKey, array $params, array 
     } catch (ServiceError $e) { apiServiceStatusFail($e); }
 }
 
+/**
+ * PATCH /service-status/services/{id} - updates a service through ServiceStatusService
+ * and returns it.
+ */
 function apiStatusServicesUpdate(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         $id = ServiceStatusService::saveService($conn, ActorContext::fromApiKey($apiKey), array_merge($body, ['id' => (int)$params[0]]));
@@ -222,6 +262,7 @@ function apiStatusServicesUpdate(PDO $conn, array $apiKey, array $params, array 
     } catch (ServiceError $e) { apiServiceStatusFail($e); }
 }
 
+/** DELETE /service-status/services/{id} - deletes a service through ServiceStatusService. */
 function apiStatusServicesDelete(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         ServiceStatusService::deleteService($conn, ActorContext::fromApiKey($apiKey), (int)$params[0]);
@@ -284,6 +325,7 @@ function apiStatusIncidentsList(PDO $conn, array $apiKey, array $params, array $
     ]);
 }
 
+/** GET /service-status/incidents/{id} - one incident with the services it affects. */
 function apiStatusIncidentsGet(PDO $conn, array $apiKey, array $params, array $body): void {
     apiRespond(apiSerializeIncident($conn, apiLoadIncident($conn, $params[0])));
 }
@@ -304,6 +346,7 @@ function apiStatusIncidentsUpdate(PDO $conn, array $apiKey, array $params, array
     } catch (ServiceError $e) { apiServiceStatusFail($e); }
 }
 
+/** DELETE /service-status/incidents/{id} - deletes an incident through ServiceStatusService. */
 function apiStatusIncidentsDelete(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         ServiceStatusService::deleteIncident($conn, ActorContext::fromApiKey($apiKey), (int)$params[0]);
@@ -331,6 +374,7 @@ function apiServiceIncidentStatusesList(PDO $conn, array $apiKey, array $params,
     }, $rows));
 }
 
+/** GET /service-impact-levels - the impact levels, in severity order. */
 function apiServiceImpactLevelsList(PDO $conn, array $apiKey, array $params, array $body): void {
     $rows = $conn->query(
         "SELECT id, name, colour, is_default, severity_order, is_active

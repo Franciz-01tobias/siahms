@@ -20,6 +20,8 @@ $analyst_name = $analyst_name ?? ($_SESSION['analyst_name'] ?? 'Analyst');
 require_once __DIR__ . '/functions.php';
 
 require_once __DIR__ . '/module-colors.php';
+require_once __DIR__ . '/app_sidebar.php';   // the optional module sidebar (#124)
+require_once __DIR__ . '/display_order.php';   // each analyst's own module order (GH #187)
 
 // Bootstrap i18n so every module that includes this header gets t() for free.
 // Idempotent — pages that already initialised it (tickets, process-mapper) are fine.
@@ -44,6 +46,11 @@ if (!empty($_SESSION['password_expired'])) {
 // Module definitions - add new modules here.
 // Display names resolve via t('common.modules.<key>.name') so adding a module means
 // one entry here + one entry in lang/<locale>/common.php's 'modules' array per language.
+// The ORDER here is the default order. Each analyst can choose their own in
+// Preferences (GH #187); a module added here appears for them automatically, in
+// its default place - see includes/display_order.php. The home page, the ⌘K
+// palette and the Files start menu all draw from this list through
+// analystVisibleModules(), so a new module needs no other launcher edited.
 $modules = [
     'watchtower' => [
         'name' => t('common.modules.watchtower.name'),
@@ -107,6 +114,24 @@ $modules = [
         'path' => 'contracts/',
         'icon' => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="12" y1="9" x2="8" y2="9"></line>'
     ],
+    'domains' => [
+        'name' => t('common.modules.domains.name'),
+        'path' => 'domains/',
+        // A globe with a padlock: the Wiki already has the plain globe, and a
+        // domain register here is as much about protecting names as listing them.
+        'icon' => '<path d="M20.9 13.5A10 10 0 1 0 12 22"></path><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10"></path><path d="M12 2a15.3 15.3 0 0 0-4 10 15.3 15.3 0 0 0 4 10"></path><rect x="15" y="17" width="7" height="5" rx="1"></rect><path d="M16.5 17v-1.5a2 2 0 0 1 4 0V17"></path>'
+    ],
+    'people' => [
+        'name' => t('common.modules.people.name'),
+        'path' => 'people/',
+        'icon' => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>'
+    ],
+    'files' => [
+        'name' => t('common.modules.files.name'),
+        'path' => 'files/',
+        // A folder with an upward arrow: files going OUT to someone.
+        'icon' => '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><polyline points="9 14 12 11 15 14"></polyline><line x1="12" y1="11" x2="12" y2="17"></line>'
+    ],
     'service-status' => [
         'name' => t('common.modules.service-status.name'),
         'path' => 'service-status/',
@@ -136,7 +161,7 @@ $modules = [
         'icon' => '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>'
     ],
     'checklists' => [
-        'name' => 'Checklists',
+        'name' => t('common.modules.checklists.name'),
         'path' => 'checklists/',
         'icon' => '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="m9 14 2 2 4-4"></path>'
     ],
@@ -144,6 +169,12 @@ $modules = [
         'name' => t('common.modules.tasks.name'),
         'path' => 'tasks/',
         'icon' => '<path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>'
+    ],
+    'projects' => [
+        'name' => t('common.modules.projects.name'),
+        'path' => 'projects/',
+        // Staggered bars - a timeline at a glance, apart from Tasks' tick-box.
+        'icon' => '<rect x="3" y="4" width="10" height="4" rx="1"></rect><rect x="7" y="10" width="11" height="4" rx="1"></rect><rect x="11" y="16" width="10" height="4" rx="1"></rect>'
     ],
     'cmdb' => [
         'name' => t('common.modules.cmdb.name'),
@@ -216,9 +247,12 @@ $modules = [
         border-radius: 8px;
         box-shadow: 0 6px 30px rgba(0, 0, 0, 0.25);
         padding: 20px;
-        /* Widened to 460px so the 4-column grid (5 rows for 20 modules)
-           has breathing room for the icon + label per cell. */
-        min-width: 460px;
+        /* 5 columns (Ed, 3.6.0): with 26 modules a 4-column grid ran off the bottom
+           of the screen. Widened to fit, and it scrolls inside itself on a short
+           window rather than spilling past the bottom edge. */
+        min-width: 570px;
+        max-height: calc(100vh - 80px);
+        overflow-y: auto;
         z-index: 1000;
         display: none;
     }
@@ -238,7 +272,7 @@ $modules = [
 
     .waffle-modules {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 8px;
     }
 
@@ -249,7 +283,8 @@ $modules = [
        doing"), and it lives here rather than in the ⌘K palette on purpose: the
        control you used to LEAVE a module is the one you come back through, it
        is already the mobile drawer at 360px, and it disturbs no keyboard path —
-       ⌘K then Enter still means "go to Watchtower", as it always has.
+       ⌘K then Enter still means "go to my first module" (Watchtower unless the
+       analyst has reordered their modules, GH #187).
        ==================================================================== */
     .waffle-tabs {
         display: flex;
@@ -529,6 +564,7 @@ $modules = [
             width: 86vw;
             max-width: 360px;
             min-width: 0;
+            max-height: none;           /* the desktop cap would cut the full-height drawer short */
             border-radius: 0;
             padding: 14px 14px calc(16px + env(safe-area-inset-bottom, 0px));
             overflow-y: auto;
@@ -645,8 +681,16 @@ function renderWaffleMenuButton() {
     <?php
 }
 
+/**
+ * Renders the waffle drawer: the module launcher (System for administrators
+ * only, every other module filtered by the analyst's allowed modules) and the
+ * Recent tab, whose trail ships empty and is fetched the first time it opens.
+ *
+ * @param mixed $modules  the $modules list at the top of this file: key => [name, path, icon SVG markup]
+ * @param mixed $current_module  the key of the module being shown, highlighted in the drawer
+ * @param mixed $path_prefix  relative path from the page to the app root, e.g. '../'; not used here (links use BASE_URL)
+ */
 function renderWaffleMenuPanel($modules, $current_module, $path_prefix) {
-    $allowed = $_SESSION['allowed_modules'] ?? null;
     ?>
     <div class="waffle-panel" id="wafflePanel">
         <div class="waffle-panel-header">
@@ -673,15 +717,12 @@ function renderWaffleMenuPanel($modules, $current_module, $path_prefix) {
 
         <div class="waffle-tabpanel active" id="waffleTabModules" role="tabpanel">
         <div class="waffle-modules">
-            <?php foreach ($modules as $key => $module):
-                // System visibility is governed by admin status alone (not the per-analyst
-                // module list) — so an admin with module restrictions still sees it, and a
-                // non-admin never does. All other modules honour the allowed-modules list.
-                if ($key === 'system') {
-                    if (!sessionIsAdmin()) continue;
-                } elseif ($allowed !== null && !in_array($key, $allowed)) {
-                    continue;
-                }
+            <?php
+            // In the analyst's own order, filtered exactly as before (System for admins
+            // only, the rest by allowed modules, the Forms-approver inbox) - one helper
+            // shared with the home page, ⌘K and the Files start menu (GH #187).
+            foreach (analystVisibleModules($modules) as $key => $module):
+                if (!empty($module['approvals'])) $module['name'] = htmlspecialchars($module['name']);
             ?>
             <a href="<?php echo BASE_URL . $module['path']; ?>" class="waffle-module-link <?php echo $key === $current_module ? 'current' : ''; ?>">
                 <div class="waffle-module-icon <?php echo $key; ?>">
@@ -708,8 +749,19 @@ function renderWaffleMenuPanel($modules, $current_module, $path_prefix) {
         </div>
     </div>
     <?php
+    // The optional sidebar (#124) - drawn here because every analyst header
+    // already calls this, so no page needs editing to have it.
+    renderAppSidebar($modules, $current_module);
 }
 
+/**
+ * Outputs the scripts every analyst page shares: the analyst's toast, chime,
+ * search-panel and desktop-notification preferences as window globals (one
+ * user_preferences query), toast/confirm/clipboard, the command palette with
+ * the modules this analyst may see, and the waffle drawer's own JS.
+ *
+ * @reads user_preferences - so the bell and toasts need not ask on every page
+ */
 function renderWaffleMenuJS() {
     // Pre-fetch the analyst's toast notification preferences so toast.js
     // doesn't have to AJAX for them on every page. Keys mirror the
@@ -723,6 +775,7 @@ function renderWaffleMenuJS() {
     $toastAnim = 'slide';
     $notifSound = 'off';                // silence unless this analyst asked for a chime
     $searchDismiss = '';                // '' = only the ✕ or Escape closes the search panel
+    $desktopNotif = '';                 // 'on' = desktop notifications for new bell items
     if (isset($_SESSION['analyst_id'])) {
         try {
             if (!function_exists('connectToDatabase')) {
@@ -731,7 +784,7 @@ function renderWaffleMenuJS() {
             $conn = connectToDatabase();
             $stmt = $conn->prepare(
                 "SELECT preference_key, preference_value FROM user_preferences
-                 WHERE analyst_id = ? AND preference_key IN ('toast_position', 'toast_animation', 'notification_sound', 'search_panel_close_outside')"
+                 WHERE analyst_id = ? AND preference_key IN ('toast_position', 'toast_animation', 'notification_sound', 'search_panel_close_outside', 'desktop_notifications')"
             );
             $stmt->execute([(int)$_SESSION['analyst_id']]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -743,6 +796,8 @@ function renderWaffleMenuJS() {
                     $notifSound = $row['preference_value'];
                 } elseif ($row['preference_key'] === 'search_panel_close_outside' && $row['preference_value']) {
                     $searchDismiss = $row['preference_value'];
+                } elseif ($row['preference_key'] === 'desktop_notifications' && $row['preference_value']) {
+                    $desktopNotif = $row['preference_value'];
                 }
             }
         } catch (Exception $e) {
@@ -764,13 +819,16 @@ function renderWaffleMenuJS() {
          war-room alerts both call window.playNotificationSound(); the value
          below is what decides whether anything is heard. -->
     <script>window.NOTIFICATION_SOUND = <?php echo json_encode($notifSound); ?>;</script>
+    <!-- Desktop notifications for new bell items (per analyst, off by default).
+         Shown by assets/js/notification-bell.js; the portal bell never sets this. -->
+    <script>window.DESKTOP_NOTIFICATIONS = <?php echo json_encode($desktopNotif === 'on'); ?>;</script>
     <script src="<?php echo BASE_URL; ?>assets/js/notification-sound.js?v=1"></script>
     <!-- App-wide notification primitives (#451). showToast + showConfirm are
          available on every page that includes the waffle menu (i.e. every
          analyst-facing module page). Individual pages no longer need their
          own <script src="toast.js"> tag. -->
     <script src="<?php echo BASE_URL; ?>assets/js/toast.js"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/confirm.js?v=5"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/confirm.js?v=6"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/clipboard.js?v=1"></script>
     <!-- Escape (always) and click-away (opt-in) for the draggable search panel,
          shared by the four modules that have one — see #144. -->
@@ -783,16 +841,11 @@ function renderWaffleMenuJS() {
     // can never offer a destination the launcher wouldn't.
     // $modules is defined at this file's top level (global scope) when a header
     // requires it; pull it in here since we're inside a function.
+    // In the analyst's own order (GH #187), so ⌘K then Enter goes to their first module.
     global $modules;
-    $cpAllowed = $_SESSION['allowed_modules'] ?? null;
     $cpModules = [];
     if (isset($modules) && is_array($modules)) {
-        foreach ($modules as $cpKey => $cpMod) {
-            if ($cpKey === 'system') {
-                if (!sessionIsAdmin()) continue;
-            } elseif ($cpAllowed !== null && !in_array($cpKey, $cpAllowed)) {
-                continue;
-            }
+        foreach (analystVisibleModules($modules) as $cpKey => $cpMod) {
             $cpModules[] = [
                 'key'  => $cpKey,
                 'name' => $cpMod['name'],
@@ -807,7 +860,7 @@ function renderWaffleMenuJS() {
         window.CP_BASE = <?php echo json_encode(BASE_URL); ?>;
         window.CP_MODULES = <?php echo json_encode($cpModules, JSON_UNESCAPED_SLASHES); ?>;
     </script>
-    <script src="<?php echo BASE_URL; ?>assets/js/command-palette.js?v=8"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/command-palette.js?v=12"></script>
     <?php
     // The palette can return documents, and a document row offers an ⓘ that opens
     // the "attached to" dialogue — which lives in the documents component. The
@@ -1185,393 +1238,31 @@ function renderWaffleMenuJS() {
  * Polls a COUNT for the badge and only fetches the list when the panel opens:
  * this runs in every open tab of every analyst, so the idle cost is the cost
  * that matters, not the cost of opening it.
+ *
+ * @param mixed $path_prefix  relative path from the page to the app root, e.g. '../', for the API and link URLs
  */
 function renderNotificationBell($path_prefix) {
     if (!isset($_SESSION['analyst_id'])) return;
-    ?>
-    <style>
-        .nb-wrap { position: relative; margin-right: 6px; }
-        .nb-btn {
-            display: flex; align-items: center;
-            background: none; border: none;
-            color: rgba(255,255,255,0.75);
-            cursor: pointer; padding: 4px 6px; border-radius: 4px; position: relative;
-            transition: color 150ms ease, background 150ms ease, transform 140ms cubic-bezier(0.23,1,0.32,1);
-        }
-        .nb-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
-        .nb-btn:active { transform: scale(0.94); }
-        .nb-count {
-            position: absolute; top: -1px; right: -2px;
-            min-width: 16px; padding: 0 4px; border-radius: 8px;
-            background: #dc2626; color: #fff;
-            font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
-        }
-        .nb-count[hidden] { display: none; }
-        .nb-panel {
-            display: none; position: absolute; top: 34px; right: 0;
-            width: 360px; max-height: 60vh; overflow-y: auto;
-            background: var(--surface, #fff); color: var(--text, #333);
-            border: 1px solid var(--border, #e0e0e0); border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-            z-index: 2000; text-align: left;
-        }
-        .nb-panel.open { display: block; }
-        .nb-head {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 14px; border-bottom: 1px solid var(--border, #eee);
-            font-size: 12px; font-weight: 600; text-transform: uppercase;
-            letter-spacing: 0.4px; color: var(--text-muted, #666);
-            position: sticky; top: 0; background: var(--surface, #fff);
-        }
-        .nb-markall {
-            border: none; background: none; cursor: pointer;
-            font-size: 11px; text-transform: none; letter-spacing: 0;
-            color: var(--accent, #0078d4); font-weight: 600;
-        }
-        .nb-markall:hover { text-decoration: underline; }
-        .nb-head-actions { display: flex; align-items: center; gap: 10px; }
-        /* Clear is destructive, so it does not get the accent colour that says
-           "safe primary action" on Mark all read. */
-        .nb-clearall { color: var(--text-muted, #666); }
-        .nb-clearall:hover { color: #c62828; }
-        .nb-item {
-            display: block; width: 100%; padding: 10px 14px;
-            border: none; border-bottom: 1px solid var(--border-soft, #f2f2f2);
-            background: none; color: inherit; font: inherit; text-align: left;
-            cursor: pointer; text-decoration: none;
-        }
-        .nb-item:hover { background: var(--surface-hover, #f6f6f6); }
-        /* Unread carries a left edge rather than a bold background: the panel is
-           mostly unread, so colouring them all just makes a solid block. */
-        .nb-item.unread { border-left: 3px solid var(--accent, #0078d4); padding-left: 11px; }
-        .nb-item-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
-        .nb-item-ref { font-size: 12px; font-weight: 600; color: var(--accent, #0078d4); }
-        /* The age sits on the BOTTOM row, hard right, rather than up beside the
-           reference. Against a variable-length ticket number it never landed in
-           the same place twice, so a column of rows had timestamps scattered
-           across the panel. Pinned to the right edge they line up into a column
-           you can read down. */
-        .nb-item-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
-        .nb-item-meta { flex: none; font-size: 11px; color: var(--text-dim, #999); white-space: nowrap; }
-        /* Not a <button>: the whole row is an <a>, and a button inside an anchor
-           is invalid HTML that browsers re-parent, which breaks the row. */
-        /* ⚠️ ALWAYS VISIBLE, and drawn as a real button — a bordered circle, not a
-           bare glyph. It started as a × that faded in on hover, which was legible
-           but read as decoration rather than a control: a mark that appears only
-           when the pointer is already over it never announces that it can be
-           clicked. A circular outlined × is the universal "remove this one", and
-           it needs no hover to say so. It also removes the desktop/touch split —
-           there is no hover on a phone, so the reveal made it unreachable there. */
-        .nb-clear {
-            flex: none; display: flex; align-items: center; justify-content: center;
-            width: 20px; height: 20px; margin: -1px -2px -1px 0;
-            border: 1px solid var(--border, #e0e0e0); border-radius: 50%;
-            background: var(--surface-2, #fafafa); color: var(--text-muted, #666);
-            font-size: 13px; font-weight: 600; line-height: 1; cursor: pointer;
-            transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
-        }
-        /* Filling it red on hover is the confirmation that it destroys something —
-           the same colour the Clear dialog's OK button uses. --danger does not
-           exist as a token, so this is the literal confirm.js value. */
-        .nb-clear:hover { background: #c62828; border-color: #c62828; color: #fff; }
-        .nb-clear:focus-visible { outline: 2px solid var(--accent, #0078d4); outline-offset: 1px; }
-        .nb-item-title { font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-        .nb-item-body { flex: 1; min-width: 0; font-size: 12px; line-height: 1.4; color: var(--text-muted, #555); overflow-wrap: anywhere; }
-        .nb-badge-count {
-            display: inline-block; margin-left: 6px; padding: 0 5px;
-            border-radius: 7px; background: var(--surface-hover, #eef1f4);
-            color: var(--text-muted, #666); font-size: 10px; font-weight: 700; line-height: 15px;
-        }
-        .nb-empty { padding: 26px 14px; text-align: center; color: var(--text-muted, #666); font-size: 13px; }
-        @media (max-width: 768px) {
-            /* Same reasoning as the war-room panel: anything wider than the
-               viewport makes iOS reflow the whole page to desktop. */
-            .nb-panel { position: fixed; top: 48px; right: 4px; left: 4px; width: auto; max-height: 70vh; }
-            .nb-btn { padding: 8px; }
-            /* Same button, sized as a real tap target. */
-            .nb-clear { width: 28px; height: 28px; margin: -4px -4px -4px 0; font-size: 16px; }
-        }
-    </style>
-
-    <div class="nb-wrap">
-        <button class="nb-btn" id="nbBtn" type="button" aria-label="<?php echo htmlspecialchars(t('common.notifications.aria')); ?>" title="<?php echo htmlspecialchars(t('common.notifications.title')); ?>">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-            <span class="nb-count" id="nbCount" hidden>0</span>
-        </button>
-        <div class="nb-panel" id="nbPanel">
-            <div class="nb-head">
-                <span><?php echo htmlspecialchars(t('common.notifications.title')); ?></span>
-                <span class="nb-head-actions">
-                    <button type="button" class="nb-markall" id="nbMarkAll"><?php echo htmlspecialchars(t('common.notifications.mark_all')); ?></button>
-                    <button type="button" class="nb-markall nb-clearall" id="nbClearAll"><?php echo htmlspecialchars(t('common.notifications.clear_all')); ?></button>
-                </span>
-            </div>
-            <div id="nbList"></div>
-        </div>
-    </div>
-
-    <script>
-    (function () {
-        const API = '<?php echo $path_prefix; ?>api/notifications/';
-        const PREFIX = '<?php echo $path_prefix; ?>';
-        const btn   = document.getElementById('nbBtn');
-        const panel = document.getElementById('nbPanel');
-        const badge = document.getElementById('nbCount');
-        const list  = document.getElementById('nbList');
-        if (!btn) return;
-
-        const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
-            ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-
-        // Stored UTC without a zone marker; left as-is, Safari and Firefox read it
-        // as local time and every notification looks hours old.
-        function ago(utc) {
-            if (!utc) return '';
-            const then = new Date(String(utc).replace(' ', 'T') + 'Z');
-            if (isNaN(then)) return '';
-            const mins = Math.floor((Date.now() - then.getTime()) / 60000);
-            if (mins < 1)  return window.t('common.notifications.just_now');
-            if (mins < 60) return window.t('common.notifications.minutes', { n: mins });
-            const hrs = Math.floor(mins / 60);
-            if (hrs < 24)  return window.t('common.notifications.hours', { n: hrs });
-            return window.t('common.notifications.days', { n: Math.floor(hrs / 24) });
-        }
-
-        function describe(n) {
-            // Translated at render time, never baked into the row — otherwise a
-            // notification written today reads forever in whoever wrote it's language.
-            const key = 'common.notifications.event.' + n.event_type;
-            const txt = window.t(key, { actor: n.actor_name || window.t('common.notifications.someone') });
-            return txt === key ? (n.actor_name || '') : txt;
-        }
-
-        function render(items) {
-            if (!items.length) {
-                list.innerHTML = '<div class="nb-empty">' + esc(window.t('common.notifications.empty')) + '</div>';
-                return;
-            }
-            list.innerHTML = items.map(n => {
-                const count = n.event_count > 1
-                    ? '<span class="nb-badge-count">' + n.event_count + '</span>' : '';
-                const ref = n.entity_ref ? esc(n.entity_ref) : '';
-                return `<a class="nb-item${n.is_read ? '' : ' unread'}" href="${n.link ? esc(PREFIX + n.link) : '#'}"
-                           data-id="${n.id}">
-                    <div class="nb-item-top">
-                        <span class="nb-item-ref">${ref}${count}</span>
-                        <span class="nb-clear" role="button" tabindex="0"
-                              title="${esc(window.t('common.notifications.clear_one'))}"
-                              aria-label="${esc(window.t('common.notifications.clear_one'))}">&times;</span>
-                    </div>
-                    <div class="nb-item-title">${esc(n.title || '')}</div>
-                    <div class="nb-item-bottom">
-                        <span class="nb-item-body">${esc(describe(n))}</span>
-                        <span class="nb-item-meta">${esc(ago(n.updated_datetime))}</span>
-                    </div>
-                </a>`;
-            }).join('');
-        }
-
-        let lastUnread = 0;
-        function paintBadge(unread) {
-            lastUnread = unread;
-            badge.textContent = unread > 99 ? '99+' : String(unread);
-            badge.hidden = unread === 0;
-        }
-
-        // ===== Chime (preference notification_sound, off by default) =====
-        // The unread count is normally non-zero when a page loads, so the count
-        // alone cannot say "something new arrived" — sounding on it would chime
-        // on every navigation for notifications you were told about yesterday.
-        // The last count seen is therefore kept per tab, and the first poll of a
-        // tab only records a baseline. Private-mode browsers throw on
-        // sessionStorage, which costs nothing worse than a silent chime.
-        const SEEN_KEY = 'nbSeenUnread';
-        function recordSeen(unread) {
-            try { sessionStorage.setItem(SEEN_KEY, String(unread)); } catch (e) { /* ignore */ }
-        }
-        function chimeIfNew(unread) {
-            let prev = null;
-            try { prev = sessionStorage.getItem(SEEN_KEY); } catch (e) { /* ignore */ }
-            recordSeen(unread);
-            if (prev === null) return;                      // first poll in this tab
-            if (unread > parseInt(prev, 10) && typeof window.playNotificationSound === 'function') {
-                window.playNotificationSound();
-            }
-        }
-
-        async function poll() {
-            try {
-                const d = await (await fetch(API + 'get_notifications.php?count_only=1')).json();
-                if (d.success) { paintBadge(d.unread); chimeIfNew(d.unread); }
-            } catch (e) { /* a failed poll is not worth telling anyone about */ }
-        }
-
-        async function open() {
-            panel.classList.add('open');
-            list.innerHTML = '<div class="nb-empty">' + esc(window.t('common.notifications.loading')) + '</div>';
-            try {
-                const d = await (await fetch(API + 'get_notifications.php')).json();
-                // Opening the panel re-baselines rather than chiming: you are
-                // looking straight at the list, so anything in it is not news.
-                if (d.success) { render(d.notifications || []); paintBadge(d.unread); recordSeen(d.unread); }
-            } catch (e) {
-                list.innerHTML = '<div class="nb-empty">' + esc(window.t('common.notifications.load_failed')) + '</div>';
-            }
-        }
-
-        btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            panel.classList.contains('open') ? panel.classList.remove('open') : open();
-        });
-        document.addEventListener('click', function (e) {
-            if (!panel.contains(e.target) && !btn.contains(e.target)) panel.classList.remove('open');
-        });
-
-        // Follow the link AND mark read. Not awaited: making somebody wait on a
-        // bookkeeping write before their ticket opens would be the wrong trade.
-        list.addEventListener('click', function (e) {
-            const item = e.target.closest('.nb-item');
-            if (!item) return;
-            const id = parseInt(item.dataset.id, 10);
-
-            // The clear button sits INSIDE the row's anchor, so without stopping
-            // the event here, clearing a notification would also navigate to the
-            // ticket it was about.
-            if (e.target.closest('.nb-clear')) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (id) clearOne(id, item);
-                return;
-            }
-
-            if (id) {
-                fetch(API + 'mark_read.php', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids: [id] }), keepalive: true
-                }).catch(() => {});
-            }
-        });
-
-        // role="button" is a promise that Enter and Space work. The span is inside
-        // an anchor, so Enter would otherwise follow the link instead.
-        list.addEventListener('keydown', function (e) {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            const btn = e.target.closest('.nb-clear');
-            if (!btn) return;
-            const item = btn.closest('.nb-item');
-            const id = item && parseInt(item.dataset.id, 10);
-            e.preventDefault();
-            e.stopPropagation();
-            if (id) clearOne(id, item);
-        });
-
-        // Awaited, unlike mark-read: this one removes something from the screen,
-        // so a row must not vanish before the server has agreed that it is gone.
-        async function clearOne(id, item) {
-            // Asks first, for the same reason Clear all does: the delete is real
-            // and there is no undo. The X sits a few pixels from the row itself,
-            // so a mis-aimed click would otherwise silently destroy the thing you
-            // were reaching for. No tick box here — a single row has no narrower
-            // and wider reading for one to choose between.
-            const ok = await showConfirm({
-                title:   window.t('common.notifications.clear_one_title'),
-                message: window.t('common.notifications.clear_one_msg'),
-                okLabel: window.t('common.notifications.clear_ok'),
-                okClass: 'danger'
-            });
-            if (!ok) return;
-            try {
-                const d = await (await fetch(API + 'clear.php', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids: [id] })
-                })).json();
-                if (!d.success) throw new Error(d.error || 'failed');
-                item.remove();
-                paintBadge(d.unread);
-                // Re-baseline, or the chime goes quiet: chimeIfNew only fires when
-                // the count rises above the stored figure, and clearing lowers it.
-                recordSeen(d.unread);
-                if (!list.querySelector('.nb-item')) {
-                    list.innerHTML = '<div class="nb-empty">' + esc(window.t('common.notifications.empty')) + '</div>';
-                }
-            } catch (err) {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(window.t('common.notifications.clear_failed'), 'error');
-                }
-            }
-        }
-
-        document.getElementById('nbMarkAll').addEventListener('click', async function (e) {
-            e.stopPropagation();
-            try {
-                const d = await (await fetch(API + 'mark_read.php', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ all: true })
-                })).json();
-                if (d.success) { paintBadge(d.unread); recordSeen(d.unread); open(); }
-            } catch (err) { /* leave the panel as it is */ }
-        });
-
-        // Clear all deletes for good, so it asks first — and by default it spares
-        // anything still unread. The tick box is the safety catch: emptying the
-        // panel should not be able to bin news nobody has looked at yet, unless
-        // that is deliberately asked for.
-        document.getElementById('nbClearAll').addEventListener('click', function (e) {
-            e.stopPropagation();
-
-            const unread = lastUnread;
-            const opts = {
-                title:    window.t('common.notifications.clear_title'),
-                message:  unread > 0
-                            ? window.t('common.notifications.clear_msg_read')
-                            : window.t('common.notifications.clear_msg'),
-                okLabel:  window.t('common.notifications.clear_ok'),
-                okClass:  'danger',
-                onConfirm: state => doClearAll(!!state.checked)
-            };
-            // No unread rows means there is nothing for the catch to protect, and
-            // an option that cannot change the outcome is just a thing to read.
-            if (unread > 0) {
-                opts.checkbox = {
-                    label: unread === 1
-                        ? window.t('common.notifications.clear_unread_one')
-                        : window.t('common.notifications.clear_unread', { n: unread }),
-                    checked: false
-                };
-            }
-            showConfirm(opts);
-        });
-
-        async function doClearAll(includeUnread) {
-            try {
-                const d = await (await fetch(API + 'clear.php', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ all: true, include_unread: includeUnread })
-                })).json();
-                if (!d.success) throw new Error(d.error || 'failed');
-                paintBadge(d.unread);
-                recordSeen(d.unread);
-                // Everything unread and the box left unticked: the honest outcome
-                // is that nothing happened, and saying so beats a panel that looks
-                // like it ignored the click.
-                if (d.cleared === 0 && typeof window.showToast === 'function') {
-                    window.showToast(window.t('common.notifications.clear_nothing'), 'info');
-                }
-                open();
-            } catch (err) {
-                if (typeof window.showToast === 'function') {
-                    window.showToast(window.t('common.notifications.clear_failed'), 'error');
-                }
-            }
-        }
-
-        poll();
-        setInterval(poll, 60000);
-    })();
-    </script>
-    <?php
+    // The bell itself is shared with the self-service portal - see
+    // includes/notification_bell.php. Only the URLs are the analyst's.
+    require_once __DIR__ . '/notification_bell.php';
+    notificationBellRender($path_prefix, [
+        'list'       => $path_prefix . 'api/notifications/get_notifications.php',
+        'markRead'   => $path_prefix . 'api/notifications/mark_read.php',
+        'clear'      => $path_prefix . 'api/notifications/clear.php',
+        'linkPrefix' => $path_prefix,
+        'seenKey'    => 'nbSeenUnread',
+    ]);
 }
 
+/**
+ * Renders the header's War Room alert button and panel, which poll
+ * api/war-room/alerts.php every minute and stay hidden until something is
+ * waiting. Not polled on the War Room page itself; desktop popups only when the
+ * analyst's warroom_desktop_alerts preference is on.
+ *
+ * @param mixed $path_prefix  relative path from the page to the app root, e.g. '../'; '' is read as './'
+ */
 function renderWarRoomAlerts($path_prefix) {
     if (!isset($_SESSION['analyst_id'])) return;
 
@@ -1775,6 +1466,16 @@ function renderWarRoomAlerts($path_prefix) {
     <?php
 }
 
+/**
+ * Renders the right-hand side of the analyst header: the "Back to" link, the
+ * company switcher, the notification bell, War Room alerts, the mail-check
+ * button, the initials avatar and its account menu (preferences, password, MFA, the portal
+ * link when the analyst could sign in there, appearance, log out), plus the
+ * password and MFA dialogs and their script.
+ *
+ * @param mixed $analyst_name  the signed-in analyst's display name, for the avatar initials and the menu
+ * @param mixed $path_prefix  relative path from the page to the app root, e.g. '../'
+ */
 function renderHeaderRight($analyst_name, $path_prefix) {
     // Extract initials from analyst name
     $parts = explode(' ', trim($analyst_name));
@@ -2213,6 +1914,8 @@ function renderHeaderRight($analyst_name, $path_prefix) {
     </style>
 
     <div class="header-right">
+        <?php // The "Back to ..." link (3.5.0) - System -> Branding. Nothing unless set up.
+        try { if (!function_exists('connectToDatabase')) require_once __DIR__ . '/functions.php'; require_once __DIR__ . '/back_link.php'; echo backLinkHtml(connectToDatabase(), 'analyst'); } catch (Throwable $e) {} ?>
         <?php echo $__tenantSwitcherHtml; ?>
         <?php renderNotificationBell($path_prefix); ?>
         <?php renderWarRoomAlerts($path_prefix); ?>

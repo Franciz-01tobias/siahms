@@ -68,6 +68,16 @@ try {
         $article['tags'] = [];
     }
 
+    // Its documents (GH #177) - only those shown in the Help Centre. Safe to list
+    // without a further check: the query above has just established that this
+    // requester may read the article. Best-effort, like the tags.
+    try {
+        require_once '../../includes/knowledge/help_centre_documents.php';
+        $article['documents'] = helpCentreArticleDocuments($conn, $articleId);
+    } catch (Exception $e) {
+        $article['documents'] = [];
+    }
+
     // Reading it in the portal is a view like any other. Best-effort: a counter
     // must never cost the reader their article.
     try {

@@ -36,12 +36,21 @@ require_once dirname(__DIR__, 3) . '/workflow/includes/engine.php';
 // Serializers + loaders
 // ---------------------------------------------------------------------------
 
+/** The SELECT for workflows, with the creator's name. */
 function apiWorkflowSelect(): string {
     return "SELECT w.*, a.full_name AS created_by_name
             FROM workflows w
             LEFT JOIN analysts a ON a.id = w.created_by";
 }
 
+/**
+ * Shapes a workflow row for the API - trigger, active flag, people, dates, last run and
+ * run count, plus the full conditions and actions when $full (only their counts
+ * otherwise).
+ *
+ * @param array $r  the workflows row as apiWorkflowSelect() loads it (conditions and actions still JSON text)
+ * @param bool $full  true to include the conditions and actions in full; false gives only their counts
+ */
 function apiSerializeWorkflow(array $r, bool $full): array {
     $conditions = json_decode($r['conditions'] ?: '[]', true) ?: [];
     $actions    = json_decode($r['actions']    ?: '[]', true) ?: [];
@@ -72,6 +81,11 @@ function apiSerializeWorkflow(array $r, bool $full): array {
     return $out;
 }
 
+/**
+ * Loads one workflow row, or answers 404 and stops.
+ *
+ * @param int $workflowId  the workflows id
+ */
 function apiLoadWorkflow(PDO $conn, int $workflowId): array {
     $stmt = $conn->prepare(apiWorkflowSelect() . " WHERE w.id = ?");
     $stmt->execute([$workflowId]);
@@ -82,6 +96,10 @@ function apiLoadWorkflow(PDO $conn, int $workflowId): array {
     return $row;
 }
 
+/**
+ * The SELECT for workflow executions, keeping the workflow's name from the snapshot when
+ * the workflow has since been deleted.
+ */
 function apiWorkflowExecutionSelect(): string {
     // COALESCE keeps orphaned executions attributed via the name snapshot
     // after their parent workflow is deleted.
@@ -90,6 +108,13 @@ function apiWorkflowExecutionSelect(): string {
             LEFT JOIN workflows w ON w.id = we.workflow_id";
 }
 
+/**
+ * Shapes a workflow execution for the API - workflow, trigger, status, times and error,
+ * plus the trigger payload and step log when $full.
+ *
+ * @param array $r  the workflow_executions row as apiWorkflowExecutionSelect() loads it, with resolved_workflow_name
+ * @param bool $full  true to add the decoded trigger_payload and step_log
+ */
 function apiSerializeWorkflowExecution(array $r, bool $full): array {
     $out = [
         'id'            => (int)$r['id'],
@@ -114,7 +139,11 @@ function apiSerializeWorkflowExecution(array $r, bool $full): array {
 // Validation — the engine's catalogues are the contract
 // ---------------------------------------------------------------------------
 
-/** Validate a conditions array. Returns it normalised (list of objects). */
+/**
+ * Validate a conditions array. Returns it normalised (list of objects).
+ *
+ * @param mixed $conditions  the caller's conditions (untrusted) - a list of {field, op, value}
+ */
 function apiValidateWorkflowConditions($conditions): array {
     if (!is_array($conditions)) {
         apiError(422, 'invalid_field', "'conditions' must be an array.");
@@ -138,7 +167,11 @@ function apiValidateWorkflowConditions($conditions): array {
     return $out;
 }
 
-/** Validate an actions array against the engine's action catalogue. */
+/**
+ * Validate an actions array against the engine's action catalogue.
+ *
+ * @param mixed $actions  the caller's actions (untrusted) - a list of {type, args}
+ */
 function apiValidateWorkflowActions($actions): array {
     if (!is_array($actions)) {
         apiError(422, 'invalid_field', "'actions' must be an array.");
@@ -162,7 +195,11 @@ function apiValidateWorkflowActions($actions): array {
     return $out;
 }
 
-/** Validate a trigger event name against the engine's catalogue. */
+/**
+ * Validate a trigger event name against the engine's catalogue.
+ *
+ * @param string $trigger  the requested trigger event name
+ */
 function apiValidateWorkflowTrigger(string $trigger): string {
     if (!array_key_exists($trigger, WorkflowEngine::availableTriggers())) {
         apiError(422, 'invalid_field', "Unknown trigger event: '{$trigger}'. See GET /workflow-triggers.");
@@ -314,7 +351,13 @@ function apiWorkflowsFire(PDO $conn, array $apiKey, array $params, array $body):
 // Executions (read-only — only the engine writes these)
 // ---------------------------------------------------------------------------
 
-/** Shared list plumbing for both execution list routes. */
+/**
+ * Shared list plumbing for both execution list routes.
+ *
+ * @param array $where  SQL conditions on workflow_executions (alias we) from the route, e.g. ['1=1'] or a workflow_id filter;
+ *    the query-string filters are added to it
+ * @param array $args  the bound values for the ? placeholders in $where, in order
+ */
 function apiWorkflowExecutionsRespondList(PDO $conn, array $where, array $args): void {
     if (isset($_GET['status']) && trim($_GET['status']) !== '') {
         $where[] = 'we.status = ?';

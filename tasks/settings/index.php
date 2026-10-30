@@ -36,10 +36,10 @@ $translationNamespaces = ['common', 'tasks'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('tasks.title') . ' ' . t('tasks.nav.settings')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=32">
+    <title><?php echo htmlspecialchars(pageTitle('tasks', t('tasks.nav.settings'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=53">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -128,7 +128,7 @@ $translationNamespaces = ['common', 'tasks'];
         [data-theme-mode="dark"] .span-mode-card.selected { background: #241b3d; }
         [data-theme-mode="dark"] .card-field-row:hover { background: #241b3d; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -262,6 +262,75 @@ $translationNamespaces = ['common', 'tasks'];
             <!-- Said plainly, because "does this stop me closing the task?" is the
                  first thing anybody switching it on will want to know. -->
             <p style="color: var(--text-muted, #666); margin-top: 16px;"><?php echo htmlspecialchars(t('tasks.settings.involved_note')); ?></p>
+        </div>
+        <?php endif; ?>
+
+        <!-- Checklists Tab — checklists on tasks (discussion #138) -->
+        <?php if (settingsTabVisible($visibleTabs, 'checklists')): ?>
+        <div class="tab-content<?php echo $activeTabId === 'checklists' ? ' active' : ''; ?>" id="checklists-tab" data-capability="<?php echo Cap::TASKS_CHECKLISTS; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('tasks.settings.checklists_heading')); ?></h2>
+            </div>
+            <p style="color: var(--text-muted, #666); margin-bottom: 16px;"><?php echo htmlspecialchars(t('tasks.settings.checklists_desc')); ?></p>
+            <label class="card-field-row">
+                <input type="checkbox" id="taskChecklistsEnabled" onchange="saveTaskChecklistsEnabled(this.checked)">
+                <div>
+                    <div class="card-field-name"><?php echo htmlspecialchars(t('tasks.settings.checklists_enabled_name')); ?></div>
+                    <div class="card-field-desc"><?php echo htmlspecialchars(t('tasks.settings.checklists_enabled_desc')); ?></div>
+                </div>
+            </label>
+            <!-- Said plainly, because "does this stop me completing a task?" and
+                 "what happens if I switch it off again?" are the two questions. -->
+            <p style="color: var(--text-muted, #666); margin-top: 16px;"><?php echo htmlspecialchars(t('tasks.settings.checklists_note')); ?></p>
+
+            <!-- Forms on tasks (GH #190): a task can need forms from the Forms module,
+                 filled in for that occurrence and checked by the same completion gate. -->
+            <label class="card-field-row" style="margin-top: 16px;">
+                <input type="checkbox" id="taskFormsEnabled" onchange="saveTaskFormsEnabled(this.checked)">
+                <div>
+                    <div class="card-field-name"><?php echo htmlspecialchars(t('tasks.settings.forms_enabled_name')); ?></div>
+                    <div class="card-field-desc"><?php echo htmlspecialchars(t('tasks.settings.forms_enabled_desc')); ?></div>
+                </div>
+            </label>
+            <label class="card-field-row" style="margin-top: 16px;">
+                <input type="checkbox" id="taskProceduresEnabled" onchange="saveTaskSwitch('procedures_enabled', this.checked)">
+                <div>
+                    <div class="card-field-name"><?php echo htmlspecialchars(t('tasks.settings.procedures_enabled_name')); ?></div>
+                    <div class="card-field-desc"><?php echo htmlspecialchars(t('tasks.settings.procedures_enabled_desc')); ?></div>
+                </div>
+            </label>
+        </div>
+        <?php endif; ?>
+
+        <!-- Evidence Tab — repeating task evidence (#181) -->
+        <?php if (settingsTabVisible($visibleTabs, 'evidence')): ?>
+        <div class="tab-content<?php echo $activeTabId === 'evidence' ? ' active' : ''; ?>" id="evidence-tab" data-capability="<?php echo Cap::TASKS_EVIDENCE; ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('tasks.settings.evidence_heading')); ?></h2>
+            </div>
+            <p style="color: var(--text-muted, #666); margin-bottom: 16px;"><?php echo htmlspecialchars(t('tasks.settings.evidence_desc')); ?></p>
+            <?php foreach ([
+                ['evidence_completed_checklist', 'evidence_checklist', ['allow' => 'evidence_checklist_allow', 'refuse' => 'evidence_checklist_refuse']],
+                ['evidence_delete_occurrence',   'evidence_delete',    ['allow' => 'evidence_delete_allow', 'refuse' => 'evidence_delete_refuse']],
+                ['evidence_report_access',       'evidence_access',    ['anyone' => 'evidence_access_anyone', 'permission' => 'evidence_access_permission']],
+                // GH #190 decision 5: open follow-ups at completion - allowed by default.
+                ['evidence_open_followups',      'evidence_followups', ['allow' => 'evidence_followups_allow', 'warn' => 'evidence_followups_warn', 'block' => 'evidence_followups_block']],
+            ] as [$evKey, $evLabel, $evOptions]): ?>
+            <div class="card-field-row" style="display:block;">
+                <label class="card-field-name" for="ev_<?php echo $evKey; ?>"><?php echo htmlspecialchars(t('tasks.settings.' . $evLabel . '_name')); ?></label>
+                <select id="ev_<?php echo $evKey; ?>" class="ev-setting" data-key="<?php echo $evKey; ?>" disabled onchange="saveEvidenceSetting(this)" style="margin:6px 0;">
+                    <?php foreach ($evOptions as $v => $k): ?>
+                    <option value="<?php echo $v; ?>"><?php echo htmlspecialchars(t('tasks.settings.' . $k)); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="card-field-desc"><?php echo htmlspecialchars(t('tasks.settings.' . $evLabel . '_desc')); ?></div>
+            </div>
+            <?php endforeach; ?>
+            <div class="card-field-row" style="display:block;">
+                <label class="card-field-name" for="ev_evidence_skip_status_id"><?php echo htmlspecialchars(t('tasks.settings.evidence_skip_status_name')); ?></label>
+                <select id="ev_evidence_skip_status_id" class="ev-setting" data-key="evidence_skip_status_id" disabled onchange="saveEvidenceSetting(this)" style="margin:6px 0;"></select>
+                <div class="card-field-desc"><?php echo htmlspecialchars(t('tasks.settings.evidence_skip_status_desc')); ?></div>
+            </div>
         </div>
         <?php endif; ?>
 
@@ -559,11 +628,43 @@ $translationNamespaces = ['common', 'tasks'];
             loadSpanMode();
             loadTimeScope();
             loadCollaboratorCompletion();
+            loadTaskChecklistsEnabled();
+            loadEvidenceSettings();
             loadCardFields();
             loadTagSettings();
             const tabFromHash = location.hash.replace('#', '');
-            if (['calendar', 'time', 'involved', 'card', 'tags'].includes(tabFromHash)) switchTab(tabFromHash);
+            if (['calendar', 'time', 'involved', 'checklists', 'evidence', 'card', 'tags'].includes(tabFromHash)) switchTab(tabFromHash);
         });
+
+        // Repeating task evidence (#181). Disabled until loaded - a select that
+        // shows its first option before the saved value arrives reads as the
+        // saved value, and one careless click would then save it.
+        async function loadEvidenceSettings() {
+            const boxes = document.querySelectorAll('.ev-setting');
+            if (!boxes.length) return;
+            try {
+                const data = await fetch(API_BASE + 'get_settings.php').then(r => r.json());
+                if (!data.success) return;
+                const s = data.settings;
+                const skip = document.getElementById('ev_evidence_skip_status_id');
+                const effective = (s.evidence_closed_statuses || []).find(x => Number(x.id) === Number(s.evidence_skip_status_effective));
+                skip.innerHTML = `<option value="">${escapeHtml(t('tasks.settings.evidence_skip_status_auto', { name: effective ? effective.name : '-' }))}</option>`
+                    + (s.evidence_closed_statuses || []).map(x => `<option value="${Number(x.id)}">${escapeHtml(x.name)}</option>`).join('');
+                boxes.forEach(b => { b.value = String(s[b.dataset.key] ?? ''); b.disabled = false; });
+            } catch (e) { console.error(e); }
+        }
+
+        async function saveEvidenceSetting(box) {
+            try {
+                const res = await fetch(API_BASE + 'save_settings.php', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ settings: { [box.dataset.key]: box.value } })
+                });
+                const data = await res.json();
+                if (data.success) showToast(t('tasks.toast.saved'), 'success');
+                else showToast(data.error || t('tasks.toast.save_failed'), 'error');
+            } catch (e) { showToast(t('tasks.toast.save_failed'), 'error'); }
+        }
 
         // ── Tag display settings ──
         const TAG_SETTINGS = ['allow_create', 'surface_card', 'surface_filter',
@@ -666,6 +767,62 @@ $translationNamespaces = ['common', 'tasks'];
                 box.checked  = String(data.settings.collaborator_completion || '0') === '1';
                 box.disabled = false;
             } catch (e) { console.error(e); }
+        }
+
+        // Checklists on tasks (discussion #138). Same disabled-until-loaded rule
+        // as the per-person tick above, for the same reason.
+        async function loadTaskChecklistsEnabled() {
+            const box = document.getElementById('taskChecklistsEnabled');
+            if (!box) return;
+            box.disabled = true;
+            try {
+                const data = await fetch(API_BASE + 'get_settings.php').then(r => r.json());
+                if (!data.success) return;
+                box.checked  = String(data.settings.checklists_enabled || '0') === '1';
+                box.disabled = false;
+                const forms = document.getElementById('taskFormsEnabled');
+                if (forms) forms.checked = String(data.settings.forms_enabled || '0') === '1';
+                const procs = document.getElementById('taskProceduresEnabled');
+                if (procs) procs.checked = String(data.settings.procedures_enabled || '0') === '1';
+            } catch (e) { console.error(e); }
+        }
+
+        async function saveTaskChecklistsEnabled(on) {
+            try {
+                const res = await fetch(API_BASE + 'save_settings.php', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ settings: { checklists_enabled: on ? '1' : '0' } })
+                });
+                const data = await res.json();
+                if (data.success) showToast(t('tasks.toast.saved'), 'success');
+                else showToast(data.error || t('tasks.toast.save_failed'), 'error');
+            } catch (e) { showToast(t('tasks.toast.save_failed'), 'error'); }
+        }
+
+        /** One of the Checklists tab's on/off switches (GH #190), saved on its own. */
+        async function saveTaskSwitch(key, on) {
+            try {
+                const res = await fetch(API_BASE + 'save_settings.php', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ settings: { [key]: on ? '1' : '0' } })
+                });
+                const data = await res.json();
+                if (data.success) showToast(t('tasks.toast.saved'), 'success');
+                else showToast(data.error || t('tasks.toast.save_failed'), 'error');
+            } catch (e) { showToast(t('tasks.toast.save_failed'), 'error'); }
+        }
+
+        /** Forms on tasks (GH #190), saved on its own like the checklists switch. */
+        async function saveTaskFormsEnabled(on) {
+            try {
+                const res = await fetch(API_BASE + 'save_settings.php', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ settings: { forms_enabled: on ? '1' : '0' } })
+                });
+                const data = await res.json();
+                if (data.success) showToast(t('tasks.toast.saved'), 'success');
+                else showToast(data.error || t('tasks.toast.save_failed'), 'error');
+            } catch (e) { showToast(t('tasks.toast.save_failed'), 'error'); }
         }
 
         async function saveCollaboratorCompletion(on) {
@@ -908,6 +1065,6 @@ $translationNamespaces = ['common', 'tasks'];
         });
 
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

@@ -9,7 +9,13 @@
  * carry the outcome).
  */
 
-/** Emit a success response and stop. $meta (pagination etc.) is optional. */
+/**
+ * Emit a success response and stop. $meta (pagination etc.) is optional.
+ *
+ * @param mixed $data  the payload, sent as the body's "data" member (any JSON-encodable value)
+ * @param int $status  HTTP status code, 200 by default
+ * @param array|null $meta  extra "meta" member such as pagination totals; null leaves it out
+ */
 function apiRespond($data, int $status = 200, ?array $meta = null): void {
     http_response_code($status);
     $body = ['data' => $data];
@@ -20,7 +26,14 @@ function apiRespond($data, int $status = 200, ?array $meta = null): void {
     exit;
 }
 
-/** Emit an error response and stop. */
+/**
+ * Emit an error response and stop.
+ *
+ * @param int $status  HTTP status code (400, 403, 404, 409, 500 ...)
+ * @param string $code  machine-readable error code such as 'invalid_parameter' or 'not_found'
+ * @param string $message  human-readable explanation, sent as-is
+ * @param array|null $details  extra structured detail added as error.details; null leaves it out
+ */
 function apiError(int $status, string $code, string $message, ?array $details = null): void {
     http_response_code($status);
     $error = ['code' => $code, 'message' => $message];
@@ -37,6 +50,8 @@ function apiError(int $status, string $code, string $message, ?array $details = 
  * code + message through verbatim, so a service-backed handler produces the
  * same error body it did when the logic lived inline. Resolves ServiceError /
  * serviceErrorHttpStatus at call time (the calling resource has required them).
+ *
+ * @param ServiceError $e  the error a shared service threw - its kind picks the status, errorCode and message pass through
  */
 function apiFailFromService(ServiceError $e): void {
     apiError(serviceErrorHttpStatus($e->kind), $e->errorCode, $e->getMessage());
@@ -58,7 +73,11 @@ function apiJsonBody(): array {
     return $decoded;
 }
 
-/** DB "YYYY-MM-DD HH:MM:SS" (stored UTC) -> ISO 8601 "YYYY-MM-DDTHH:MM:SSZ", or null. */
+/**
+ * DB "YYYY-MM-DD HH:MM:SS" (stored UTC) -> ISO 8601 "YYYY-MM-DDTHH:MM:SSZ", or null.
+ *
+ * @param string|null $dbDatetime  a UTC datetime column value; null or '' gives null
+ */
 function apiIsoDate(?string $dbDatetime): ?string {
     if ($dbDatetime === null || $dbDatetime === '') {
         return null;
@@ -69,6 +88,9 @@ function apiIsoDate(?string $dbDatetime): ?string {
 /**
  * Parse an incoming date/time filter or field (ISO 8601, with or without Z,
  * or "YYYY-MM-DD HH:MM:SS") into a UTC DB string. 400s on garbage.
+ *
+ * @param string $value  the caller-supplied date/time text (untrusted); no offset is read as UTC
+ * @param string $field  the field or query parameter name, quoted in the 400 message
  */
 function apiParseDate(string $value, string $field): string {
     $v = trim($value);

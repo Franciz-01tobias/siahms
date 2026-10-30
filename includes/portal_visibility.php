@@ -138,6 +138,9 @@ function portalEmailInvolvesRequester(array $email, ?string $requesterEmail): bo
 /**
  * Apply the policy to one message.
  *
+ * @param array $email  the emails row - needs channel, direction, from_address, to_recipients, cc_recipients
+ * @param ?string $requesterEmail  the ticket owner's address; null = they have no mailbox, '' = unknown
+ * @param string $policy  the third-party policy: 'hide', 'no_attachments' or 'show' (PORTAL_THIRD_PARTY_*); anything else hides
  * @return array{visible: bool, attachments: bool}
  *         visible     — show the message in the thread at all
  *         attachments — allow its attachments to be listed AND downloaded

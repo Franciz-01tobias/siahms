@@ -40,6 +40,9 @@ function inboxViewFilterFromRequest(): array {
  * an install can have Resolved, Cancelled and Closed, all of them closed.
  * NOT EXISTS rather than NOT IN so a ticket with no status is kept: NOT IN
  * against a NULL status_id is NULL, and would silently drop it.
+ *
+ * @param array $filter  array{mine:bool,hide_closed:bool} as from inboxViewFilterFromRequest()
+ * @param string $alias  the alias the calling query gives the tickets table (trusted - written into the SQL)
  */
 function inboxViewFilterSql(array $filter, int $analystId, string $alias = 't'): string {
     $sql = '';

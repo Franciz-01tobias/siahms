@@ -29,6 +29,9 @@ I18n::initFromSession();
 Tz::init();
 
 requireModuleAccess('tasks');
+// Read only access to Tasks (#181 Part G): the page offers nothing that writes. The
+// services and endpoints refuse regardless - this only stops the page offering it.
+$tasksReadOnly = analystModuleLevel(connectToDatabase(), (int)$_SESSION['analyst_id'], 'tasks') === 'read';
 
 $current_page = 'calendar';
 $path_prefix = '../../';
@@ -40,18 +43,23 @@ $translationNamespaces = ['common', 'tasks'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('tasks.title') . ' ' . t('tasks.nav.calendar')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=32">
+    <title><?php echo htmlspecialchars(pageTitle('tasks', t('tasks.nav.calendar'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=53">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
-<body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>">
+<body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>"<?php echo $tasksReadOnly ? ' class="module-read-only"' : ''; ?>>
     <?php include '../includes/header.php'; ?>
+    <?php /* The action row (#185). Tasks had no general New - only the + at the
+             top of each board column, which stays as a shortcut that already
+             knows the status. New asks for a title and opens the task. */
+          require_once __DIR__ . '/../../includes/action_row.php';
+          renderActionRow(t('tasks.title'), $tasksReadOnly ? [] : [actionRowNew('../?new=1', t('tasks.board.new_task'), true)], ['accent' => 'tsk']); ?>
 
     <div class="tasks-container">
         <!-- Sidebar -->
@@ -148,8 +156,9 @@ $translationNamespaces = ['common', 'tasks'];
         // The stored choice, rendered server-side so the select is already correct.
         window.CAL_SUBTASK_SCOPE = <?php echo json_encode($calSubtaskScope); ?>;
     </script>
-    <script src="../../assets/js/tasks-quick-panel.js?v=1"></script>
+    <script src="../../assets/js/safe-html.js?v=1"></script>
+    <script src="../../assets/js/tasks-quick-panel.js?v=2"></script>
     <script src="../../assets/js/tasks-calendar.js?v=12"></script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

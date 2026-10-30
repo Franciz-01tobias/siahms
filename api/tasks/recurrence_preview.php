@@ -19,6 +19,7 @@
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/tenancy.php';
 require_once '../../includes/services/task_recurrence.php';
 
 header('Content-Type: application/json');
@@ -48,7 +49,10 @@ try {
     $t = $conn->prepare("SELECT id, title, start_date, due_date, recurrence_id FROM tasks WHERE id = ?");
     $t->execute([$taskId]);
     $task = $t->fetch(PDO::FETCH_ASSOC);
-    if (!$task) {
+    // 🔒 Company scope, as every other task endpoint: another company's task is
+    // answered exactly like one that does not exist, so its existence is not
+    // confirmed either.
+    if (!$task || !analystCanAccessTask($conn, (int)$_SESSION['analyst_id'], $taskId)) {
         echo json_encode(['success' => false, 'error' => 'No such task']);
         exit;
     }

@@ -99,6 +99,10 @@
         }
     }
 
+    /**
+     * Shows the views button only at phone width and closes the views drawer when leaving it, then
+     * re-syncs the Morning Checks controls - the shared shell for every page.
+     */
     function syncShell() {
         var vb = document.querySelector('.mobile-views-btn');
         if (vb) vb.style.display = mq.matches ? '' : 'none';
@@ -193,9 +197,19 @@
     // the inbox wiring below would inject a Folders button onto a flat page.
     if (!mc || !document.querySelector('.email-list-container')) return;
 
+    /**
+     * Wires the Assets page for phones - a list/detail pane stack with a Back sub-bar showing the open
+     * asset's name.
+     */
     function initAssetsMobile() {
+        /** Records the current Assets pane on body[data-mobile-pane] for the CSS to act on. */
         function setPane(p) { document.body.setAttribute('data-mobile-pane', p); }
+        /** Returns the current Assets pane, defaulting to the list. */
         function currentPane() { return document.body.getAttribute('data-mobile-pane') || 'list'; }
+        /**
+         * Switches the Assets pane and, at phone width, pushes a history entry so the device Back button
+         * returns to the list.
+         */
         function pushPane(p) {
             setPane(p);
             if (mq.matches) history.pushState({ nmPane: p }, '');
@@ -226,12 +240,17 @@
         // Wrap selectAsset — never edit the module's own renderer.
         if (typeof window.selectAsset === 'function') {
             var _selectAsset = window.selectAsset;
+            /**
+             * Wraps the Assets module's selectAsset so opening an asset on a phone slides to the detail pane and
+             * puts the asset's hostname in the sub-bar.
+             */
             window.selectAsset = function (assetId) {
                 var r = _selectAsset.apply(this, arguments);
                 // Only when genuinely navigating list -> detail. selectAsset is
                 // also called to re-render in place, and those must not stack
                 // history entries.
                 if (mq.matches && currentPane() !== 'detail') pushPane('detail');
+                /** Copies the open asset's hostname into the Assets sub-bar. */
                 var show = function () {
                     var name = document.querySelector('.asset-detail-hostname');
                     var ref  = aBar.querySelector('.msb-ref');
@@ -242,6 +261,10 @@
             };
         }
 
+        /**
+         * Shows the Assets sub-bar and views button only at phone width, and clears the pane state on desktop
+         * so both panes show.
+         */
         function syncAssetsBar() {
             var on = mq.matches;
             aBar.style.display = on ? 'flex' : 'none';
@@ -289,22 +312,23 @@
             return (!v || v === key) ? fallback : v;
         }
 
-        // ---- sub-bar: the two actions the hidden sidebar used to carry ----
+        // ---- sub-bar: the Categories sheet. New event is in the action row
+        // above (#185), which stays on screen on a phone. ----
         var bar = document.createElement('div');
         bar.className = 'mobile-subbar';
         bar.style.display = 'none';          // @media CSS can't hide injected chrome
         var optLabel = tr('calendar.sidebar.categories', 'Categories');
-        var newLabel = tr('calendar.sidebar.new_event', 'New event');
         bar.innerHTML =
-            '<button type="button" class="msb-calopts">⚙ <span></span></button>' +
-            '<button type="button" class="msb-new">+ <span></span></button>';
+            '<button type="button" class="msb-calopts">⚙ <span></span></button>';
         bar.querySelector('.msb-calopts span').textContent = optLabel;
-        bar.querySelector('.msb-new span').textContent = newLabel;
         bar.querySelector('.msb-calopts').setAttribute('aria-label', optLabel);
-        bar.querySelector('.msb-new').setAttribute('aria-label', newLabel);
         container.parentNode.insertBefore(bar, container);
 
         // ---- sheet chrome (LAYER 7's .mobile-sheet, built twice) ----
+        /**
+         * Builds one of the Calendar's full-screen phone sheets (options or day agenda) with a title and a
+         * Close button.
+         */
         function buildSheet(cls, title) {
             var s = document.createElement('div');
             s.className = 'mobile-sheet mobile-sheet-' + cls;
@@ -329,10 +353,15 @@
             el.style.display = 'flex';
             history.pushState({ calSheet: true }, '');
         }
+        /** Hides both Calendar phone sheets without touching history. */
         function hideSheets() {
             optsSheet.style.display = 'none';
             daySheet.style.display = 'none';
         }
+        /**
+         * Closes the open Calendar sheet, popping its history entry when there is one so the device Back
+         * button stays in step.
+         */
         function closeSheet() {
             if (history.state && history.state.calSheet) history.back();
             else hideSheets();
@@ -349,11 +378,12 @@
         function sidebarIntoSheet() {
             var sb = container.querySelector('.calendar-sidebar');
             if (!sb) return;                                  // already moved
-            // The sidebar's own New-event button duplicates the sub-bar's.
-            var dup = sb.querySelector('.sidebar-section .btn-full[onclick*="openEventModal"]');
-            if (dup && dup.parentNode) dup.parentNode.classList.add('mc-dup');
             optsSheet.querySelector('.ms-body').appendChild(sb);
         }
+        /**
+         * Moves the Calendar sidebar out of the options sheet and back into the page, for when the viewport
+         * leaves phone width.
+         */
         function sidebarBackToPage() {
             var sb = optsSheet.querySelector('.calendar-sidebar');
             if (sb) container.insertBefore(sb, container.firstChild);
@@ -363,14 +393,13 @@
             openSheet(optsSheet);
         });
 
-        // ---- 2. New event: straight through to the module's own modal ----
-        bar.querySelector('.msb-new').addEventListener('click', function () {
-            if (typeof _openEventModal === 'function') _openEventModal();
-        });
-
         // ---- 3. agenda sheet for a tapped day ----
         var agendaDate = null;
 
+        /**
+         * Formats a YYYY-MM-DD date as the Calendar agenda heading (weekday plus day and month) in the
+         * interface language, falling back to the raw string.
+         */
         function localDateLabel(dateStr) {
             var d = new Date(dateStr + 'T00:00:00');
             if (isNaN(d.getTime())) return dateStr;
@@ -386,6 +415,10 @@
             }
         }
 
+        /**
+         * Fills the Calendar day sheet with the tapped day's events, each opening the module's edit modal,
+         * plus a New event button pre-filled with that day.
+         */
         function renderAgenda() {
             if (!agendaDate) return;
             var body = daySheet.querySelector('.ms-body');
@@ -457,6 +490,7 @@
             body.appendChild(add);
         }
 
+        /** Opens the Calendar agenda sheet for the given date. */
         function openDaySheet(dateStr) {
             agendaDate = dateStr;
             renderAgenda();
@@ -466,6 +500,10 @@
         // ---- wrap the module's globals (never edit itsm_calendar.js) ----
         var _openEventModal = window.openEventModal;
         if (typeof _openEventModal === 'function') {
+            /**
+             * Wraps the Calendar's openEventModal so tapping a day in the month grid on a phone opens that day's
+             * agenda instead of a blank New event form.
+             */
             window.openEventModal = function (eventId, dateStr, hour) {
                 /* Only the month grid's day-cell click is redirected: it is the
                    one call that means "I tapped a day", and on mobile that has
@@ -498,8 +536,16 @@
         // showing the old list, so refresh it off the same promise.
         if (typeof window.renderCalendar === 'function') {
             var _renderCalendar = window.renderCalendar;
+            /**
+             * Wraps the Calendar's renderCalendar so an open agenda sheet is refreshed after a re-render and
+             * week/day views scroll to working hours on a phone.
+             */
             window.renderCalendar = function () {
                 var r = _renderCalendar.apply(this, arguments);
+                /**
+                 * Runs once the Calendar has re-rendered - refreshes the agenda sheet if it is open and scrolls to 7
+                 * AM.
+                 */
                 var after = function () {
                     if (mq.matches && daySheet.style.display === 'flex') renderAgenda();
                     scrollToWorkingHours();
@@ -509,6 +555,10 @@
             };
         }
 
+        /**
+         * Shows the Calendar sub-bar only at phone width, and on desktop closes the sheets and puts the
+         * sidebar back.
+         */
         function syncCalendarBar() {
             var on = mq.matches;
             bar.style.display = on ? 'flex' : 'none';
@@ -543,6 +593,7 @@
             return (!v || v === key) ? fallback : v;
         }
 
+        /** Records the Change Management view on body[data-cm-pane] at phone width, and clears it on desktop. */
         function setPane(name) {
             if (!mq.matches) { document.body.removeAttribute('data-cm-pane'); return; }
             document.body.setAttribute('data-cm-pane', name);
@@ -553,6 +604,7 @@
         // this only records which pane won.
         var showView = window.showView;
         if (typeof showView === 'function') {
+            /** Wraps Change Management's showView so the phone pane state follows the list, detail or editor view. */
             window.showView = function (view) {
                 var out = showView.apply(this, arguments);
                 setPane(view === 'detail' || view === 'editor' ? view : 'list');
@@ -600,16 +652,20 @@
             var emptyLabel = tr('change-management.detail.not_provided', 'Not provided');
             var closeLabel = tr('common.close', 'Close');
 
+            /** Returns the rich-text panels in the Change Management form widget as an array. */
             function panels() {
                 return [].slice.call(widget.querySelectorAll('.rich-text-panel'));
             }
+            /** Returns the Change Management rich-text tab for a field key. */
             function tabFor(key) {
                 return widget.querySelector('.rich-text-tab[data-field-key="' + key + '"]');
             }
+            /** Returns the textarea behind a Change Management rich-text field key. */
             function areaFor(key) {
                 var p = widget.querySelector('.rich-text-panel[data-field-key="' + key + '"]');
                 return p && p.querySelector('textarea');
             }
+            /** Returns the live TinyMCE editor for an id, or null when none is initialised. */
             function liveEditor(id) {
                 return (id && window.tinymce && window.tinymce.get(id)) || null;
             }
@@ -651,6 +707,10 @@
 
             var openKey = null;
 
+            /**
+             * Rebuilds the phone cards for the Change Management rich-text fields - name, plain-text excerpt and
+             * Edit - skipping fields whose tab is hidden.
+             */
             function renderCards() {
                 list.innerHTML = '';
                 panels().forEach(function (panel) {
@@ -693,6 +753,10 @@
                 });
             }
 
+            /**
+             * Returns a Change Management rich-text field's current HTML, from the live editor when one is open,
+             * otherwise from its textarea.
+             */
             function currentValue(key) {
                 var area = areaFor(key);
                 if (!area) return '';
@@ -700,6 +764,10 @@
                 return ed ? ed.getContent() : area.value;
             }
 
+            /**
+             * Opens one Change Management rich-text field full screen on a phone and creates a TinyMCE editor for
+             * that field only.
+             */
             function openField(key) {
                 var area = areaFor(key);
                 if (!area) return;
@@ -727,6 +795,10 @@
                         plugins: ['advlist', 'autolink', 'lists', 'link', 'wordcount'],
                         toolbar: 'undo redo | bold italic underline | bullist numlist | link | removeformat',
                         content_style: 'body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; font-size: 16px; }',
+                        /**
+                         * TinyMCE setup hook - loads the textarea's value into the editor once it is ready and fires a resize
+                         * so it lays out.
+                         */
                         setup: function (editor) {
                             editor.on('init', function () {
                                 editor.setContent(area.value || '');
@@ -737,6 +809,10 @@
                 }
             }
 
+            /**
+             * Leaves the full-screen Change Management field, writing the editor's content back to the textarea
+             * before removing the editor, then redraws the cards.
+             */
             function closeField() {
                 document.body.classList.remove('cm-editor-full');
                 if (openKey) {
@@ -764,6 +840,10 @@
             var _set = window.setEditorContent, _get = window.getEditorContent;
 
             if (typeof _init === 'function') {
+                /**
+                 * Wraps Change Management's initEditors so a phone creates no editors and instead clears every field's
+                 * textarea and redraws the cards.
+                 */
                 window.initEditors = function (callback) {
                     if (!mq.matches) return _init.apply(this, arguments);
                     /* 🔴 The create path clears through `tinymce.get(id)`
@@ -781,6 +861,10 @@
                 };
             }
             if (typeof _destroy === 'function') {
+                /**
+                 * Wraps Change Management's destroyEditors so a phone first closes any full-screen field before the
+                 * original runs.
+                 */
                 window.destroyEditors = function () {
                     if (!mq.matches) return _destroy.apply(this, arguments);
                     if (document.body.classList.contains('cm-editor-full')) closeField();
@@ -788,6 +872,10 @@
                 };
             }
             if (typeof _set === 'function') {
+                /**
+                 * Wraps Change Management's setEditorContent so a phone with no live editor writes into the textarea
+                 * and redraws the cards.
+                 */
                 window.setEditorContent = function (id, content) {
                     if (!mq.matches || liveEditor(id)) return _set.apply(this, arguments);
                     var a = document.getElementById(id);
@@ -796,6 +884,10 @@
                 };
             }
             if (typeof _get === 'function') {
+                /**
+                 * Wraps Change Management's getEditorContent so it reads a live editor first, then the textarea on a
+                 * phone - keeping Save from blanking fields.
+                 */
                 window.getEditorContent = function (id) {
                     var ed = liveEditor(id);
                     if (ed) return ed.getContent();          // mid-edit: the editor is ahead of the textarea
@@ -809,6 +901,10 @@
                every editor open, so the cards are rebuilt behind it. */
             var _refresh = window.refreshFormLayout;
             if (typeof _refresh === 'function') {
+                /**
+                 * Wraps Change Management's refreshFormLayout so the phone cards are rebuilt after field visibility
+                 * changes.
+                 */
                 window.refreshFormLayout = function () {
                     var out = _refresh.apply(this, arguments);
                     if (mq.matches) renderCards();
@@ -821,6 +917,10 @@
 
         setPane('list');
         wireRichTextCards();
+        /**
+         * Clears the Change Management pane state and full-screen editor class when the viewport leaves phone
+         * width.
+         */
         var sync = function () {
             if (!mq.matches) {
                 document.body.removeAttribute('data-cm-pane');
@@ -831,7 +931,9 @@
         else if (mq.addListener) { mq.addListener(sync); }
     }
 
+    /** Wires Problem Management for phones so the sidebar steps aside while a problem is open. */
     function initProblemsMobile() {
+        /** Records the Problem Management view on body[data-pm-pane] at phone width, and clears it on desktop. */
         function setPane(name) {
             if (!mq.matches) { document.body.removeAttribute('data-pm-pane'); return; }
             document.body.setAttribute('data-pm-pane', name);
@@ -841,6 +943,10 @@
         // the module already has — history, scroll reset, caching — is intact.
         var openDetail = window.pmOpenDetail;
         if (typeof openDetail === 'function') {
+            /**
+             * Wraps pmOpenDetail so the phone switches to the detail pane only once the problem has actually
+             * loaded.
+             */
             window.pmOpenDetail = function () {
                 var out = openDetail.apply(this, arguments);
                 // pmOpenDetail is async and bails on a failed fetch, so the pane
@@ -856,6 +962,7 @@
 
         var backToList = window.pmBackToList;
         if (typeof backToList === 'function') {
+            /** Wraps pmBackToList so the phone returns to the list pane. */
             window.pmBackToList = function () {
                 setPane('list');
                 return backToList.apply(this, arguments);
@@ -869,10 +976,18 @@
         else if (mq.addListener) { mq.addListener(sync); }
     }
 
+    /**
+     * Wires the Service Status board for phones - a Services/Incidents switcher and whole-card taps that
+     * open an incident.
+     */
     function initStatusMobile() {
         var layout = document.querySelector('.status-layout');
         if (!layout) return;
 
+        /**
+         * Translates a key for the Service Status phone switcher, falling back to the given English when the
+         * key is missing.
+         */
         function tr(key, fallback) {
             if (typeof window.t !== 'function') return fallback;
             var v = window.t(key);
@@ -899,6 +1014,10 @@
         btns[1].textContent = tr('service-status.board.incidents', 'Incidents');
         layout.insertBefore(switcher, layout.firstChild);
 
+        /**
+         * Shows the Services or Incidents half of the Service Status board on a phone and marks the matching
+         * switcher button.
+         */
         function setTab(name) {
             document.body.setAttribute('data-ss-tab', name);
             btns.forEach(function (b) {
@@ -927,6 +1046,10 @@
             if (title) title.click();
         });
 
+        /**
+         * Shows the Service Status switcher only at phone width, defaulting to Services, and clears the tab on
+         * desktop so both halves show.
+         */
         function syncStatusBar() {
             var on = mq.matches;
             switcher.style.display = on ? 'flex' : 'none';
@@ -966,6 +1089,10 @@
         var container = document.querySelector('.knowledge-container');
         if (!container) return;
 
+        /**
+         * Translates a key for the Knowledge phone controls, falling back to the given English when the key is
+         * missing.
+         */
         function tr(key, fallback) {
             if (typeof window.t !== 'function') return fallback;
             var v = window.t(key);
@@ -995,11 +1122,14 @@
         sheet.querySelector('.ms-close').addEventListener('click', closeSheet);
         document.body.appendChild(sheet);
 
+        /** Opens the Knowledge tags sheet and pushes a history entry so the device Back button closes it. */
         function openSheet() {
             sheet.style.display = 'flex';
             history.pushState({ kbSheet: true }, '');
         }
+        /** Hides the Knowledge tags sheet without touching history. */
         function hideSheet() { sheet.style.display = 'none'; }
+        /** Closes the Knowledge tags sheet, popping its history entry when there is one. */
         function closeSheet() {
             if (history.state && history.state.kbSheet) history.back();
             else hideSheet();
@@ -1021,6 +1151,7 @@
             }
             sheet.querySelector('.ms-body').appendChild(sb);
         }
+        /** Puts the Knowledge sidebar and its search box back where they were on desktop. */
         function sidebarBackToPage() {
             var sb = sheet.querySelector('.knowledge-sidebar');
             if (!sb) return;
@@ -1049,6 +1180,10 @@
         var backLink = document.querySelector('.article-detail-header > .btn');
         var backLong = backLink ? backLink.textContent.trim() : '';
         var backShort = tr('common.back', backLong);
+        /**
+         * Shortens the Knowledge article Back to list button to Back on a phone and restores the long label on
+         * desktop.
+         */
         function syncBackLabel() {
             if (!backLink) return;
             backLink.textContent = mq.matches ? backShort : backLong;
@@ -1069,6 +1204,7 @@
             meta.setAttribute('role', 'button');
             meta.setAttribute('tabindex', '0');
             meta.setAttribute('aria-expanded', 'false');
+            /** Expands or collapses the Knowledge article meta block on a phone. */
             function toggle() {
                 var open = head.classList.toggle('kb-meta-open');
                 meta.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -1081,6 +1217,10 @@
 
         if (typeof window.renderArticleDetail === 'function') {
             var _renderArticleDetail = window.renderArticleDetail;
+            /**
+             * Wraps Knowledge's renderArticleDetail so the collapsible meta block is wired after each article
+             * renders.
+             */
             window.renderArticleDetail = function () {
                 var r = _renderArticleDetail.apply(this, arguments);
                 wireMetaToggle();
@@ -1131,6 +1271,10 @@
             content.insertBefore(bar, content.firstChild);
             content.insertBefore(openBtn, bar);
 
+            /**
+             * Turns the Knowledge editor's full-screen mode on or off, showing the article's title in its bar and
+             * nudging TinyMCE to re-measure.
+             */
             function setFull(on) {
                 if (on) {
                     var titleField = document.getElementById('articleTitle');
@@ -1158,6 +1302,7 @@
         }
 
         // ---- mirror the current view onto <body> for CSS ----
+        /** Works out which Knowledge view (list, detail or editor) is showing from the views' inline display styles. */
         function readView() {
             var d = document.getElementById('articleDetailView');
             var e = document.getElementById('articleEditorView');
@@ -1173,6 +1318,10 @@
 
         if (typeof window.showView === 'function') {
             var _showView = window.showView;
+            /**
+             * Wraps Knowledge's showView so body[data-kb-view] follows the view, the desktop pop-out is stripped
+             * and the full-screen editor control is wired.
+             */
             window.showView = function (view) {
                 var r = _showView.apply(this, arguments);
                 setKbView(view || readView());
@@ -1204,6 +1353,10 @@
         });
         stripEditorPopout();
 
+        /**
+         * Shows the Knowledge sub-bar at phone width and wires the phone controls, or on desktop undoes every
+         * phone-only state and puts the sidebar back.
+         */
         function syncKnowledgeBar() {
             var on = mq.matches;
             bar.style.display = on ? 'flex' : 'none';
@@ -1229,7 +1382,9 @@
     }
 
     // ---- pane state, mirrored on <body> so CSS ancestor selectors can react ----
+    /** Records the tickets inbox pane (list, folders or reading) on body[data-mobile-pane] for the CSS. */
     function setPane(p) { document.body.setAttribute('data-mobile-pane', p); }
+    /** Returns the current tickets inbox pane, defaulting to the list. */
     function currentPane() { return document.body.getAttribute('data-mobile-pane') || 'list'; }
 
     // Navigate INTO a pane, pushing a history entry so the device Back button
@@ -1249,6 +1404,10 @@
     // ---- wrap the globals inbox.js already exposes (don't edit inbox.js) ----
     if (typeof window.selectEmail === 'function') {
         var _selectEmail = window.selectEmail;
+        /**
+         * Wraps the inbox's selectEmail so opening a ticket on a phone slides to the reading pane and applies
+         * the phone refinements once it renders.
+         */
         window.selectEmail = function () {
             var r = _selectEmail.apply(this, arguments);
             // Push only when genuinely navigating list -> ticket. selectEmail is
@@ -1263,8 +1422,30 @@
         };
     }
 
+    // The other way a ticket opens: by id. The ?ticket_id= deep link (Users ->
+    // a user's ticket, notifications, Calendar's "Open in inbox") and the
+    // linked-ticket pills all call loadTicketById, which renders via
+    // displayEmail and never touches selectEmail - so on a phone the ticket
+    // loaded behind the list and you were left looking at the inbox. Same
+    // treatment as selectEmail: show the reading pane, then the refinements.
+    if (typeof window.loadTicketById === 'function') {
+        var _loadTicketById = window.loadTicketById;
+        /**
+         * Wraps the inbox's loadTicketById so a ticket opened by id (deep links, linked-ticket pills) also
+         * shows the reading pane on a phone.
+         */
+        window.loadTicketById = function () {
+            if (mq.matches && currentPane() !== 'reading') pushPane('reading');
+            var r = _loadTicketById.apply(this, arguments);
+            if (r && typeof r.then === 'function') r.then(afterTicketRender);
+            else afterTicketRender();
+            return r;
+        };
+    }
+
     if (typeof window.selectFolder === 'function') {
         var _selectFolder = window.selectFolder;
+        /** Wraps the inbox's selectFolder so picking a folder on a phone pops the folders pane back to the list. */
         window.selectFolder = function () {
             var r = _selectFolder.apply(this, arguments);
             // Picking a folder drops back to the list; pop the folders entry so
@@ -1281,6 +1462,7 @@
     // open when the saved pref is on, so strip it right after each sync here.
     if (typeof window.syncPopoutToTicketState === 'function') {
         var _syncPopout = window.syncPopoutToTicketState;
+        /** Wraps the inbox's syncPopoutToTicketState so the desktop pop-out mode is stripped again on a phone. */
         window.syncPopoutToTicketState = function () {
             var r = _syncPopout.apply(this, arguments);
             if (mq.matches) document.body.classList.remove('ticket-popout');
@@ -1292,6 +1474,10 @@
     // (re)rendered, refresh the compact mobile badge that replaces it.
     if (typeof window.renderAttachmentInfoBar === 'function') {
         var _renderAttach = window.renderAttachmentInfoBar;
+        /**
+         * Wraps the inbox's renderAttachmentInfoBar so the compact phone attachment badge is refreshed when
+         * attachments arrive.
+         */
         window.renderAttachmentInfoBar = function () {
             var r = _renderAttach.apply(this, arguments);
             if (mq.matches) syncAttachBadge();
@@ -1380,12 +1566,29 @@
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'action-btn mobile-sheet-btn mobile-sheet-btn-' + def.cls;
-                btn.innerHTML = '<span class="action-btn-icon">' + def.icon + '</span><span>' + def.label + '</span>';
+                btn.innerHTML = '<span class="action-btn-icon">' + def.icon + '</span><span class="msb-label">' + def.label + '</span>';
                 btn.addEventListener('click', function () { def.sheet.style.display = 'flex'; });
                 toolbar.appendChild(btn);
             }
         });
+        syncLinksCount();
     }
+
+    // "Links (2)" on the Links button. The word only shows in the "…" panel
+    // (the bar is icon-only), but the count is set either way. Equipment, CMDB,
+    // domain and task pills arrive by their own fetches AFTER the strip is drawn,
+    // and unlinking redraws a group in place, so a one-off count at relocate time
+    // would be wrong - the observer recounts whenever the strip's pills change.
+    // Every pill in the strip, early or late, is an `a.pm-ticket-badge`.
+    var linksDef = SECTIONS[0];
+    /** Sets the ticket Links sheet button's label to show how many linked items the sheet holds. */
+    function syncLinksCount() {
+        var btn = document.querySelector('.mobile-sheet-btn-links .msb-label');
+        if (!btn) return;
+        var n = linksDef.body.querySelectorAll('.links-strip .pm-ticket-badge').length;
+        btn.textContent = n ? linksDef.label + ' (' + n + ')' : linksDef.label;
+    }
+    new MutationObserver(syncLinksCount).observe(linksDef.body, { childList: true, subtree: true });
 
     // ---- Opened-ticket refinements ----------------------------------------
     // Run after every ticket render: relocate the section sheets, then apply
@@ -1402,6 +1605,10 @@
         return (typeof currentEmail !== 'undefined') ? currentEmail : null;
     }
 
+    /**
+     * Tidies an opened ticket on a phone - bare subject heading, ticket reference in the sub-bar,
+     * attachment badge and a single-row action bar.
+     */
     function decorateReadingPane() {
         if (!mq.matches) return;
         var rp = document.getElementById('readingPane');
@@ -1517,12 +1724,20 @@
     // through, unchanged.
     if (typeof window.showAuditHistory === 'function') {
         var _showAudit = window.showAuditHistory;
+        /**
+         * Wraps the inbox's showAuditHistory so a phone opens the full-screen history sheet instead of the
+         * desktop table modal.
+         */
         window.showAuditHistory = function () {
             if (mq.matches) { openAuditSheet(); return; }
             return _showAudit.apply(this, arguments);
         };
     }
 
+    /**
+     * Opens the ticket history sheet on a phone and loads the open ticket's audit trail into it from
+     * get_ticket_audit.php.
+     */
     function openAuditSheet() {
         var email = getCurrentEmail();
         if (!email || !email.ticket_id) return;
@@ -1544,6 +1759,7 @@
         return m ? { day: m[1].trim(), time: m[2] } : { day: '', time: (text || '').trim() };
     }
 
+    /** Creates a span with a class and text content, for the ticket history feed. */
     function span(cls, text) {
         var el = document.createElement('span');
         el.className = cls;
@@ -1655,10 +1871,15 @@
     dots.style.display = 'none';
     board.parentNode.insertBefore(dots, board.nextSibling);
 
+    /** Returns the Tasks board's columns. */
     function columns() {
         return board.querySelectorAll('.board-column');
     }
 
+    /**
+     * Rebuilds the Tasks board position dots to match the column count, showing them only on a phone with
+     * more than one column.
+     */
     function build() {
         var n = columns().length;
         if (dots.childElementCount !== n) {
@@ -1674,6 +1895,7 @@
         mark();
     }
 
+    /** Highlights the Tasks board dot for the column nearest the left edge of the scroller. */
     function mark() {
         var cols = columns();
         if (!cols.length) return;
@@ -1700,6 +1922,7 @@
     // the whole mobile bundle throwing on load.
     if (typeof window.renderBoard === 'function') {
         var realRenderBoard = window.renderBoard;
+        /** Wraps the Tasks renderBoard so the position dots are rebuilt after each board render. */
         window.renderBoard = function () {
             var r = realRenderBoard.apply(this, arguments);
             build();
@@ -1707,6 +1930,7 @@
         };
     }
 
+    /** Rebuilds the Tasks board dots when the viewport crosses the phone breakpoint. */
     function sync() { build(); }
     sync();
     if (mq.addEventListener) { mq.addEventListener('change', sync); }
@@ -1909,6 +2133,22 @@
           columns: [0, 4],
           watch: '#logsTableContainer' },
 
+        /* Background jobs (#182) — two more tables in the same container.
+           Health: Job · Health · Last scheduled run · Last run · Expected · (Edit).
+           The job (with what stops without it) leads and the health pill and
+           its problems read on their own; the two times and the interval are
+           bare values that need their headings. */
+        { table: 'body[data-mobile-page="rep-logs"] .logs-table[data-log-type="jobs"]',
+          columns: [2, 3, 4],
+          watch: '#logsTableContainer' },
+
+        /* Run history: Started · Job · Started by · Outcome · Took · Summary.
+           The job and the outcome pill say what they are; a bare time, a bare
+           "Schedule (command line)" and a bare "12 ms" do not. */
+        { table: 'body[data-mobile-page="rep-logs"] .logs-table[data-log-type="job-runs"]',
+          columns: [0, 2, 4],
+          watch: '#logsTableContainer' },
+
         /* ---- REPORTING: the Intune drill-down (LAYER 35j, #1482) ----
            Device · User · OS · Compliance · Encrypted · Last sync. The
            device name is the heading and compliance is a pill; the other
@@ -1968,9 +2208,49 @@
            is all the harvester needs, and is exactly why hiding a head is
            not the same as removing it. */
         { table: 'body[data-mobile-page="wiki-scan"] .history-table',
-          columns: [2, 3, 4, 5] }
+          columns: [2, 3, 4, 5] },
+
+        /* ---- Domains (LAYER 41) ----
+           Register: the name, status and grade speak for themselves; the
+           expiry countdown, renewal mode, registrar, protection, certificate
+           and owner do not. The table is in the markup and only its tbody is
+           replaced, so watching the table is enough. */
+        { table: 'body[data-mobile-page="domains-register"] #domTable',
+          columns: [3, 4, 5, 7, 8, 9] },
+        /* Accounts: everything after the account's own name - a reference, a
+           person, a bare domain count and a date mean nothing alone. */
+        { table: 'body[data-mobile-page="domains-accounts"] .dom-table',
+          columns: [1, 2, 3, 4, 5, 6] },
+
+        /* ---- Assets > Users (LAYER 43c) ----
+           A person's equipment: serial, asset tag and the date it was
+           issued are three bare values side by side - two codes that look
+           alike and a date that could mean anything. The table is rebuilt
+           with the whole detail pane, so it does not exist at load: watch
+           the pane. */
+        { table: 'body[data-mobile-page="assets-users"] .au-table',
+          columns: [3, 4, 5], watch: '#auDetail' },
+
+        /* ---- LMS -> Tests (LAYER 29t) ----
+           All three tables are built whole by lms-tests.js into a container,
+           so each watches its container (the Reporting rule above).
+           Tests: two bare counts - questions and candidates. */
+        { table: 'body[data-mobile-page="lms-tests"] #testsList .lms-table',
+          columns: [2, 3], watch: '#testsList' },
+        /* Candidates, all tests: the test name (a second name under a
+           person's), a bare score and two bare dates - sent and finished,
+           which are indistinguishable unlabelled. Status is a pill. */
+        { table: 'body[data-mobile-page="lms-tests"] #candList .lms-table',
+          columns: [1, 3, 4, 5], watch: '#candList' },
+        /* The same table in the builder, one test so no Test column. */
+        { table: 'body[data-mobile-page="lms-tests-edit"] #sittings .lms-table',
+          columns: [2, 3, 4], watch: '#sittings' }
     ];
 
+    /**
+     * Copies a table's header text onto the chosen columns' cells as data-mobile-label so the phone card
+     * feed can print column labels, skipping empty cells and short placeholder rows.
+     */
     function labelCardFeed(table, columns) {
         var head = table.tHead;
         if (!head || !head.rows.length) return;
@@ -2015,6 +2295,7 @@
         }
     }
 
+    /** Labels every configured card-feed table on the page at phone width. */
     function apply() {
         if (!mq.matches) return;
         for (var i = 0; i < FEEDS.length; i++) {
@@ -2128,6 +2409,7 @@
     }
 
     // ---- 3. the overflow -------------------------------------------------
+    /** Removes the Forms editor footer's "…" overflow, putting its buttons back on the bar first. */
     function clearOverflow() {
         var panel = footer.querySelector('.mobile-more-panel');
         var btn = footer.querySelector('.mobile-more-btn');
@@ -2140,6 +2422,10 @@
         if (btn) btn.parentNode.removeChild(btn);
     }
 
+    /**
+     * Measures the Forms editor footer and moves whichever visible buttons do not fit into a "…"
+     * overflow panel, always keeping Save on the bar.
+     */
     function buildOverflow() {
         clearOverflow();
 
@@ -2224,6 +2510,10 @@
     // 🔑 The general rule: **before hiding a label, check every button
     // actually has something left to show.**
     var GLYPHS = { cancelEdit: '✕' };          // ✕
+    /**
+     * Gives a Forms editor footer button with no SVG (Cancel) a text glyph so it is not left blank once
+     * its label is hidden.
+     */
     function ensureIcon(btn) {
         if (!btn || btn.querySelector('svg') || btn.querySelector('.fm-glyph')) return;
         var on = btn.getAttribute('onclick') || '';
@@ -2236,6 +2526,10 @@
         btn.insertBefore(s, btn.firstChild);
     }
 
+    /**
+     * Moves the Forms editor's toolbar buttons into the footer before Cancel, in order, wrapping their
+     * labels and adding missing icons.
+     */
     function moveIn() {
         // The first original child is Cancel; everything moved in goes BEFORE
         // it, in the order MOVERS lists, so the bar reads left to right the
@@ -2257,6 +2551,7 @@
         });
     }
 
+    /** Puts the moved Forms editor toolbar buttons back where they came from and removes the overflow. */
     function moveOut() {
         clearOverflow();
         moved.forEach(function (m) {
@@ -2270,6 +2565,7 @@
         // have replaced.
     }
 
+    /** Moves the Forms editor toolbar into the footer bar at phone width, or back out again on desktop. */
     function sync() {
         if (mq.matches) {
             if (!moved.length) moveIn();
@@ -2331,6 +2627,7 @@
 
     var mq = window.matchMedia('(max-width: 768px)');
 
+    /** Gives each icon-only Contracts detail action button a title taken from its own label, at phone width only. */
     function apply() {
         if (!mq.matches) return;             // desktop: never write the attribute
         var btns = host.querySelectorAll('.contract-card-header .actions .btn');
@@ -2361,6 +2658,7 @@
     }
 
     apply();
+    /** Re-applies or clears the Contracts action button titles when the viewport crosses the phone breakpoint. */
     var onChange = function () { apply(); clear(); };
     if (mq.addEventListener) { mq.addEventListener('change', onChange); }
     else if (mq.addListener) { mq.addListener(onChange); }
@@ -2416,6 +2714,10 @@
 
     var mq = window.matchMedia('(max-width: 768px)');
 
+    /**
+     * Translates a key for the Contracts suppliers/contacts directory view, falling back to the given
+     * English when the key is missing.
+     */
     function t(key, fallback) {
         if (typeof window.t !== 'function') return fallback;
         var got = window.t(key);
@@ -2468,6 +2770,7 @@
        needs nothing from either. */
     var empty = null;
 
+    /** Tells a real Contracts supplier or contact row from the single-cell loading, empty or error row. */
     function rowIsRecord(tr) {
         // ⚠️ The loading / empty / error row is a single `<td colspan>`.
         // Filtering it would hide the page's own message and leave a
@@ -2475,6 +2778,10 @@
         return tr.cells.length > 1;
     }
 
+    /**
+     * Filters the Contracts suppliers or contacts list by the directory search text and shows a no-results
+     * line when nothing matches.
+     */
     function filter() {
         var q = (input.value || '').trim().toLowerCase();
         var rows = tbody.rows, shown = 0, any = false;
@@ -2494,6 +2801,7 @@
         empty.style.display = (any && q && shown === 0) ? 'block' : 'none';
     }
 
+    /** Shows every Contracts suppliers or contacts row again and hides the no-results line. */
     function clearFilter() {
         var rows = tbody.rows;
         for (var i = 0; i < rows.length; i++) rows[i].style.display = '';
@@ -2604,6 +2912,10 @@
         var got = t(key);
         return (got && got !== key) ? got : fallback;
     }
+    /**
+     * Returns the label for the LMS lessons/contents panel button - the panel's own heading, or the
+     * Lessons translation when it has none.
+     */
     function panelLabel() {
         var h = panel.querySelector('h1, h2, h3, h4, .lms-editor-side-head');
         var text = h ? (h.textContent || '').replace(/\s+/g, ' ').trim() : '';
@@ -2621,6 +2933,7 @@
 
     var scrim = null;
 
+    /** Opens the LMS lessons/contents panel as a phone sheet and shows the scrim that closes it. */
     function open() {
         document.body.setAttribute('data-lms-panel', 'open');
         btn.setAttribute('aria-expanded', 'true');
@@ -2632,6 +2945,7 @@
         }
         scrim.style.display = '';
     }
+    /** Closes the LMS lessons/contents phone sheet and hides its scrim. */
     function close() {
         document.body.removeAttribute('data-lms-panel');
         btn.setAttribute('aria-expanded', 'false');
@@ -2756,6 +3070,7 @@
         new MutationObserver(syncTabName).observe(pane, { attributes: true, attributeFilter: ['style'] });
     }
 
+    /** Shows the lesson text or questions page of the LMS lesson editor on a phone and marks the matching tab. */
     function setPage(which) {
         pane.setAttribute('data-lms-page', which);
         tText.classList.toggle('active', which === 'text');
@@ -2776,11 +3091,13 @@
     bar.style.display = 'none';
 
     var moved = [];
+    /** Moves an LMS editor control into the phone bottom bar, remembering where it came from. */
     function claim(el) {
         if (!el) return;
         moved.push({ el: el, parent: el.parentNode, next: el.nextSibling });
         bar.appendChild(el);
     }
+    /** Puts every LMS editor control moved into the bottom bar back exactly where it was. */
     function restore() {
         for (var i = moved.length - 1; i >= 0; i--) {
             var m = moved[i];
@@ -2790,6 +3107,10 @@
         moved = [];
     }
 
+    /**
+     * Moves Course settings, Preview and the AI write-this-lesson button into the LMS editor's phone
+     * bottom bar, once.
+     */
     function gather() {
         if (moved.length) return;            // already gathered
         var barActions = document.querySelector('.lms-editor-bar-actions');
@@ -2864,6 +3185,7 @@
 
     var mq = window.matchMedia('(max-width: 768px)');
 
+    /** Translates a key for the LMS Progress filter bar, falling back to the given English when the key is missing. */
     function tr(key, fallback) {
         if (typeof window.t !== 'function') return fallback;
         var v = window.t(key);
@@ -2901,23 +3223,28 @@
     /* Where the selects came from, so they go back EXACTLY there. */
     var home = filters.parentNode, homeNext = filters.nextSibling;
 
+    /** Moves the LMS Progress filter dropdowns into the phone filter sheet. */
     function filtersIntoSheet() {
         if (filters.parentNode !== sheet.querySelector('.ms-body')) {
             sheet.querySelector('.ms-body').appendChild(filters);
         }
     }
+    /** Puts the LMS Progress filter dropdowns back where they were in the page. */
     function filtersBackToPage() {
         if (filters.parentNode === home) return;
         if (homeNext && homeNext.parentNode === home) home.insertBefore(filters, homeNext);
         else home.appendChild(filters);
     }
 
+    /** Opens the LMS Progress filter sheet and pushes a history entry so the device Back button closes it. */
     function openSheet() {
         filtersIntoSheet();
         sheet.style.display = 'flex';
         history.pushState({ lmsFilter: true }, '');
     }
+    /** Hides the LMS Progress filter sheet without touching history. */
     function hideSheet() { sheet.style.display = 'none'; }
+    /** Closes the LMS Progress filter sheet, popping its history entry when there is one. */
     function closeSheet() {
         if (history.state && history.state.lmsFilter) history.back();
         else hideSheet();
@@ -2930,6 +3257,10 @@
     function progressVisible() {
         return panel.style.display !== 'none';
     }
+    /**
+     * Shows the LMS Progress filter bar only on a phone while the Progress tab is visible, and otherwise
+     * puts the filters back in the page.
+     */
     function sync() {
         if (mq.matches && progressVisible()) {
             filtersIntoSheet();
@@ -2979,6 +3310,10 @@
 
     var mq = window.matchMedia('(max-width: 768px)');
 
+    /**
+     * Translates a key for the Process Mapper process-list button, falling back to the given English when
+     * the key is missing.
+     */
     function tr(key, fallback) {
         if (typeof window.t !== 'function') return fallback;
         var v = window.t(key);
@@ -3000,6 +3335,7 @@
 
     var scrim = null;
 
+    /** Opens the Process Mapper process list as a phone sheet and shows the scrim that closes it. */
     function open() {
         document.body.setAttribute('data-pm-sidebar', 'open');
         btn.setAttribute('aria-expanded', 'true');
@@ -3011,6 +3347,7 @@
         }
         scrim.style.display = '';
     }
+    /** Closes the Process Mapper process-list sheet and hides its scrim. */
     function close() {
         document.body.removeAttribute('data-pm-sidebar');
         btn.setAttribute('aria-expanded', 'false');
@@ -3105,6 +3442,10 @@
 
     var mq = window.matchMedia('(max-width: 768px)');
 
+    /**
+     * Translates a key for the Network Mapper palette button, falling back to the given English when the
+     * key is missing.
+     */
     function tr(key, fallback) {
         if (typeof window.t !== 'function') return fallback;
         var v = window.t(key);
@@ -3127,6 +3468,7 @@
 
     var scrim = null;
 
+    /** Opens the Network Mapper CMDB class palette as a phone sheet and shows the scrim that closes it. */
     function open() {
         document.body.setAttribute('data-nm-palette', 'open');
         btn.setAttribute('aria-expanded', 'true');
@@ -3138,6 +3480,7 @@
         }
         scrim.style.display = '';
     }
+    /** Closes the Network Mapper palette sheet and hides its scrim. */
     function close() {
         document.body.removeAttribute('data-nm-palette');
         btn.setAttribute('aria-expanded', 'false');
@@ -3173,6 +3516,10 @@
     if (detail && canvas && window.MutationObserver) {
         new MutationObserver(function () {
             if (!mq.matches || !detail.classList.contains('open')) return;
+            /**
+             * Scrolls the Network Mapper canvas on the next tick so the selected node sits in the strip still
+             * visible above the details sheet.
+             */
             setTimeout(function () {
                 var sel = canvas.querySelector('.nm-node.selected');
                 if (!sel) return;
@@ -3246,6 +3593,7 @@
     var mq = window.matchMedia('(max-width: 768px)');
     var strip = document.querySelector('.help-sidebar');
 
+    /** Returns the help page section a contents link points at, from its data-section id. */
     function sectionOf(link) {
         return link.dataset ? document.getElementById(link.dataset.section) : null;
     }
@@ -3366,14 +3714,17 @@
         return !!(b && b.offsetParent !== null);
     }
 
+    /** Gives a short vibration, where the device supports it, when a Network Mapper long press turns into a drag. */
     function buzz() {
         try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) { /* not everywhere */ }
     }
 
+    /** Cancels the pending Network Mapper long-press timer. */
     function clearTimer() {
         if (timer) { clearTimeout(timer); timer = null; }
     }
 
+    /** Ends a Network Mapper touch gesture - cancels the timer, removes the drag ghost and resets the gesture state. */
     function cleanup() {
         clearTimer();
         if (ghost && ghost.parentNode) { ghost.parentNode.removeChild(ghost); }
@@ -3384,6 +3735,10 @@
 
     /* ---- 1. place: a class tile onto the canvas ---------------------- */
 
+    /**
+     * Starts placing a Network Mapper class tile by touch - closes the palette sheet and shows a ghost
+     * tile under the finger.
+     */
     function beginPlace(tile, pt) {
         mode = 'place';
         subject = tile;
@@ -3405,6 +3760,10 @@
         document.body.appendChild(ghost);
     }
 
+    /**
+     * Drops the dragged Network Mapper class tile onto the map by firing a real drop event at the canvas,
+     * so the module's own handler places it.
+     */
     function finishPlace(pt) {
         var over = document.elementFromPoint(pt.x, pt.y);
         if (!over || !canvas.contains(over)) { return; }   // released off the map
@@ -3427,6 +3786,10 @@
 
     /* ---- 2. move: an existing node ----------------------------------- */
 
+    /**
+     * Starts moving a Network Mapper node by touch, firing a mousedown on it so the module's own drag
+     * handling takes over.
+     */
     function beginMove(node, pt) {
         mode = 'move';
         subject = node;
@@ -3441,6 +3804,7 @@
         }));
     }
 
+    /** Fires a synthetic mouse event at the document at a touch point, feeding the Network Mapper's own node drag. */
     function relayMouse(type, pt) {
         if (!pt) { return; }
         document.dispatchEvent(new MouseEvent(type, {
@@ -3451,6 +3815,7 @@
 
     /* ---- the gesture ------------------------------------------------- */
 
+    /** Returns the client coordinates of the first touch in a touch event, or null. */
     function point(e) {
         var t = (e.touches && e.touches[0]) ? e.touches[0]
               : (e.changedTouches && e.changedTouches[0]);
@@ -3551,6 +3916,7 @@
         });
         footer.appendChild(del);
 
+        /** Shows the Network Mapper node sheet's injected Delete button only at phone width. */
         var syncDel = function () { del.style.display = mq.matches ? '' : 'none'; };
         syncDel();
         if (mq.addEventListener) { mq.addEventListener('change', syncDel); }
@@ -3607,6 +3973,7 @@
 
     var mq = window.matchMedia('(max-width: 768px)');
 
+    /** Scrolls the Workflow editor's map pane so the selected node sits in view above the inspector on a phone. */
     function reveal() {
         if (!mq.matches) return;
         var sel = canvas.querySelector('.wf-node.selected');
@@ -3680,6 +4047,10 @@
     var sidebar = container.querySelector('.wiki-sidebar');
     if (!sidebar) return;
 
+    /**
+     * Translates a key for the System wiki folder-tree sheet, falling back to the given English when the
+     * key is missing.
+     */
     function tr(key, fallback) {
         if (typeof window.t !== 'function') return fallback;
         var v = window.t(key);
@@ -3719,13 +4090,19 @@
     sheet.querySelector('.ms-close').addEventListener('click', close);
     document.body.appendChild(sheet);
 
+    /**
+     * Opens the System wiki folder tree as a phone sheet and pushes a history entry so the device Back
+     * button closes it.
+     */
     function open() {
         if (!mq.matches) return;
         treeIntoSheet();
         sheet.style.display = 'flex';
         history.pushState({ wikiTree: true }, '');
     }
+    /** Hides the System wiki folder-tree sheet without touching history. */
     function hide() { sheet.style.display = 'none'; }
+    /** Closes the System wiki folder-tree sheet, popping its history entry when there is one. */
     function close() {
         if (history.state && history.state.wikiTree) history.back();
         else hide();
@@ -3742,6 +4119,7 @@
         if (sheet.contains(sidebar)) return;
         sheet.querySelector('.ms-body').appendChild(sidebar);
     }
+    /** Puts the System wiki folder tree back into the page container. */
     function treeBackToPage() {
         if (container.contains(sidebar)) return;
         container.insertBefore(sidebar, container.firstChild);
@@ -3869,14 +4247,21 @@
         week: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M9 10v11M15 10v11"/></svg>'
     };
     var LABELS = {
+        /** Returns the translated label for the Tickets rota Day view. */
         day:     function () { return tr('common.view_day', 'Day'); },
+        /** Returns the translated label for the Tickets rota Analyst view. */
         analyst: function () { return tr('tickets.group_analyst', 'Analyst'); },
+        /** Returns the translated label for the Tickets rota Week view. */
         week:    function () { return tr('common.view_week', 'Week'); }
     };
 
     var bar = null, viewsWrap = null, actionsWrap = null, chooser = null;
 
     // ---- the sticky footer -------------------------------------------------
+    /**
+     * Builds the Tickets rota phone footer, with a slot for Copy/Paste week and the Day, Analyst and Week
+     * view buttons, once.
+     */
     function buildBar() {
         if (bar) return;
         bar = document.createElement('div');
@@ -3917,6 +4302,7 @@
         if (pasteBtn && pasteBtn.parentElement !== target) target.appendChild(pasteBtn);
     }
 
+    /** Marks the Tickets rota footer button for the current view as pressed. */
     function syncBarPressed() {
         if (!viewsWrap) return;
         Array.prototype.forEach.call(viewsWrap.querySelectorAll('.rota-vb-btn'), function (b) {
@@ -3934,6 +4320,7 @@
     }
 
     // ---- the chooser strip -------------------------------------------------
+    /** Builds the Tickets rota chooser strip under the header, whose chips pick the day or analyst to show, once. */
     function buildChooser() {
         if (chooser) return;
         chooser = document.createElement('div');
@@ -3985,6 +4372,7 @@
         syncChooserPressed();
     }
 
+    /** Marks the chosen day or analyst chip in the Tickets rota chooser and scrolls it into sight. */
     function syncChooserPressed() {
         if (!chooser) return;
         Array.prototype.forEach.call(chooser.querySelectorAll('.rota-ch-btn'), function (chip) {
@@ -4000,6 +4388,10 @@
         }
     }
 
+    /**
+     * Switches the Tickets rota phone view (day, analyst or week), remembers it in localStorage and
+     * re-applies the grid filtering.
+     */
     function setView(v) {
         view = v;
         try { localStorage.setItem(STORE, v); } catch (e) { /* not essential */ }
@@ -4022,6 +4414,7 @@
         if (chosenCol > cols - 2) chosenCol = 0;
     }
 
+    /** Removes the phone hide class and date labels from every Tickets rota grid cell. */
     function clearTags() {
         Array.prototype.forEach.call(grid.children, function (el) {
             el.classList.remove('rota-m-hide');
@@ -4046,6 +4439,10 @@
         return iso;                        // never leave the cell unlabelled
     }
 
+    /**
+     * Hides the Tickets rota grid cells outside the chosen day or analyst on a phone, labels stacked
+     * analyst cells with their dates and redraws the chooser.
+     */
     function apply() {
         if (!mq.matches) { clearTags(); return; }
         defaults();
@@ -4118,12 +4515,17 @@
        mobile.js loads after rota.js, so the global is already there. */
     if (typeof window.goToThisWeek === 'function') {
         var rotaGoToThisWeek = window.goToThisWeek;
+        /** Wraps the rota's goToThisWeek so on a phone the chosen day resets and defaults back to today. */
         window.goToThisWeek = function () {
             if (mq.matches) chosenCol = null;
             return rotaGoToThisWeek.apply(this, arguments);
         };
     }
 
+    /**
+     * Sets up the Tickets rota footer and chooser at phone width, or on desktop puts Copy/Paste back and
+     * removes every phone-only change.
+     */
     function sync() {
         if (mq.matches) {
             buildBar();
@@ -4152,7 +4554,8 @@
 })();
 
 /* ============================================================================
-   LAYER 39a - Tickets > Users: the detail pane was 0px wide at x=360.
+   LAYER 39a - a list-and-detail page as a pane stack: Tickets > Users, and
+   (LAYER 43) Assets > Users, which is the same shape with assets in it.
 
    🔴 Tapping a user "did nothing", and so did tapping a group. Both were
    working perfectly: measured after a tap, `.user-detail-container` held 1748
@@ -4165,20 +4568,45 @@
    The fault is the oldest one in this rollout: a fixed-width pane beside a
    flexible one on a screen narrower than the fixed pane.
 
-   Both users and groups render into that same container - selectGroup()
-   redraws the whole detail pane - so one pane stack serves both.
+   ⭐ One block, a list of pages (extract on the second use - Mobile: Assets).
+   Each entry names the two panes and the globals that open a record:
+     page         the body's data-mobile-page
+     list/detail  the two panes
+     wraps        globals that open a record; wrapped, never edited (§1)
+     deepLink     a query parameter that opens straight to a record. Assets
+                  calls selectPerson() inline for ?user_id=, BEFORE this file
+                  loads, so the wrap never sees it and the stack would sit on
+                  the list with the person loaded out of sight.
    ========================================================================== */
 (function () {
     'use strict';
 
-    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'tickets-users') return;
+    var STACKS = [
+        /* Both users and groups render into the one detail container -
+           selectGroup() redraws the whole pane - so one stack serves both. */
+        { page: 'tickets-users', list: '.users-list-container',
+          detail: '#userDetail, .user-detail-container',
+          wraps: ['selectUser', 'selectGroup'], deepLink: 'user_id' },
+        { page: 'assets-users', list: '.au-wrap > .au-panel:first-child',
+          detail: '#auDetail',
+          wraps: ['selectPerson'], deepLink: 'user_id' }
+    ];
+
+    var cfg = null;
+    for (var i = 0; i < STACKS.length; i++) {
+        if (document.body && document.body.getAttribute('data-mobile-page') === STACKS[i].page) { cfg = STACKS[i]; break; }
+    }
+    if (!cfg) return;
 
     var mq = window.matchMedia('(max-width: 768px)');
-    var detail = document.getElementById('userDetail')
-              || document.querySelector('.user-detail-container');
-    var list = document.querySelector('.users-list-container');
+    var detail = document.querySelector(cfg.detail);
+    var list = document.querySelector(cfg.list);
     if (!detail || !list) return;
 
+    /**
+     * Translates a key for the users pane-stack Back button, falling back to the given English when the
+     * key is missing.
+     */
     function tr(key, fallback) {
         if (typeof window.t !== 'function') return fallback;
         var v = window.t(key);
@@ -4187,11 +4615,10 @@
 
     var back = null;
 
-    /* 🔴 selectUser() and selectGroup() REDRAW the detail pane wholesale, which
+    /* 🔴 The open-a-record functions REDRAW the detail pane wholesale, which
        throws this button away with everything else. Exactly the same fault as
-       the rota chooser, written up one layer earlier and still walked into
-       here: anything injected into a pane a page re-renders has to be put
-       back, and the only reliable trigger is watching the pane. */
+       the rota chooser: anything injected into a pane a page re-renders has to
+       be put back, and the only reliable trigger is watching the pane. */
     function buildBack() {
         if (back && back.isConnected) return;
         if (back) { detail.insertBefore(back, detail.firstChild); return; }
@@ -4207,6 +4634,10 @@
         detail.insertBefore(back, detail.firstChild);
     }
 
+    /**
+     * Shows the list or detail pane of a users pane stack (Tickets or Assets Users) on a phone, starting a
+     * newly opened record at the top.
+     */
     function showPane(which) {
         document.body.setAttribute('data-users-pane', which);
         if (which === 'detail') {
@@ -4215,18 +4646,18 @@
         }
     }
 
-    /* Wrap rather than edit (§1). users.php calls these globals from the row
-       markup it generates, so wrapping catches every row including the ones
+    /* Wrap rather than edit (§1). The pages call these globals from the row
+       markup they generate, so wrapping catches every row including the ones
        drawn after a search or a re-render - which a listener bound to the rows
        would not. */
-    ['selectUser', 'selectGroup'].forEach(function (name) {
+    cfg.wraps.forEach(function (name) {
         var orig = window[name];
         if (typeof orig !== 'function') return;
         window[name] = function () {
             var out = orig.apply(this, arguments);
             if (mq.matches) {
-                // selectGroup is async and redraws the pane; switching now is
-                // still correct because the pane is what we are revealing.
+                // These are async and redraw the pane; switching now is still
+                // correct because the pane is what we are revealing.
                 showPane('detail');
             }
             return out;
@@ -4238,15 +4669,133 @@
         if (mq.matches) buildBack();
     }).observe(detail, { childList: true });
 
+    var linked = false;
+    if (cfg.deepLink) {
+        try { linked = parseInt(new URLSearchParams(window.location.search).get(cfg.deepLink) || '', 10) > 0; } catch (e) {}
+    }
+
+    /**
+     * Sets up the users pane stack's Back button and starting pane at phone width (the detail pane for a
+     * user_id deep link), or removes it on desktop.
+     */
     function sync() {
         if (mq.matches) {
             buildBack();
             if (back) back.style.display = '';
-            if (!document.body.getAttribute('data-users-pane')) showPane('list');
+            if (!document.body.getAttribute('data-users-pane')) showPane(linked ? 'detail' : 'list');
         } else {
             // Desktop is a two-pane screen and must stay one.
             if (back) back.style.display = 'none';
             document.body.removeAttribute('data-users-pane');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ============================================================================
+   LAYER 39a2 - Tickets -> Users: a user's actions in a sticky footer (Ed)
+
+   People / Edit / Manager access / Delete wrapped under the name and scrolled
+   away with it. They move to a footer pinned to the bottom, as icons - the
+   Domains 41i shape:
+
+   - The REAL buttons move, never copies, and each one's words go into
+     aria-label (an icon has no name).
+   - selectUser() redraws #userDetail wholesale, so the footer is refilled on
+     every redraw (watched, as the Back button is); the previous user's
+     buttons simply go with the old markup.
+   - A group (selectGroup draws into the same pane) has none of the four, so
+     the footer hides. "Add to address book" stays in the header.
+   - Above 768px the buttons go back where they were.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'tickets-users') return;
+    var detail = document.getElementById('userDetail');
+    if (!detail) return;
+    var mq = window.matchMedia('(max-width: 768px)');
+
+    /** Wraps SVG path markup in a stroked 24px icon for the Tickets Users phone action footer. */
+    var SVG = function (paths) {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+               'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+    };
+    // Matched by what each control does, not by its (translated) words.
+    var ACTIONS = [
+        { sel: 'a[href*="person"]',
+          icon: SVG('<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 16 0v1"/>') },
+        { sel: 'button[onclick^="openUserModal"]',
+          icon: SVG('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>') },
+        { sel: 'a[href^="manager-access.php"]',
+          icon: SVG('<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>') },
+        { sel: 'button[onclick^="deleteUser"]', danger: true,
+          icon: SVG('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>') }
+    ];
+
+    var footer = document.createElement('div');
+    footer.className = 'users-detail-bar';
+    footer.style.display = 'none';
+    document.body.appendChild(footer);
+    var saved = [];
+
+    /**
+     * Puts the Tickets Users action buttons back into the user's header with their original text and
+     * empties the phone footer.
+     */
+    function restore() {
+        saved.forEach(function (s) {
+            if (!s.parent.isConnected) return;          // that user's markup is gone
+            s.el.innerHTML = s.html;
+            s.el.removeAttribute('aria-label');
+            s.el.removeAttribute('title');
+            s.el.classList.remove('udb-btn', 'udb-danger');
+            s.parent.insertBefore(s.el, s.next);
+        });
+        saved = [];
+        footer.innerHTML = '';
+    }
+
+    /**
+     * Moves the open user's People, Edit, Manager access and Delete buttons into the phone footer as
+     * icons, hiding the footer when there are none (a group).
+     */
+    function fill() {
+        restore();
+        var actions = detail.querySelector('.user-detail-header > div > div:last-child');
+        if (!actions) { footer.style.display = 'none'; document.body.classList.remove('has-users-bar'); return; }
+        ACTIONS.forEach(function (a) {
+            var el = actions.querySelector(a.sel);
+            if (!el) return;
+            saved.push({ el: el, html: el.innerHTML, parent: el.parentNode, next: el.nextSibling });
+            var label = (el.textContent || '').replace(/\s+/g, ' ').trim();
+            el.innerHTML = a.icon;
+            if (label) { el.setAttribute('aria-label', label); el.title = label; }
+            el.classList.add('udb-btn');
+            if (a.danger) el.classList.add('udb-danger');
+            footer.appendChild(el);
+        });
+        var any = footer.children.length > 0;
+        footer.style.display = any ? '' : 'none';
+        document.body.classList.toggle('has-users-bar', any);
+    }
+
+    var busy = false;
+    new MutationObserver(function () {
+        if (busy || !mq.matches) return;
+        busy = true;
+        try { fill(); } finally { busy = false; }
+    }).observe(detail, { childList: true });
+
+    /** Fills the Tickets Users action footer at phone width, or on desktop puts the buttons back and hides it. */
+    function sync() {
+        if (mq.matches) { fill(); }
+        else {
+            restore();
+            footer.style.display = 'none';
+            document.body.classList.remove('has-users-bar');
         }
     }
     sync();
@@ -4298,6 +4847,7 @@
 
     var swapped = [];
 
+    /** Swaps the tickets calendar modal's footer buttons for icons, moving each label into aria-label. */
     function toIcons() {
         if (swapped.length) return;
         Array.prototype.forEach.call(footer.querySelectorAll('.btn'), function (el) {
@@ -4313,6 +4863,7 @@
         });
     }
 
+    /** Restores the tickets calendar modal's footer buttons to their original text. */
     function toText() {
         swapped.forEach(function (s) {
             s.el.innerHTML = s.html;
@@ -4322,6 +4873,7 @@
         swapped = [];
     }
 
+    /** Shows the tickets calendar modal's footer buttons as icons at phone width and as text on desktop. */
     function sync() { if (mq.matches) toIcons(); else toText(); }
     sync();
     if (mq.addEventListener) { mq.addEventListener('change', sync); }
@@ -4365,6 +4917,7 @@
     var footer = null;
     var saved = [];          // original markup, so desktop gets it back exactly
 
+    /** Creates the Checklists editor's phone footer bar, once. */
     function build() {
         if (footer) return;
         footer = document.createElement('div');
@@ -4372,6 +4925,10 @@
         document.body.appendChild(footer);
     }
 
+    /**
+     * Moves the Checklists editor's Back and Save into the phone footer as icons, moving each label into
+     * aria-label.
+     */
     function toIcons() {
         if (saved.length) return;
         [back, save].forEach(function (el) {
@@ -4385,6 +4942,7 @@
         });
     }
 
+    /** Puts the Checklists editor's Back and Save back where they were, with their original text. */
     function toText() {
         saved.forEach(function (s) {
             s.el.innerHTML = s.html;
@@ -4405,6 +4963,10 @@
             Math.ceil(footer.getBoundingClientRect().height) + 'px');
     }
 
+    /**
+     * Shows the Checklists editor's Back/Save footer at phone width, or on desktop restores the buttons
+     * and drops the reserved height.
+     */
     function sync() {
         if (mq.matches) {
             build();
@@ -4457,6 +5019,10 @@
 
     var home = { parent: sidebar.parentNode, next: sidebar.nextSibling };
 
+    /**
+     * Translates a key for the Checklists list filter sheet, falling back to the given English when the
+     * key is missing.
+     */
     function tr(key, fallback) {
         if (typeof window.t !== 'function') return fallback;
         var v = window.t(key);
@@ -4470,6 +5036,10 @@
 
     var sheet = null, sheetBody = null, bar = null;
 
+    /**
+     * Builds the Checklists list filter sheet and its Filters footer button, closing the sheet when a
+     * filter link is tapped, once.
+     */
     function build() {
         if (sheet) return;
 
@@ -4519,11 +5089,13 @@
         });
     }
 
+    /** Opens or closes the Checklists list filter sheet via body[data-chk-sheet]. */
     function setOpen(open) {
         document.body.setAttribute('data-chk-sheet', open ? 'open' : 'closed');
         if (open && sheetBody) sheetBody.scrollTop = 0;
     }
 
+    /** Moves the Checklists sidebar into the filter sheet, or back to its place in the page. */
     function place(intoSheet) {
         if (intoSheet) {
             if (sheetBody && sidebar.parentNode !== sheetBody) sheetBody.appendChild(sidebar);
@@ -4532,12 +5104,14 @@
         }
     }
 
+    /** Records the Checklists filter footer's height in --chk-bar-h so the list is not hidden behind it. */
     function reserve() {
         if (!bar) return;
         document.body.style.setProperty('--chk-bar-h',
             Math.ceil(bar.getBoundingClientRect().height) + 'px');
     }
 
+    /** Moves the Checklists sidebar into a sheet with a footer button at phone width, or puts it back on desktop. */
     function sync() {
         if (mq.matches) {
             build();
@@ -4556,4 +5130,1251 @@
     sync();
     if (mq.addEventListener) { mq.addEventListener('change', sync); }
     else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   LAYER 41 - Domains: the register's sidebar as a sheet (Techniques §4)
+
+   Search, ten views and six filters stacked above the list on a phone, a
+   screen and a half before the first domain. The REAL `.dom-sidebar` node
+   moves into a full-screen sheet opened from a Filters bar at the bottom,
+   and moves home again when the viewport leaves mobile - so every listener
+   domains-register.js attached to it keeps working, and desktop never sees
+   the sheet or the bar.
+
+   🔑 The sheet closes when a VIEW is tapped - that is an arrival, and what
+   you chose is behind the sheet. It stays open for the search box and the
+   filter drop-downs, because you often set several (System Wiki's lesson:
+   closing on every tap can make the next choice unreachable).
+
+   The bar shows the current view beside "Filters", harvested from the
+   view's own button, so the list's state is visible without opening the
+   sheet and no string is invented.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'domains-register') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var sidebar = document.querySelector('.dom-sidebar');
+    if (!sidebar) return;
+
+    var home = { parent: sidebar.parentNode, next: sidebar.nextSibling };
+
+    /**
+     * Translates a key for the Domains register filter sheet, falling back to the given English when the
+     * key is missing.
+     */
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+
+    var ICONS = {
+        filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5h18M7 12h10M10 19h4"/></svg>',
+        close:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+    };
+
+    var sheet = null, sheetBody = null, bar = null, viewLabel = null;
+
+    /**
+     * Builds the Domains register filter sheet and its Filters footer button, closing the sheet when a
+     * view is tapped, once.
+     */
+    function build() {
+        if (sheet) return;
+
+        sheet = document.createElement('div');
+        sheet.className = 'dom-sheet';
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+
+        var head = document.createElement('div');
+        head.className = 'dom-sheet-head';
+        var title = document.createElement('span');
+        title.className = 'dom-sheet-title';
+        title.textContent = tr('common.filter', 'Filters');
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'dom-sheet-close';
+        close.innerHTML = ICONS.close;
+        close.setAttribute('aria-label', tr('common.close', 'Close'));
+        close.addEventListener('click', function () { setOpen(false); });
+        head.appendChild(title);
+        head.appendChild(close);
+
+        sheetBody = document.createElement('div');
+        sheetBody.className = 'dom-sheet-body';
+        sheet.appendChild(head);
+        sheet.appendChild(sheetBody);
+        document.body.appendChild(sheet);
+
+        bar = document.createElement('div');
+        bar.className = 'dom-fbar';
+        var open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'dom-fbar-btn';
+        open.innerHTML = ICONS.filter + '<span>' + tr('common.filter', 'Filters') + '</span>';
+        viewLabel = document.createElement('span');
+        viewLabel.className = 'dom-fbar-view';
+        open.appendChild(viewLabel);
+        open.addEventListener('click', function () { setOpen(true); });
+        bar.appendChild(open);
+        document.body.appendChild(bar);
+
+        /* A view is an arrival; delegated, because the page redraws the views
+           on every render and a listener per button would miss the redraw.
+           🔴 CAPTURE phase: the page's own click handler re-renders #domViews,
+           so by the time a bubbling listener runs the tapped button has been
+           replaced and `closest('#domViews button')` finds nothing - the list
+           changed and the sheet stayed open over it. Capture runs first. */
+        sheetBody.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('#domViews button') : null;
+            if (btn) setOpen(false);
+        }, true);
+
+        /* Keep the bar's view label in step with the page's own redraws. */
+        var views = document.getElementById('domViews');
+        if (views && window.MutationObserver) {
+            new MutationObserver(showView).observe(views, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        }
+        showView();
+    }
+
+    /**
+     * Shows the active Domains register view's name beside Filters on the phone footer button, leaving its
+     * count out.
+     */
+    function showView() {
+        if (!viewLabel) return;
+        var active = document.querySelector('#domViews button.active');
+        var text = '';
+        if (active) {
+            // The button holds the view's name and a count; take the text
+            // nodes and the first element only, so the count stays behind.
+            for (var i = 0; i < active.childNodes.length; i++) {
+                var n = active.childNodes[i];
+                if (n.nodeType === 3) text += n.nodeValue;
+                else if (n.nodeType === 1 && !n.classList.contains('count')) text += n.textContent;
+            }
+        }
+        text = text.replace(/\s+/g, ' ').trim();
+        viewLabel.textContent = text ? '· ' + text : '';
+        if (bar) bar.querySelector('.dom-fbar-btn').setAttribute('aria-label', tr('common.filter', 'Filters') + (text ? ' - ' + text : ''));
+    }
+
+    /** Opens or closes the Domains register filter sheet via body[data-dom-sheet]. */
+    function setOpen(open) {
+        document.body.setAttribute('data-dom-sheet', open ? 'open' : 'closed');
+        if (open && sheetBody) sheetBody.scrollTop = 0;
+    }
+
+    /** Moves the Domains register sidebar into the filter sheet, or back to its place in the page. */
+    function place(intoSheet) {
+        if (intoSheet) {
+            if (sheetBody && sidebar.parentNode !== sheetBody) sheetBody.appendChild(sidebar);
+        } else if (sidebar.parentNode !== home.parent) {
+            home.parent.insertBefore(sidebar, home.next);
+        }
+    }
+
+    /** Records the Domains register filter footer's height in --dom-bar-h so the list is not hidden behind it. */
+    function reserve() {
+        if (!bar) return;
+        document.body.style.setProperty('--dom-bar-h', Math.ceil(bar.getBoundingClientRect().height) + 'px');
+    }
+
+    /**
+     * Moves the Domains register sidebar into a sheet with a footer button at phone width, or puts it back
+     * on desktop.
+     */
+    function sync() {
+        if (mq.matches) {
+            build();
+            place(true);
+            bar.style.display = '';
+            sheet.style.display = '';
+            if (!document.body.getAttribute('data-dom-sheet')) setOpen(false);
+            reserve();
+        } else {
+            place(false);
+            if (bar) bar.style.display = 'none';
+            if (sheet) sheet.style.display = 'none';
+            document.body.removeAttribute('data-dom-sheet');
+            document.body.style.removeProperty('--dom-bar-h');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   LAYER 41i - Domains: a domain's actions in a sticky footer (Ed)
+
+   Refresh, Check now, Edit and Delete sat in a wrapping row under the hero,
+   scrolled away as soon as you read down the page. They move to a footer
+   pinned to the bottom, as icons - the Checklists editor's 40c, done the same
+   way:
+
+   - The REAL buttons move, never copies: domains-view.js binds each by id,
+     so a clone would do nothing beside an original that still works.
+   - Each button's own label goes into aria-label (an icon has no name), and
+     Refresh and Check keep the icon they already carry; only Edit and Delete
+     get one here.
+   - busy() swaps a button's contents for "Working..." and back, saving what
+     was there when clicked - so the icon is what comes back.
+   - Above 768px everything returns exactly where it was, title text and all.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'domains-view') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    // Back first, as in the Checklists editor's footer (Ed: "a proper back button").
+    var ids = ['domBack', 'btnRefresh', 'btnCheck', 'btnEdit', 'btnDelete'];
+    var btns = ids.map(function (id) { return document.getElementById(id); }).filter(Boolean);
+    if (btns.length !== ids.length) return;
+
+    var ICONS = {
+        domBack:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
+        btnEdit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+        btnDelete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
+    };
+
+    var footer = null;
+    var saved = [];
+
+    /** Creates the Domains detail page's phone action footer, once. */
+    function build() {
+        if (footer) return;
+        footer = document.createElement('div');
+        footer.className = 'dom-view-bar';
+        document.body.appendChild(footer);
+    }
+
+    /**
+     * Moves the Domains detail page's Back, Refresh, Check now, Edit and Delete buttons into the phone
+     * footer as icons, moving each label into aria-label.
+     */
+    function toIcons() {
+        if (saved.length) return;
+        btns.forEach(function (el) {
+            saved.push({ el: el, html: el.innerHTML, parent: el.parentNode, next: el.nextSibling,
+                         hadAria: el.hasAttribute('aria-label') });
+            // The back link reads "← All domains": the arrow is the icon now.
+            var label = (el.textContent || '').replace(/\s+/g, ' ').replace(/^[\u2190<]+\s*/, '').trim();
+            var own = el.querySelector('svg');
+            el.innerHTML = ICONS[el.id] || (own ? own.outerHTML : '');
+            if (label) el.setAttribute('aria-label', label);
+            el.classList.add('dom-vb-btn');
+            footer.appendChild(el);
+        });
+    }
+
+    /** Puts the Domains detail page's action buttons back where they were, with their original content. */
+    function toText() {
+        saved.forEach(function (s) {
+            s.el.innerHTML = s.html;
+            if (!s.hadAria) s.el.removeAttribute('aria-label');
+            s.el.classList.remove('dom-vb-btn');
+            s.parent.insertBefore(s.el, s.next);      // exactly where it was
+        });
+        saved = [];
+    }
+
+    /* Reserve the footer's real height, so the last card is not behind it. */
+    function reserve() {
+        if (!footer) return;
+        document.body.style.setProperty('--dom-vbar-h', Math.ceil(footer.getBoundingClientRect().height) + 'px');
+    }
+
+    /**
+     * Shows the Domains detail action footer at phone width, or on desktop restores the buttons and drops
+     * the reserved height.
+     */
+    function sync() {
+        if (mq.matches) {
+            build();
+            footer.style.display = '';
+            toIcons();
+            reserve();
+        } else {
+            toText();
+            if (footer) footer.style.display = 'none';
+            document.body.style.removeProperty('--dom-vbar-h');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   Contracts list on a phone: Overview / Contracts views + a sticky footer (Ed)
+
+   The page is a sidebar (search, the five figures, quick links, New contract)
+   stacked over the contract cards, so the cards started a screen and a half
+   down. On a phone it becomes two views and a footer, the tickets rota's
+   switcher shape (fixed, bottom, z-index 1200, env() for the home indicator):
+
+     Overview   the figures and quick links (the sidebar)
+     Contracts  the list on its own
+     Search     the page's own search modal (openSearchModal)
+     Add        the sidebar's New contract link (edit.php)
+     Filter     a sheet built FROM the page's #partyFilter options; picking
+                one sets the real select and fires its change, so
+                loadContracts() does the work exactly as on desktop. A dot on
+                the button says a filter is on while the select is hidden.
+
+   The view is ONE attribute on <body>; CSS does the hiding. Which view you
+   were on is remembered per browser (a convenience, so wrapped in try).
+   Zero new strings: every label already exists and is translated.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'contracts-list') return;
+    var mq = window.matchMedia('(max-width: 768px)');
+    var select = document.getElementById('partyFilter');
+    var KEY = 'freeitsm.contracts.mobileView';
+
+    /**
+     * Translates a key for the Contracts list phone footer, falling back to the given English when the key
+     * is missing.
+     */
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+    /** Escapes a string for safe use in HTML text or a double-quoted attribute. */
+    function esc(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+    /** Wraps SVG path markup in a stroked 24px icon for the Contracts list phone footer. */
+    var SVG = function (p) {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+               'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
+    };
+    var ITEMS = [
+        { id: 'overview', label: tr('contracts.list.overview', 'Overview'),
+          icon: SVG('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>') },
+        { id: 'list', label: tr('contracts.nav.contracts', 'Contracts'),
+          icon: SVG('<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>') },
+        { id: 'search', label: tr('common.search', 'Search'),
+          icon: SVG('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>') },
+        // New contract is in the action row at the top of the page (#185).
+        { id: 'filter', label: tr('common.filter', 'Filter'),
+          icon: SVG('<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>') }
+    ];
+
+    var bar = document.createElement('nav');
+    bar.className = 'ctr-mbar';
+    bar.style.display = 'none';
+    var btns = {};
+    ITEMS.forEach(function (it) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ctr-mbar-btn';
+        b.setAttribute('data-act', it.id);
+        b.innerHTML = it.icon + '<span>' + esc(it.label) + '</span>';
+        b.addEventListener('click', function () { act(it.id); });
+        bar.appendChild(b);
+        btns[it.id] = b;
+    });
+    document.body.appendChild(bar);
+
+    // The filter sheet: one row per option of the real select.
+    var sheet = document.createElement('div');
+    sheet.className = 'ctr-filter-sheet';
+    sheet.style.display = 'none';
+    document.body.appendChild(sheet);
+
+    /**
+     * Builds the Contracts list filter sheet with one option per entry in the real party filter, marking
+     * the current one.
+     */
+    function buildSheet() {
+        if (!select) return;
+        var title = select.getAttribute('aria-label') || tr('common.filter', 'Filter');
+        var html = '<div class="cfs-panel" role="dialog" aria-label="' + esc(title) + '">' +
+                   '<div class="cfs-head"><span>' + esc(title) + '</span>' +
+                   '<button type="button" class="cfs-close">' + esc(tr('common.close', 'Close')) + '</button></div>';
+        Array.prototype.forEach.call(select.options, function (o, i) {
+            html += '<button type="button" class="cfs-opt' + (o.value === select.value ? ' on' : '') +
+                    '" data-i="' + i + '">' + esc(o.textContent) + '</button>';
+        });
+        sheet.innerHTML = html + '</div>';
+        sheet.querySelector('.cfs-close').addEventListener('click', closeSheet);
+        Array.prototype.forEach.call(sheet.querySelectorAll('.cfs-opt'), function (el) {
+            el.addEventListener('click', function () {
+                select.selectedIndex = parseInt(el.getAttribute('data-i'), 10);
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+                syncDot();
+                closeSheet();
+                setView('list');
+            });
+        });
+    }
+    /** Rebuilds and opens the Contracts list filter sheet. */
+    function openSheet() { buildSheet(); sheet.style.display = 'flex'; }
+    /** Hides the Contracts list filter sheet. */
+    function closeSheet() { sheet.style.display = 'none'; }
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSheet(); });
+
+    /** Shows a dot on the Contracts list Filter footer button while a party filter is set. */
+    function syncDot() {
+        btns.filter.classList.toggle('has-dot', !!(select && select.value));
+    }
+
+    /**
+     * Switches the Contracts list phone view between Overview and Contracts, remembers it in localStorage
+     * and scrolls back to the top.
+     */
+    function setView(v) {
+        document.body.setAttribute('data-contracts-view', v);
+        btns.overview.setAttribute('aria-pressed', v === 'overview' ? 'true' : 'false');
+        btns.list.setAttribute('aria-pressed', v === 'list' ? 'true' : 'false');
+        try { localStorage.setItem(KEY, v); } catch (e) {}
+        window.scrollTo(0, 0);
+        var lay = document.querySelector('.contracts-layout');
+        if (lay) lay.scrollTop = 0;
+    }
+
+    /**
+     * Runs a Contracts list phone footer action - switch view, open the search modal or open the
+     * filter sheet.
+     */
+    function act(id) {
+        if (id === 'overview' || id === 'list') setView(id);
+        else if (id === 'search' && typeof window.openSearchModal === 'function') window.openSearchModal();
+        else if (id === 'filter') openSheet();
+    }
+
+    /**
+     * Shows the Contracts list phone footer at phone width with the remembered view, or on desktop clears
+     * the view and closes the filter sheet.
+     */
+    function sync() {
+        if (mq.matches) {
+            var v = 'overview';
+            try { v = localStorage.getItem(KEY) || 'overview'; } catch (e) {}
+            setView(v === 'list' ? 'list' : 'overview');
+            bar.style.display = '';
+            syncDot();
+            if (!select) btns.filter.style.display = 'none';
+        } else {
+            document.body.removeAttribute('data-contracts-view');
+            bar.style.display = 'none';
+            closeSheet();
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   LAYER 29t - LMS -> Tests builder: the question count gets its heading back
+
+   On a phone each skill row is a small card and the one row of column heads
+   above them is hidden (it cannot label a stack). Difficulty and format are
+   selects that say what they are; the count is a bare "5". Harvest the
+   heading from the hidden head - already translated - onto each row as an
+   attribute, and LAYER 29t prints it as the row ::before. Rows are added,
+   removed and rebuilt by lms-tests.js, so the list is watched (§21).
+   Phone only, and the attribute is removed again above 768px (§25).
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'lms-tests-edit') return;
+    var list = document.getElementById('skills');
+    var head = document.querySelector('.ct-skill-head');
+    if (!list || !head) return;
+    var mq = window.matchMedia('(max-width: 768px)');
+    var ATTR = 'data-mobile-count-label';
+
+    /** Returns the question-count column heading from the LMS Tests builder's hidden skill header. */
+    function label() {
+        var cell = head.children[2];
+        return cell ? (cell.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    }
+    /**
+     * Stamps the question-count heading onto each LMS Tests builder skill row at phone width, and removes
+     * it on desktop.
+     */
+    function apply() {
+        var text = mq.matches ? label() : '';
+        Array.prototype.forEach.call(list.querySelectorAll('.ct-skill'), function (row) {
+            if (text) { if (row.getAttribute(ATTR) !== text) row.setAttribute(ATTR, text); }
+            else row.removeAttribute(ATTR);
+        });
+    }
+    new MutationObserver(apply).observe(list, { childList: true });
+    apply();
+    if (mq.addEventListener) { mq.addEventListener('change', apply); }
+    else if (mq.addListener) { mq.addListener(apply); }
+})();
+
+/* ==========================================================================
+   LAYER 44a - Projects portfolio: the sidebar as a sheet (Techniques §4)
+
+   A 240px sidebar beside the cards left the card grid 120px wide on a phone.
+   The Domains register's answer (LAYER 41), under this module's names: the
+   REAL `.prj-sidebar` moves into a full-screen sheet opened from a Filters
+   bar at the bottom, and moves home when the viewport leaves mobile - so
+   every listener projects-portfolio.js attached keeps working, and desktop
+   never builds the sheet or the bar.
+
+   🔑 A view is an arrival: the sheet closes on it. The search box keeps it
+   open while you type. The bar shows the current view, harvested from the
+   view's own label, so no string is invented.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'projects-portfolio') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var sidebar = document.querySelector('.prj-sidebar');
+    if (!sidebar) return;
+    var home = { parent: sidebar.parentNode, next: sidebar.nextSibling };
+
+    /**
+     * Translates a key for the Projects portfolio filter sheet, falling back to the given English when the
+     * key is missing.
+     */
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+    var ICONS = {
+        filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5h18M7 12h10M10 19h4"/></svg>',
+        close:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+    };
+
+    var sheet = null, sheetBody = null, bar = null, viewLabel = null;
+
+    /**
+     * Builds the Projects portfolio filter sheet and its Filter footer button, closing the sheet when a
+     * view is tapped, once.
+     */
+    function build() {
+        if (sheet) return;
+        sheet = document.createElement('div');
+        sheet.className = 'prj-msheet';
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        var head = document.createElement('div');
+        head.className = 'prj-msheet-head';
+        var title = document.createElement('span');
+        title.className = 'prj-msheet-title';
+        title.textContent = tr('common.filter', 'Filter');
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'prj-msheet-close';
+        close.innerHTML = ICONS.close;
+        close.setAttribute('aria-label', tr('common.close', 'Close'));
+        close.addEventListener('click', function () { setOpen(false); });
+        head.appendChild(title);
+        head.appendChild(close);
+        sheetBody = document.createElement('div');
+        sheetBody.className = 'prj-msheet-body';
+        sheet.appendChild(head);
+        sheet.appendChild(sheetBody);
+        document.body.appendChild(sheet);
+
+        bar = document.createElement('div');
+        bar.className = 'prj-fbar';
+        var open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'prj-fbar-btn';
+        open.innerHTML = ICONS.filter + '<span>' + tr('common.filter', 'Filter') + '</span>';
+        viewLabel = document.createElement('span');
+        viewLabel.className = 'prj-fbar-view';
+        open.appendChild(viewLabel);
+        open.addEventListener('click', function () { setOpen(true); });
+        bar.appendChild(open);
+        document.body.appendChild(bar);
+
+        /* CAPTURE phase - the Domains lesson: a page that redraws what was
+           tapped detaches it before a bubbling listener can ask where it was.
+           This page only toggles classes today, but the capture costs
+           nothing and survives the day it starts redrawing. */
+        sheetBody.addEventListener('click', function (e) {
+            var li = e.target.closest ? e.target.closest('#prjViews li[data-view]') : null;
+            if (li) setOpen(false);
+        }, true);
+
+        var views = document.getElementById('prjViews');
+        if (views && window.MutationObserver) {
+            new MutationObserver(showView).observe(views, { subtree: true, attributes: true, attributeFilter: ['class'] });
+        }
+        showView();
+    }
+
+    /** Shows the active Projects portfolio view's name beside Filter on the phone footer button. */
+    function showView() {
+        if (!viewLabel) return;
+        var active = document.querySelector('#prjViews li.active > span');
+        var text = active ? (active.textContent || '').replace(/\s+/g, ' ').trim() : '';
+        viewLabel.textContent = text ? '· ' + text : '';
+        bar.querySelector('.prj-fbar-btn').setAttribute('aria-label', tr('common.filter', 'Filter') + (text ? ' - ' + text : ''));
+    }
+
+    /** Opens or closes the Projects portfolio filter sheet. */
+    function setOpen(open) {
+        if (!sheet) return;
+        sheet.classList.toggle('open', !!open);
+        if (open && sheetBody) sheetBody.scrollTop = 0;
+    }
+
+    /** Moves the Projects portfolio sidebar into the filter sheet, or back to its place in the page. */
+    function place(intoSheet) {
+        if (intoSheet) {
+            if (sheetBody && sidebar.parentNode !== sheetBody) sheetBody.appendChild(sidebar);
+        } else if (sidebar.parentNode !== home.parent) {
+            home.parent.insertBefore(sidebar, home.next);
+        }
+    }
+
+    /** Records the Projects portfolio filter footer's height in --prj-bar-h so the cards are not hidden behind it. */
+    function reserve() {
+        if (!bar) return;
+        document.body.style.setProperty('--prj-bar-h', Math.ceil(bar.getBoundingClientRect().height) + 'px');
+    }
+
+    /**
+     * Moves the Projects portfolio sidebar into a sheet with a footer button at phone width, or puts it
+     * back on desktop.
+     */
+    function sync() {
+        if (mq.matches) {
+            build();
+            place(true);
+            bar.style.display = '';
+            sheet.style.display = '';
+            reserve();
+        } else {
+            place(false);
+            setOpen(false);
+            if (bar) bar.style.display = 'none';
+            if (sheet) sheet.style.display = 'none';
+            document.body.style.removeProperty('--prj-bar-h');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   LAYER 44b - Projects: a project's actions in a sticky footer (41i's shape)
+
+   "All projects" was a small grey text link, and Edit / Delete sat at the
+   foot of the banner and scrolled away. On a phone all three live in a
+   footer pinned to the bottom - Back as a chevron square, Edit and Delete as
+   icons - done exactly as the Domains view (41i):
+
+   - The REAL link and buttons move, never copies: projects-view.js binds
+     #pvEdit and #pvDelete by id, so a clone would do nothing.
+   - Each one's own label goes into aria-label (an icon has no name).
+   - Above 768px everything returns exactly where it was.
+   - Template (3.2.0, save as a template) is an icon square like Back, between
+     Edit and Delete; it stays [hidden] for anyone without the permission.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'projects-view') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var btns = [document.querySelector('#prjPage > .prj-back'), document.getElementById('pvEdit'), document.getElementById('pvTemplate'), document.getElementById('pvDelete')];
+    if (!btns[0] || !btns[1] || !btns[3]) return;
+    btns = btns.filter(Boolean);
+
+    var ICONS = {
+        back:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
+        pvEdit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+        pvTemplate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+        pvDelete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
+    };
+
+    var footer = null;
+    var saved = [];
+
+    /** Creates the Projects detail page's phone action footer, once. */
+    function build() {
+        if (footer) return;
+        footer = document.createElement('div');
+        footer.className = 'prj-view-bar';
+        document.body.appendChild(footer);
+    }
+
+    /**
+     * Moves the project's Back link and Edit, Template and Delete buttons into the phone footer as icons,
+     * moving each label into aria-label.
+     */
+    function toIcons() {
+        if (saved.length) return;
+        btns.forEach(function (el) {
+            saved.push({ el: el, html: el.innerHTML, parent: el.parentNode, next: el.nextSibling,
+                         hadAria: el.hasAttribute('aria-label') });
+            // The back link reads "← All projects": the arrow becomes the icon.
+            var label = (el.textContent || '').replace(/\s+/g, ' ').replace(/^[←<]+\s*/, '').trim();
+            // Two actions leave room for their own words (one each, "Edit" /
+            // "Delete"); Back is the square, as in the Domains footer.
+            var word = document.createElement('span');
+            word.textContent = label;
+            el.innerHTML = ICONS[el.id] ? ICONS[el.id] + word.outerHTML : ICONS.back;
+            if (label) el.setAttribute('aria-label', label);
+            el.classList.add('prj-vb-btn');
+            footer.appendChild(el);
+        });
+    }
+
+    /** Puts the project's Back link and action buttons back where they were, with their original content. */
+    function toText() {
+        saved.forEach(function (s) {
+            s.el.innerHTML = s.html;
+            if (!s.hadAria) s.el.removeAttribute('aria-label');
+            s.el.classList.remove('prj-vb-btn');
+            s.parent.insertBefore(s.el, s.next);      // exactly where it was
+        });
+        saved = [];
+    }
+
+    /** Records the Projects detail footer's height in --prj-vbar-h so the page is not hidden behind it. */
+    function reserve() {
+        if (!footer) return;
+        document.body.style.setProperty('--prj-vbar-h', Math.ceil(footer.getBoundingClientRect().height) + 'px');
+    }
+
+    /**
+     * Shows the Projects detail action footer at phone width, or on desktop restores the buttons and drops
+     * the reserved height.
+     */
+    function sync() {
+        if (mq.matches) {
+            build();
+            footer.style.display = '';
+            toIcons();
+            reserve();
+        } else {
+            toText();
+            if (footer) footer.style.display = 'none';
+            document.body.style.removeProperty('--prj-vbar-h');
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   LAYER 44c - Projects plan: move a task to another phase without a drag
+
+   On desktop a task is dragged between lanes (HTML5 drag-and-drop). §22
+   says that kind of drag CAN fire on iOS from a long press - but here the
+   grip only appears on :hover (§26), the row is mostly a link whose long
+   press opens the link menu, and a 360px screen shows one lane at a time, so
+   the lane you want is usually off-screen. A phone gets a picker instead: a
+   small button on each row opens a sheet listing the plan's own lanes.
+
+   🔑 Wrap, don't edit (§1), Network Mapper's way (LAYER 31): choosing a
+   lane dispatches the SAME events the page already listens for - a
+   `dragstart` on the row and a `drop` on the lane - so projects-view.js's own
+   moveTask() does the API call and the redraw, and not one line of it
+   changed. The events carry a stub dataTransfer, so no browser needs the
+   DataTransfer constructor.
+
+   Zero new strings: the lane names and kind chips come from the lanes'
+   own headings, the sheet's title is the task's own title, and the button's
+   name is the plan's own word for a lane ("Phase", "Stage", "Sprint").
+   Rows are rebuilt on every change, so the plan is watched; nothing is
+   injected above 768px, and everything injected is removed when the
+   viewport leaves mobile.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'projects-view') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var plan = document.getElementById('pvPlan');
+    if (!plan || !window.MutationObserver) return;
+
+    /**
+     * Translates a key for the Projects plan move-task sheet, falling back to the given English when the
+     * key is missing.
+     */
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+    /**
+     * Returns an element's text with whitespace collapsed, or an empty string - for the Projects plan
+     * move-task picker.
+     */
+    function txt(el) { return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+    var ICON_MOVE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4"/><path d="M17 20V4M13 8l4-4 4 4"/></svg>';
+    var ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+    var sheet = null, sheetTitle = null, sheetBody = null, current = null, pending = null;
+
+    /** Builds the Projects plan move-task sheet, whose lane options move the chosen task, once. */
+    function build() {
+        if (sheet) return;
+        sheet = document.createElement('div');
+        sheet.className = 'prj-msheet prj-move-sheet';
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        var head = document.createElement('div');
+        head.className = 'prj-msheet-head';
+        sheetTitle = document.createElement('span');
+        sheetTitle.className = 'prj-msheet-title';
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'prj-msheet-close';
+        close.innerHTML = ICON_CLOSE;
+        close.setAttribute('aria-label', tr('common.close', 'Close'));
+        close.addEventListener('click', function () { setOpen(false); });
+        head.appendChild(sheetTitle);
+        head.appendChild(close);
+        sheetBody = document.createElement('div');
+        sheetBody.className = 'prj-msheet-body';
+        sheet.appendChild(head);
+        sheet.appendChild(sheetBody);
+        document.body.appendChild(sheet);
+        // A tap on the dimmed plan above the choices closes the sheet.
+        sheet.addEventListener('click', function (e) { if (e.target === sheet) setOpen(false); });
+        sheetBody.addEventListener('click', function (e) {
+            var nudge = e.target.closest ? e.target.closest('.prj-move-nudge-btn') : null;
+            if (nudge) {
+                if (nudge.disabled || !current) return;
+                var id = current;
+                setOpen(false);
+                window.PrjPlan.nudgeTask(id, parseInt(nudge.getAttribute('data-nudge'), 10));
+                return;
+            }
+            var opt = e.target.closest ? e.target.closest('.prj-move-opt') : null;
+            if (!opt || opt.getAttribute('aria-current') === 'true') return;
+            moveTo(opt.getAttribute('data-lane'));
+        });
+    }
+
+    /** Opens or closes the Projects plan move-task sheet, forgetting the task when it closes. */
+    function setOpen(open) {
+        if (!sheet) return;
+        sheet.classList.toggle('open', !!open);
+        if (!open) current = null;
+    }
+
+    /** The plan's own word for a lane, from the first lane's kind chip. */
+    function laneWord() {
+        return txt(plan.querySelector('.prj-lane-kind'));
+    }
+
+    /**
+     * Opens the Projects plan move-task sheet for a task row, listing every lane with the task's current
+     * one marked.
+     */
+    function openFor(row) {
+        build();
+        current = row.getAttribute('data-task');
+        var here = row.closest('.prj-lane');
+        sheetTitle.textContent = txt(row.querySelector('.prj-task-title'));
+        var html = '';
+        // GH #184: Up / Down within its own lane, before the list of lanes. Done by
+        // projects-view.js's own nudgeTask(), the same as the arrow keys on desktop.
+        if (window.PrjPlan && window.PrjPlan.nudgeTask) {
+            var rows = here ? here.querySelectorAll('.prj-task') : [];
+            var at = Array.prototype.indexOf.call(rows, row);
+            html += '<div class="prj-move-nudge">'
+                + '<button type="button" class="prj-move-nudge-btn" data-nudge="-1"' + (at <= 0 ? ' disabled' : '') + '>&#8593; ' + tr('projects.plan.move_up', 'Up') + '</button>'
+                + '<button type="button" class="prj-move-nudge-btn" data-nudge="1"' + (at < 0 || at >= rows.length - 1 ? ' disabled' : '') + '>&#8595; ' + tr('projects.plan.move_down', 'Down') + '</button>'
+                + '</div>';
+        }
+        Array.prototype.forEach.call(plan.querySelectorAll('.prj-lane'), function (lane) {
+            var id = lane.getAttribute('data-lane') || '';
+            var kind = lane.querySelector('.prj-lane-kind');
+            var name = txt(lane.querySelector('.prj-lane-head h3'));
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'prj-move-opt';
+            b.setAttribute('data-lane', id);
+            if (lane === here) b.setAttribute('aria-current', 'true');
+            if (kind) {
+                var k = document.createElement('span');
+                k.className = 'prj-lane-kind';
+                k.textContent = txt(kind);
+                b.appendChild(k);
+            }
+            var n = document.createElement('span');
+            n.textContent = name;
+            b.appendChild(n);
+            html += b.outerHTML;
+        });
+        sheetBody.innerHTML = html;
+        setOpen(true);
+    }
+
+    /**
+     * Dispatches a drag event with a stub dataTransfer carrying the chosen task id, so the Projects plan's
+     * own drag handlers move it.
+     */
+    function fire(target, type) {
+        var ev = new Event(type, { bubbles: true, cancelable: true });
+        var dt = { effectAllowed: 'move', dropEffect: 'move', setData: function () {}, getData: function () { return current || ''; } };
+        try { Object.defineProperty(ev, 'dataTransfer', { value: dt }); } catch (err) { /* very old engines */ }
+        target.dispatchEvent(ev);
+    }
+
+    /**
+     * Moves the chosen Projects plan task to a lane by firing dragstart, drop and dragend, so the page's
+     * own moveTask() does the work.
+     */
+    function moveTo(laneId) {
+        var row = current ? plan.querySelector('.prj-task[data-task="' + current + '"]') : null;
+        var lane = plan.querySelector('.prj-lane[data-lane="' + laneId + '"]');
+        if (!row || !lane) { setOpen(false); return; }
+        pending = { task: current, lane: laneId };
+        fire(row, 'dragstart');
+        fire(lane.querySelector('.prj-lane-tasks') || lane, 'drop');
+        fire(row, 'dragend');
+        setOpen(false);
+    }
+
+    /**
+     * Adds a move button to each Projects plan task row on a phone, and shows a Moved toast once a pending
+     * move has been redrawn.
+     */
+    function decorate() {
+        if (!mq.matches) return;
+        var word = laneWord();
+        // Nothing to move between until the plan has at least one lane besides
+        // "not in a phase yet".
+        var lanes = plan.querySelectorAll('.prj-lane').length;
+        Array.prototype.forEach.call(plan.querySelectorAll('.prj-task'), function (row) {
+            var btn = row.querySelector('.prj-move-btn');
+            if (lanes < 2) { if (btn) btn.remove(); return; }
+            if (btn) return;
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'prj-move-btn';
+            btn.innerHTML = ICON_MOVE;
+            if (word) btn.setAttribute('aria-label', word);
+            var rm = row.querySelector('.prj-task-remove');
+            row.insertBefore(btn, rm || null);
+        });
+        // A move finished: the page redrew the plan with the task in its new lane.
+        if (pending) {
+            var moved = plan.querySelector('.prj-lane[data-lane="' + pending.lane + '"] .prj-task[data-task="' + pending.task + '"]');
+            if (moved) {
+                pending = null;
+                if (typeof window.showToast === 'function' && window.Prj && window.Prj.T) window.showToast(window.Prj.T('plan.moved'), 'success');
+            }
+        }
+    }
+
+    /** Removes the Projects plan move buttons and hides the move-task sheet. */
+    function strip() {
+        Array.prototype.forEach.call(plan.querySelectorAll('.prj-move-btn'), function (b) { b.remove(); });
+        setOpen(false);
+        if (sheet) sheet.style.display = 'none';
+    }
+
+    /* The picker button lives in the row, so a tap on it must not reach the
+       row's link or the page's own click handler's other branches. */
+    plan.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('.prj-move-btn') : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openFor(btn.closest('.prj-task'));
+    }, true);
+
+    new MutationObserver(decorate).observe(plan, { childList: true, subtree: true });
+
+    /** Adds the Projects plan move buttons at phone width, or strips them on desktop. */
+    function sync() {
+        if (mq.matches) {
+            if (sheet) sheet.style.display = '';
+            decorate();
+        } else {
+            strip();
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   LAYER 44d - Projects scope: change a deliverable's priority without a drag
+
+   On desktop a card is dragged between the MoSCoW columns. On a phone the
+   board is one column per row (mobile.css 44k), so the column you want is a
+   screen or more away and a drag would have to scroll the page mid-gesture
+   - the same reasons as the plan's lanes (44c). So each card gets 44c's
+   picker button, opening 44c's bottom sheet listing the five columns, the
+   card's own one ticked and not choosable. (Tapping the card itself still
+   opens its dialog, whose Priority field does the same thing with more
+   taps; the picker is the one-tap move the drag is on desktop.)
+
+   🔑 Wrap, don't edit (§1): choosing a column dispatches the events
+   projects-tools.js already listens for - `dragstart` on the card,
+   `dragover` on the column (its handler moves the card into the column, so
+   the order it sends includes it), `drop`, `dragend` - and its own item_move
+   call and redraw do the rest. Not one line of projects-tools.js changed.
+
+   Zero new strings: the column names come from the columns' own headings
+   (text nodes only, so the count badge stays behind), the sheet's title is
+   the card's own title, the button's name is the dialog's own "Priority"
+   label, and the toast is the plan's existing "Moved". Only cards the
+   analyst may change carry draggable="true", so only they get a picker.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'projects-view') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var scope = document.getElementById('pvScope');
+    if (!scope || !window.MutationObserver) return;
+
+    /**
+     * Translates a key for the Projects scope move sheet, falling back to the given English when the key
+     * is missing.
+     */
+    function tr(key, fallback) {
+        if (typeof window.t !== 'function') return fallback;
+        var v = window.t(key);
+        return (!v || v === key) ? fallback : v;
+    }
+    /**
+     * Returns an element's text with whitespace collapsed, or an empty string - for the Projects scope
+     * priority picker.
+     */
+    function txt(el) { return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+    /** A column heading's own words - text nodes only, so the count badge
+        beside them does not come along. */
+    function headText(h) {
+        if (!h) return '';
+        var s = '';
+        for (var i = 0; i < h.childNodes.length; i++) {
+            if (h.childNodes[i].nodeType === 3) s += h.childNodes[i].nodeValue;
+        }
+        return s.replace(/\s+/g, ' ').trim();
+    }
+    var ICON_MOVE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4"/><path d="M17 20V4M13 8l4-4 4 4"/></svg>';
+    var ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+    var sheet = null, sheetTitle = null, sheetBody = null, current = null, pending = null;
+
+    /** Builds the Projects scope priority sheet, whose MoSCoW column options move the chosen card, once. */
+    function build() {
+        if (sheet) return;
+        sheet = document.createElement('div');
+        sheet.className = 'prj-msheet prj-move-sheet';
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        var head = document.createElement('div');
+        head.className = 'prj-msheet-head';
+        sheetTitle = document.createElement('span');
+        sheetTitle.className = 'prj-msheet-title';
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'prj-msheet-close';
+        close.innerHTML = ICON_CLOSE;
+        close.setAttribute('aria-label', tr('common.close', 'Close'));
+        close.addEventListener('click', function () { setOpen(false); });
+        head.appendChild(sheetTitle);
+        head.appendChild(close);
+        sheetBody = document.createElement('div');
+        sheetBody.className = 'prj-msheet-body';
+        sheet.appendChild(head);
+        sheet.appendChild(sheetBody);
+        document.body.appendChild(sheet);
+        sheet.addEventListener('click', function (e) { if (e.target === sheet) setOpen(false); });
+        sheetBody.addEventListener('click', function (e) {
+            var opt = e.target.closest ? e.target.closest('.prj-move-opt') : null;
+            if (!opt || opt.getAttribute('aria-current') === 'true') return;
+            moveTo(opt.getAttribute('data-moscow'));
+        });
+    }
+
+    /** Opens or closes the Projects scope priority sheet, forgetting the card when it closes. */
+    function setOpen(open) {
+        if (!sheet) return;
+        sheet.classList.toggle('open', !!open);
+        if (!open) current = null;
+    }
+
+    /**
+     * Opens the Projects scope priority sheet for a card, listing every MoSCoW column with the card's
+     * current one marked.
+     */
+    function openFor(card) {
+        build();
+        current = card.getAttribute('data-item');
+        var here = card.closest('.prj-moscow-col');
+        sheetTitle.textContent = txt(card.querySelector('.prj-item-title'));
+        sheetBody.innerHTML = '';
+        Array.prototype.forEach.call(scope.querySelectorAll('.prj-moscow-col'), function (col) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'prj-move-opt';
+            b.setAttribute('data-moscow', col.getAttribute('data-moscow') || '');
+            if (col === here) b.setAttribute('aria-current', 'true');
+            var n = document.createElement('span');
+            n.textContent = headText(col.querySelector('header h4'));
+            b.appendChild(n);
+            sheetBody.appendChild(b);
+        });
+        setOpen(true);
+    }
+
+    /**
+     * Dispatches a drag event with a stub dataTransfer carrying the chosen card id, so the Projects scope
+     * board's own drag handlers move it.
+     */
+    function fire(target, type) {
+        var ev = new Event(type, { bubbles: true, cancelable: true });
+        var dt = { effectAllowed: 'move', dropEffect: 'move', setData: function () {}, getData: function () { return current || ''; } };
+        try { Object.defineProperty(ev, 'dataTransfer', { value: dt }); } catch (err) { /* very old engines */ }
+        target.dispatchEvent(ev);
+    }
+
+    /**
+     * Moves the chosen Projects scope card to a MoSCoW column by firing dragstart, dragover, drop and
+     * dragend, so the page's own handlers save it.
+     */
+    function moveTo(moscow) {
+        var card = current ? scope.querySelector('.prj-item[data-item="' + current + '"]') : null;
+        var col = scope.querySelector('.prj-moscow-col[data-moscow="' + moscow + '"]');
+        var zone = col ? col.querySelector('.prj-moscow-cards') : null;
+        if (!card || !zone) { setOpen(false); return; }
+        pending = { item: current, moscow: moscow };
+        fire(card, 'dragstart');
+        fire(zone, 'dragover');     // the page moves the card into the column here
+        fire(zone, 'drop');
+        fire(card, 'dragend');
+        setOpen(false);
+    }
+
+    /**
+     * Adds a priority button to each movable Projects scope card on a phone, and shows a Moved toast once
+     * a pending move has been redrawn.
+     */
+    function decorate() {
+        if (!mq.matches) return;
+        var label = txt(document.querySelector('label[for="piMoscow"]'));
+        Array.prototype.forEach.call(scope.querySelectorAll('.prj-item[draggable="true"]'), function (card) {
+            if (card.querySelector('.prj-move-btn')) return;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'prj-move-btn';
+            btn.innerHTML = ICON_MOVE;
+            if (label) btn.setAttribute('aria-label', label);
+            card.appendChild(btn);
+        });
+        // A move finished: the page redrew the board with the card in its new column.
+        if (pending) {
+            var moved = scope.querySelector('.prj-moscow-col[data-moscow="' + pending.moscow + '"] .prj-item[data-item="' + pending.item + '"]');
+            if (moved && moved.querySelector('.prj-move-btn')) {
+                pending = null;
+                if (typeof window.showToast === 'function' && window.Prj && window.Prj.T) window.showToast(window.Prj.T('plan.moved'), 'success');
+            }
+        }
+    }
+
+    /** Removes the Projects scope priority buttons and hides the priority sheet. */
+    function strip() {
+        Array.prototype.forEach.call(scope.querySelectorAll('.prj-move-btn'), function (b) { b.remove(); });
+        setOpen(false);
+        if (sheet) sheet.style.display = 'none';
+    }
+
+    /* The picker sits inside the card, whose own click opens the dialog -
+       capture, and stop the tap there. */
+    scope.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('.prj-move-btn') : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openFor(btn.closest('.prj-item'));
+    }, true);
+
+    new MutationObserver(decorate).observe(scope, { childList: true, subtree: true });
+
+    /** Adds the Projects scope priority buttons at phone width, or strips them on desktop. */
+    function sync() {
+        if (mq.matches) {
+            if (sheet) sheet.style.display = '';
+            decorate();
+        } else {
+            strip();
+        }
+    }
+    sync();
+    if (mq.addEventListener) { mq.addEventListener('change', sync); }
+    else if (mq.addListener) { mq.addListener(sync); }
+})();
+
+/* ==========================================================================
+   LAYER 44e - Projects RACI: each cell's member name, for the card feed
+
+   mobile.css 44l turns the matrix into one card per deliverable with the
+   header hidden, so each cell needs to say whose it is. The names are
+   already on the page, translated, in the hidden header (§21) - but the
+   shared FEEDS harvester cannot be used: it reads the header's text nodes
+   (these headers are all spans) and, rightly for a report, refuses to label
+   an empty cell - and here the empty cell is exactly where you tap to
+   assign someone. So: the `.prj-raci-name` of the matching header, stamped
+   on every cell, as data-prj-member (the shared data-mobile-label is
+   printed BEFORE a cell by the §21 CSS; here the name follows the button).
+   renderRaci() replaces the whole table on every change, so
+   the panel is watched; phone only, and removed when leaving mobile.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    if (!document.body || document.body.getAttribute('data-mobile-page') !== 'projects-view') return;
+
+    var mq = window.matchMedia('(max-width: 768px)');
+    var box = document.getElementById('pvRaci');
+    if (!box || !window.MutationObserver) return;
+
+    /**
+     * Stamps each Projects RACI cell with its member's name as data-prj-member at phone width, and removes
+     * it on desktop.
+     */
+    function apply() {
+        var table = box.querySelector('table.prj-raci');
+        if (!table || !table.tHead || !table.tHead.rows.length || !table.tBodies[0]) return;
+        var heads = table.tHead.rows[0].cells;
+        Array.prototype.forEach.call(table.tBodies[0].rows, function (row) {
+            if (row.cells.length !== heads.length) return;
+            for (var i = 1; i < row.cells.length; i++) {
+                var cell = row.cells[i];
+                if (!mq.matches) { cell.removeAttribute('data-prj-member'); continue; }
+                var name = heads[i].querySelector('.prj-raci-name');
+                var text = name ? (name.textContent || '').replace(/\s+/g, ' ').trim() : '';
+                if (text && cell.getAttribute('data-prj-member') !== text) cell.setAttribute('data-prj-member', text);
+            }
+        });
+    }
+
+    new MutationObserver(function () { if (mq.matches) apply(); }).observe(box, { childList: true, subtree: true });
+    apply();
+    if (mq.addEventListener) { mq.addEventListener('change', apply); }
+    else if (mq.addListener) { mq.addListener(apply); }
 })();

@@ -434,6 +434,34 @@ body {
 .due-badge.overdue { color: #dc3545; font-weight: 600; }
 .due-badge.today { color: #f57c00; font-weight: 600; }
 
+/* A card's subtask line: chevron, progress and "1/4 subtasks", left-aligned above
+   the list, and the button that shows or hides it (GH #184). */
+.card-subtask-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 0 -4px;
+    padding: 3px 6px 3px 4px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--text-dim, #888);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+.card-subtask-head:hover { background: var(--surface-2, #f1f1f4); color: var(--text, #333); }
+.card-subtask-head:focus-visible { outline: 2px solid var(--tsk-accent, #7c3aed); outline-offset: 1px; }
+.card-subtask-chevron { flex-shrink: 0; transition: transform 0.15s ease; }
+.card-subtask-head.is-open .card-subtask-chevron { transform: rotate(90deg); }
+/* A track you can see in both themes, so an empty bar still reads as a bar. */
+.card-subtask-head .subtask-bar { background: var(--border, #d6d6dc); }
+.card-subtask-head + .task-card-subtasks { margin-top: 2px; }
+
+/* A tick box in the sidebar, e.g. Hide done (GH #184). */
+.sidebar-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text, #333); cursor: pointer; padding: 4px 2px; }
+.sidebar-check input { accent-color: var(--tsk-accent, #7c3aed); width: 15px; height: 15px; cursor: pointer; margin: 0; }
+
 /* Subtask progress */
 .subtask-progress {
     display: flex;
@@ -452,6 +480,9 @@ body {
 }
 
 .subtask-bar-fill {
+    /* A <span>, so without this it is inline and its width and height are
+       ignored - the green never showed, however many subtasks were done. */
+    display: block;
     height: 100%;
     background: #2e7d32;
     border-radius: 2px;
@@ -1866,38 +1897,48 @@ body {
    Chosen per analyst with the button in the panel header; columns stay the
    default. The same blocks, regrouped — see applyModalTabs() in tasks.js.
    ────────────────────────────────────────────────────────────────────────── */
+/* Folder tabs (Ed: "make them look more like tabs - and the same width"). Each
+   tab is a raised card on the rule below it; the open one takes the panel's own
+   background and drops its bottom edge, so it reads as the front of the stack.
+   flex: 1 1 0 shares the strip out evenly whatever each label says. */
 .tdm-tabs {
     display: flex;
-    flex-wrap: wrap;
-    gap: 2px;
+    gap: 4px;
     margin: 4px 0 18px;
-    border-bottom: 1px solid var(--border-soft, #eceff3);
+    padding: 0 2px;
+    border-bottom: 1px solid var(--border, #e0e0e0);
 }
 .tdm-tab {
     position: relative;
+    flex: 1 1 0;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 7px;
-    padding: 9px 14px;
-    border: none;
-    background: transparent;
-    /* The underline is drawn on the button itself and only COLOURED when
-       active, so selecting a tab cannot change its height and shuffle the
-       fields below it by a pixel. */
-    border-bottom: 2px solid transparent;
+    padding: 9px 12px;
+    background: var(--surface-2, #fafafa);
+    border: 1px solid var(--border, #e0e0e0);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    /* Sits over the strip's rule by its own 1px, so the active tab can hide it. */
     margin-bottom: -1px;
     color: var(--text-muted, #666);
     font-family: inherit;
     font-size: 13px;
     font-weight: 600;
+    white-space: nowrap;
     cursor: pointer;
 }
-.tdm-tab:hover { color: var(--text, #333); }
+.tdm-tab:hover { color: var(--text, #333); background: var(--surface-hover, #f0f0f0); }
 .tdm-tab.active {
+    background: var(--surface, #fff);
     color: var(--tsk-accent, #7c3aed);
-    border-bottom-color: var(--tsk-accent, #7c3aed);
+    /* The same size as every other tab - a border that only appears when active
+       would nudge the panel below by a pixel each time you switch. */
+    border-bottom: 1px solid var(--surface, #fff);
+    box-shadow: inset 0 2px 0 var(--tsk-accent, #7c3aed);
 }
-
 /* ⭐ The count is what stops a tab HIDING things: three subtasks behind a tab
    with no number are indistinguishable from none. */
 .tdm-tab-count {
@@ -1921,6 +1962,31 @@ body {
 .tdm-tabpanel { display: none; }
 .tdm-tabpanel.active { display: block; }
 
+/* The Details tab fills the window's width (Ed: "fit in more form fields per
+   row"). Two to a row left each dropdown ~860px wide for "Medium" on a wide
+   screen, and pushed the description below the fold. So the short fields flow
+   into as many columns as fit - at least 240px each - and the pairs (.detail-row)
+   dissolve into that grid. Prose and lists keep a whole row. A narrow window
+   simply gets fewer columns, down to one. Columns layout is unaffected: its
+   right-hand column is narrow on purpose. */
+#tdmTab-details.active {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    column-gap: 16px;
+    align-items: start;
+}
+#tdmTab-details > .detail-row { display: contents; }
+#tdmTab-details > .detail-description,
+#tdmTab-details > #involvedField,
+#tdmTab-details > #taskChecklistSection,
+#tdmTab-details > .detail-field:has(#detailTagSection),
+#tdmTab-details > .recur-section,
+#tdmTab-details > .recur-master-link,
+#tdmTab-details > .subtask-of,
+#tdmTab-details > :not(.detail-field):not(.detail-row) { grid-column: 1 / -1; }
+/* "All day" is a tick box with no label above it - sit it level with the boxes beside it. */
+#tdmTab-details > .detail-field:has(#detailWorkAllDay) { align-self: end; padding-bottom: 10px; }
+
 /* A tab panel holds blocks that were written to sit in a scrolling column, and
    several of them open with their own heading. The first one loses its top
    margin so the content starts against the tab strip rather than a gap. */
@@ -1933,7 +1999,6 @@ body {
    than wrapping into three rows that eat the screen the tabs were meant to save. */
 @media (max-width: 700px) {
     .tdm-tabs {
-        flex-wrap: nowrap;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
@@ -2224,3 +2289,443 @@ body {
     padding: 9px 11px;
     border-radius: 6px;
 }
+
+/* ── Checklists on a task (discussion #138) ───────────────────────
+   Every colour is a theme variable that exists in theme.css, so the section
+   follows dark mode - the Telegram settings box shipped with two that did not
+   exist and showed a light panel in dark mode. */
+#taskChecklistSection .chk-card {
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--surface, #fff);
+}
+#taskChecklistSection .chk-card-head { display: flex; align-items: center; gap: 8px; }
+#taskChecklistSection .chk-card-title { font-weight: 600; color: var(--text, #333); flex: 1; display: flex; align-items: center; gap: 6px; }
+#taskChecklistSection .chk-lock { color: var(--danger-text, #b91c1c); flex-shrink: 0; }
+#taskChecklistSection .chk-card-progress { font-size: 12px; color: var(--text-muted, #666); white-space: nowrap; }
+#taskChecklistSection .btn-link-small {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font-size: 12px; color: var(--text-muted, #666); text-decoration: underline;
+}
+#taskChecklistSection .btn-link-small:hover { color: var(--danger-text, #b91c1c); }
+#taskChecklistSection .chk-bar { height: 4px; border-radius: 2px; background: var(--border-soft, #eef0f3); margin: 8px 0 6px; overflow: hidden; }
+#taskChecklistSection .chk-bar-fill { height: 100%; background: var(--success-text, #16a34a); }
+#taskChecklistSection .chk-step { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border-soft, #eef0f3); }
+#taskChecklistSection .chk-step:first-of-type { border-top: 0; }
+#taskChecklistSection .chk-step input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+#taskChecklistSection .chk-step-body { flex: 1; min-width: 0; }
+#taskChecklistSection .chk-step-title { font-size: 13px; color: var(--text, #333); }
+#taskChecklistSection .chk-step.done .chk-step-title { color: var(--text-muted, #666); text-decoration: line-through; }
+#taskChecklistSection .chk-mandatory {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .03em; margin-left: 6px;
+    padding: 1px 5px; border-radius: 3px;
+    background: var(--warning-bg, #fef3c7); color: var(--warning-text, #92400e);
+}
+#taskChecklistSection .chk-role { font-size: 11px; color: var(--text-muted, #666); margin-left: 6px; }
+#taskChecklistSection .chk-step-value {
+    margin-top: 4px; width: 100%; box-sizing: border-box; font-size: 12px; padding: 4px 6px;
+    border: 1px solid var(--border, #e5e7eb); border-radius: 4px;
+    background: var(--surface, #fff); color: var(--text, #333);
+}
+#taskChecklistSection .chk-step-desc { font-size: 12px; color: var(--text-muted, #666); margin-top: 2px; white-space: pre-wrap; }
+#taskChecklistSection .chk-step-by { font-size: 11px; color: var(--text-muted, #666); margin-top: 2px; }
+#taskChecklistSection .chk-attach { display: flex; gap: 8px; align-items: center; }
+#taskChecklistSection .chk-attach .detail-select { flex: 1; min-width: 0; }
+#taskChecklistSection .chk-empty { font-size: 13px; color: var(--text-muted, #666); margin-bottom: 8px; }
+
+/* ── Forms a task needs (GH #190) ─────────────────────────────────
+   Shaped like the checklist cards above it, with the same theme variables. */
+#taskFormsSection .tf-card {
+    border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 10px 12px;
+    margin-bottom: 10px; background: var(--surface, #fff);
+}
+#taskFormsSection .tf-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#taskFormsSection .tf-title { font-weight: 600; color: var(--text, #333); flex: 1; min-width: 140px; display: flex; align-items: center; gap: 6px; }
+#taskFormsSection .chk-lock { color: var(--danger-text, #b91c1c); flex-shrink: 0; }
+#taskFormsSection .tf-req { font-size: 12px; padding: 2px 4px; border: 1px solid var(--border, #e5e7eb); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333); }
+#taskFormsSection .btn-link-small { background: none; border: 0; padding: 0; cursor: pointer; font-size: 12px; color: var(--text-muted, #666); text-decoration: underline; }
+#taskFormsSection .btn-link-small:hover { color: var(--danger-text, #b91c1c); }
+#taskFormsSection .tf-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+#taskFormsSection .tf-state { font-size: 12px; color: var(--text-muted, #666); }
+#taskFormsSection .tf-done { color: var(--success-text, #16a34a); }
+#taskFormsSection .tf-draft { color: var(--warning-text, #92400e); }
+#taskFormsSection .tf-note { font-size: 12px; color: var(--text-muted, #666); font-style: italic; }
+#taskFormsSection .tf-answers { margin-top: 8px; font-size: 13px; }
+#taskFormsSection .tf-answers summary { cursor: pointer; color: var(--text-muted, #666); font-size: 12px; }
+#taskFormsSection .tf-answers table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+#taskFormsSection .tf-answers th { text-align: left; font-weight: 600; color: var(--text-muted, #666); padding: 4px 8px 4px 0; vertical-align: top; width: 40%; }
+#taskFormsSection .tf-answers td { padding: 4px 0; color: var(--text, #333); white-space: pre-wrap; word-break: break-word; }
+#taskFormsSection .tf-exception td { color: var(--danger-text, #b91c1c); font-weight: 600; }
+#taskFormsSection .tf-add { display: flex; gap: 8px; align-items: center; }
+#taskFormsSection .tf-add .detail-select { flex: 1; min-width: 0; }
+#taskFormsSection .tf-empty { font-size: 13px; color: var(--text-muted, #666); margin-bottom: 8px; }
+
+/* ── The Work view (GH #190 phase 2) ───────────────────────────────
+   One block: head (progress, Complete), instructions, procedures, checklists,
+   forms. Nested sections keep their own styles; this only frames them. */
+#taskWorkSection .work-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+#taskWorkSection .work-title { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 160px; }
+#taskWorkSection .work-title label { margin: 0; }
+#taskWorkSection .work-sub { font-size: 12px; color: var(--text-muted, #666); }
+#taskWorkSection .work-progress { display: flex; align-items: center; gap: 8px; min-width: 180px; flex: 1; }
+#taskWorkSection .work-progress .chk-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--border-soft, #eef0f3); overflow: hidden; margin: 0; }
+#taskWorkSection .work-progress .chk-bar-fill { height: 100%; background: var(--success-text, #16a34a); }
+#taskWorkSection .work-actions { display: flex; align-items: center; gap: 12px; }
+#taskWorkSection .work-open-pref { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted, #666); font-weight: normal; margin: 0; cursor: pointer; }
+#taskWorkSection .work-instructions { margin-bottom: 14px; }
+#taskWorkSection .work-instructions-body { font-size: 14px; color: var(--text, #333); line-height: 1.5; overflow-wrap: anywhere; }
+#taskWorkSection .work-instructions-body img { max-width: 100%; height: auto; }
+#taskProcedureSection .tp-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface, #fff); }
+#taskProcedureSection .tp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#taskProcedureSection .tp-title { font-weight: 600; color: var(--text, #333); flex: 1; min-width: 140px; }
+#taskProcedureSection .btn-link-small { background: none; border: 0; padding: 0; cursor: pointer; font-size: 12px; color: var(--text-muted, #666); text-decoration: underline; }
+#taskProcedureSection .tp-remove:hover { color: var(--danger-text, #b91c1c); }
+#taskProcedureSection .tp-body { margin-top: 8px; }
+#taskProcedureSection .tp-body summary { cursor: pointer; font-size: 12px; color: var(--text-muted, #666); }
+#taskProcedureSection .tp-article { margin-top: 8px; font-size: 14px; color: var(--text, #333); line-height: 1.5; max-height: 480px; overflow: auto; overflow-wrap: anywhere; }
+#taskProcedureSection .tp-article img { max-width: 100%; height: auto; }
+#taskProcedureSection .tp-add { position: relative; }
+#taskProcedureSection .tp-add input { width: 100%; box-sizing: border-box; }
+#taskProcedureSection .tp-results { display: flex; flex-direction: column; margin-top: 4px; }
+#taskProcedureSection .tp-result { text-align: left; background: none; border: 0; border-bottom: 1px solid var(--border-soft, #eef0f3); padding: 6px 4px; cursor: pointer; color: var(--text, #333); font-size: 13px; }
+#taskProcedureSection .tp-result:hover { background: var(--accent-soft, #eef4ff); }
+#taskFormsSection .tf-inline { margin-top: 10px; }
+#taskFormsSection .tf-frame { width: 100%; height: 420px; border: 1px solid var(--border-soft, #eef0f3); border-radius: 6px; background: var(--surface, #fff); display: block; margin-bottom: 4px; }
+#taskFollowUpSection .fu-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-soft, #eef0f3); font-size: 13px; flex-wrap: wrap; }
+#taskFollowUpSection .fu-num { font-weight: 600; white-space: nowrap; }
+#taskFollowUpSection .fu-title { flex: 1; min-width: 120px; color: var(--text, #333); }
+#taskFollowUpSection .fu-state { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--border-soft, #eef0f3); color: var(--text-muted, #666); }
+#taskFollowUpSection .fu-open { background: var(--warning-bg, #fef3c7); color: var(--warning-text, #92400e); }
+#taskFollowUpSection .fu-closed { background: var(--success-bg, #dcfce7); color: var(--success-text, #16a34a); }
+#taskFollowUpSection .btn-link-small, .chk-followup, .tf-followup { background: none; border: 0; padding: 0; cursor: pointer; font-size: 12px; color: var(--text-muted, #666); text-decoration: underline; }
+#taskFollowUpSection .fu-add { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+#taskFollowUpSection .fu-line { display: flex; gap: 8px; align-items: center; }
+#taskFollowUpSection .fu-line .detail-input { flex: 1; min-width: 0; }
+body.module-read-only .fu-add,
+body.module-read-only .fu-remove,
+body.module-read-only .chk-followup,
+body.module-read-only .tf-followup,
+body.module-read-only .work-complete,
+body.module-read-only .tp-add,
+body.module-read-only .tp-remove { display: none !important; }
+
+/* ── Board columns by status or by analyst (2.10.0) ─────────────── */
+.board-column--analyst .column-analyst-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    font-size: 10px; font-weight: 600;
+    background: var(--accent-soft, #e8f0fe); color: var(--accent, #2563eb);
+}
+/* The task's status, on the card, in the status's own colour (it is no longer the column). */
+.task-card-status {
+    display: inline-block; margin-bottom: 6px; padding: 1px 7px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; color: var(--st);
+    border: 1px solid var(--st);
+    background: color-mix(in srgb, var(--st) 12%, transparent);
+}
+
+/* ── Subtasks in the task window: columns, and dragging to re-order ─────────
+   One grid for the rows and the heading row above them, so Start and Due line
+   up down the list: handle | tick | name | who | start | due.
+   ────────────────────────────────────────────────────────────────────────── */
+.subtask-item,
+.subtask-head {
+    display: grid;
+    grid-template-columns: 14px 16px minmax(0, 1fr) minmax(0, 110px) 128px 128px;
+    align-items: center;
+    column-gap: 8px;
+}
+.subtask-head {
+    padding: 0 10px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-dim, #999);
+}
+.subtask-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.subtask-item .subtask-assignee { max-width: none; }
+.subtask-handle {
+    color: var(--text-faint, #bbb);
+    font-size: 12px;
+    letter-spacing: -3px;
+    cursor: grab;
+    user-select: none;
+    text-align: center;
+}
+.subtask-item:hover .subtask-handle { color: var(--text-muted, #888); }
+.subtask-item.dragging {
+    opacity: 0.5;
+    background: var(--accent-soft, #ede9fe);
+}
+.subtask-date {
+    width: 100%;
+    padding: 3px 6px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text, #333);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+.subtask-item:hover .subtask-date { border-color: var(--border, #e0e0e0); background: var(--surface, #fff); }
+.subtask-date:focus { outline: none; border-color: var(--tsk-accent, #7c3aed); background: var(--surface, #fff); }
+/* An unset date shows the browser's dd/mm/yyyy placeholder - faded until the
+   row is hovered, so a list of undated subtasks does not look like a form. */
+.subtask-date.is-empty { color: var(--text-faint, #bbb); }
+.subtask-item:hover .subtask-date.is-empty { color: var(--text-muted, #888); }
+
+@media (max-width: 700px) {
+    .subtask-item,
+    .subtask-head { grid-template-columns: 14px 16px minmax(0, 1fr) 112px 112px; }
+    .subtask-item .subtask-assignee,
+    .subtask-head > span:nth-child(4) { display: none; }
+}
+
+/* ── Subtasks in a NARROW space - the side panel (GH #184) ─────────────
+   The one-line grid needs ~330px for its fixed parts, and the 480px side panel
+   leaves ~440px - so the owner took what was left and the subtask's NAME got
+   nothing at all. The @media rule above never helped: it measures the WINDOW,
+   and the panel is narrow on the widest screen.
+
+   So this measures the subtask area itself (a container query) and, when it is
+   narrow, gives each row two lines: the handle, tick and name on the first -
+   the name with the whole width - and the owner and the two dates on the
+   second, under their headings. Nothing is hidden; the large task window, which
+   has the room, keeps the one-line row. */
+.subtask-section { container: subtasks / inline-size; }
+@container subtasks (max-width: 600px) {
+    .subtask-item,
+    .subtask-head {
+        grid-template-columns: 14px 16px minmax(0, 1fr) 118px 118px;
+        grid-template-areas:
+            "grip tick name name  name"
+            "grip .    who  start due";
+        row-gap: 2px;
+    }
+    .subtask-item > :nth-child(1), .subtask-head > :nth-child(1) { grid-area: grip; }
+    .subtask-item > :nth-child(2), .subtask-head > :nth-child(2) { grid-area: tick; }
+    .subtask-item > :nth-child(3), .subtask-head > :nth-child(3) { grid-area: name; }
+    .subtask-item > :nth-child(4), .subtask-head > :nth-child(4) { grid-area: who; }
+    .subtask-item > :nth-child(5), .subtask-head > :nth-child(5) { grid-area: start; }
+    .subtask-item > :nth-child(6), .subtask-head > :nth-child(6) { grid-area: due; }
+    .subtask-item .subtask-assignee { font-size: 11px; }
+    .subtask-item .subtask-date { font-size: 11px; padding: 2px 4px; }
+    /* The headings now sit on the second line, over the dates. */
+    .subtask-head { padding-bottom: 0; }
+
+    /* The add row: the name on a line of its own, then the dates and the button. */
+    .subtask-add #newSubtaskInput { flex: 1 1 100%; }
+}
+/* The add row never pushes the panel sideways: it wraps, and its boxes may shrink
+   below the browser's own minimum width for a date box (Mobile-Friendly-Tasks §20).
+   input.subtask-add-due outranks ".subtask-add input", which had been cancelling it. */
+.subtask-add { flex-wrap: wrap; }
+.subtask-add input { min-width: 0; }
+.subtask-add input.subtask-add-due { flex: 1 1 120px; max-width: 160px; }
+
+/* ── Subtasks listed under their card on the board ───────────────────────────
+   Drawn as branches of a tree (Ed): a trunk runs down from the card's meta row
+   and each subtask hangs off it on its own short branch. The last one ends the
+   trunk at its branch, like the └ in a file tree. Each row opens its subtask.
+   ────────────────────────────────────────────────────────────────────────── */
+.task-card-subtasks {
+    margin-top: 6px;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+}
+.task-card-subtask {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--text, #333);
+    cursor: pointer;
+}
+/* The trunk, full height on every row but the last... */
+.task-card-subtask::before {
+    content: '';
+    position: absolute;
+    left: -11px;
+    top: 0;
+    bottom: 0;
+    border-left: 1.5px solid var(--border, #e0e0e0);
+}
+.task-card-subtask:last-child::before { bottom: 50%; }
+/* ...and the branch out to the row. */
+.task-card-subtask::after {
+    content: '';
+    position: absolute;
+    left: -11px;
+    top: 50%;
+    width: 9px;
+    border-top: 1.5px solid var(--border, #e0e0e0);
+}
+.task-card-subtask:hover {
+    background: var(--surface-hover, #f0f0f0);
+    color: var(--tsk-accent, #7c3aed);
+}
+.task-card-subtask:hover .task-card-subtask-title { text-decoration: underline; }
+.task-card-subtask.is-done:hover .task-card-subtask-title { text-decoration: line-through underline; }
+/* The tick is a button that completes the subtask (the rest of the row opens it).
+   The box it draws is 11px; the button around it is 20px, so it is easy to hit. */
+.task-card-subtask-tick {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin: -4px -2px -4px -5px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+.task-card-subtask-tick::before {
+    content: '';
+    width: 11px;
+    height: 11px;
+    box-sizing: border-box;
+    border: 1.5px solid var(--text-faint, #bbb);
+    border-radius: 3px;
+}
+.task-card-subtask-tick:hover::before { border-color: var(--tsk-accent, #7c3aed); }
+.task-card-subtask-tick:focus-visible { outline: 2px solid var(--tsk-accent, #7c3aed); outline-offset: 0; }
+.task-card-subtask-tick:disabled { opacity: .5; cursor: progress; }
+.task-card-subtask.is-done .task-card-subtask-tick::before {
+    background: var(--tsk-accent, #7c3aed);
+    border-color: var(--tsk-accent, #7c3aed);
+}
+.task-card-subtask-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.task-card-subtask.is-done .task-card-subtask-title {
+    text-decoration: line-through;
+    color: var(--text-dim, #999);
+}
+.task-card-subtask .due-badge { font-size: 10px; padding: 1px 5px; }
+
+/* Drag handles on checklists and their steps (2.10.0). */
+#taskChecklistSection .chk-handle {
+    flex-shrink: 0;
+    color: var(--text-faint, #bbb);
+    font-size: 12px;
+    letter-spacing: -3px;
+    cursor: grab;
+    user-select: none;
+    padding-right: 3px;
+}
+#taskChecklistSection .chk-step .chk-handle { margin-top: 2px; }
+#taskChecklistSection .chk-card:hover > .chk-card-head > .chk-handle,
+#taskChecklistSection .chk-step:hover > .chk-handle { color: var(--text-muted, #888); }
+#taskChecklistSection .chk-card.dragging,
+#taskChecklistSection .chk-step.dragging { opacity: 0.5; background: var(--accent-soft, #ede9fe); }
+
+/* ---- Projects (3.2.0): the project a task is part of ------------------------
+   In the project's OWN colour (--pc, from its palette), so a board mixing
+   several projects can be read at a glance. */
+.task-card-project {
+    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+    font-size: 11px; font-weight: 650; color: var(--pc, #e11d48);
+    margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.task-card-contractor {
+    display: flex; align-items: center; gap: 5px; max-width: 100%;
+    font-size: 11px; font-weight: 600; color: var(--text-secondary, #555);
+    margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.task-card-contractor span { font-weight: 400; color: var(--text-dim, #888); }
+.task-card-project-dot { width: 8px; height: 8px; border-radius: 3px; background: var(--pc, #e11d48); flex-shrink: 0; display: inline-block; }
+.detail-project-open { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--prj-accent, #e11d48); text-decoration: none; }
+.detail-project-open:hover { text-decoration: underline; }
+.detail-project-readonly { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text, #333); }
+.detail-project-under { margin-top: 4px; font-size: 12px; color: var(--text-dim, #888); }
+.detail-project-stage { font-weight: 600; color: var(--text-muted, #555); }
+
+.detail-project-open { text-transform: none; letter-spacing: normal; }
+
+/* ── Repeating task evidence (#181) ─────────────────────────────── */
+.recur-scheduled { font-size: 12px; color: var(--text-muted, #666); margin-top: 6px; }
+.recur-evidence { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.recur-evidence a.recur-link { text-decoration: none; display: inline-block; }
+.recur-skip { margin-top: 8px; padding: 10px; border: 1px solid var(--border, #e5e7eb); border-radius: 6px; background: var(--surface-2, #f8f9fa); }
+.recur-skip label { display: block; font-size: 12px; color: var(--text-muted, #666); margin-bottom: 4px; }
+.recur-skip textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 6px 8px;
+    border: 1px solid var(--border, #e5e7eb); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333); }
+.recur-skip-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+
+.history-section { margin-top: 20px; }
+.history-section h4 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted, #666); }
+.history-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--border-soft, #eef0f3); border-radius: 6px; }
+#tdmTab-history .history-list { max-height: none; }
+.history-item { padding: 7px 10px; border-top: 1px solid var(--border-soft, #eef0f3); }
+.history-item:first-child { border-top: 0; }
+.history-what { font-size: 13px; color: var(--text, #333); overflow-wrap: anywhere; }
+.history-meta { font-size: 11px; color: var(--text-muted, #666); margin-top: 2px; }
+.history-step .history-what { color: var(--text-secondary, #555); }
+.history-empty { padding: 10px; font-size: 13px; color: var(--text-muted, #666); }
+
+#taskChecklistSection .chk-result-spacer { width: 13px; flex-shrink: 0; }
+#taskChecklistSection .chk-results { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+#taskChecklistSection .chk-result {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--border, #e5e7eb); background: var(--surface, #fff); color: var(--text, #333);
+}
+#taskChecklistSection .chk-result-pass.active { background: var(--success-bg, #dcfce7); border-color: var(--success-text, #16a34a); color: var(--success-text, #166534); }
+#taskChecklistSection .chk-result-fail.active { background: var(--danger-bg, #fee2e2); border-color: var(--danger-text, #b91c1c); color: var(--danger-text, #991b1b); }
+#taskChecklistSection .chk-result-na.active   { background: var(--surface-2, #f0f0f0); border-color: var(--text-muted, #666); color: var(--text, #333); }
+#taskChecklistSection .chk-exception { display: flex; gap: 6px; align-items: flex-start; margin-top: 6px; }
+#taskChecklistSection .chk-exception textarea { flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 4px 6px;
+    border: 1px solid var(--border, #e5e7eb); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #333); }
+#taskChecklistSection .chk-exception-note { font-size: 12px; color: var(--danger-text, #991b1b); margin-top: 4px; }
+#taskChecklistSection .chk-step.failed .chk-step-title { text-decoration: none; color: var(--danger-text, #991b1b); }
+
+/* Read only access to Tasks (#181 Part G): nothing that writes is offered. The
+   services and endpoints refuse regardless - this only stops the page offering
+   what will be refused. */
+body.module-read-only #detailPanelBody input:not([type="search"]),
+body.module-read-only #detailPanelBody select,
+body.module-read-only #detailPanelBody textarea { pointer-events: none; opacity: .75; }
+body.module-read-only .column-add-btn,
+body.module-read-only .quick-add-container,
+body.module-read-only [onclick^="deleteCurrentTask"],
+body.module-read-only .subtask-add,
+body.module-read-only .comment-add,
+body.module-read-only .link-search-container,
+body.module-read-only .link-remove,
+body.module-read-only .chk-attach,
+body.module-read-only .tf-add,
+body.module-read-only .tf-req,
+body.module-read-only .tf-fill,
+body.module-read-only #taskFormsSection .btn-link-small,
+body.module-read-only .chk-results,
+body.module-read-only .chk-handle,
+body.module-read-only .subtask-handle,
+body.module-read-only #taskChecklistSection .btn-link-small,
+body.module-read-only #taskChecklistSection input[type="checkbox"],
+body.module-read-only .recur-link[onclick],
+body.module-read-only .recur-skip,
+body.module-read-only #ctxMenu .ctx-item:not([data-action="open"]):not([data-action="copylink"]),
+body.module-read-only #ctxMenu .ctx-sep { display: none !important; }
+
+/* GH #191: the note under Card order while cards are sorted by due date. */
+.sidebar-hint { font-size: 11px; line-height: 1.4; color: var(--text-muted, #666); margin-top: 6px; }

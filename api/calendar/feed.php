@@ -15,6 +15,13 @@ require_once '../../includes/functions.php';
 require_once '../../includes/ics.php';
 require_once '../../includes/timezone.php';   // naive_now() — calendar events are naive (GH #126)
 
+/**
+ * Sends an HTTP status and a plain-text message, then stops - the feed's only error
+ * path, since a calendar app shows nothing richer.
+ *
+ * @param mixed $code  the HTTP status line after the protocol, e.g. '404 Not Found'
+ * @param mixed $msg  the plain-text body the calendar app receives
+ */
 function feed_deny($code, $msg) {
     header($_SERVER['SERVER_PROTOCOL'] . ' ' . $code);
     header('Content-Type: text/plain; charset=utf-8');

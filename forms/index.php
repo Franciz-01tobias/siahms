@@ -17,6 +17,12 @@ I18n::initFromSession();
 Tz::init();
 
 requireModuleAccess('forms');
+// Read only access and "Design forms" (#180 Part 3): the list leaves out what the server
+// would refuse. Comfort only - every write endpoint and FormsService check again.
+require_once '../includes/rbac.php';
+$fmConn       = connectToDatabase();
+$formsLevel   = analystModuleLevel($fmConn, (int)$_SESSION['analyst_id'], 'forms');
+$formsMayDesign = $formsLevel === 'full' && analystMayAct($fmConn, (int)$_SESSION['analyst_id'], Cap::FORMS_DESIGN);
 
 $current_page = 'forms';
 $path_prefix = '../';
@@ -28,13 +34,13 @@ $translationNamespaces = ['common', 'forms'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('forms.list.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('forms')); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="<?php echo BASE_URL; ?>assets/js/i18n.js?v=3"></script>
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo BASE_URL; ?>assets/js/tz.js?v=5"></script>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/forms.css?v=<?= time() ?>">
     <style>
         /* Module accent (teal). */
@@ -92,6 +98,12 @@ $translationNamespaces = ['common', 'forms'];
             gap: 6px;
         }
         .new-form-btn:hover { background: var(--forms-accent-hover, #00695c); color: white; }
+        /* #180: no design rights - no New form, no per-form design actions. Read only - no
+           filling in either (a submission is a record created). The server refuses all of
+           these anyway; this is so they are not offered. */
+        body.forms-no-design .new-form-btn,
+        body.forms-no-design .col-actions button.ft-action-btn { display: none !important; }
+        body.module-read-only .col-actions a[href*="forms/fill.php"] { display: none !important; }
 
         /* The table card itself — scrolls internally so the toolbar
            stays pinned at the top of the page. */
@@ -259,26 +271,23 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
 </head>
-<body>
-    <?php include 'includes/header.php'; ?>
+<body class="<?php echo trim(($formsLevel === 'read' ? 'module-read-only ' : '') . ($formsMayDesign ? '' : 'forms-no-design')); ?>">    <?php include 'includes/header.php'; ?>
+    <?php /* The action row (#185) is what was the list's toolbar: title, search,
+             New. New only for someone who may design forms - Read only access
+             or no Design forms permission gets the row without it. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('forms.list.title'), array_merge(
+              $formsMayDesign ? [actionRowNew(BASE_URL . 'forms/edit/', t('forms.list.new_form'), true)] : [],
+              [['label' => t('forms.list.seed_items'), 'onclick' => 'addStandardItems()']]
+          ), [
+              'accent' => 'forms',
+              'extra' => '<input type="text" id="formSearch" class="forms-list-search action-row-search" placeholder="'
+                       . htmlspecialchars(t('forms.list.search_placeholder')) . '" oninput="filterForms()">',
+          ]); ?>
 
     <div class="forms-list-container">
-        <div class="forms-list-toolbar">
-            <h1><?php echo htmlspecialchars(t('forms.list.title')); ?></h1>
-            <div class="toolbar-actions">
-                <input type="text" id="formSearch" class="forms-list-search" placeholder="<?php echo htmlspecialchars(t('forms.list.search_placeholder')); ?>" oninput="filterForms()">
-                <a href="<?php echo BASE_URL; ?>forms/edit/" class="new-form-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    <?php echo htmlspecialchars(t('forms.list.new_form')); ?>
-                </a>
-                <button type="button" class="new-form-btn" onclick="addStandardItems()">
-                    <?php echo htmlspecialchars(t('forms.list.seed_items')); ?>
-                </button>
-            </div>
-        </div>
-
         <div class="forms-table-card">
             <table class="forms-table" id="formsTable">
                 <thead>
@@ -395,6 +404,7 @@ $translationNamespaces = ['common', 'forms'];
     <script>
         const API_BASE = '<?php echo BASE_URL; ?>api/forms/';
         const EDIT_BASE = '<?php echo BASE_URL; ?>forms/edit/';
+        const FORMS_MAY_DESIGN = <?php echo $formsMayDesign ? 'true' : 'false'; ?>;   // #180
 
         let allForms = [];
         let filteredForms = [];
@@ -591,7 +601,8 @@ $translationNamespaces = ['common', 'forms'];
         }
 
         function openEdit(id) {
-            window.location.href = EDIT_BASE + '?id=' + id;
+            // Somebody who may not design (#180) opens what they may read: the submissions.
+            window.location.href = FORMS_MAY_DESIGN ? EDIT_BASE + '?id=' + id : '<?php echo BASE_URL; ?>forms/submissions.php?id=' + id;
         }
 
         // Friendly "5 minutes ago" / "2 days ago" — falls back to the
@@ -970,6 +981,6 @@ $translationNamespaces = ['common', 'forms'];
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
 </body>
 </html>

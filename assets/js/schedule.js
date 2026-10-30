@@ -12,6 +12,8 @@
  * every timezone; they are stored without a zone and must never be round-tripped
  * through Date.toISOString(), which converts to UTC first and moved a 00:30
  * ticket to the previous DAY for anyone east of UTC (#1161).
+ *
+ * @wiki Ticket-Calendar-Sync-Developer-Guide
  */
 (function () {
     'use strict';
@@ -36,6 +38,7 @@
 
     /** A naive stamp from local date parts — never via toISOString(). */
     function formatNaive(d) {
+        /** Pads a number to two digits. */
         function p(n) { return String(n).padStart(2, '0'); }
         return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' '
              + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());

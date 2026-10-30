@@ -32,16 +32,16 @@ $translationNamespaces = ['common', 'calendar'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('calendar.title') . ' ' . t('calendar.nav.table')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('calendar', t('calendar.nav.table'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/calendar-grid.css?v=1">
     <link rel="stylesheet" href="../../assets/css/itsm_calendar.css?v=8">
     <link rel="stylesheet" href="../../assets/css/data-table.css?v=4">
     <style>body { --accent: var(--cal-accent, #ef6c00); --accent-hover: var(--cal-accent-hover, #e65100); }</style>
     <!-- Mobile: the shared shell plus LAYER 15c, which already contains a
          .dt-page table view (columns are user-chosen, so it scrolls). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -49,6 +49,9 @@ $translationNamespaces = ['common', 'calendar'];
 </head>
 <body>
     <?php include '../includes/header.php'; ?>
+    <?php /* New in the table view opens the calendar's event form (?new=1) - #185. */
+          require_once __DIR__ . '/../../includes/action_row.php';
+          renderActionRow(t('calendar.title'), [actionRowNew('../?new=1', t('calendar.sidebar.new_event'), true)], ['accent' => 'cal']); ?>
 
     <div class="dt-page">
         <?php include '../../includes/data-table-skeleton.php'; ?>
@@ -56,6 +59,6 @@ $translationNamespaces = ['common', 'calendar'];
 
     <script src="../../assets/js/data-table.js?v=6"></script>
     <script src="../../assets/js/calendar-table.js?v=3"></script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

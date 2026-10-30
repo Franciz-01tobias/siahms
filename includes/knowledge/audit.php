@@ -79,6 +79,10 @@ function knowledgeAuditLog(PDO $conn, string $type, int $id, string $action,
  * day. The race (two tabs, same second) would at worst write two rows, which is
  * a cosmetic duplicate rather than a wrong answer — the alternative, locking a
  * log table on every article read, is not worth that.
+ *
+ * @param int $articleId  the knowledge article read; 0 or less records nothing
+ * @param ?int $analyst  the analyst who read it, or null for a portal reader
+ * @param ?int $user  the portal user who read it, or null for an analyst; both null records nothing
  */
 function knowledgeAuditView(PDO $conn, int $articleId, ?int $analyst, ?int $user = null): void
 {
@@ -106,6 +110,10 @@ function knowledgeAuditView(PDO $conn, int $articleId, ?int $analyst, ?int $user
  * Names are resolved HERE rather than joined, because an analyst who has since
  * been deleted must still show as something — a history whose actor column is
  * blank for everyone who ever left is not a history anybody can use.
+ *
+ * @param string $type  'article' or 'folder'
+ * @param int $id  the article or folder id
+ * @param int $limit  the most entries returned, clamped to 1-500
  */
 function knowledgeAuditHistory(PDO $conn, string $type, int $id, int $limit = 200): array
 {

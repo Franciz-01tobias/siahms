@@ -13,6 +13,8 @@
  *   per-module preference  (theme_<module>)  →  global preference (theme)  →  default
  * so a user can run one palette everywhere, or pick a different one per module
  * (e.g. "English Summer" on Tickets, "Dark" on Problem Management).
+ *
+ * @wiki Theming-and-Dark-Mode
  */
 class Theme
 {
@@ -31,11 +33,25 @@ class Theme
     /** All registered palettes: id => ['label' => …]. Used to build the picker. */
     public static function all() { return self::THEMES; }
 
+    /**
+     * True when $id is a registered palette id - used to reject a saved preference that is not one.
+     *
+     * @param mixed $id  a palette id to check, e.g. a saved preference
+     */
     public static function isValid($id) { return is_string($id) && array_key_exists($id, self::THEMES); }
 
+    /**
+     * The display name of a palette, or the id itself when it is not registered.
+     *
+     * @param mixed $id  a palette id, e.g. 'dark'
+     */
     public static function label($id) { return self::THEMES[$id]['label'] ?? $id; }
 
-    /** The light/dark base of the active palette for $module. Drives the TinyMCE skin. */
+    /**
+     * The light/dark base of the active palette for $module. Drives the TinyMCE skin.
+     *
+     * @param mixed $module  the module key, e.g. 'tickets'; null for the global preference only
+     */
     public static function mode($module = null)
     {
         $id = self::active($module);
@@ -46,6 +62,8 @@ class Theme
      * The active palette id for $module (null = global only). Reads the analyst's
      * preference from the DB; falls back to the global pref, then the default.
      * Result is cached per module for the request.
+     *
+     * @param mixed $module  the module key, e.g. 'tickets' (reads theme_<module> first); null for the global preference only
      */
     public static function active($module = null)
     {
@@ -125,3 +143,6 @@ class Theme
         return self::$cache[$ckey] = $theme;
     }
 }
+
+// systemName() - the install's name for page titles (System -> Branding).
+require_once __DIR__ . '/system_name.php';

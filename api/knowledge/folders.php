@@ -132,7 +132,12 @@ function handleList(PDO $conn, int $analystId): void
     ]);
 }
 
-/** May this viewer reach this folder? Delegates; never re-implements the rule. */
+/**
+ * May this viewer reach this folder? Delegates; never re-implements the rule.
+ *
+ * @param KnowledgeViewer $viewer  who is looking, as built by KnowledgeViewer::forAnalyst()
+ * @param int $folderId  the knowledge_folders id to check
+ */
 function knowledgeFolderIsReadable(PDO $conn, KnowledgeViewer $viewer, int $folderId): bool
 {
     if ($viewer->isUnrestricted()) return true;
@@ -147,7 +152,11 @@ function knowledgeFolderIsReadable(PDO $conn, KnowledgeViewer $viewer, int $fold
     );
 }
 
-/** Refuse anything the caller may not reach, in the same words as "not found". */
+/**
+ * Refuse anything the caller may not reach, in the same words as "not found".
+ *
+ * @param ?int $folderId  the folder to check; null means the root, which everyone may reach
+ */
 function requireFolderAccess(PDO $conn, int $analystId, ?int $folderId): void
 {
     if ($folderId === null) return;   // the root: everyone has it
@@ -160,6 +169,14 @@ function requireFolderAccess(PDO $conn, int $analystId, ?int $folderId): void
     }
 }
 
+/**
+ * Creates a knowledge folder under the given parent (or at the top level) and audits it.
+ *
+ * A new folder always inherits and restricts nothing, so creating one never changes who
+ * can see what is already there. The caller must be able to read the parent.
+ *
+ * @param array $in  the decoded JSON request: name, and parent_id (empty or null for the top level)
+ */
 function handleCreate(PDO $conn, int $analystId, array $in): void
 {
     $name = trim((string)($in['name'] ?? ''));
@@ -183,6 +200,11 @@ function handleCreate(PDO $conn, int $analystId, array $in): void
     echo json_encode(['success' => true, 'id' => $id]);
 }
 
+/**
+ * Renames a knowledge folder the caller can read, and audits the change.
+ *
+ * @param array $in  the decoded JSON request: id and the new name
+ */
 function handleRename(PDO $conn, int $analystId, array $in): void
 {
     $id   = (int)($in['id'] ?? 0);
@@ -204,6 +226,8 @@ function handleRename(PDO $conn, int $analystId, array $in): void
  * documents, and is reachable from nothing. The permission walk survives a cycle
  * (it fails closed) but the tree does not, so this is refused at the door rather
  * than tolerated later.
+ *
+ * @param array $in  the decoded JSON request: id, and parent_id (empty or null for the top level)
  */
 function handleMove(PDO $conn, int $analystId, array $in): void
 {
@@ -241,6 +265,8 @@ function handleMove(PDO $conn, int $analystId, array $in): void
  * either destroy them or orphan them, and neither is something to do on one
  * click. Empty it first — which is a decision about the documents, made
  * deliberately, rather than a side effect of tidying the tree.
+ *
+ * @param array $in  the decoded JSON request: id of the folder to delete
  */
 function handleDelete(PDO $conn, int $analystId, array $in): void
 {
@@ -284,6 +310,8 @@ function handleDelete(PDO $conn, int $analystId, array $in): void
  * title and a body, and requiring those to move a row would mean the drag had to
  * fetch and re-post the whole article — which is also how a drag ends up
  * overwriting an edit somebody else was making.
+ *
+ * @param array $in  the decoded JSON request: article_id, and folder_id (empty or null for the root)
  */
 function handleMoveArticle(PDO $conn, int $analystId, array $in): void
 {
@@ -320,6 +348,8 @@ function handleMoveArticle(PDO $conn, int $analystId, array $in): void
  *     not returned rather than being returned and hidden.
  *   • creating one requires being able to read the target, or a shortcut would
  *     be a way to confirm that an article you cannot see exists.
+ *
+ * @param array $in  the decoded JSON request: article_id and the folder_id the shortcut goes in
  */
 function handleAddShortcut(PDO $conn, int $analystId, array $in): void
 {
@@ -360,7 +390,11 @@ function handleAddShortcut(PDO $conn, int $analystId, array $in): void
     echo json_encode(['success' => true]);
 }
 
-/** Remove a shortcut. The article itself is untouched — that is the whole point. */
+/**
+ * Remove a shortcut. The article itself is untouched — that is the whole point.
+ *
+ * @param array $in  the decoded JSON request: article_id and the folder_id the shortcut is in
+ */
 function handleRemoveShortcut(PDO $conn, int $analystId, array $in): void
 {
     $articleId = (int)($in['article_id'] ?? 0);
@@ -432,7 +466,14 @@ function handleExceptions(PDO $conn, int $analystId): void
     echo json_encode(['success' => true, 'exceptions' => $out]);
 }
 
-/** Thin alias onto includes/knowledge/audit.php, the one writer. */
+/**
+ * Thin alias onto includes/knowledge/audit.php, the one writer.
+ *
+ * @param string $type  what was acted on: 'folder' or 'article'
+ * @param int $id  that folder's or article's id
+ * @param string $action  one of KNOWLEDGE_AUDIT_ACTIONS, e.g. 'create', 'move', 'delete'
+ * @param ?array $detail  extra facts stored as JSON with the row, or null
+ */
 function knowledgeAudit(PDO $conn, string $type, int $id, string $action, int $analystId, ?array $detail): void
 {
     knowledgeAuditLog($conn, $type, $id, $action, $analystId, $detail);

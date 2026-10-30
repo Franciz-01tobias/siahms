@@ -15,6 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('forms');
+requireModuleWriteJson('forms');   // Read only access (#180) changes nothing here
 
 try {
     $conn = connectToDatabase();

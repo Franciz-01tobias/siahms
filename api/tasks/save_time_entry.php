@@ -12,6 +12,7 @@ require_once '../../includes/services/tasks.php';
 header('Content-Type: application/json');
 if (!isset($_SESSION['analyst_id'])) { echo json_encode(['success' => false, 'error' => 'Not authenticated']); exit; }
 requireModuleAccessJson('tasks');
+requireModuleWriteJson('tasks');   // Read only access to Tasks writes nothing (#181 Part G)
 
 try {
     $data   = json_decode(file_get_contents('php://input'), true) ?: [];

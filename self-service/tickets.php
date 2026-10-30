@@ -17,13 +17,21 @@ $bodyClass    = 'portal-app';
 // Loads assets/js/screen-recorder.js for the reply composer — the same module
 // the compose screen uses. Pairs with includes/record-modal.php below.
 $needsRecorder = true;
+// The read-only answers (discussion #193) use the shared field renderer.
+$pageHead = '<link rel="stylesheet" href="../assets/css/ticket-fields.css?v=2">'
+          . '<script src="../assets/js/ticket-fields.js?v=2"></script>';
 
-$pageData = ['ticketId' => (int)($_GET['id'] ?? 0)];
+// Which list: the person's own tickets, or - for a manager - their team's
+// (discussion #62). Whether they really manage anybody is the endpoint's answer
+// (get_team_tickets.php), not this parameter's.
+$ssView = (($_GET['view'] ?? '') === 'team') ? 'team' : 'mine';
+if ($ssView === 'team') $activeNav = 'team_tickets';
+$pageData = ['ticketId' => (int)($_GET['id'] ?? 0), 'view' => $ssView];
 
 $pageStyles = <<<'CSS'
 /* Two panes filling the viewport under the 48px header, each scrolling its own
    body — the same structure as the analyst inbox (.main-container). */
-.tk-shell { display: flex; height: calc(100vh - 48px); }
+.tk-shell { display: flex; height: calc(100vh - var(--ss-chrome, 48px)); }   /* the bar + any logo band */
 
 .tk-list {
     width: 380px;
@@ -53,6 +61,13 @@ $pageStyles = <<<'CSS'
     max-width: 170px;
 }
 .tk-filter:focus { outline: none; border-color: var(--ss-accent, #10b981); }
+/* Team tickets: who and which status, side by side under the heading (#62). */
+.tk-list-filters { display: flex; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.tk-list-filters .tk-filter { flex: 1; min-width: 0; max-width: none; }
+.tk-more { display: block; width: calc(100% - 36px); margin: 12px 18px 16px; padding: 8px 12px; border: 1px solid var(--border, #e5e7eb);
+    border-radius: 6px; background: var(--surface, #fff); color: var(--text, #333); font-family: inherit; font-size: 13px; cursor: pointer; }
+.tk-more:hover { border-color: var(--ss-accent, #10b981); }
+.tk-more small { display: block; color: var(--text-muted, #666); font-size: 11px; margin-top: 2px; }
 
 /* The line between tickets. Translucent so it takes its weight from the
    surface beneath it, and keyed on the theme MODE so any dark palette is
@@ -150,6 +165,32 @@ $pageStyles = <<<'CSS'
     background: var(--danger-bg, #fdecea);
 }
 .tk-close-btn:disabled { opacity: .55; cursor: progress; }
+/* Managers (discussion #62, step 3): whose ticket this is, and a stub. */
+.tk-mgr-banner { flex-shrink: 0; padding: 10px 24px; font-size: 13px; background: var(--info-bg, #e3f2fd);
+    color: var(--info-text, #0d47a1); border-bottom: 1px solid var(--info-border, #90caf9); }
+.tk-stub { margin: 40px auto; max-width: 440px; text-align: center; color: var(--text-muted, #666); padding: 0 24px; }
+.tk-stub .tk-lock { width: 28px; height: 28px; color: var(--danger-text, #b3261e); margin: 0 0 8px; }
+.tk-stub h1 { font-size: 18px; margin: 0 0 8px; color: var(--text, #333); }
+.tk-stub-meta { font-size: 12px; color: var(--text-faint, #999); }
+.tk-item-subject.is-stub { font-style: italic; color: var(--text-muted, #666); }
+/* Who has seen this ticket (discussion #62, step 2). Quiet when nobody has;
+   it is information, not an alarm. */
+.tk-seen { margin: 12px 24px 0; flex-shrink: 0; padding: 8px 12px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px;
+    background: var(--surface-2, #f7f9fa); font-size: 12px; color: var(--text-muted, #666); }
+.tk-seen-title { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text, #333); margin-bottom: 2px; }
+.tk-seen-icon { width: 14px; height: 14px; flex-shrink: 0; }
+.tk-seen-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.tk-seen-list li { padding: 2px 0; }
+.tk-seen-list strong { color: var(--text, #333); font-weight: 600; }
+/* Confidential (discussion #62) - danger tones from the theme. */
+.tk-lock { width: 12px; height: 12px; vertical-align: -1px; margin-right: 4px; flex-shrink: 0; }
+.tk-item-subject .tk-lock { color: var(--danger-text, #b3261e); }
+.tk-confidential { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    background: var(--danger-bg, #fdecea); color: var(--danger-text, #b3261e); border: 1px solid var(--danger-border, #f5c6c2); }
+.tk-mark-confidential { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-family: inherit;
+    background: transparent; color: var(--text-muted, #666); border: 1px dashed var(--border, #e5e7eb); cursor: pointer; }
+.tk-mark-confidential:hover:not(:disabled) { color: var(--danger-text, #b3261e); border-color: var(--danger-border, #f5c6c2); background: var(--danger-bg, #fdecea); }
+.tk-mark-confidential:disabled { opacity: .55; cursor: progress; }
 .tk-read-subject { font-size: 17px; font-weight: 600; color: var(--text, #333); margin: 0 0 8px 0; }
 .tk-read-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--text-muted, #666); }
 .tk-num {
@@ -306,6 +347,26 @@ $pageStyles = <<<'CSS'
 /* The back control is a phone affordance only; the desktop layout shows both
    panes at once and has nothing to go back to. */
 .tk-back { display: none; }
+
+/* The answers the requester gave (discussion #193). Under the title, or in a
+   panel beside the conversation - Tickets -> Settings -> Custom fields. */
+.tk-answers-head { padding: 12px 24px; background: var(--surface, #fff); border-bottom: 1px solid var(--border, #e5e7eb); flex-shrink: 0; }
+.tk-answers-title { font-size: 12px; font-weight: 600; color: var(--text-muted, #666); text-transform: uppercase; letter-spacing: .4px; margin: 0 0 8px; }
+.tk-read-body { flex: 1; display: flex; min-height: 0; }
+.tk-read-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.tk-answers-side { width: 260px; flex-shrink: 0; overflow-y: auto; padding: 16px 18px; background: var(--surface, #fff); border-left: 1px solid var(--border, #e5e7eb); }
+.tk-answers-side .tf-answers { grid-template-columns: 1fr; gap: 12px; }
+/* The panel only where there is room for it; anything narrower shows the same
+   answers under the title instead. */
+.tk-answers-head.tk-answers-narrow { display: none; }
+@media (max-width: 900px) {
+    .tk-answers-side { display: none; }
+    .tk-answers-head.tk-answers-narrow { display: block; }
+    .tk-read-body { display: block; }
+}
+@media (max-width: 768px) {
+    .tk-answers-head { padding: 10px 14px; }
+}
 CSS;
 
 $pageScripts = <<<'JS'
@@ -333,15 +394,22 @@ let ssTickets = [];
 
         document.addEventListener('DOMContentLoaded', function () {
             const sel = document.getElementById('tkFilter');
-            if (sel) sel.addEventListener('change', function () { ssFilter = sel.value; renderList(); });
+            // Team tickets filter on the SERVER (they are paged), My tickets in the page.
+            if (sel) sel.addEventListener('change', function () { ssFilter = sel.value; ssTeam ? loadTickets() : renderList(); });
+            const who = document.getElementById('tkPerson');
+            if (who) who.addEventListener('change', function () { ssPerson = who.value; ssFilter = ''; loadTickets(); });
             loadTickets();
         });
 
         async function loadTickets() {
             try {
-                const r = await fetch('../api/self-service/get_tickets.php');
+                // A manager's team view reads a different list; everything after
+                // this - the reading pane, the files, replying - is the same page,
+                // and every endpoint behind it decides for itself (#62).
+                const r = await fetch(ssTeam ? teamUrl(1) : '../api/self-service/get_tickets.php');
                 const d = await r.json();
                 ssTickets = d.success ? (d.tickets || []) : [];
+                if (ssTeam) { ssTeamData = d.success ? d : null; ssTeamPage = 1; }
                 renderFilterOptions();
                 renderList();
 
@@ -373,6 +441,7 @@ let ssTickets = [];
         function renderFilterOptions() {
             const sel = document.getElementById('tkFilter');
             if (!sel) return;
+            if (ssTeam) { renderTeamFilters(sel); return; }
 
             const order = [];
             const counts = {};
@@ -391,7 +460,47 @@ let ssTickets = [];
             if (sel.value !== ssFilter) ssFilter = '';   // status vanished → fall back to All
         }
 
+        // ── Team tickets: paged and filtered on the server (#62) ─────────────
+        // A head of department's team can have thousands of tickets, so the list
+        // arrives 50 at a time with a Load more, and both dropdowns ask the
+        // server again rather than filtering what happens to be loaded.
+        const ssTeam = window.PAGE.view === 'team';
+        let ssTeamData = null, ssTeamPage = 1, ssPerson = '';
+        function teamUrl(page) {
+            return '../api/self-service/get_team_tickets.php?' + new URLSearchParams({ page: page, person: ssPerson, status: ssFilter });
+        }
+        function renderTeamFilters(sel) {
+            const d = ssTeamData || { people: [], statuses: [] };
+            const sum = a => a.reduce((n, x) => n + x.count, 0);
+            const who = document.getElementById('tkPerson');
+            if (who) {
+                who.innerHTML = '<option value="">' + esc(window.t('self-service.tickets.team_person_all')) + ' (' + sum(d.people) + ')</option>'
+                    + d.people.map(p => '<option value="' + p.id + '">' + esc(p.name) + ' (' + p.count + ')</option>').join('');
+                who.value = ssPerson;
+                if (who.value !== String(ssPerson)) ssPerson = '';
+            }
+            sel.innerHTML = '<option value="">' + esc(window.t('self-service.tickets.filter_all')) + ' (' + sum(d.statuses) + ')</option>'
+                + d.statuses.map(s => '<option value="' + esc(s.name) + '">' + esc(s.name) + ' (' + s.count + ')</option>').join('');
+            sel.value = ssFilter;
+            if (sel.value !== ssFilter) ssFilter = '';
+        }
+        async function ssLoadMore(btn) {
+            if (btn) btn.disabled = true;
+            try {
+                const d = await (await fetch(teamUrl(ssTeamPage + 1))).json();
+                if (!d.success) return;
+                ssTeamPage = d.page;
+                ssTeamData.has_more = d.has_more;
+                ssTickets = ssTickets.concat(d.tickets || []);
+                // Keep the reader where they were: the list only grows below them.
+                const host = document.getElementById('tkList'), top = host.scrollTop;
+                renderList();
+                host.scrollTop = top;
+            } finally { if (btn) btn.disabled = false; }
+        }
+
         function visibleTickets() {
+            if (ssTeam) return ssTickets;          // already filtered by the server
             if (!ssFilter) return ssTickets;
             return ssTickets.filter(t => (t.status || '') === ssFilter);
         }
@@ -401,7 +510,8 @@ let ssTickets = [];
             const list = visibleTickets();
 
             if (!list.length) {
-                host.innerHTML = '<div class="loading-state">' + esc(window.t('self-service.tickets.none')) + '</div>';
+                host.innerHTML = '<div class="loading-state">' + esc(window.t(window.PAGE.view === 'team'
+                    ? 'self-service.tickets.team_none' : 'self-service.tickets.none')) + '</div>';
                 return;
             }
 
@@ -410,13 +520,19 @@ let ssTickets = [];
                 return '<button type="button" class="tk-item' + (ssSelected == t.id ? ' selected' : '') + '" onclick="selectTicket(' + t.id + ')">'
                      +   '<div class="tk-item-top">'
                      +     '<span class="tk-dot" style="background:' + esc(c) + '"></span>'
-                     +     '<span class="tk-item-subject">' + esc(t.subject || '') + '</span>'
+                     +     '<span class="tk-item-subject' + (t.stub ? ' is-stub' : '') + '">' + (t.sensitivity === 'confidential' ? SS_LOCK_ICON : '')
+                     +       esc(t.stub ? window.t('self-service.tickets.stub_subject') : (t.subject || '')) + '</span>'
                      +     '<span class="tk-item-date">' + esc(shortDate(t.updated_datetime || t.created_datetime)) + '</span>'
                      +   '</div>'
                      +   (t.preview ? '<div class="tk-item-preview">' + esc(stripTags(t.preview)) + '</div>' : '')
-                     +   '<div class="tk-item-meta">' + esc(t.ticket_number || '') + ' &middot; ' + esc(t.status || '') + '</div>'
+                     +   '<div class="tk-item-meta">' + (t.requester_name ? '<strong>' + esc(t.requester_name) + '</strong> &middot; ' : '')
+                     +     esc(t.ticket_number || '') + ' &middot; ' + esc(t.status || '') + '</div>'
                      + '</button>';
-            }).join('');
+            }).join('')
+            + ((ssTeam && ssTeamData && ssTeamData.has_more)
+                ? '<button type="button" class="tk-more" onclick="ssLoadMore(this)">' + esc(window.t('self-service.tickets.load_more'))
+                  + '<small>' + esc(window.t('self-service.tickets.showing_of', { shown: list.length, total: ssTeamData.total })) + '</small></button>'
+                : '');
         }
 
         // ── Phone master/detail ───────────────────────────────────────────
@@ -479,10 +595,10 @@ let ssTickets = [];
                     // nothing to go back FROM, so pushing would only litter the
                     // history with one entry per ticket read.
                     if (wantsReveal && ssPhone.matches && !(history.state && history.state.ssReading)) {
-                        window.history.pushState({ ticketId: id, ssReading: true }, '', 'tickets.php?id=' + id);
+                        window.history.pushState({ ticketId: id, ssReading: true }, '', ssTicketUrl(id));
                     } else {
                         window.history.replaceState(
-                            { ticketId: id, ssReading: wantsReveal && ssPhone.matches }, '', 'tickets.php?id=' + id);
+                            { ticketId: id, ssReading: wantsReveal && ssPhone.matches }, '', ssTicketUrl(id));
                     }
                 }
             } catch (e) { /* not fatal */ }
@@ -507,6 +623,21 @@ let ssTickets = [];
             const t = d.ticket;
             const pane = document.getElementById('tkRead');
             const c = t.status_colour || '#0078d4';
+            // What this viewer may do, as the SERVER says - the requester, or a
+            // manager with whatever System -> Managers allows (#62).
+            ssViewer = d.viewer || { role: 'requester', can_reply: true, can_close: true, stub: false };
+
+            if (ssViewer.stub) {
+                ssCurrentTicketId = Number(t.id) || 0;
+                pane.innerHTML = managerBannerHtml()
+                  + '<div class="tk-stub">' + SS_LOCK_ICON
+                  +   '<h1>' + esc(window.t('self-service.ticket.stub_title')) + '</h1>'
+                  +   '<p>' + esc(window.t('self-service.ticket.stub_body')) + '</p>'
+                  +   '<p class="tk-stub-meta">' + esc(t.ticket_number || '') + ' &middot; ' + esc(t.status || '')
+                  +     ' &middot; ' + esc(window.t('self-service.ticket.created', { date: fullDate(t.created_datetime) })) + '</p>'
+                  + '</div>';
+                return;
+            }
 
             // Screen recordings, bucketed by the message they were recorded with.
             // A recording with no email_id came with the ticket's OPENING message
@@ -553,25 +684,55 @@ let ssTickets = [];
             }).join('');
 
             pane.innerHTML =
-                '<div class="tk-read-head">'
+                managerBannerHtml()
+              + '<div class="tk-read-head">'
               +   '<h1 class="tk-read-subject">' + esc(t.subject || '') + '</h1>'
               +   '<div class="tk-read-meta">'
               +     '<span class="tk-num">' + esc(t.ticket_number || '') + '</span>'
               +     '<span class="status-badge" style="background-color:' + esc(c) + '1f;color:' + esc(c) + ';border:1px solid ' + esc(c) + '33">' + esc(t.status || '') + '</span>'
               +     '<span>' + esc(t.priority || '') + '</span>'
               +     (t.department_name ? '<span>' + esc(t.department_name) + '</span>' : '')
+              +     confidentialHtml(t)
               +     '<span>' + esc(window.t('self-service.ticket.created', { date: fullDate(t.created_datetime) })) + '</span>'
               +   '</div>'
               + '</div>'
+              + answersHtml(d.field_answers, 'head')
+              + (answersPlace(d.field_answers) === 'side' ? '<div class="tk-read-body"><div class="tk-read-main">' : '')
+              + seenByHtml(d.seen_by)
               + '<div class="tk-thread" id="tkThread">' + (msgs || '<div class="loading-state">' + esc(window.t('self-service.ticket.no_conversation')) + '</div>') + '</div>'
-              + composerHtml(t);
+              + (ssViewer.can_reply ? composerHtml(t) : (ssViewer.can_close ? '<div class="tk-composer"><div class="tk-composer-actions">' + closeButtonHtml(t) + '</div></div>' : ''))
+              + (answersPlace(d.field_answers) === 'side' ? '</div>' + answersHtml(d.field_answers, 'side') + '</div>' : '');
 
             ssCurrentTicketId = Number(t.id) || 0;
             wireComposer();
             const closeBtn = document.getElementById('ssSelfClose');
             if (closeBtn) closeBtn.addEventListener('click', selfCloseTicket);
+            const confBtn = document.getElementById('ssMarkConfidential');
+            if (confBtn) confBtn.addEventListener('click', markConfidential);
             const thread = document.getElementById('tkThread');
             if (thread) thread.scrollTop = thread.scrollHeight;   // newest first to the eye
+        }
+
+        /**
+         * Where the requester's answers go (discussion #193): 'off', 'header' or
+         * 'side'; 'off' too when there are none to show.
+         */
+        function answersPlace(fa) {
+            return (fa && fa.items && fa.items.length && window.TicketFields) ? fa.place : 'off';
+        }
+
+        /**
+         * The answers block. 'head' draws under the title - for the header
+         * setting, and for the side setting on a screen too narrow for the
+         * panel; 'side' draws the panel.
+         */
+        function answersHtml(fa, where) {
+            const place = answersPlace(fa);
+            if (place === 'off') return '';
+            const title = '<p class="tk-answers-title">' + esc(window.t('self-service.ticket.details_heading')) + '</p>';
+            const list = window.TicketFields.readOnly(fa.items);
+            if (where === 'side') return place === 'side' ? '<aside class="tk-answers-side">' + title + list + '</aside>' : '';
+            return '<div class="tk-answers-head' + (place === 'side' ? ' tk-answers-narrow' : '') + '">' + title + list + '</div>';
         }
 
         function messageHtml(o) {
@@ -638,6 +799,103 @@ let ssTickets = [];
         // would be worse than one variable beside them.
         let ssCurrentTicketId = 0;
 
+        // ── Managers (discussion #62, step 3) ─────────────────────────────
+        let ssViewer = { role: 'requester', can_reply: true, can_close: true, stub: false };
+
+        function ssTicketUrl(id) {
+            return 'tickets.php?' + (window.PAGE.view === 'team' ? 'view=team&' : '') + 'id=' + id;
+        }
+
+        // Said up front on a team ticket: whose it is, and what a manager may do
+        // here - signposted, so nobody wonders why there is no reply box.
+        function managerBannerHtml() {
+            if (ssViewer.role !== 'manager') return '';
+            const can = ssViewer.can_reply && ssViewer.can_close ? 'mgr_can_both'
+                      : ssViewer.can_reply ? 'mgr_can_reply'
+                      : ssViewer.can_close ? 'mgr_can_close' : 'mgr_can_view';
+            return '<div class="tk-mgr-banner">'
+                 +   '<strong>' + esc(window.t('self-service.ticket.mgr_banner', { name: ssViewer.requester_name || '' })) + '</strong> '
+                 +   (ssViewer.stub ? '' : esc(window.t('self-service.ticket.' + can)))
+                 + '</div>';
+        }
+
+        // ── Who has seen this ticket (discussion #62, step 2) ─────────────
+        // Shown by default, not behind a button: if someone other than the
+        // requester can read their ticket, the requester is owed knowing when
+        // they did. Portal viewers only - the service desk is deliberately left
+        // out (see includes/ticket_views.php). null = not tracked yet on this
+        // install (Database Verification not run), so no panel at all rather
+        // than a reassurance nothing is backing up.
+        function seenByHtml(seen) {
+            if (!Array.isArray(seen)) return '';
+            const icon = '<svg class="tk-seen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+            const body = seen.length === 0
+                ? '<span class="tk-seen-none">' + esc(window.t('self-service.ticket.seen_nobody')) + '</span>'
+                : '<ul class="tk-seen-list">' + seen.map(v =>
+                      '<li><strong>' + esc(v.name) + '</strong> <span>' + esc(fullDate(v.last))
+                    + (v.count > 1 ? ' &middot; ' + esc(window.t('self-service.ticket.seen_times', { count: v.count })) : '')
+                    + '</span></li>').join('') + '</ul>';
+            return '<div class="tk-seen" title="' + esc(window.t('self-service.ticket.seen_help')) + '">'
+                 +   '<div class="tk-seen-title">' + icon + esc(window.t('self-service.ticket.seen_title')) + '</div>'
+                 +   body
+                 + '</div>';
+        }
+
+        // ── Confidential (discussion #62) ─────────────────────────────────
+        // A badge when the ticket is confidential; otherwise a quiet button to
+        // make it so. ONE WAY: only the service desk makes a ticket Normal again
+        // (api/self-service/mark_confidential.php enforces it, not this button).
+        const SS_LOCK_ICON = '<svg class="tk-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+
+        function confidentialHtml(t) {
+            // Only the requester can mark their ticket confidential; a manager just
+            // sees whether it is (#62).
+            if (ssViewer.role === 'manager' && t.sensitivity !== 'confidential') return '';
+            if (t.sensitivity === 'confidential') {
+                return '<span class="tk-confidential" title="' + esc(window.t('self-service.ticket.confidential_hint')) + '">'
+                     + SS_LOCK_ICON + esc(window.t('self-service.ticket.confidential')) + '</span>';
+            }
+            return '<button type="button" class="tk-mark-confidential" id="ssMarkConfidential" title="'
+                 + esc(window.t('self-service.ticket.confidential_hint')) + '">'
+                 + SS_LOCK_ICON + esc(window.t('self-service.ticket.mark_confidential')) + '</button>';
+        }
+
+        async function markConfidential() {
+            const ok = await showConfirm({
+                title:   window.t('self-service.ticket.mark_confidential_title'),
+                message: window.t('self-service.ticket.mark_confidential_confirm'),
+                okLabel: window.t('self-service.ticket.mark_confidential')
+            });
+            if (!ok) return;
+            const btn = document.getElementById('ssMarkConfidential');
+            if (btn) btn.disabled = true;
+            try {
+                const r = await fetch(API_BASE + 'mark_confidential.php', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket_id: ssCurrentTicketId })
+                });
+                const d = await r.json();
+                if (!d.success) {
+                    showToast(d.error || window.t('self-service.ticket.mark_confidential_failed'), 'error');
+                    if (btn) btn.disabled = false;
+                    return;
+                }
+                showToast(window.t('self-service.ticket.mark_confidential_done'), 'success');
+                // Swap the button for the badge in place, and put the padlock in the list.
+                if (btn) btn.outerHTML = confidentialHtml({ sensitivity: 'confidential' });
+                markListRowConfidential(ssCurrentTicketId);
+            } catch (e) {
+                showToast(window.t('self-service.ticket.mark_confidential_failed'), 'error');
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        function markListRowConfidential(id) {
+            const row = ssTickets.find(x => Number(x.id) === Number(id));
+            if (row) { row.sensitivity = 'confidential'; renderList(); }
+        }
+
         /**
          * "No longer needed", offered only when the administrator has switched
          * it on AND the ticket is still open.
@@ -647,7 +905,10 @@ let ssTickets = [];
          * person asking — a button that is not on the page is not a rule.
          */
         function closeButtonHtml(t) {
-            if (!(window.SS_PORTAL && window.SS_PORTAL.allow_self_close)) return '';
+            // A requester needs the portal's self-close switch; a manager, the
+            // managers' one - which the server has already folded into can_close.
+            if (ssViewer.role === 'manager' ? !ssViewer.can_close
+                                            : !(window.SS_PORTAL && window.SS_PORTAL.allow_self_close)) return '';
             if (Number(t.is_closed) === 1) return '';
             return '<button type="button" class="btn tk-close-btn" id="ssSelfClose" title="'
                  + esc(window.t('self-service.ticket.self_close_hint')) + '">'
@@ -917,11 +1178,20 @@ require_once __DIR__ . '/includes/header.php';
     <div class="tk-shell">
         <div class="tk-list">
             <div class="tk-list-head">
-                <h2><?php echo htmlspecialchars(t('self-service.tickets.heading')); ?></h2>
+                <h2><?php echo htmlspecialchars(t($ssView === 'team' ? 'self-service.tickets.team_heading' : 'self-service.tickets.heading')); ?></h2>
+                <?php if ($ssView !== 'team'): ?>
                 <!-- Populated from the statuses actually on this person's tickets,
                      so the list never offers a filter that would come back empty. -->
                 <select class="tk-filter" id="tkFilter" aria-label="<?php echo htmlspecialchars(t('self-service.tickets.filter_label')); ?>"></select>
+                <?php endif; ?>
             </div>
+            <?php if ($ssView === 'team'): ?>
+            <?php /* Who, and which status - both with counts from the server. */ ?>
+            <div class="tk-list-filters">
+                <select class="tk-filter" id="tkPerson" aria-label="<?php echo htmlspecialchars(t('self-service.tickets.team_person_label')); ?>"></select>
+                <select class="tk-filter" id="tkFilter" aria-label="<?php echo htmlspecialchars(t('self-service.tickets.filter_label')); ?>"></select>
+            </div>
+            <?php endif; ?>
             <div class="tk-list-body" id="tkList">
                 <div class="loading-state"><?php echo htmlspecialchars(t('self-service.tickets.loading')); ?></div>
             </div>

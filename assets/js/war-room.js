@@ -70,6 +70,7 @@
      'wrManageBtn', 'wrNewChannel', 'wrNewDm', 'wrFiles', 'wrPending', 'wrArchivedNote',
      'wrAttachLabel'].forEach(function (id) { els[id] = document.getElementById(id); });
 
+    /** Translates a key through window.t, or returns the key when no translator is loaded. */
     function t(key, vars) {
         return (typeof window.t === 'function') ? window.t(key, vars) : key;
     }
@@ -83,6 +84,7 @@
         if (text !== undefined && text !== null) n.textContent = String(text);
         return n;
     }
+    /** Removes every child of a DOM node. */
     function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
     /** Local time from the server's UTC string, via the app's shared tz helper. */
@@ -92,6 +94,7 @@
         return isNaN(d) ? '' : fmtTime(d);
     }
 
+    /** Formats a byte count as B, KB or MB for an attachment chip. */
     function bytes(n) {
         if (n < 1024) return n + ' B';
         if (n < 1048576) return Math.round(n / 1024) + ' KB';
@@ -106,6 +109,7 @@
         { kind: 'dm',     key: 'war-room.channel.direct' }
     ];
 
+    /** Redraws the channel list - the all-hands channel first, then the Teams, Channels and Direct groups. */
     function renderChannels() {
         clear(els.wrChannels);
 
@@ -118,6 +122,9 @@
         });
     }
 
+    /**
+     * Appends one channel button with its private marker and its mention or unread badge (neither shows for the open channel).
+     */
     function addChannelButton(c) {
         var btn = el('button', 'wr-channel' + (c.id === activeId ? ' active' : ''));
         btn.type = 'button';
@@ -140,11 +147,15 @@
         els.wrChannels.appendChild(btn);
     }
 
+    /** Returns the channel object for the open channel, or null. */
     function currentChannel() {
         for (var i = 0; i < channels.length; i++) if (channels[i].id === activeId) return channels[i];
         return null;
     }
 
+    /**
+     * Fills the title and topic for the open channel, swaps the composer for the archived note when archived, and shows Manage only for custom channels.
+     */
     function applyChannelHeader() {
         var c = currentChannel();
         if (!c) return;
@@ -161,6 +172,7 @@
         els.wrManageBtn.hidden = (c.kind !== 'custom');
     }
 
+    /** Opens another channel - clears the message list, resets the since_id watermark and polls at once. */
     function switchChannel(id) {
         if (id === activeId) return;
         activeId = id;
@@ -181,6 +193,9 @@
 
     /* ── messages ──────────────────────────────────────────────────────────── */
 
+    /**
+     * Builds one message row - author, Warbot tag, time, edited flag, body with @mentions, edit/delete buttons and attachments - all as text nodes.
+     */
     function renderMessage(m) {
         var row = el('div', 'wr-msg' + (m.deleted ? ' wr-msg-deleted' : '') + (m.is_bot ? ' wr-msg-bot' : ''));
         row.setAttribute('data-msg-id', m.id);
@@ -300,6 +315,7 @@
         if (last < text.length) node.appendChild(document.createTextNode(text.slice(last)));
     }
 
+    /** True when a name (full or first) belongs to someone in the directory, the current analyst, or Warbot. */
     function nameKnown(name) {
         var n = name.toLowerCase().trim();
         if (n === 'warbot') return true;          // highlighted like any other name
@@ -307,6 +323,7 @@
             return p.full === n || p.first === n;
         });
     }
+    /** True when a mentioned name is the current analyst's full or first name. */
     function mentionsMe(name) {
         var n = name.toLowerCase().trim();
         return myNames.indexOf(n) >= 0;
@@ -318,6 +335,9 @@
         return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].indexOf(ext) >= 0 ? 'image/' + ext : 'other';
     }
 
+    /**
+     * Adds polled messages to the list, replacing any already shown with the same id, and scrolls down only for new ones when the reader was at the bottom.
+     */
     function appendMessages(list) {
         if (!list.length) return;
         els.wrEmpty.hidden = true;
@@ -353,6 +373,7 @@
 
     /* ── presence ──────────────────────────────────────────────────────────── */
 
+    /** Draws the presence panel - who is in this channel, who is elsewhere in the war room, or an offline warning. */
     function renderPresence(p) {
         clear(els.wrPresence);
         if (offline) {
@@ -376,6 +397,9 @@
 
     /* ── the poll ──────────────────────────────────────────────────────────── */
 
+    /**
+     * The heartbeat - fetches poll.php for new messages, channel list with counts and presence, and flags the page offline when it fails.
+     */
     function poll() {
         var url = api + 'poll.php?channel_id=' + encodeURIComponent(activeId) +
                   '&since_id=' + encodeURIComponent(lastId) + '&read=1';
@@ -399,6 +423,7 @@
             });
     }
 
+    /** Starts (or restarts) the poll every POLL_MS milliseconds. */
     function startPolling() {
         if (timer) clearInterval(timer);
         timer = setInterval(poll, POLL_MS);
@@ -406,6 +431,7 @@
 
     /* ── sending ───────────────────────────────────────────────────────────── */
 
+    /** Draws a removable chip for each file chosen but not yet sent. */
     function renderPending() {
         clear(els.wrPending);
         els.wrPending.hidden = !pending.length;
@@ -464,6 +490,9 @@
         return { at: at, typed: typed };
     }
 
+    /**
+     * Shows the @ autocomplete for the word at the caret - up to six directory matches, plus @everyone and Warbot when they fit.
+     */
     function acRender() {
         var ctx = acContext();
         if (!ctx) { acHide(); return; }
@@ -495,8 +524,10 @@
         acBox.hidden = false;
     }
 
+    /** Hides the @ autocomplete and forgets its matches. */
     function acHide() { acBox.hidden = true; acMatches = []; acIndex = -1; }
 
+    /** Replaces the typed @word with the chosen name in the analyst's mention style, then closes the picker. */
     function acAccept(i) {
         var p = acMatches[i];
         if (!p) return;
@@ -614,6 +645,7 @@
 
     /* ── edit and delete ─────────────────────────────────────────────────────── */
 
+    /** Opens the edit modal for one of the analyst's own messages; Save sends the new body through messageAction. */
     function openEdit(m) {
         var body = openModal(t('war-room.message.edit_heading'));
         var ta = document.createElement('textarea');
@@ -638,6 +670,7 @@
         ta.focus();
     }
 
+    /** Opens the delete confirmation for a message; confirming sends the delete through messageAction. */
     function openDelete(m) {
         var body = openModal(t('war-room.message.delete_heading'));
         body.appendChild(el('p', 'wr-muted', t('war-room.message.delete_confirm')));
@@ -657,6 +690,9 @@
         body.appendChild(actions);
     }
 
+    /**
+     * Posts an edit or delete to message.php, then reloads the whole channel because the changed message is behind the poll watermark.
+     */
     function messageAction(action, payload) {
         payload.action = action;
         fetch(api + 'message.php', {
@@ -680,11 +716,15 @@
             .catch(function () { alert(t('war-room.message.failed')); });
     }
 
+    /**
+     * Sends the composer text and any pending files to send.php (multipart when files are attached), reports refused files, and asks Warbot when addressed.
+     */
     function send() {
         var body = els.wrBody.value;
         if (!body.trim() && !pending.length) return;
 
         els.wrSend.disabled = true;
+        /** Re-enables the Send button when the request settles. */
         var done = function () { els.wrSend.disabled = false; };
 
         var request;
@@ -735,10 +775,12 @@
     // If they ever disagree the server wins: it re-checks before answering, so
     // the worst a mismatch here causes is a wasted request or a missed trigger.
     var WARBOT_COMMANDS = /^\s*\/(p1|open|status|changes|oncall|asset|impact|kb|help)\b/i;
+    /** True when the text mentions @warbot or starts with a Warbot slash command. */
     function addressesWarbot(text) {
         return /@warbot\b/i.test(text) || WARBOT_COMMANDS.test(text);
     }
 
+    /** Shows a "thinking" placeholder and asks warbot.php to answer a message; the next poll brings in the reply. */
     function askWarbot(messageId) {
         // A "thinking" line, removed by the next poll when the real answer lands.
         // Without it the room looks like Warbot ignored you for several seconds,
@@ -768,12 +810,14 @@
 
     /* ── panels (search, situation report) ─────────────────────────────────── */
 
+    /** Opens the side panel (search or situation report) with a title and returns its empty body. */
     function openPanel(title) {
         els.wrPanelTitle.textContent = title;
         clear(els.wrPanelBody);
         els.wrPanel.hidden = false;
         return els.wrPanelBody;
     }
+    /** Hides the side panel. */
     function closePanel() { els.wrPanel.hidden = true; }
     els.wrPanelClose.addEventListener('click', closePanel);
 
@@ -797,6 +841,9 @@
         body.appendChild(results);
 
         var debounce = null;
+        /**
+         * Runs the message search through search.php (all channels, or this one when ticked) and lists the hits, each one switching to its channel.
+         */
         function run() {
             var q = input.value.trim();
             clear(results);
@@ -916,12 +963,14 @@
 
     /* ── dialogs (new channel, new DM, manage) ─────────────────────────────── */
 
+    /** Opens the shared dialog with a title and returns its empty body. */
     function openModal(title) {
         els.wrModalTitle.textContent = title;
         clear(els.wrModalBody);
         els.wrModal.hidden = false;
         return els.wrModalBody;
     }
+    /** Hides the shared dialog. */
     function closeModal() { els.wrModal.hidden = true; }
     els.wrModalClose.addEventListener('click', closeModal);
     els.wrModal.addEventListener('click', function (e) { if (e.target === els.wrModal) closeModal(); });
@@ -929,12 +978,16 @@
         if (e.key === 'Escape') { closeModal(); closePanel(); }
     });
 
+    /** Appends a label and a control to a dialog body and returns the control. */
     function field(parent, labelText, node) {
         parent.appendChild(el('label', 'wr-field-label', labelText));
         parent.appendChild(node);
         return node;
     }
 
+    /**
+     * Posts a channel action (create, dm, update, archive, restore) to channels.php; calls onOk on success, alerts with failKey on failure.
+     */
     function post(action, payload, onOk, failKey) {
         payload.action = action;
         fetch(api + 'channels.php', {
@@ -1025,6 +1078,7 @@
         var list = el('div', 'wr-members');
         body.appendChild(list);
 
+        /** Lists the directory people matching the filter, each a button that opens a direct message with them. */
         function draw(filter) {
             clear(list);
             directory.filter(function (p) {
@@ -1035,6 +1089,7 @@
                 row.appendChild(el('span', null, p.name));
                 if (p.here) row.appendChild(el('span', 'wr-here-dot', '• ' + t('war-room.dm.here_now')));
                 row.addEventListener('click', function () {
+                    /** Opens (or reuses) the direct-message channel with this analyst, then switches to it. */
                     post('dm', { analyst_id: p.id }, function (d) {
                         closeModal();
                         poll();
@@ -1094,6 +1149,7 @@
     if (alertsBox) {
         alertsBox.addEventListener('change', function () {
             var on = alertsBox.checked;
+            /** Saves the analyst's desktop-alerts preference (warroom_desktop_alerts) through WR_PREF_URL. */
             var save = function (value) {
                 fetch(window.WR_PREF_URL, {
                     method: 'POST',

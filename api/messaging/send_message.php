@@ -67,12 +67,11 @@ try {
     // inbound row's to_recipients ("C08HELP:1719500000.000100"). Replying to the
     // sender there would send a DM to the person instead of answering in the
     // thread everyone else is reading.
-    $recipient = $conv['from_address'];
-    if ($channelType === 'slack') {
-        $recipient = trim((string) ($conv['to_recipients'] ?? ''));
-        if ($recipient === '') {
-            throw new Exception('This ticket has no Slack thread to reply to.');
-        }
+    // Teams and Mattermost (PR #166) are threaded the same way - see
+    // messagingReplyAddress(), the one place this rule lives.
+    $recipient = messagingReplyAddress($channelType, $conv);
+    if ($recipient === '') {
+        throw new Exception('This ticket has no conversation to reply into.');
     }
     $channel = loadMessagingChannel($conn, (int) $conv['channel_id']);
     if (!$channel) {
@@ -84,14 +83,9 @@ try {
 
     // 24h service window — free-text replies are only allowed inside it.
     //
-    // ⚠️ This is a WhatsApp Business rule, not a general one, so only the channels
-    // that actually have it are checked:
-    //   webchat — self-hosted, no provider in the middle at all
-    //   slack   — Slack has no such window; you can reply to a thread from last
-    //             year. Enforcing it here would block ordinary replies and show
-    //             an error about "pre-approved template messages", which is
-    //             meaningless in Slack and would look like a broken integration.
-    if (!in_array($channelType, ['webchat', 'slack'], true)) {
+    // ⚠️ A WhatsApp Business rule, not a general one. Which channels have it is
+    // decided in ONE place, channelHasServiceWindow() - see why there.
+    if (channelHasServiceWindow($channelType)) {
         $win = $conn->prepare("SELECT last_inbound_at FROM tickets WHERE id = ?");
         $win->execute([$ticketId]);
         if (!channelWindowOpen($win->fetchColumn() ?: null)) {

@@ -39,9 +39,9 @@ $translationNamespaces = ['common', 'asset-management'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('asset-management.title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('assets')); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -1476,10 +1476,17 @@ $translationNamespaces = ['common', 'asset-management'];
              <style> block so its @media rules win on ties — the ordering rule
              from the wiki's Mobile-Friendly-Techniques. Every rule inside it is
              gated at 768px, so the desktop layout is untouched. */ ?>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/project-links.css?v=1">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
+    <?php /* The heading carries the count (Ed) - "Assets - 633 found" - and
+             since #185 it is the action row's title, beside New.
+             ⚠️ The static label is the FALLBACK: renderAssetsList() replaces
+             the title's whole textContent (#assetCount) once the list arrives. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('asset-management.nav.assets'), [actionRowNew('openNewAssetModal()', t('asset-management.list.new_asset'))], ['title_id' => 'assetCount']); ?>
 
     <div class="main-container assets-container">
         <!-- Assets List -->
@@ -1495,7 +1502,6 @@ $translationNamespaces = ['common', 'asset-management'];
                          renderAssetsList() replaces the whole textContent once
                          the list arrives, and an empty heading until then would
                          read as a page that failed to load. */ ?>
-                <h3 id="assetCount"><?php echo htmlspecialchars(t('asset-management.nav.assets')); ?></h3>
                 <input type="text" class="search-box" id="assetSearch" placeholder="<?php echo htmlspecialchars(t('asset-management.list.search_placeholder')); ?>" oninput="searchAssets()" autocomplete="off">
                 <div class="asset-count-row">
                     <?php /* Adding by hand (#1132), bulk tagging (#935) and
@@ -1506,7 +1512,6 @@ $translationNamespaces = ['common', 'asset-management'];
                              and three underlined words in a row read as a
                              breadcrumb. Outline rather than filled, so they
                              still do not outrank the search. */ ?>
-                    <button type="button" class="btn btn-outline btn-sm" onclick="openNewAssetModal()"><?php echo htmlspecialchars(t('asset-management.list.add_asset')); ?></button>
                     <a class="btn btn-outline btn-sm" href="scanner.php"><?php echo htmlspecialchars(t('asset-management.list.scan')); ?></a>
                     <a class="btn btn-outline btn-sm" href="assign-tags.php"><?php echo htmlspecialchars(t('asset-management.list.assign_tags')); ?></a>
                 </div>
@@ -1588,6 +1593,12 @@ $translationNamespaces = ['common', 'asset-management'];
                         <input type="text" class="search-box" id="naName" required maxlength="50" autocomplete="off"
                                placeholder="<?php echo htmlspecialchars(t('asset-management.new.name_ph')); ?>">
                         <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.new.name_hint')); ?></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="naAssetTag"><?php echo htmlspecialchars(t('asset-management.field.asset_tag')); ?></label>
+                        <input type="text" class="search-box" id="naAssetTag" maxlength="64" autocomplete="off"
+                               placeholder="<?php echo htmlspecialchars(t('asset-management.new.asset_tag_ph_auto')); ?>">
+                        <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.new.asset_tag_hint')); ?></div>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="naType"><?php echo htmlspecialchars(t('asset-management.field.type')); ?></label>
@@ -1865,6 +1876,8 @@ $translationNamespaces = ['common', 'asset-management'];
                 // tolerant — a reader that quietly accepts both spellings is how
                 // the two drifted apart without anyone noticing (see GH #91).
                 var params = new URLSearchParams(window.location.search);
+                // ?new=1: New in the table view's action row lands here (#185).
+                if (params.get('new') === '1') { openNewAssetModal(); return; }
                 var aid = params.get('asset_id') || params.get('asset');
                 if (aid) {
                     var n = parseInt(aid, 10);
@@ -2238,10 +2251,12 @@ $translationNamespaces = ['common', 'asset-management'];
                     </div>
                     <div class="detail-tabs" id="detailTabs">
                         <button class="detail-tab active" onclick="switchDetailTab('keyinfo')" data-dtab="keyinfo">${window.t('asset-management.detail.tab_keyinfo')}</button>
+                        <button class="detail-tab" onclick="switchDetailTab('financial')" data-dtab="financial">${window.t('asset-management.detail.tab_financial')}</button>
                         <button class="detail-tab" onclick="switchDetailTab('devices')" data-dtab="devices">${window.t('asset-management.detail.tab_devices')} <span class="tab-count" id="devicesCountBadge">...</span></button>
                         <button class="detail-tab" onclick="switchDetailTab('software')" data-dtab="software">${window.t('asset-management.detail.tab_software')} <span class="tab-count" id="softwareCountBadge">...</span></button>
                         <button class="detail-tab" onclick="switchDetailTab('tickets')" data-dtab="tickets">${window.t('asset-management.detail.tab_tickets')} <span class="tab-count" id="ticketsCountBadge">...</span></button>
                         <button class="detail-tab" onclick="switchDetailTab('contracts')" data-dtab="contracts">${window.t('asset-management.detail.tab_contracts')} <span class="tab-count" id="contractsCountBadge">...</span></button>
+                        ${window.ASSET_SHOW_PROJECTS ? `<button class="detail-tab" onclick="switchDetailTab('projects')" data-dtab="projects">${window.tf ? window.tf('projects.links_other.title', 'Projects') : 'Projects'}</button>` : ''}
                         <button class="detail-tab" onclick="switchDetailTab('documents')" data-dtab="documents">${window.t('common.documents.heading')}</button>
                     </div>
                 </div>
@@ -2358,33 +2373,6 @@ $translationNamespaces = ['common', 'asset-management'];
                             <span class="info-label">${window.t('asset-management.field.last_seen')}</span>
                             <span class="info-value">${seenHtml(selectedAsset.last_seen, true)}</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.purchase_date')}</span>
-                            <input type="date" class="info-value-input" value="${selectedAsset.purchase_date || ''}" onchange="updateAssetField('purchase_date', this.value)">
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.purchase_cost')}</span>
-                            <input type="number" step="0.01" min="0" class="info-value-input" value="${selectedAsset.purchase_cost != null ? selectedAsset.purchase_cost : ''}" placeholder="0.00" onchange="updateAssetField('purchase_cost', this.value)">
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.supplier')}</span>
-                            <select class="info-value-select" onchange="updateAssetField('supplier_id', this.value)">
-                                <option value="">${window.t('asset-management.common.none_option')}</option>
-                                ${assetSuppliers.map(s => `<option value="${s.id}" ${s.id == selectedAsset.supplier_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.order_number')}</span>
-                            <input type="text" class="info-value-input" value="${escapeHtml(selectedAsset.order_number || '')}" placeholder="-" onchange="updateAssetField('order_number', this.value)">
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.warranty_expiry')}<span class="expiry-slot" data-expiry-field="warranty_expiry">${expiryFlag(selectedAsset.warranty_expiry)}</span></span>
-                            <input type="date" class="info-value-input" value="${selectedAsset.warranty_expiry || ''}" onchange="updateAssetField('warranty_expiry', this.value)">
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">${window.t('asset-management.field.lease_expiry')}<span class="expiry-slot" data-expiry-field="lease_expiry">${expiryFlag(selectedAsset.lease_expiry)}</span></span>
-                            <input type="date" class="info-value-input" value="${selectedAsset.lease_expiry || ''}" onchange="updateAssetField('lease_expiry', this.value)">
-                        </div>
                     </div>
                     <?php /* Custom fields (docs/design/flexible-asset-fields.md).
                              Sits between the built-in details and Storage: it is
@@ -2427,6 +2415,52 @@ $translationNamespaces = ['common', 'asset-management'];
                         </div>
                     </div>
                     </div>
+                    <?php /* Financial (3.5.0): purchase, supplier, cost centre, warranty and lease -
+                             everything to do with money, moved out of a busy Key info. */ ?>
+                    <div class="detail-tab-panel detail-tab-panel--scroll" id="financialPanel" data-dtab-panel="financial">
+                    <div class="asset-info-grid">
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.purchase_date')}</span>
+                            <input type="date" class="info-value-input" value="${selectedAsset.purchase_date || ''}" onchange="updateAssetField('purchase_date', this.value)">
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.purchase_cost')}</span>
+                            <input type="number" step="0.01" min="0" class="info-value-input" value="${selectedAsset.purchase_cost != null ? selectedAsset.purchase_cost : ''}" placeholder="0.00" onchange="updateAssetField('purchase_cost', this.value)">
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.supplier')}</span>
+                            <select class="info-value-select" onchange="updateAssetField('supplier_id', this.value)">
+                                <option value="">${window.t('asset-management.common.none_option')}</option>
+                                ${assetSuppliers.map(s => `<option value="${s.id}" ${s.id == selectedAsset.supplier_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.cost_centre')}</span>
+                            <select class="info-value-select" id="assetCostCentre" onchange="updateAssetField('cost_centre_id', this.value)">
+                                <option value="">${window.t('asset-management.common.none_option')}</option>
+                                ${selectedAsset.cost_centre_id ? `<option value="${selectedAsset.cost_centre_id}" selected>${escapeHtml(selectedAsset.cost_centre_label || '')}</option>` : ''}
+                            </select>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.order_number')}</span>
+                            <input type="text" class="info-value-input" value="${escapeHtml(selectedAsset.order_number || '')}" placeholder="-" onchange="updateAssetField('order_number', this.value)">
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.warranty_expiry')}<span class="expiry-slot" data-expiry-field="warranty_expiry">${expiryFlag(selectedAsset.warranty_expiry)}</span></span>
+                            <input type="date" class="info-value-input" value="${selectedAsset.warranty_expiry || ''}" onchange="updateAssetField('warranty_expiry', this.value)">
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.lease_start')}</span>
+                            <input type="date" class="info-value-input" value="${selectedAsset.lease_start || ''}" onchange="updateAssetField('lease_start', this.value)">
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">${window.t('asset-management.field.lease_expiry')}<span class="expiry-slot" data-expiry-field="lease_expiry">${expiryFlag(selectedAsset.lease_expiry)}</span></span>
+                            <input type="date" class="info-value-input" value="${selectedAsset.lease_expiry || ''}" onchange="updateAssetField('lease_expiry', this.value)">
+                        </div>
+                        <?php /* Assets -> Leases (3.5.0): which lease it is on. Filled by loadAssetLease(). */ ?>
+                        <div class="info-item" id="assetLeaseLine" style="grid-column:1/-1;display:none;font-size:13px;color:var(--text-muted);"></div>
+                    </div>
+                    </div>
                     <div class="detail-tab-panel" id="devicesPanel" data-dtab-panel="devices">
                         <div class="devices-search">
                             <input type="text" id="devicesSearch" placeholder="${window.t('asset-management.devices.filter_placeholder')}" oninput="filterDevices()" autocomplete="off">
@@ -2455,6 +2489,7 @@ $translationNamespaces = ['common', 'asset-management'];
                             <div class="loading"><div class="spinner"></div></div>
                         </div>
                     </div>
+                    ${window.ASSET_SHOW_PROJECTS ? '<div class="detail-tab-panel detail-tab-panel--scroll" id="projectsPanel" data-dtab-panel="projects"><div id="assetProjects" style="padding:4px 2px"></div></div>' : ''}
                     <div class="detail-tab-panel detail-tab-panel--scroll" id="documentsPanel" data-dtab-panel="documents">
                         <div id="assetDocuments"></div>
                     </div>
@@ -2469,6 +2504,9 @@ $translationNamespaces = ['common', 'asset-management'];
             loadIntuneDevice(assetId);
             loadAssetTickets(assetId);
             loadAssetContracts(assetId);
+            loadAssetCostCentres(selectedAsset);
+            // Projects (3.2.0): the projects this asset is part of.
+            if (window.ASSET_SHOW_PROJECTS && window.ProjectLinks) ProjectLinks.mount(document.getElementById('assetProjects'), { kind: 'asset', id: assetId, base: window.APP_BASE || '../', bare: true });
             loadCustomFields(assetId);
 
             // ⚠️ MOUNTED, not re-pointed. This detail pane rebuilds its whole DOM
@@ -2482,6 +2520,31 @@ $translationNamespaces = ['common', 'asset-management'];
                 parentId:   assetId,
                 apiBase:    '../api/documents/'
             });
+            loadAssetLease(assetId);
+        }
+
+        /**
+         * Assets -> Leases (3.5.0): "On lease X - schedule" under the lease
+         * dates, linking to the lease. The dates above ARE the lease's for an
+         * asset on one; typing new ones here makes them this asset's own.
+         */
+        async function loadAssetLease(assetId) {
+            const line = document.getElementById('assetLeaseLine');
+            if (!line) return;
+            try {
+                const r = await fetch('../api/assets/leases/for_asset.php?asset_id=' + encodeURIComponent(assetId));
+                const d = await r.json();
+                if (!d.success || !d.leases || !d.leases.length || !selectedAsset || selectedAsset.id != assetId) { line.style.display = 'none'; return; }
+                const l = d.leases[0];
+                const T = k => window.t('asset-management.leases.' + k);
+                // One span: .info-item is a flex column, so loose pieces would stack.
+                line.innerHTML = `<span>${escapeHtml(l.active ? T('panel_on_lease') : T('panel_was_on'))}: `
+                    + `<a href="leases/view.php?id=${l.lease_id}" style="color:var(--accent);text-decoration:none;">${escapeHtml(l.lease_name)}</a>`
+                    + (l.schedule_name ? ` · ${escapeHtml(l.schedule_name)}` : '')
+                    + (l.active ? '' : ` · ${escapeHtml(l.outcome_name || '')}`)
+                    + (l.active && l.own_dates ? ` <em>(${escapeHtml(T('panel_own_dates'))})</em>` : '') + '</span>';
+                line.style.display = '';
+            } catch (e) { line.style.display = 'none'; }
         }
 
         /**
@@ -2506,6 +2569,21 @@ $translationNamespaces = ['common', 'asset-management'];
          * different answers and reading one as the other is how somebody
          * concludes a contract was never set up.
          */
+        // The cost centres this asset can be charged to (GH #160): its own
+        // company's active ones, plus its current one if that has been switched off.
+        async function loadAssetCostCentres(asset) {
+            const sel = document.getElementById('assetCostCentre');
+            if (!sel || !asset) return;
+            try {
+                const q = new URLSearchParams({ company_id: asset.tenant_id || '', keep: asset.cost_centre_id || '' });
+                const r = await fetch('../api/cost-centres/options.php?' + q, { credentials: 'same-origin' });
+                const d = await r.json();
+                if (!d.success || document.getElementById('assetCostCentre') !== sel) return;
+                sel.innerHTML = '<option value="">' + escapeHtml(window.t('asset-management.common.none_option')) + '</option>'
+                    + d.cost_centres.map(c => `<option value="${c.id}"${c.id == asset.cost_centre_id ? ' selected' : ''}>${escapeHtml(c.code + ' ' + c.name)}${c.is_active ? '' : ' (' + escapeHtml(window.t('asset-management.field.cost_centre_inactive')) + ')'}</option>`).join('');
+            } catch (e) { /* the current value stays shown */ }
+        }
+
         async function loadAssetContracts(assetId) {
             const list  = document.getElementById('assetContractsList');
             const badge = document.getElementById('contractsCountBadge');
@@ -2556,7 +2634,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     </div>`;
 
                 list.innerHTML = addBar + head + rows.map(c => {
-                    const supplier = c.supplier_trading_name || c.supplier_name || '';
+                    const supplier = c.party_label || c.supplier_trading_name || c.supplier_name || '';   // supplier or customer (#153)
                     // Bare dates. The words that used to prefix them are now
                     // column headings (Ed) — "Ends" and "Notice by" repeated on
                     // every row is the same two words said as many times as you
@@ -2752,7 +2830,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     return;
                 }
                 results.innerHTML = data.contracts.map(c => {
-                    const supplier = c.supplier_trading_name || c.supplier_name || '';
+                    const supplier = c.party_label || c.supplier_trading_name || c.supplier_name || '';   // supplier or customer (#153)
                     const ends = c.contract_end
                         ? `${window.t('asset-management.detail.contract_ends')} ${c.contract_end}`
                         : window.t('asset-management.detail.contract_no_end');
@@ -3246,6 +3324,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     body: JSON.stringify({
                         tenant_id:       coGroup.hidden ? null : (parseInt(coVal, 10) || null),
                         hostname:        document.getElementById('naName').value.trim(),
+                        asset_tag:       document.getElementById('naAssetTag')?.value.trim() || '',
                         asset_type_id:   document.getElementById('naType').value,
                         asset_status_id: document.getElementById('naStatus').value,
                         location_id:     document.getElementById('naLocation').value,
@@ -3290,7 +3369,10 @@ $translationNamespaces = ['common', 'asset-management'];
                               fieldWarning ? 'error' : 'success');
                     return;
                 }
-                showToast(fieldWarning || window.t('asset-management.new.created'),
+                const successMsg = data.asset_tag
+                    ? window.t('asset-management.new.created_with_tag', { tag: data.asset_tag })
+                    : window.t('asset-management.new.created');
+                showToast(fieldWarning || successMsg,
                           fieldWarning ? 'error' : 'success');
                 await loadAssets();
                 selectAsset(data.id);
@@ -3577,10 +3659,10 @@ $translationNamespaces = ['common', 'asset-management'];
 
                 if (data.success && data.disks.length > 0) {
                     container.innerHTML = data.disks.map(disk => {
-                        const pct = parseFloat(disk.used_percent) || 0;
-                        const sizeGB = (disk.size_bytes / 1073741824).toFixed(1);
-                        const freeGB = (disk.free_bytes / 1073741824).toFixed(1);
-                        const usedGB = (sizeGB - freeGB).toFixed(1);
+                        const pct = disk.used_percent == null ? null : parseFloat(disk.used_percent);
+                        const sizeGB = disk.size_bytes == null ? '\u2014' : (disk.size_bytes / 1073741824).toFixed(1);
+                        const freeGB = disk.free_bytes == null ? '\u2014' : (disk.free_bytes / 1073741824).toFixed(1);
+                        const usedGB = disk.size_bytes == null || disk.free_bytes == null ? '\u2014' : ((disk.size_bytes-disk.free_bytes)/1073741824).toFixed(1);
                         const level = pct >= 90 ? 'high' : pct >= 75 ? 'medium' : 'low';
 
                         return `<div class="disk-card">
@@ -3588,16 +3670,20 @@ $translationNamespaces = ['common', 'asset-management'];
                                 <span class="disk-drive">${escapeHtml(disk.drive)}</span>
                                 <span class="disk-label">${escapeHtml(disk.label || '')}</span>
                             </div>
-                            <div class="disk-bar-container">
-                                <div class="disk-bar-fill usage-${level}" data-pct="${pct}"></div>
+                            <div class="disk-bar-container" ${pct == null ? 'hidden' : ''}>
+                                <div class="disk-bar-fill usage-${level}" data-pct="${pct == null ? 0 : pct}"></div>
                             </div>
                             <div class="disk-details">
                                 <span>${window.t('asset-management.disk.used_of', { used: usedGB, total: sizeGB })}</span>
-                                <span class="disk-percent usage-${level}">${pct}%</span>
+                                <span class="disk-percent usage-${level}">${pct == null ? '\u2014' : pct + '%'}</span>
                             </div>
                             <div class="disk-details" style="margin-top: 4px;">
                                 <span>${window.t('asset-management.disk.free', { free: freeGB })}</span>
                                 <span>${escapeHtml(disk.file_system || '')}</span>
+                            </div>
+                            <div class="disk-details" style="margin-top: 4px;">
+                                <span>${window.t('common.inventory_source')}</span>
+                                <span>${escapeHtml(disk.source || '')}</span>
                             </div>
                         </div>`;
                     }).join('');
@@ -4004,12 +4090,16 @@ $translationNamespaces = ['common', 'asset-management'];
             }
         }
 
+        function softwareIdentityCount(items) {
+            return new Set(items.map(s => s.app_id || JSON.stringify([s.display_name,s.publisher]))).size;
+        }
+
         function updateSwTabCounts() {
             const apps = allAssetSoftware.filter(s => !parseInt(s.system_component));
             const components = allAssetSoftware.filter(s => parseInt(s.system_component));
-            document.getElementById('swCountApps').textContent = apps.length;
-            document.getElementById('swCountComponents').textContent = components.length;
-            document.getElementById('swCountAll').textContent = allAssetSoftware.length;
+            document.getElementById('swCountApps').textContent = softwareIdentityCount(apps);
+            document.getElementById('swCountComponents').textContent = softwareIdentityCount(components);
+            document.getElementById('swCountAll').textContent = softwareIdentityCount(allAssetSoftware);
         }
 
         function switchSwTab(filter) {
@@ -4031,7 +4121,7 @@ $translationNamespaces = ['common', 'asset-management'];
                 software = software.filter(s => parseInt(s.system_component));
             }
 
-            badge.textContent = software.length;
+            badge.textContent = softwareIdentityCount(software);
 
             if (software.length === 0) {
                 container.innerHTML = `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.software.no_data')}</div>`;
@@ -4045,6 +4135,7 @@ $translationNamespaces = ['common', 'asset-management'];
                             <th>${window.t('asset-management.software.col_application')}</th>
                             <th>${window.t('asset-management.software.col_publisher')}</th>
                             <th>${window.t('asset-management.software.col_version')}</th>
+                            <th>${window.t('common.inventory_source')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -4053,6 +4144,7 @@ $translationNamespaces = ['common', 'asset-management'];
                                 <td>${escapeHtml(sw.display_name)}</td>
                                 <td>${escapeHtml(sw.publisher || '\u2014')}</td>
                                 <td>${escapeHtml(sw.display_version || '\u2014')}</td>
+                                <td>${escapeHtml(sw.source || '\u2014')}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -4111,6 +4203,7 @@ $translationNamespaces = ['common', 'asset-management'];
          * hand it whatever was edited without asking what kind of field it is.
          */
         function refreshExpiryFlag(field, value) {
+            if (field === 'lease_start' || field === 'lease_expiry') { loadAssetLease(selectedAsset && selectedAsset.id); }
             if (field !== 'warranty_expiry' && field !== 'lease_expiry') { return; }
             const slot = document.querySelector(`.expiry-slot[data-expiry-field="${field}"]`);
             if (slot) { slot.innerHTML = expiryFlag(value); }
@@ -4386,7 +4479,8 @@ $translationNamespaces = ['common', 'asset-management'];
             // localise here. Legacy rows hold an English label (with spaces/capitals)
             // — those don't match a key, so we show them as-is.
             const FIELD_KEYS = ['type','status','location','supplier','purchase_date',
-                'purchase_cost','order_number','warranty_expiry','lease_expiry','assigned_user'];
+                'purchase_cost','order_number','warranty_expiry','lease_start','lease_expiry','cost_centre','assigned_user',
+                'hostname','asset_created','asset_discovered','hostname_reused'];
 
             history.forEach(entry => {
                 const noneEm = `<em style="color:#999;">${window.t('asset-management.common.none')}</em>`;
@@ -4404,7 +4498,7 @@ $translationNamespaces = ['common', 'asset-management'];
                         <span class="history-arrow">&rarr;</span>
                         <span class="history-value-new">${newVal}</span>
                     </td>
-                    <td class="history-meta">${escapeHtml(entry.analyst_name || window.t('asset-management.common.unknown'))}</td>
+                    <td class="history-meta">${escapeHtml(entry.analyst_name || window.t(entry.analyst_id ? 'asset-management.common.unknown' : 'asset-management.history.automatic'))}</td>
                 </tr>`;
             });
 
@@ -4524,6 +4618,8 @@ $translationNamespaces = ['common', 'asset-management'];
              behaviour inside is gated on matchMedia(768px), so on desktop it is
              inert. (#936) */ ?>
     <script src="../assets/js/network-mapper-icons.js?v=3"></script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script>window.ASSET_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects') ? 'true' : 'false'; ?>; window.APP_BASE = window.APP_BASE || <?php echo json_encode(BASE_URL); ?>;</script>
+    <script src="../assets/js/project-links.js?v=1"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

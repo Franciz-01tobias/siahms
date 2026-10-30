@@ -30,6 +30,10 @@ require_once dirname(__DIR__, 3) . '/includes/services/tickets.php';
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The SELECT for tickets, with status, priority, type, origin, department, analyst,
+ * requester and company names.
+ */
 function apiTicketSelect(): string {
     return "SELECT t.*,
                    ts.name  AS status_name,  ts.is_closed AS status_is_closed,
@@ -51,6 +55,12 @@ function apiTicketSelect(): string {
             LEFT JOIN tenants           tn  ON tn.id  = t.tenant_id";
 }
 
+/**
+ * Shapes a ticket row for the API - number, subject, status (with is_closed), priority,
+ * type, origin, department, analyst, requester and the rest of the record.
+ *
+ * @param array $r  the tickets row as apiTicketSelect() loads it, with the lookup, analyst, requester and company names
+ */
 function apiSerializeTicket(array $r): array {
     $rel = function ($id, $name, array $extra = []) {
         return $id === null ? null : array_merge(['id' => (int)$id, 'name' => $name], $extra);
@@ -88,8 +98,34 @@ function apiSerializeTicket(array $r): array {
         // ticket that has already come back, and reporting it would say otherwise.
         'snoozed_until' => (!empty($r['snoozed_until']) && strtotime($r['snoozed_until'] . ' UTC') > time())
                             ? apiIsoDate($r['snoozed_until']) : null,
+        // 'normal' or 'confidential' (discussion #62). 'normal' before Database
+        // Verification has added the column, which is what every ticket then is.
+        'sensitivity'   => $r['sensitivity'] ?? 'normal',
         'deleted_at'    => apiIsoDate($r['deleted_datetime']),
     ];
+}
+
+/**
+ * A ticket's custom fields (#179) for the API: {field_key: value} for every
+ * field the ticket has, null when unanswered. Typed - a number is a number, a
+ * yes/no is true/false, a date is "2026-11-03", a date and time is
+ * "2026-11-03T09:00:00", a time is "09:00".
+ *
+ * @param array $row  the ticket row (id, tenant_id, ticket_type_id)
+ */
+function apiTicketCustomFields(PDO $conn, array $row): object {
+    $defs = TicketFieldsService::fieldsForTicket($conn, $row);
+    $values = TicketFieldsService::values($conn, (int)$row['id'], $defs);
+    $out = [];
+    foreach ($defs as $key => $d) {
+        $v = $values[$key] ?? null;
+        if ($v !== null && $d['type'] === 'date') {
+            $mode = $d['config']['date_mode'] ?? 'date';
+            $v = $mode === 'time' ? substr($v, 11, 5) : ($mode === 'datetime' ? str_replace(' ', 'T', substr($v, 0, 19)) : substr($v, 0, 10));
+        }
+        $out[$key] = $v;
+    }
+    return (object)$out;
 }
 
 /** Load one ticket (with joins) enforcing the key's company scope; 404s if not visible. */
@@ -247,6 +283,7 @@ function apiTicketsGet(PDO $conn, array $apiKey, array $params, array $body): vo
     $descStmt->execute([$params[0]]);
     $desc = $descStmt->fetchColumn();
     $ticket['description_html'] = $desc === false ? null : $desc;
+    $ticket['custom_fields'] = apiTicketCustomFields($conn, $row);
 
     apiRespond($ticket);
 }
@@ -278,11 +315,16 @@ function apiTicketsCreate(PDO $conn, array $apiKey, array $params, array $body):
         $tenantId = apiKeyDefaultTenantId($conn, $apiKey);
     }
 
+    // Custom fields (#179). Always passed, so the fields required when a ticket
+    // is logged are enforced for the API exactly as for the New ticket form - an
+    // integration that leaves one out gets a 422 naming it, not a ticket missing it.
+    $body['custom_fields'] = $body['custom_fields'] ?? [];
     try {
         $ticketId = TicketsService::createTicket($conn, ActorContext::fromApiKey($apiKey), $tenantId, $body, null,
             'Created via API (key: ' . $apiKey['name'] . ')');
     } catch (ServiceError $e) { apiFailFromService($e); }
-    apiRespond(apiSerializeTicket(apiLoadTicket($conn, $apiKey, $ticketId)), 201);
+    $row = apiLoadTicket($conn, $apiKey, $ticketId);
+    apiRespond(apiSerializeTicket($row) + ['custom_fields' => apiTicketCustomFields($conn, $row)], 201);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +334,8 @@ function apiTicketsUpdate(PDO $conn, array $apiKey, array $params, array $body):
     try {
         TicketsService::updateTicket($conn, ActorContext::fromApiKey($apiKey), (int)$params[0], $body, true);
     } catch (ServiceError $e) { apiFailFromService($e); }
-    apiRespond(apiSerializeTicket(apiLoadTicket($conn, $apiKey, $params[0])));
+    $row = apiLoadTicket($conn, $apiKey, $params[0]);
+    apiRespond(apiSerializeTicket($row) + ['custom_fields' => apiTicketCustomFields($conn, $row)]);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +348,7 @@ function apiTicketsDelete(PDO $conn, array $apiKey, array $params, array $body):
     apiRespond(['id' => $params[0], 'deleted' => true]);
 }
 
+/** POST /tickets/{id}/restore - restores a deleted ticket through TicketsService and returns it. */
 function apiTicketsRestore(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         TicketsService::restoreTicket($conn, ActorContext::fromApiKey($apiKey), (int)$params[0], false);
@@ -335,6 +379,10 @@ function apiTicketNotesList(PDO $conn, array $apiKey, array $params, array $body
     apiRespond($notes);
 }
 
+/**
+ * POST /tickets/{id}/notes - adds a note to the ticket through TicketsService. Notes are
+ * internal unless is_internal is false.
+ */
 function apiTicketNotesCreate(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         $noteId = TicketsService::createNote($conn, ActorContext::fromApiKey($apiKey), (int)$params[0], $body);
@@ -433,6 +481,10 @@ function apiRequireTimeTracking(PDO $conn, int $ticketId): void {
     }
 }
 
+/**
+ * GET /tickets/{id}/time-entries - the ticket's active time entries, oldest first.
+ * Refused when time tracking is off for the ticket.
+ */
 function apiTicketTimeEntriesList(PDO $conn, array $apiKey, array $params, array $body): void {
     apiLoadTicket($conn, $apiKey, $params[0]);
     apiRequireTimeTracking($conn, (int) $params[0]);
@@ -456,6 +508,10 @@ function apiTicketTimeEntriesList(PDO $conn, array $apiKey, array $params, array
     apiRespond($entries);
 }
 
+/**
+ * POST /tickets/{id}/time-entries - logs time on the ticket through TicketsService,
+ * returning the minutes and time as stored.
+ */
 function apiTicketTimeEntriesCreate(PDO $conn, array $apiKey, array $params, array $body): void {
     apiRequireTimeTracking($conn, (int) $params[0]);
     try {
@@ -473,6 +529,7 @@ function apiTicketTimeEntriesCreate(PDO $conn, array $apiKey, array $params, arr
     ], 201);
 }
 
+/** DELETE /tickets/{id}/time-entries/{entryId} - deletes a time entry through TicketsService. */
 function apiTicketTimeEntriesDelete(PDO $conn, array $apiKey, array $params, array $body): void {
     apiRequireTimeTracking($conn, (int) $params[0]);
     try {

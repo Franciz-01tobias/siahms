@@ -11,6 +11,9 @@ require_once '../../includes/tenancy.php';
 require_once '../../includes/html_sanitise.php';
 require_once '../../includes/ticket_recordings.php';
 require_once '../../includes/uploads.php';   // uploadStoreBytes() — see F1
+require_once '../../includes/service_context.php';
+require_once '../../includes/services/ticket_fields.php';   // custom fields (#179)
+require_once '../../includes/self_service_ticket_types.php';
 
 header('Content-Type: application/json');
 
@@ -31,6 +34,9 @@ $subject = trim($input['subject'] ?? '');
 $description = trim($input['description'] ?? '');
 $priority = $input['priority'] ?? 'Normal';
 $mailboxId = !empty($input['mailbox_id']) ? (int)$input['mailbox_id'] : null;
+// The requester's own "Confidential" tick (discussion #62). They can only ever
+// raise a ticket's sensitivity, never lower one - see includes/ticket_sensitivity.php.
+$wantsConfidential = !empty($input['confidential']);
 $inputAttachments = $input['attachments'] ?? [];
 $recordingIds = array_values(array_filter(array_map('intval', $input['recording_ids'] ?? [])));
 
@@ -41,6 +47,15 @@ if (empty($subject)) {
 
 try {
     $conn = connectToDatabase();
+
+    // Refuse the Confidential tick rather than drop it (discussion #62): before
+    // Database Verification it cannot be stored, and a requester who ticked it
+    // must never end up with a ticket they believe is confidential and is not.
+    require_once '../../includes/ticket_sensitivity.php';
+    if ($wantsConfidential && !ticketSensitivityReady($conn)) {
+        echo json_encode(['success' => false, 'error' => 'Confidential tickets are not available on this service desk yet. Please untick it, or contact the service desk directly.']);
+        exit;
+    }
 
     // Validate the submitted priority against the CONFIGURED active priorities
     // (not a hardcoded Low/Normal/High list) so custom priorities like
@@ -81,8 +96,36 @@ try {
         ? (int) $user['tenant_id']
         : (isMultiTenant($conn) ? null : getDefaultTenantId($conn));
 
-    // Generate unique ticket number
-    $ticketNumber = generateTicketNumber($conn, $ticketTenantId);
+    // The mailbox (GH #172). ⚠️ RE-CHECKED HERE, like the category below: the
+    // dropdown only offers this user's company's mailboxes and shared ones, but
+    // a hand-posted id could otherwise pick another company's mailbox - and the
+    // ticket would then be answered from that company's address. One not offered
+    // is dropped, so the ticket is still raised and an analyst picks a mailbox.
+    if ($mailboxId !== null) {
+        require_once '../../includes/self_service_mailboxes.php';
+        if (!isset(selfServiceMailboxes($conn, $userId)[$mailboxId])) {
+            $mailboxId = null;
+        }
+    }
+
+    // The ticket type and the custom fields the requester was asked (#179).
+    // ⚠️ RE-CHECKED HERE, like the mailbox and the category: a type is accepted
+    // only if it is one this requester's company offers, and only the fields
+    // marked "Ask the requester" may be answered - a hand-posted key for an
+    // analyst-only field is refused, not quietly stored.
+    $ticketTypeId = null;
+    if (!empty($input['ticket_type_id'])) {
+        $wantedType = (int)$input['ticket_type_id'];
+        if (isset(selfServiceTicketTypes($conn, $ticketTenantId)[$wantedType])) {
+            $ticketTypeId = $wantedType;
+        }
+    }
+    $customDefs = TicketFieldsService::fieldsFor($conn, $ticketTenantId, $ticketTypeId, 'requester');
+    $customValues = TicketFieldsService::validate($conn, $customDefs,
+        is_array($input['custom_fields'] ?? null) ? $input['custom_fields'] : [], true);
+
+    // Generate unique ticket number - per type, where the numbering says so.
+    $ticketNumber = generateTicketNumber($conn, $ticketTenantId, $ticketTypeId);
 
     // Create ticket. The status resolves to the CONFIGURED default rather than the
     // literal name 'Open', which an admin may rename or translate (#79). The
@@ -109,13 +152,13 @@ try {
     }
 
     $ticketSql = "INSERT INTO tickets (
-        ticket_number, subject, status_id, priority_id, category_id,
+        ticket_number, subject, status_id, priority_id, category_id, ticket_type_id,
         user_id, tenant_id, created_datetime, updated_datetime
     ) VALUES (
         ?, ?,
         (SELECT id FROM ticket_statuses   WHERE is_active = 1 ORDER BY is_default DESC, display_order, id LIMIT 1),
         (SELECT id FROM ticket_priorities WHERE name = ? LIMIT 1),
-        ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP()
+        ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP()
     )";
 
     $ticketStmt = $conn->prepare($ticketSql);
@@ -124,11 +167,18 @@ try {
         $subject,
         $priority,
         $categoryId,
+        $ticketTypeId,
         $userId,
         $ticketTenantId,
     ]);
 
     $ticketId = $conn->lastInsertId();
+
+    // The answers to the custom fields the requester was asked, already
+    // validated above. Audited like any other change, with no analyst behind it.
+    if ($customValues) {
+        TicketFieldsService::write($conn, new ActorContext(0, null, 'portal'), (int)$ticketId, $customDefs, $customValues);
+    }
 
     // Equipment the user attached to the report (discussion #57).
     //
@@ -268,6 +318,14 @@ try {
     // Deliberately AFTER the commit, for the same reason the recordings claim is:
     // a ticket that rolled back must never have announced itself. It also matters
     // to the search indexer downstream, which cannot see uncommitted rows.
+    // Confidential - the requester's tick, or the mailbox they chose. Before the
+    // announcement, so nothing downstream ever sees this ticket as Normal.
+    require_once '../../includes/ticket_sensitivity.php';
+    if ($wantsConfidential) {
+        ticketSensitivityRaise($conn, (int)$ticketId, 'the requester asked for it when raising the ticket');
+    }
+    ticketSensitivityApplyDefaults($conn, (int)$ticketId, $mailboxId);
+
     require_once '../../includes/ticket_events.php';
     ticketDispatchCreated($conn, (int)$ticketId, $userId, $fromEmail);
 
@@ -293,10 +351,10 @@ try {
  * so the call sites in this file keep reading naturally; the format, the
  * counter and the uniqueness check all live in one place.
  */
-function generateTicketNumber($conn, ?int $tenantId = null) {
+function generateTicketNumber($conn, ?int $tenantId = null, ?int $typeId = null) {
     // ⚠️ THE COMPANY MUST BE PASSED IN. Under per-company numbering the number
     // carries that company's code and draws from its own counter, so numbering
     // before working out whose ticket it is would put every portal ticket on the
     // default company's sequence whatever the portal user's company is.
-    return TicketNumbering::next($conn, null, $tenantId);
+    return TicketNumbering::next($conn, $typeId, $tenantId);
 }

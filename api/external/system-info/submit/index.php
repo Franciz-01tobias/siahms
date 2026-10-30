@@ -99,6 +99,9 @@ if (!isset($data['hostname']) || trim($data['hostname']) === '') {
 $hostname = trim($data['hostname']);
 
 // Helper: get string value or null
+// @param mixed $data  one section of the agent's decoded JSON report (untrusted)
+// @param mixed $key  the field to read from it
+// @param mixed $maxLen  the most characters to keep (the column length); null or 0 keeps it all
 function strOrNull($data, $key, $maxLen = null) {
     $val = $data[$key] ?? null;
     if ($val === null || (is_string($val) && trim($val) === '')) return null;
@@ -108,6 +111,8 @@ function strOrNull($data, $key, $maxLen = null) {
 }
 
 // Helper: get int/bigint value or null
+// @param mixed $data  one section of the agent's decoded JSON report (untrusted)
+// @param mixed $key  the field to read; anything not numeric comes back as null
 function intOrNull($data, $key) {
     return isset($data[$key]) && is_numeric($data[$key]) ? (int)$data[$key] : null;
 }
@@ -148,14 +153,23 @@ if (!empty($data['tpm']) && is_array($data['tpm'])) {
 }
 
 try {
-    // Check if asset exists — scoped to this key's company (NULL-safe match, so a
-    // Default-company key matches NULL-tenant assets).
-    $stmt = $conn->prepare("SELECT id FROM assets WHERE hostname = ? AND tenant_id <=> ?");
-    $stmt->execute([$hostname, $keyTenant]);
-    $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+    require_once __DIR__ . '/../../../../includes/services/assets.php';
 
-    if ($existing) {
-        $hostId = (int)$existing['id'];
+    // Which asset is this machine? Serial first, then hostname (PR #164) - so a
+    // renamed machine is recognised instead of arriving as a duplicate. Scoped
+    // to this key's company (NULL-safe, so a Default-company key matches
+    // NULL-tenant assets). A rename it reports is applied here, by the service.
+    $agentCtx = ActorContext::system('Inventory agent');
+    $reconcileRes = AssetsService::reconcileAsset(
+        $conn,
+        $agentCtx,
+        ['service_tag' => strOrNull($data, 'service_tag', 50), 'hostname' => $hostname],
+        $keyTenant,
+        'inventory agent'
+    );
+
+    if ($reconcileRes['asset_id'] !== null) {
+        $hostId = (int)$reconcileRes['asset_id'];
 
         // Update all fields
         $stmt = $conn->prepare("
@@ -201,45 +215,33 @@ try {
     } else {
         $isNew = true;
 
-        $stmt = $conn->prepare("
-            INSERT INTO assets (
-                hostname, manufacturer, model, memory, service_tag,
-                operating_system, feature_release, build_number, cpu_name, speed,
-                bios_version, first_seen, last_seen,
-                domain, logged_in_user, last_boot_utc,
-                tpm_version, bitlocker_status, gpu_name, tenant_id
-            ) VALUES (
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(),
-                ?, ?, ?,
-                ?, ?, ?, ?
-            )
-        ");
-        $stmt->execute([
-            mb_substr($hostname, 0, 50),
-            strOrNull($data, 'manufacturer', 50),
-            strOrNull($data, 'model', 50),
-            intOrNull($data, 'memory'),
-            strOrNull($data, 'service_tag', 50),
-            strOrNull($data, 'operating_system', 50),
-            strOrNull($data, 'feature_release', 10),
-            strOrNull($data, 'build_number', 50),
-            strOrNull($data, 'cpu_name', 250),
-            intOrNull($data, 'speed'),
-            strOrNull($data, 'bios_version', 20),
-            strOrNull($data, 'domain', 100),
-            strOrNull($data, 'logged_in_user', 100),
-            strOrNull($data, 'last_boot_utc'),
-            $tpmVersion,
-            $bitlockerStatus ? mb_substr($bitlockerStatus, 0, 20) : null,
-            $gpuName,
-            $keyTenant
-        ]);
-
-        $hostId = (int)$conn->lastInsertId();
+        // One write path for every inventory source: the tag (if the company
+        // generates them), the transaction and the history row (PR #164).
+        $hostId = AssetsService::createDiscoveredAsset($conn, $agentCtx, [
+            'hostname'         => mb_substr($hostname, 0, 50),
+            'manufacturer'     => strOrNull($data, 'manufacturer', 50),
+            'model'            => strOrNull($data, 'model', 50),
+            'memory'           => intOrNull($data, 'memory'),
+            'service_tag'      => strOrNull($data, 'service_tag', 50),
+            'operating_system' => strOrNull($data, 'operating_system', 50),
+            'feature_release'  => strOrNull($data, 'feature_release', 10),
+            'build_number'     => strOrNull($data, 'build_number', 50),
+            'cpu_name'         => strOrNull($data, 'cpu_name', 250),
+            'speed'            => intOrNull($data, 'speed'),
+            'bios_version'     => strOrNull($data, 'bios_version', 20),
+            'domain'           => strOrNull($data, 'domain', 100),
+            'logged_in_user'   => strOrNull($data, 'logged_in_user', 100),
+            'last_boot_utc'    => strOrNull($data, 'last_boot_utc'),
+            'tpm_version'      => $tpmVersion,
+            'bitlocker_status' => $bitlockerStatus ? mb_substr($bitlockerStatus, 0, 20) : null,
+            'gpu_name'         => $gpuName,
+        ], $keyTenant, 'the inventory agent', $reconcileRes['hostname_reused']);
     }
 } catch (PDOException $e) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Failed to upsert asset', 'detail' => $e->getMessage()]);
+    exit;
+} catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Failed to upsert asset', 'detail' => $e->getMessage()]);
     exit;
@@ -269,6 +271,8 @@ $leftUnchanged = [];
  *
  * Silence is the other half of the bug, so a skipped section is NAMED in the
  * response rather than looking like a successful sync of nothing.
+ *
+ * @param mixed $value  one section of the report, e.g. $data['disks']; only a non-empty array counts
  */
 function reportHas($value): bool {
     return !empty($value) && is_array($value);
@@ -276,11 +280,14 @@ function reportHas($value): bool {
 
 try {
     // The agent has authoritative per-drive data, so it owns asset_disks for
-    // any host it reports for — but only when it actually reported some.
+    // its own source on any host it reports for — but only when it actually reported some.
     if (!reportHas($data['disks']['logical'] ?? null)) {
         $leftUnchanged[] = 'disks';
     } else {
-        $conn->prepare("DELETE FROM asset_disks WHERE asset_id = ?")->execute([$hostId]);
+        // TRAP: 'intune' too. Intune's volumes are only a stand-in until the agent reports
+        // (intuneSyncDisks() skips an asset with agent rows), so the agent replaces them as it
+        // always has. REST sources ('rest:...') are another tool's view and are left alone.
+        $conn->prepare("DELETE FROM asset_disks WHERE asset_id = ? AND source IN ('agent', 'intune')")->execute([$hostId]);
         $stmt = $conn->prepare("
             INSERT INTO asset_disks (asset_id, drive, label, file_system, size_bytes, free_bytes, used_percent, source)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'agent')
@@ -373,7 +380,7 @@ try {
     if (!reportHas($data['network_adapters'] ?? null)) {
         $leftUnchanged[] = 'network_adapters';
     } else {
-        $conn->prepare("DELETE FROM asset_network_adapters WHERE asset_id = ?")->execute([$hostId]);
+        $conn->prepare("DELETE FROM asset_network_adapters WHERE asset_id = ? AND source = 'agent'")->execute([$hostId]);
         $stmt = $conn->prepare("
             INSERT INTO asset_network_adapters (asset_id, name, mac_address, ip_address, subnet_mask, gateway, dhcp_enabled)
             VALUES (?, ?, ?, ?, ?, ?, ?)

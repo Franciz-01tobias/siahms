@@ -604,6 +604,9 @@
 }
 
 .option-remove:hover { color: var(--danger-text, #d32f2f); }
+/* GH #190 phase 4: "counts as an exception" on a choice option. */
+.option-exc { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted, #666); white-space: nowrap; cursor: pointer; margin: 0 4px; }
+.option-exc input { margin: 0; }
 
 .add-option-btn {
     background: none;

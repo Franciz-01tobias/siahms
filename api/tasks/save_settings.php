@@ -53,7 +53,10 @@ try {
         }
     }
 
-    $allowed = ['calendar_span_mode', 'card_fields', 'tag_settings', 'time_scope', 'collaborator_completion'];
+    $allowed = ['calendar_span_mode', 'card_fields', 'tag_settings', 'time_scope', 'collaborator_completion', 'checklists_enabled', 'forms_enabled', 'procedures_enabled',
+                // Repeating task evidence (#181) - Tasks -> Settings -> Evidence.
+                'evidence_completed_checklist', 'evidence_delete_occurrence', 'evidence_skip_status_id', 'evidence_report_access',
+                'evidence_open_followups'];
     // `priority` is absent from this list on purpose — it holds a placement,
     // not a boolean, and is normalised separately below. See get_settings.php.
     $cardFieldKeys = ['assignee', 'team', 'start_date',
@@ -71,6 +74,24 @@ try {
         } elseif ($key === 'time_scope') {
             // Where scheduled work and time entries are offered (GH #112).
             if (!in_array($value, ['both', 'tasks', 'subtasks', 'off'], true)) continue;
+        } elseif ($key === 'evidence_completed_checklist' || $key === 'evidence_delete_occurrence') {
+            if (!in_array($value, ['allow', 'refuse'], true)) continue;
+        } elseif ($key === 'evidence_open_followups') {
+            if (!in_array($value, ['allow', 'warn', 'block'], true)) continue;
+        } elseif ($key === 'evidence_report_access') {
+            if (!in_array($value, ['anyone', 'permission'], true)) continue;
+        } elseif ($key === 'evidence_skip_status_id') {
+            // Empty = the last closed status; otherwise it must BE an active closed one.
+            $value = (string)(int)$value === '0' ? '' : (string)(int)$value;
+            if ($value !== '') {
+                $chk = $conn->prepare("SELECT 1 FROM task_statuses WHERE id = ? AND is_closed = 1 AND is_active = 1");
+                $chk->execute([(int)$value]);
+                if (!$chk->fetchColumn()) continue;
+            }
+        } elseif ($key === 'checklists_enabled' || $key === 'forms_enabled' || $key === 'procedures_enabled') {
+            // Checklists on tasks (discussion #138). '1'/'0' only, read by
+            // ChecklistsService::tasksEnabled() as exactly '1'.
+            $value = !empty($value) && $value !== '0' && $value !== 'false' ? '1' : '0';
         } elseif ($key === 'collaborator_completion') {
             // Whether each person on a task ticks off their own part (GH #89).
             // Normalised to '1'/'0' here so the column only ever holds one of two

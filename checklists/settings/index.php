@@ -1,4 +1,12 @@
 <?php
+/**
+ * Checklists settings - categories, suggested roles and the left-panel preference.
+ *
+ * Categories and roles are changed through api/checklists/save_lookup.php and
+ * delete_lookup.php; only the sidebar mode posts back to this page (saved as
+ * user_preferences.checklists_sidebar_mode).
+ * @wiki Checklists-and-SOPs-Developer-Guide
+ */
 ini_set('display_errors', 0);
 session_start();
 
@@ -83,9 +91,9 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('checklists.settings.page_title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('checklists', t('checklists.nav.settings'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* Full-width settings shell — the same one tickets/settings and LMS use.
          * ⚠️ Dropping max-width alone is NOT enough: inbox.css sets
@@ -150,7 +158,7 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
         .lk-name-input { width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid var(--border-soft, #cbd5e1); border-radius: 6px; font-size: 13px; background: var(--surface, #fff); color: var(--text, #1e293b); }
         .lk-modal-x { background: none; border: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--text-muted, #64748b); }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-page="checklists-settings" data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>" class="settings-shell">
     <?php include __DIR__ . '/../includes/header.php'; ?>
@@ -431,6 +439,6 @@ if (!in_array($activeTab, ['categories', 'roles', 'layout'])) {
             if (ev.target === this) lkCloseRename();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

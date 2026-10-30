@@ -129,7 +129,16 @@ function apiV1BaseSchemas(): array {
     ];
 }
 
-/** Build one OpenAPI Operation Object for a docs endpoint. */
+/**
+ * Build one OpenAPI Operation Object for a docs endpoint.
+ *
+ * @param array $ep  one endpoint from spec.json: m (method), p (path template), s, d, params, perm
+ * @param string $section  the spec.json section the endpoint is listed under, used as its tag
+ * @param array $extras  that endpoint's entry in spec.json extras - examples and specific errors; may be empty
+ * @param array $endpointToHandler  'METHOD /path' => handler function, from apiV1MapEndpointsToHandlers()
+ * @param array $handlerSuccess  handler function => the success codes its apiRespond() calls use
+ * @param array $schemas  the typed schemas from openapi_schemas.php: schemas, responses and requestBodies
+ */
 function apiV1BuildOperation(array $ep, string $section, array $extras, array $endpointToHandler, array $handlerSuccess, array $schemas): array {
     $key = $ep['m'] . ' ' . $ep['p'];
     $op = [
@@ -202,7 +211,7 @@ function apiV1BuildOperation(array $ep, string $section, array $extras, array $e
         }
         $op['requestBody'] = [
             'required' => $ep['m'] === 'POST',
-            'content'  => ['application/json' => $content],
+            'content'  => [($schemas['requestContentTypes'][$key] ?? 'application/json') => $content],
         ];
     }
 
@@ -212,7 +221,15 @@ function apiV1BuildOperation(array $ep, string $section, array $extras, array $e
     return $op;
 }
 
-/** Assemble the responses map: success code(s) + every error the endpoint can return. */
+/**
+ * Assemble the responses map: success code(s) + every error the endpoint can return.
+ *
+ * @param array $ep  one endpoint from spec.json: m (method), p (path template), s, d, params, perm
+ * @param array $extras  that endpoint's entry in spec.json extras - examples and specific errors; may be empty
+ * @param array $endpointToHandler  'METHOD /path' => handler function, from apiV1MapEndpointsToHandlers()
+ * @param array $handlerSuccess  handler function => the success codes its apiRespond() calls use
+ * @param array $schemas  the typed schemas from openapi_schemas.php: schemas, responses and requestBodies
+ */
 function apiV1BuildResponses(array $ep, array $extras, array $endpointToHandler, array $handlerSuccess, array $schemas): array {
     $key = $ep['m'] . ' ' . $ep['p'];
     $responses = [];
@@ -227,7 +244,7 @@ function apiV1BuildResponses(array $ep, array $extras, array $endpointToHandler,
         $envelope = apiV1SuccessEnvelope($dataSchema);
         $responses[(string)$code] = [
             'description' => $code === 201 ? 'Created.' : 'Success.',
-            'content' => ['application/json' => ['schema' => $envelope]],
+            'content' => $schemas['responseContents'][$key] ?? ['application/json' => ['schema' => $envelope]],
         ];
     }
 
@@ -243,7 +260,11 @@ function apiV1BuildResponses(array $ep, array $extras, array $endpointToHandler,
     return $responses;
 }
 
-/** Wrap a data schema (or a generic object) in the { data, meta? } envelope. */
+/**
+ * Wrap a data schema (or a generic object) in the { data, meta? } envelope.
+ *
+ * @param ?array $dataSchema  the typed schema for the data member; null gives a generic payload
+ */
 function apiV1SuccessEnvelope(?array $dataSchema): array {
     $data = $dataSchema ?? ['description' => 'The response payload.'];
     return [
@@ -259,6 +280,9 @@ function apiV1SuccessEnvelope(?array $dataSchema): array {
  * The errors an endpoint can return: the common ones derived from its shape,
  * plus any endpoint-specific ones from the docs extras. Mirrors the docs page's
  * errorsOf() so the two never disagree. Returns [code => description].
+ *
+ * @param array $ep  one endpoint from spec.json: m (method), p (path template), s, d, params, perm
+ * @param array $extras  that endpoint's entry in spec.json extras - examples and specific errors; may be empty
  */
 function apiV1EndpointErrors(array $ep, array $extras): array {
     $glossary = [
@@ -295,13 +319,24 @@ function apiV1EndpointErrors(array $ep, array $extras): array {
     return $out;
 }
 
-/** A stable, unique operationId from method + path. */
+/**
+ * A stable, unique operationId from method + path.
+ *
+ * @param string $method  the HTTP method, e.g. 'GET'
+ * @param string $path  the path template, e.g. /tickets/{id}
+ */
 function apiV1OperationId(string $method, string $path): string {
     $slug = strtolower($method) . '_' . trim(preg_replace('/[^a-z0-9]+/i', '_', str_replace(['{', '}'], '', $path)), '_');
     return trim(preg_replace('/_+/', '_', $slug), '_');
 }
 
-/** Pull a parameter description from the docs params for a given name/in. */
+/**
+ * Pull a parameter description from the docs params for a given name/in.
+ *
+ * @param array $ep  one endpoint from spec.json: m (method), p (path template), s, d, params, perm
+ * @param string $name  the parameter's name
+ * @param string $in  where it goes: 'path' or 'query'
+ */
 function apiV1ParamDescription(array $ep, string $name, string $in): string {
     foreach ($ep['params'] ?? [] as $p) {
         if (($p['in'] ?? '') !== $in) continue;
@@ -315,6 +350,8 @@ function apiV1ParamDescription(array $ep, string $name, string $in): string {
 /**
  * Match every docs endpoint (method + path template) to its handler function by
  * testing the template against the route regexes. Returns ['M /path' => handler].
+ *
+ * @param array $routes  the router's table: [method, path regex, permission, handler function] per route
  */
 function apiV1MapEndpointsToHandlers(array $routes): array {
     $spec = json_decode(file_get_contents(__DIR__ . '/../spec.json'), true);
@@ -376,10 +413,22 @@ function apiV1HandlerSuccessCodes(): array {
 // numbers, leading zeros, dates). No dependency on ext-yaml.
 // ---------------------------------------------------------------------------
 
+/**
+ * Renders the OpenAPI document as YAML, with a generated-file header line.
+ *
+ * @param array $data  the OpenAPI document as built by apiV1BuildOpenApi()
+ */
 function apiV1OpenApiToYaml(array $data): string {
     return "# FreeITSM REST API — OpenAPI 3.0.3 (generated)\n" . apiV1YamlNode($data, 0);
 }
 
+/**
+ * Renders one value as YAML at the given indent - lists as "- " items with the first key
+ * of a mapping hung on the dash, mappings as "key: value", empty arrays as [] or {}.
+ *
+ * @param mixed $value  the value to render - an array (list or mapping) or a scalar
+ * @param int $indent  the nesting level; each level is two spaces
+ */
 function apiV1YamlNode($value, int $indent): string {
     $pad = str_repeat('  ', $indent);
     if (is_array($value)) {
@@ -416,10 +465,22 @@ function apiV1YamlNode($value, int $indent): string {
     return $pad . apiV1YamlScalar($value) . "\n";
 }
 
+/**
+ * A mapping key as YAML - plain when it is a simple identifier or path, double-quoted otherwise.
+ *
+ * @param string $k  a mapping key
+ */
 function apiV1YamlKey(string $k): string {
     return preg_match('/^[A-Za-z_][A-Za-z0-9_\-\.\/{}$]*$/', $k) ? $k : apiV1YamlQuote($k);
 }
 
+/**
+ * A scalar as YAML - null, true, false and numbers as they are, a string plain only when
+ * it is unambiguous text and double-quoted otherwise, so nothing is read back as another
+ * type.
+ *
+ * @param mixed $v  a null, boolean, number or string
+ */
 function apiV1YamlScalar($v): string {
     if ($v === null)  return 'null';
     if ($v === true)  return 'true';
@@ -434,6 +495,12 @@ function apiV1YamlScalar($v): string {
     return apiV1YamlQuote($s);
 }
 
+/**
+ * Double-quotes a string for YAML, escaping backslashes, quotes, newlines, tabs and
+ * carriage returns.
+ *
+ * @param string $s  the string to quote
+ */
 function apiV1YamlQuote(string $s): string {
     $s = str_replace(['\\', '"', "\n", "\t", "\r"], ['\\\\', '\\"', '\\n', '\\t', '\\r'], $s);
     return '"' . $s . '"';

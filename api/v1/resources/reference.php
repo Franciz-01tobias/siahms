@@ -6,17 +6,30 @@
  */
 
 // GET /analysts — active analysts (assignment targets).
+// 3.5.0 (PR #174): ?email= finds one by address (case-insensitive) and
+// ?include_inactive=1 adds deactivated ones, so a provisioning client can find
+// someone it deactivated and switch them back on. is_active is in every row.
 function apiAnalystsList(PDO $conn, array $apiKey, array $params, array $body): void {
-    $rows = $conn->query(
-        "SELECT id, full_name, email, is_active FROM analysts WHERE is_active = 1 ORDER BY full_name ASC"
-    )->fetchAll(PDO::FETCH_ASSOC);
+    $where = [];
+    $args  = [];
+    if (empty($_GET['include_inactive'])) {
+        $where[] = 'is_active = 1';
+    }
+    if (isset($_GET['email']) && trim((string)$_GET['email']) !== '') {
+        $where[] = 'LOWER(email) = ?';
+        $args[]  = strtolower(trim((string)$_GET['email']));
+    }
+    $stmt = $conn->prepare("SELECT id, full_name, email, is_active FROM analysts"
+        . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . " ORDER BY full_name ASC");
+    $stmt->execute($args);
     apiRespond(array_map(function ($a) {
         return [
-            'id'    => (int)$a['id'],
-            'name'  => $a['full_name'],
-            'email' => $a['email'],
+            'id'        => (int)$a['id'],
+            'name'      => $a['full_name'],
+            'email'     => $a['email'],
+            'is_active' => (int)$a['is_active'] === 1,
         ];
-    }, $rows));
+    }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
 }
 
 // GET /companies — the companies (tenants) this key can see.
@@ -78,7 +91,12 @@ function apiOriginsList(PDO $conn, array $apiKey, array $params, array $body): v
     apiTenantConfigList($conn, $apiKey, 'ticket_origins', 'ticket_origin');
 }
 
-/** Shared list for the tenant-overridable config tables (add/hide model). */
+/**
+ * Shared list for the tenant-overridable config tables (add/hide model).
+ *
+ * @param string $table  the config table to list (e.g. 'ticket_types') - a fixed name from the caller, never input
+ * @param string $entityType  its key in tenant_config_hidden (e.g. 'ticket_type'), for the per-company overrides
+ */
 function apiTenantConfigList(PDO $conn, array $apiKey, string $table, string $entityType): void {
     if (isset($_GET['company_id']) && $_GET['company_id'] !== '') {
         $cid = (int)$_GET['company_id'];

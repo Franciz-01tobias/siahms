@@ -70,6 +70,10 @@ function assignOwnerColours(tickets) {
     ownerColourMap = new Map(ids.map((id, i) => [id, OWNER_COLOURS[i % OWNER_COLOURS.length]]));
 }
 
+/**
+ * The colour for a ticket owner on the calendar - the unassigned grey for nobody, the
+ * colour assigned to them on screen, or a fixed fallback from the palette.
+ */
 function ownerColour(ownerId) {
     if (!ownerId) return OWNER_COLOUR_UNASSIGNED;   // "nobody" is a real answer
     const id = Number(ownerId);
@@ -175,6 +179,7 @@ const WEEKDAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 's
 const MONTH_KEYS = ['january', 'february', 'march', 'april', 'may', 'june',
                     'july', 'august', 'september', 'october', 'november', 'december'];
 
+/** The short name of a weekday (Monday = 0) in the analyst's locale. */
 function shortWeekdayLabel(weekdayIndex) {
     // Render short labels via Intl to respect locale; weekdayIndex is Monday=0..Sunday=6.
     // Build a reference date for that weekday and format it short.
@@ -183,6 +188,7 @@ function shortWeekdayLabel(weekdayIndex) {
     return fmtNaiveWeekday(ref, true);
 }
 
+/** The translated name of a month (January = 0). */
 function monthLabel(monthIndex) {
     return tr('common.calendar.months.' + MONTH_KEYS[monthIndex]);
 }
@@ -365,6 +371,7 @@ function scheduledBlockTop(ticket, startHour, startMinutes, dayHasAllDay) {
     return dayHasAllDay ? Math.max(top, ALL_DAY_BAR_PX) : top;
 }
 
+/** Midnight on the Monday of the week a date falls in. */
 function getWeekStart(date) {
     const d = new Date(date);
     const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, …, 6 = Saturday
@@ -565,6 +572,10 @@ function renderDayView(container) {
     container.innerHTML = html;
 }
 
+/**
+ * The hour label down the side of the day and week views - "14" or "2 PM", following the
+ * analyst's chosen time format.
+ */
 function formatHourLabel(hour) {
     // The gutter label down the side of a day/week view: "14" on a 24-hour
     // clock, "2 PM" on a 12-hour one. Follows the analyst's chosen time format
@@ -601,6 +612,7 @@ function draggedDurationMinutes(ticket) {
     return (m && m > 0) ? m : 60;
 }
 
+/** Starts dragging a scheduled ticket on the calendar, remembering which one it is. */
 function onEventDragStart(e, ticketId) {
     dragTicketId = ticketId;
     // Firefox refuses to start a drag unless something is in the dataTransfer.
@@ -609,11 +621,13 @@ function onEventDragStart(e, ticketId) {
     if (e.target.classList) e.target.classList.add('is-dragging');
 }
 
+/** Clears the dragging style and any highlighted drop slot when a drag ends. */
 function onEventDragEnd(e) {
     if (e.target.classList) e.target.classList.remove('is-dragging');
     document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
 }
 
+/** Lets a dragged ticket be dropped on this slot and highlights it - only one slot at a time. */
 function allowDrop(e, el) {
     if (dragTicketId === null) return;
     e.preventDefault();
@@ -668,10 +682,12 @@ function onSlotDrop(e, dateStr, columnEl) {
     const rect = columnEl.getBoundingClientRect();
     let minutes = Math.round((e.clientY - rect.top + columnEl.scrollTop) / 15) * 15;
     minutes = Math.max(0, Math.min(minutes, 24 * 60 - 15));
+    /** Pads a number to two digits. */
     const p = n => String(n).padStart(2, '0');
     commitDrag(ticket, dateStr, p(Math.floor(minutes / 60)) + ':' + p(minutes % 60));
 }
 
+/** Saves a ticket dropped at a date and time, keeping its duration. */
 function commitDrag(ticket, dateStr, time) {
     const range = FreeITSMSchedule.toStoredRange(dateStr, time, draggedDurationMinutes(ticket), false);
     applyDrag(ticket, range.start, range.end, false);
@@ -857,6 +873,10 @@ async function postSchedule(body, okKey) {
     }
 }
 
+/**
+ * Saves the date, time, duration and all-day choice from the calendar's schedule dialog
+ * for the selected ticket.
+ */
 async function saveScheduleFromCalendar() {
     if (!schedTargetTicket) return;
     const date   = document.getElementById('calSchedDate').value;
@@ -877,6 +897,10 @@ async function saveScheduleFromCalendar() {
     }, 'tickets.calendar.rescheduled');
 }
 
+/**
+ * Asks for confirmation, then clears the selected ticket's scheduled time so it leaves
+ * the calendar.
+ */
 async function unscheduleFromCalendar() {
     if (!schedTargetTicket) return;
     // Worth a confirm: the ticket leaves the calendar entirely and the times it
@@ -978,6 +1002,12 @@ function calendarRefreshBlocked() {
     return null;
 }
 
+/**
+ * The background refresh: reloads the scheduled tickets for the range shown and redraws
+ * only when something has changed. Skipped while the tab is hidden, a ticket is being
+ * dragged, a dialog is open or another refresh is running; a failure is logged, not
+ * shown.
+ */
 async function calendarAutoRefresh() {
     if (calendarRefreshBlocked()) return;
 
@@ -1003,6 +1033,10 @@ async function calendarAutoRefresh() {
     }
 }
 
+/**
+ * Starts the background refresh timer, and refreshes straight away whenever the tab
+ * becomes visible again.
+ */
 function startCalendarAutoRefresh() {
     if (calendarRefreshTimer) clearInterval(calendarRefreshTimer);
     calendarRefreshTimer = setInterval(calendarAutoRefresh, CALENDAR_REFRESH_MS);
@@ -1043,6 +1077,7 @@ function formatScheduleRange(ticket) {
     return `${full} – ${end}`;
 }
 
+/** A date and time as "weekday date at time", in the analyst's formats. */
 function formatDateTime(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);

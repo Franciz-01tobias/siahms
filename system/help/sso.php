@@ -6,8 +6,11 @@
 require __DIR__ . '/_init.php';
 
 // The redirect URI the admin registers in their IdP (same one for every provider).
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = requestScheme();
 $redirectUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 'api/auth/oidc_callback.php';
+// Where the two sign-outs send people back (same as auth/analyst_logout.php and self-service/logout.php).
+$signoutAnalystUri = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL;
+$signoutPortalUri  = $signoutAnalystUri . 'self-service/login.php';
 
 $helpSlug = 'sso';
 require __DIR__ . '/_top.php';
@@ -25,7 +28,7 @@ require __DIR__ . '/_top.php';
     <div class="help-cards">
         <div class="help-card">
             <h4>Analysts</h4>
-            <p>Your service-desk staff, on the main login page. Each analyst is assigned a sign-in method (local password, or a specific provider) in <strong>System &rarr; Analysts</strong>.</p>
+            <p>Your service-desk staff, on the main login page. Each analyst has one sign-in method (local password, or a specific provider), set for them in <strong>System &rarr; Analysts</strong> or taken from their team in <strong>System &rarr; Teams</strong>.</p>
         </div>
         <div class="help-card">
             <h4>Self-service portal</h4>
@@ -49,7 +52,7 @@ require __DIR__ . '/_top.php';
         <tr><td><strong>You are…</strong></td><td>One organisation running FreeITSM for your own staff and users.</td><td>An MSP (or group) supporting several separate client companies from one install.</td></tr>
         <tr><td><strong>How many companies?</strong></td><td>Just one (the silent “Default”).</td><td>Two or more (System &rarr; Companies).</td></tr>
         <tr><td><strong>Identity providers</strong></td><td>Your own IdP(s), shared by everyone.</td><td>Each client brings <em>their own</em> IdP.</td></tr>
-        <tr><td><strong>Portal login shows…</strong></td><td>Provider buttons up front.</td><td>Email first, then that person's company's provider(s).</td></tr>
+        <tr><td><strong>Portal login shows…</strong></td><td>Provider buttons up front.</td><td>Email first, then that person's company's provider(s). Global providers can still have a button.</td></tr>
     </table></div>
     <div class="help-note"><strong>How FreeITSM decides which you are:</strong> it counts companies. With one company it behaves as a single-company install; the moment you add a second company in System &rarr; Companies, the multi-company behaviour switches on automatically. You don't toggle a setting.</div>
     <p>Pick your section below.</p>
@@ -65,9 +68,9 @@ require __DIR__ . '/_top.php';
     </div>
 
     <div class="help-steps">
-        <div class="help-step"><div class="help-step-num">1</div><div><strong>Register an app in your identity provider.</strong> Create an app/registration in Entra, Okta, Google, etc. Set its redirect URI to the address below, and note the <strong>issuer URL</strong>, <strong>client ID</strong> and a <strong>client secret</strong>.<br><br>Redirect URI to register: <code><?php echo htmlspecialchars($redirectUri); ?></code></div></div>
+        <div class="help-step"><div class="help-step-num">1</div><div><strong>Register an app in your identity provider.</strong> Create an app/registration in Entra, Okta, Google, etc. Set its redirect URI to the address below, and note the <strong>issuer URL</strong>, <strong>client ID</strong> and a <strong>client secret</strong>.<br><br>Redirect URI to register: <code><?php echo htmlspecialchars($redirectUri); ?></code><br>Sign-out (post-logout) addresses to register as well: <code><?php echo htmlspecialchars($signoutAnalystUri); ?></code> and <code><?php echo htmlspecialchars($signoutPortalUri); ?></code></div></div>
         <div class="help-step"><div class="help-step-num">2</div><div><strong>Add the provider here.</strong> System &rarr; Single Sign-On &rarr; <em>Add provider</em>. Paste the issuer URL, client ID and secret, give it a display name (e.g. “Sign in with Microsoft”), tick <strong>Enabled</strong>, and use <strong>Test</strong> to confirm the issuer is reachable. Turn on the master <strong>Enable single sign-on</strong> switch.</div></div>
-        <div class="help-step"><div class="help-step-num">3</div><div><strong>Decide who uses it.</strong> For <strong>analysts</strong>, set their <em>Sign-in method</em> to this provider in System &rarr; Analysts. For <strong>portal users</strong>, turn on the provider's <em>auto-create users</em> toggle and they're created on first sign-in — or they're matched to an existing record by verified email.</div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div><strong>Decide who uses it.</strong> For <strong>analysts</strong>, set the <em>Sign-in method</em> on their team in System &rarr; Teams, and everyone set to <em>Follow team</em> uses it — or set it for one person in System &rarr; Analysts. To have analysts created the first time they sign in, tick <em>Auto-create IT analysts</em>. For <strong>portal users</strong>, tick <em>Auto-create portal requesters</em> and they're created on first sign-in — or they're matched to an existing record by verified email. The two switches are separate, so you can let customers in without creating analysts (see <a href="#jit-rules">Auto-create rules</a>).</div></div>
     </div>
 
     <div class="help-note ok"><strong>That's it.</strong> The login pages now lead with your provider's button, with the password form tucked behind a “local account” link. Nothing else to configure — there are no companies to think about.</div>
@@ -99,7 +102,7 @@ require __DIR__ . '/_top.php';
     </div>
 
     <h4>How the routing then works</h4>
-    <p>On a multi-company install the portal login shows <strong>just an email box</strong> — no provider buttons up front (that would leak every client's IdP). When someone enters their email:</p>
+    <p>On a multi-company install the portal login leads with an <strong>email box</strong>. A client company's own providers never get a button there — that would show every visitor which IdP each of your clients uses. Your <strong>Global</strong> providers are the exception: they belong to you rather than to a client, so they show as buttons, as on a single-company install (untick <strong>Show the button on the portal login</strong> to hide one). When someone enters their email:</p>
     <ul>
         <li><strong>Their company has no IdP</strong> &rarr; they get the email + password form.</li>
         <li><strong>One IdP</strong> &rarr; they're sent straight to it.</li>
@@ -110,6 +113,116 @@ require __DIR__ . '/_top.php';
     <div class="help-note warn"><strong>Today, each client hands you a client secret</strong> (which you store and rotate). That's the “bring-your-own-credentials” model and it works for any provider. A future option — where you register one app and each client just clicks “consent”, with no secret to hand over — is designed but not yet built. It will not change anything above; only how a provider is added.</div>
 </div>
 
+<!-- 4a. Auto-create rules (discussion #155) -->
+<div class="help-section" id="jit-rules">
+    <div class="help-section-header"><?php echo helpSectionNum('jit-rules'); ?>
+        <div>
+            <h3>Auto-create rules: portal requesters and analysts</h3>
+        </div>
+    </div>
+    <p>A sign-in provider can create accounts the first time someone signs in through it (sometimes called <em>just-in-time</em> or JIT provisioning). There are two separate switches, so one company sign-in can serve both your staff and your customers:</p>
+    <ul>
+        <li><strong>Auto-create portal requesters</strong> &mdash; someone signing in on the <em>self-service portal</em> for the first time gets a portal account. Leave it off if only people you already know (for example, contacts created from tickets) should get in.</li>
+        <li><strong>Auto-create IT analysts</strong> &mdash; someone signing in on the <em>analyst</em> login for the first time gets an analyst account. Works for OpenID Connect and LDAP providers.</li>
+        <li><strong>Default module access for auto-created analysts</strong> &mdash; shown while the analyst switch is on. List the modules new analysts get (for example <code>tickets, knowledge</code>). Blank means every module, so set it for a pilot.</li>
+        <li><strong>Company access for auto-created analysts</strong> (multi-company installs) &mdash; which companies a new analyst can see: <strong>every company</strong> (the default, as before), <strong>only this provider's company</strong> (the Default company for a provider that belongs to no company), or <strong>none</strong> until an administrator grants some. It only applies when the account is created.</li>
+    </ul>
+
+    <h4>Someone with no analyst account signs in on the analyst login</h4>
+    <p>For an OpenID Connect provider with <em>Auto-create IT analysts</em> off, choose what happens under <strong>Non-analyst sign-in action</strong>:</p>
+    <ul>
+        <li><strong>Warn and confirm</strong> &mdash; a page explains they have no analyst account and offers to continue to the self-service portal. Nothing happens unless they choose it. This is the default for a new provider.</li>
+        <li><strong>Automatically switch</strong> &mdash; they go straight to the portal, as if they had signed in there.</li>
+        <li><strong>Block</strong> &mdash; they see an error on the analyst login, as before this setting existed.</li>
+    </ul>
+    <p>Either way the portal applies its own rules: if <em>Auto-create portal requesters</em> is off and they have no portal account, they are refused there instead.</p>
+    <div class="help-note"><strong>Upgrading keeps your settings.</strong> Before these switches were split, one <em>auto-create users</em> switch covered both portals. When you upgrade and run Database Verification, any provider that had it on keeps creating analysts as well, and the non-analyst action is set to <strong>Block</strong> so nobody sees a new screen until you choose it.</div>
+</div>
+
+<!-- 4a2. Profile sync (discussion #155) -->
+<div class="help-section" id="profile-sync">
+    <div class="help-section-header"><?php echo helpSectionNum('profile-sync'); ?>
+        <div>
+            <h3>Keeping profile details in step with your identity provider</h3>
+        </div>
+    </div>
+    <p>An OpenID Connect provider can also fill in people's <strong>name, job title, department, office, phone and mobile</strong> from what it sends at sign-in. Choose how under <strong>Profile attribute sync</strong>:</p>
+    <ul>
+        <li><strong>Never</strong> (the default) &mdash; only the sign-in details are used. Profile fields are left alone and people edit their own.</li>
+        <li><strong>On account creation</strong> &mdash; fills the fields in when an account is auto-created. After that, people can edit them and sign-in does not overwrite them.</li>
+        <li><strong>Always</strong> &mdash; updates the fields at every sign-in. Because an edit would be undone at the next one, the fields become read-only in the portal's <strong>My Account</strong> and in the analyst's <strong>Preferences &rarr; My details</strong>, with a note saying they come from the identity provider.</li>
+    </ul>
+    <p>A portal user's own <em>preferred name</em> is never overwritten. Nothing is written until the person has passed every sign-in check, so a provider that is about to be refused cannot change anyone's details.</p>
+    <p>LDAP and CardDAV are not affected by this setting: they keep details up to date their own way, through directory sync and address-book write-back.</p>
+
+    <h4>Getting the details into the sign-in</h4>
+    <p>Keep <strong>Scopes</strong> set to the standard <code>openid email profile</code> &mdash; job title and department are <em>claims</em>, not scopes. Add them as claims in your identity provider:</p>
+    <ul>
+        <li><strong>Microsoft Entra ID:</strong> <em>App registrations &rarr; your app &rarr; Token configuration &rarr; Add optional claim</em>, choose the <strong>ID</strong> token, and add the ones you want. Entra's userinfo endpoint only returns the basic profile, so for Entra these <strong>must</strong> be in the ID token.</li>
+        <li><strong>Okta:</strong> <em>Security &rarr; API &rarr; Authorization Servers &rarr; Claims</em>, add claims mapped to <code>user.title</code>, <code>user.department</code> and <code>user.primaryPhone</code>.</li>
+        <li><strong>Keycloak:</strong> <em>Client scopes &rarr; profile &rarr; Mappers</em>, add <em>User Attribute</em> mappers for <code>job_title</code>, <code>department</code> and <code>phone_number</code>.</li>
+    </ul>
+    <p>When sync is on, FreeITSM also asks the provider's userinfo endpoint for anything missing from the ID token. What the ID token says always wins.</p>
+</div>
+
+<!-- Groups from the identity provider (3.5.0) -->
+<div class="help-section" id="sso-groups">
+    <div class="help-section-header"><?php echo helpSectionNum('sso-groups'); ?>
+        <div>
+            <h3>Groups from the identity provider</h3>
+        </div>
+    </div>
+    <p>When someone signs in with single sign-on, the identity provider sends a few facts about them - name, email, and usually the <strong>groups</strong> they are in. FreeITSM can use those groups to decide <strong>who can be an analyst</strong>, <strong>who is an administrator</strong> and <strong>which teams people are in</strong>, checked again at every sign-in. Manage staff in your identity provider and FreeITSM follows: add someone to a group and they get the access at their next sign-in; take them out and it goes.</p>
+    <p>Open the provider in <strong>System &rarr; SSO</strong> and go to the <strong>Groups and teams</strong> tab:</p>
+    <ol>
+        <li><strong>Where the groups come from</strong> - choose <em>groups</em> for most providers, <em>realm_access.roles</em> for Keycloak, or <em>Something else</em> if yours uses another name.</li>
+        <li><strong>Sign in once</strong> through the provider, then open it again. <strong>Groups seen</strong> now lists every group that sign-in sent.</li>
+        <li><strong>Name them.</strong> Some providers - Microsoft Entra among them - send a code such as <code>78d21822-f5ee-...</code> rather than a name. Type a name beside each code (find it in Entra under <em>Groups</em>, the group, <em>Object ID</em>). The dropdowns below then show your names.</li>
+        <li><strong>Analyst group</strong> (optional) - only people in this group can sign in as analysts, and only they are created automatically. Someone who leaves it is refused at their next sign-in. This is the same as an LDAP directory's analyst group.</li>
+        <li><strong>Administrator group</strong> (optional) - people in it are administrators, people not in it are not. Leave it empty to manage administrators by hand. The last administrator is never removed.</li>
+        <li><strong>Teams</strong> - add a row for each group: choose the group, choose the team. What the team can do - its modules, companies and roles - is set in <strong>System &rarr; Teams</strong>, the same as for anyone you add to a team by hand.</li>
+    </ol>
+    <div class="help-note ok"><strong>Setting this up for the first time?</strong> Follow the <a href="sso-groups.php">step-by-step guide</a> - it has a checklist for Microsoft Entra, Okta and Keycloak.</div>
+    <h4>What happens at each sign-in</h4>
+    <ul>
+        <li>People are <strong>added</strong> to the teams their groups point to and <strong>taken out</strong> of those teams when they leave the group. Teams with no row here are never changed, so teams you manage by hand are safe.</li>
+        <li>Analysts the provider creates get their modules from these teams (unless the provider names default modules). For companies, choose <strong>Company access for auto-created analysts</strong> on the <em>Signing in</em> tab - set it to <em>None</em> if your teams give the companies.</li>
+        <li>Group names match ignoring capital letters, in any language.</li>
+        <li>A group that nobody has signed in with yet can still be chosen, but it is pointed out, in case it is misspelt.</li>
+    </ul>
+    <h4>Getting the groups into the sign-in</h4>
+    <ul>
+        <li><strong>Microsoft Entra ID:</strong> <em>Token configuration &rarr; Add groups claim</em>. Entra sends group <strong>IDs</strong> (long strings of letters and numbers) unless you set it to send names - either way, choose them from the list after a sign-in.</li>
+        <li><strong>Okta:</strong> add a <code>groups</code> claim to the authorization server, with a filter for the groups you want.</li>
+        <li><strong>Keycloak:</strong> realm roles arrive in <code>realm_access.roles</code>; or add a <em>Group Membership</em> mapper named <code>groups</code>.</li>
+    </ul>
+</div>
+
+<!-- 4a3. Portal email domains (GH #147) -->
+<div class="help-section" id="portal-domains">
+    <div class="help-section-header"><?php echo helpSectionNum('portal-domains'); ?>
+        <div>
+            <h3>Sending portal users straight to SSO by email domain</h3>
+        </div>
+    </div>
+    <p>Normally the portal's email box only sends someone to single sign-on once it knows them: after their first SSO sign-in, or (on a multi-company install) because their company owns a provider. A first-timer who types their email and presses <strong>Continue</strong> gets the password box, and has to know to use the provider button instead.</p>
+    <p>An OpenID Connect provider's <strong>Email domains</strong> box fixes that. List your domains, one per line, for example <code>company.com</code>, and on the portal:</p>
+    <ul>
+        <li>an address on one of those domains goes <strong>straight to the provider</strong>, even the first time;</li>
+        <li>any other address gets the password box, exactly as before.</li>
+    </ul>
+    <p>Untick <strong>Show the button on the portal login</strong> as well and the page is just the email box and Continue. One box works for your staff and your outside customers, and nobody has to choose.</p>
+    <h4>Worth knowing</h4>
+    <ul>
+        <li><strong>It includes people who use a password today.</strong> Anyone on a listed domain is sent to the provider. When they sign in there, their existing portal account is linked by email, and their tickets stay with them.</li>
+        <li><strong>New people need auto-create.</strong> If someone on the domain has no portal account yet, turn on <em>Auto-create portal requesters</em>, or the portal will refuse them after they sign in.</li>
+        <li><strong>The whole domain only.</strong> <code>company.com</code> does not cover <code>uk.company.com</code>; add that on its own line.</li>
+        <li><strong>One provider per domain</strong>, and never a public email domain such as <code>gmail.com</code>. Saving refuses both.</li>
+        <li><strong>Directory users are left alone.</strong> Someone already assigned to an LDAP directory, or to another provider, keeps signing in the way they do now.</li>
+        <li><strong>The portal only.</strong> The analyst login is not affected; analysts are assigned to a provider one by one or through their team.</li>
+        <li><strong><code>?local=1</code> still works</strong> as the way back to the password form.</li>
+    </ul>
+</div>
 <!-- 4b. LDAP / Active Directory -->
 <div class="help-section" id="ldap">
     <div class="help-section-header"><?php echo helpSectionNum('ldap'); ?>
@@ -428,7 +541,7 @@ require __DIR__ . '/_top.php';
             <p>Only your global (internal) providers ever appear here — clients' IdPs are never shown to staff.</p>
         </div>
     </div>
-    <div class="help-note"><strong>First portal sign-in tip:</strong> a brand-new portal user typing their email may land on the password form, because the email-first router only auto-routes people it has seen before. They should use the <strong>provider button</strong> (single-company) or it routes by company (multi-company); after that first sign-in they're remembered and email-first routing is automatic.</div>
+    <div class="help-note"><strong>First portal sign-in tip:</strong> a brand-new portal user typing their email may land on the password form, because the email-first router only auto-routes people it has seen before. They should use the <strong>provider button</strong> (single-company) or it routes by company (multi-company); after that first sign-in they're remembered and email-first routing is automatic. To route them on the very first visit, list your domains under the provider's <strong>Email domains</strong> &mdash; see <a href="#portal-domains">Sending portal users straight to SSO</a>.</div>
 </div>
 
 <!-- 6. Break-glass -->
@@ -458,9 +571,16 @@ require __DIR__ . '/_top.php';
 
     <h4>“Redirect URI mismatch” after signing in at the provider</h4>
     <p>The redirect URI registered in the IdP must <em>exactly</em> match <code><?php echo htmlspecialchars($redirectUri); ?></code> — scheme, host and path. Copy it from this page (or the SSO settings page) rather than typing it.</p>
+    <p>If you moved FreeITSM to a new address (for example from <code>http://localhost/...</code> to an https name), add the new address in the IdP too. FreeITSM builds it from the address you are using.</p>
+
+    <h4>Seeing, or undoing, which provider a portal user is linked to</h4>
+    <p>Open them in <strong>Tickets &rarr; Users</strong>: the <em>Signs in with</em> line names their provider. <strong>Unlink</strong> beside it removes the link, after asking. Their tickets and details stay; the email box stops sending them to that provider, and the next time they sign in through a provider they are linked again. People kept up to date from a directory have no Unlink, because the next sync would link them again. Each unlink is written to the system log.</p>
+
+    <h4>“Invalid redirect uri” when signing out</h4>
+    <p>The provider was asked to send you back to an address it does not allow. Register both sign-out addresses as allowed post-logout redirect URLs: <code><?php echo htmlspecialchars($signoutAnalystUri); ?></code> for the analyst login and <code><?php echo htmlspecialchars($signoutPortalUri); ?></code> for the self-service portal. They are on the Single Sign-On page with a Copy button each. In Keycloak this is <em>Clients &rarr; your client &rarr; Valid post logout redirect URIs</em>; in Okta, <em>Sign-out redirect URIs</em>.</p>
 
     <h4>A portal user typed their email but got the password form, not SSO</h4>
-    <p>Single-company: they should click the provider button for their first sign-in. Multi-company: check the company that owns their email domain actually has an enabled provider, and that the domain is listed under System &rarr; Companies. Unmapped domains and personal/free-email addresses are sent to local login by design.</p>
+    <p>Single-company: they should click the provider button for their first sign-in, or list their domain under the provider's <strong>Email domains</strong> so the email box routes them. If the domain is listed and they still get the password form, check they are not already assigned to a different provider or a directory. Multi-company: check the company that owns their email domain actually has an enabled provider, and that the domain is listed under System &rarr; Companies. Unmapped domains and personal/free-email addresses are sent to local login by design.</p>
 
     <h4>“Your email is not verified with the identity provider”</h4>
     <p>The provider sent <code>email_verified: false</code>, or you've turned on <em>Require a verified-email claim</em> for a provider whose tokens omit it. Leave that toggle off unless your IdP lets users self-register unverified addresses.</p>
@@ -468,6 +588,13 @@ require __DIR__ . '/_top.php';
     <h4>A client's provider button is showing on the analyst login</h4>
     <p>Set the provider's <strong>Company</strong> to that client (not “Global”). Global providers are the only ones offered to analysts; company-owned ones are portal-only.</p>
 
+    <h4>Profile details (job title, department, phone) are not updating on SSO login</h4>
+    <p>Check the following in your identity provider configuration:</p>
+    <ul>
+        <li>Verify that <strong>Profile attribute sync</strong> on the sign-in provider is set to <strong>Always</strong> or <strong>Initial</strong>.</li>
+        <li>In your Identity Provider (e.g. Microsoft Entra ID / Azure AD App Registration &rarr; Token configuration), ensure optional claims for <code>department</code>, <code>job_title</code> / <code>title</code>, and <code>phone_number</code> / <code>businessPhones</code> are added to the ID and Access Tokens.</li>
+        <li>Verify that your configured <strong>Scopes</strong> list in FreeITSM includes the required scopes for your provider (e.g. <code>openid email profile</code>).</li>
+    </ul>
     <h4>Discovery test fails</h4>
     <p>The issuer URL is wrong or unreachable from the server. It should be the base issuer (no <code>/.well-known/…</code> on the end) — e.g. <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</code> for Entra. Use the <strong>Test</strong> button to confirm before saving.</p>
 </div>

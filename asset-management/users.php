@@ -13,6 +13,7 @@ require_once '../includes/functions.php';
 require_once '../includes/i18n.php';
 require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
+require_once '../includes/person_editor.php';   // the shared person editor
 I18n::initFromSession();
 Tz::init();
 
@@ -27,9 +28,9 @@ $translationNamespaces = ['common', 'asset-management'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('asset-management.users.page_title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('assets', t('asset-management.nav.users'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -134,9 +135,13 @@ $translationNamespaces = ['common', 'asset-management'];
         /* --- people directory (directory sync slice 1) --- */
         .au-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .au-head-btn { padding: 4px 12px; font-size: 12px; }
-        .au-search { display: flex; gap: 8px; }
-        .au-search input[type=search] { flex: 1; }
+        /* The search box gets a line of its own and the filters share the next one -
+           side by side in a narrow panel, the dropdowns took their full text width and
+           squeezed the box to a sliver. */
+        .au-search { display: flex; flex-wrap: wrap; gap: 8px; }
+        .au-search input[type=search] { flex: 1 1 100%; }
         .au-search select {
+            flex: 1 1 0; min-width: 0;
             padding: 7px 10px; border: 1px solid var(--border, #ddd); border-radius: 6px;
             background: var(--surface, #fff); color: var(--text, #333); font-size: 13px;
         }
@@ -178,30 +183,7 @@ $translationNamespaces = ['common', 'asset-management'];
             background: var(--accent-soft, #e8f4fd); color: var(--text, #333);
             border-left: 3px solid var(--accent, #0078d4);
         }
-        /* Person editor */
-        .au-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
-        .au-form label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text, #333); }
-        .au-form input, .au-form select {
-            width: 100%; padding: 8px 10px; border: 1px solid var(--border, #ddd);
-            border-radius: 6px; background: var(--surface, #fff); color: var(--text, #333); font-size: 13px;
-        }
-        .au-form input:disabled, .au-form select:disabled { background: var(--surface-hover, #f4f4f4); color: var(--text-muted, #888); }
-        .au-form .full { grid-column: 1 / -1; }
-        .au-form-err { grid-column: 1 / -1; color: #a4262c; font-size: 13px; min-height: 18px; }
-        @media (max-width: 700px) { .au-form { grid-template-columns: 1fr; } }
-        .au-modal-backdrop {
-            position: fixed; inset: 0; background: rgba(0,0,0,.45);
-            display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
-        }
-        .au-modal-backdrop[hidden] { display: none; }
-        .au-modal {
-            background: var(--surface, #fff); border-radius: 10px; width: 100%; max-width: 640px;
-            max-height: 90vh; display: flex; flex-direction: column;
-            box-shadow: 0 20px 60px rgba(0,0,0,.3);
-        }
-        .au-modal-head { padding: 18px 20px; font-size: 17px; font-weight: 600; color: var(--text, #333); }
-        .au-modal-body { padding: 0 20px; overflow-y: auto; }
-        .au-modal-foot { padding: 16px 20px; display: flex; justify-content: flex-end; gap: 8px; }
+        /* The person editor brings its own styles: includes/person_editor.php. */
 
         @media (max-width: 900px) {
             /* One column below tablet — a 330px sidebar beside a table does not
@@ -210,8 +192,10 @@ $translationNamespaces = ['common', 'asset-management'];
             .au-list { max-height: 320px; }
         }
     </style>
+    <!-- Mobile layer: AFTER the page's own <style> so its @media rules win on ties (Techniques §9). -->
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
-<body>
+<body data-mobile-module="assets" data-mobile-page="assets-users">
 <?php include 'includes/header.php'; ?>
 
 <div class="au-wrap">
@@ -254,35 +238,32 @@ $translationNamespaces = ['common', 'asset-management'];
     </div>
 </div>
 
-<!-- Person editor. Built here rather than reaching for a shared showModal(),
-     because there isn't one — confirm.js and toast.js are the only global UI
-     helpers, and inventing a third here would be a fourth modal implementation
-     rather than a shared one. -->
-<div class="au-modal-backdrop" id="auModal" hidden>
-    <div class="au-modal" role="dialog" aria-modal="true" aria-labelledby="auModalTitle">
-        <div class="au-modal-head" id="auModalTitle"></div>
-        <div class="au-modal-body" id="auModalBody"></div>
-        <div class="au-modal-foot">
-            <button type="button" class="au-btn" onclick="closeModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
-            <button type="button" class="au-btn primary" id="auModalOk"><?php echo htmlspecialchars(t('common.save')); ?></button>
-        </div>
-    </div>
-</div>
+<?php /* The person editor - shared with Tickets -> Users (discussion #62). */ ?>
+<?php personEditorRender(); ?>
 
 <script>
 const API = '../api/assets/';
+// Everything about this person, from every module (#153) - for analysts who can open People.
+const PERSON_PAGE = <?php echo json_encode(analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'people') ? BASE_URL . 'people/person.php?id=' : null); ?>;
+// Resolved here: this page does not export the tickets namespace to JavaScript.
+const MANAGER_ACCESS_LABEL = <?php echo json_encode(t('tickets.manager_access.button'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;
 let people = [];
 let selectedId = null;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
-function fmtDate(d) {
-    if (!d) return '—';
-    // Stored as UTC without a zone marker; without the Z, Safari and Firefox
-    // read it as local and the date can slip by a day.
-    const dt = new Date(String(d).replace(' ', 'T') + 'Z');
-    return isNaN(dt) ? '—' : fmtDate(dt);
+/**
+ * The date a thing was issued, or a dash.
+ *
+ * 🔴 This was a top-level `function fmtDate`, which SHADOWED tz.js's global
+ * fmtDate for the whole page - so its last line called itself with a Date,
+ * which never parses, and the Assigned column printed "—" for everybody from
+ * #1195 onwards. The same commit renamed triage's copy for exactly this
+ * reason. tz.js's fmtDate already reads a stored UTC string as UTC.
+ */
+function fmtAssigned(d) {
+    return (d && window.fmtDate(d)) || '—';
 }
 
 /** "Baikal (address book)" - a source by name and by what kind it is. */
@@ -431,7 +412,7 @@ function renderDetail(user, assets) {
             <td>${esc([a.manufacturer, a.model].filter(Boolean).join(' ') || '—')}</td>
             <td class="au-mono">${esc(a.service_tag || '—')}</td>
             <td class="au-mono">${esc(a.asset_tag || '—')}</td>
-            <td>${esc(fmtDate(a.assigned_datetime))}</td>
+            <td>${esc(fmtAssigned(a.assigned_datetime))}</td>
         </tr>`).join('')
         : `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted,#666);">
              ${esc(window.t('asset-management.users.no_assets'))}</td></tr>`;
@@ -485,12 +466,14 @@ function renderDetail(user, assets) {
             </div>
             <div class="au-actions">
                 <span id="addToBookHost" data-user-id="${user.id}" data-btn-class="au-btn" style="display:contents;"></span>
+                ${PERSON_PAGE ? `<a class="au-btn" href="${PERSON_PAGE}${user.id}">${esc(window.t('common.modules.people.name'))}</a>` : ''}
                 <button type="button" class="au-btn" onclick="openPerson(${user.id})">
                     ${esc(window.t('asset-management.users.edit'))}
                 </button>
                 <button type="button" class="au-btn" onclick="toggleActive(${user.id})">
                     ${esc(window.t(p.is_active === false ? 'asset-management.users.reactivate' : 'asset-management.users.deactivate'))}
                 </button>
+                <a class="au-btn" href="manager-access.php?user_id=${user.id}">${esc(MANAGER_ACCESS_LABEL)}</a>
                 <a class="au-btn primary" href="handover.php?user_id=${user.id}" target="_blank" rel="noopener">
                     ${esc(window.t('asset-management.users.handover'))}
                 </a>
@@ -517,152 +500,17 @@ function renderDetail(user, assets) {
 }
 
 /* ------------------------------------------------------------------
-   Person editor
+   Person editor: the ONE shared editor (includes/person_editor.php),
+   also opened from Tickets -> Users (discussion #62). This page only says
+   what to do after a save - refresh the list and reselect the person.
    ------------------------------------------------------------------ */
-
-/**
- * Minimal modal. onOk returns true to close, false to stay open with an error
- * showing — a save that fails validation must not throw away what was typed.
- */
-let modalOk = null;
-function openModal(title, html, onOk) {
-    document.getElementById('auModalTitle').textContent = title;
-    document.getElementById('auModalBody').innerHTML = html;
-    modalOk = onOk;
-    document.getElementById('auModal').hidden = false;
-    const first = document.querySelector('#auModalBody input:not([disabled])');
-    if (first) first.focus();
-}
-function closeModal() {
-    document.getElementById('auModal').hidden = true;
-    modalOk = null;
-}
-document.getElementById('auModalOk').addEventListener('click', async function () {
-    if (!modalOk) return closeModal();
-    this.disabled = true;
-    try { if (await modalOk()) closeModal(); } finally { this.disabled = false; }
-});
-// Escape closes, and a click on the backdrop (but not inside the dialog) closes.
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !document.getElementById('auModal').hidden) closeModal();
-});
-document.getElementById('auModal').addEventListener('click', e => {
-    if (e.target.id === 'auModal') closeModal();
-});
-
-// Every person field this form can post. The list of which ones a DIRECTORY owns
-// is NOT here: it arrives per person as `managed_fields`, because the answer
-// depends on the protocol. LDAP is authoritative for all seven; an address book
-// has no payroll number and no reporting line, so a CardDAV contact owns five and
-// the other two stay ours to fill in.
-//
-// 🔴 This used to be a hardcoded DIRECTORY_OWNED literal, and it was wrong from
-// the day CardDAV shipped — greying out two fields that no import would ever
-// populate. includes/users.php had warned that duplicating the list across
-// writers would make it disagree with itself; resolving it server-side is what
-// stops that happening again.
-const PERSON_FIELDS = ['job_title','department','office','phone','mobile','employee_id','manager_id'];
-
-// Fields a directory owns for THIS person. Shown disabled with an explanation
-// rather than editable and then silently reverted by the next sync, which is how
-// somebody concludes FreeITSM lost their change.
-const ownedFields = p => (p && Array.isArray(p.managed_fields)) ? p.managed_fields : [];
-
 function openPerson(id) {
-    const p = id ? (personById(id) || {}) : {};
-    const managed = !!p.is_managed;
-    const owned = ownedFields(p);
-    const dis = f => owned.includes(f) ? ' disabled' : '';
-
-    // Manager options come from the people already loaded. Somebody cannot be
-    // their own manager, so they are left out of their own list.
-    const mgrOpts = ['<option value="">' + esc(window.t('asset-management.users.no_manager')) + '</option>']
-        .concat(people.filter(o => o.id !== id && o.is_active)
-                      .map(o => `<option value="${o.id}"${o.id === p.manager_id ? ' selected' : ''}>${esc(o.name)}</option>`))
-        .join('');
-
-    const field = (f, labelKey, type) => `
-        <div>
-            <label for="pf_${f}">${esc(window.t(labelKey))}</label>
-            <input id="pf_${f}" type="${type || 'text'}" value="${esc(p[f] || '')}"${dis(f)}>
-        </div>`;
-
-    openModal(
-        window.t(id ? 'asset-management.users.edit_title' : 'asset-management.users.add_title'),
-        `<div class="au-form">
-            ${field('display_name', 'asset-management.users.f_name')}
-            ${field('email',        'asset-management.users.f_email', 'email')}
-            ${field('job_title',    'asset-management.users.f_job_title')}
-            ${field('department',   'asset-management.users.f_department')}
-            ${field('office',       'asset-management.users.f_office')}
-            ${field('employee_id',  'asset-management.users.f_employee_id')}
-            ${field('phone',        'asset-management.users.f_phone')}
-            ${field('mobile',       'asset-management.users.f_mobile')}
-            <div class="full">
-                <label for="pf_manager_id">${esc(window.t('asset-management.users.f_manager'))}</label>
-                <select id="pf_manager_id"${dis('manager_id')}>${mgrOpts}</select>
-            </div>
-            ${managed ? '<div class="full au-managed-note" style="margin:0;">'
-                        + esc(window.t('asset-management.users.managed_note')) + '</div>' : ''}
-            <div class="au-form-err" id="pfErr"></div>
-        </div>`,
-        () => savePerson(id, owned)
-    );
-}
-
-async function savePerson(id, owned) {
-    const err = document.getElementById('pfErr');
-    err.textContent = '';
-
-    const val = f => {
-        const el = document.getElementById('pf_' + f);
-        return el ? el.value.trim() : '';
-    };
-    const body = { display_name: val('display_name'), email: val('email') };
-    if (id) body.id = id;
-    // Only send what this record is allowed to change. Sending a disabled field
-    // would be rejected by the API anyway — not sending it is the honest request.
-    for (const f of PERSON_FIELDS) {
-        if (owned.includes(f)) continue;
-        body[f] = val(f);
-    }
-
-    if (!body.display_name && !body.email) {
-        err.textContent = window.t('asset-management.users.need_name_or_email');
-        return false;   // keep the modal open
-    }
-
-    try {
-        const r = await fetch('../api/tickets/save_user.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const d = await r.json();
-        if (!d.success) { err.textContent = d.error || 'Save failed'; return false; }
-        await loadPeople(document.getElementById('auSearch').value.trim());
-        if (d.id) selectPerson(d.id);
-
-        // 🔴 Both people editors post to the SAME endpoint, so both have to
-        // report the address book. Telling the analyst on one screen and not the
-        // other is worse than telling neither: it makes whether you find out
-        // depend on which door you came in through, which is the same trap the
-        // two editors already caused once with the person fields themselves.
-        const ab = d.address_book;
-        if (ab && ab.conflict) {
-            showToast(ab.error || window.t('asset-management.users.ab_conflict'), 'warning', 12000);
-        } else if (ab && !ab.ok) {
-            showToast(window.t('asset-management.users.ab_failed', { error: ab.error || '' }), 'error', 12000);
-        } else if (ab && ab.ok && ab.changed && ab.changed.length) {
-            showToast(window.t('asset-management.users.ab_written'), 'success');
-        } else {
-            showToast(window.t('asset-management.users.saved'), 'success');
+    PersonEditor.open(id || null, {
+        onSaved: async function (savedId) {
+            await loadPeople(document.getElementById('auSearch').value.trim());
+            if (savedId) selectPerson(savedId);
         }
-        return true;
-    } catch (e) {
-        err.textContent = String(e.message || e);
-        return false;
-    }
+    });
 }
 
 async function toggleActive(id) {
@@ -734,5 +582,6 @@ loadPeople('');
     if (n > 0) selectPerson(n);
 })();
 </script>
+<script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

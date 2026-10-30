@@ -16,7 +16,7 @@ require __DIR__ . '/_top.php';
         </div>
     </div>
     <p>Before roles, that wasn't possible — either you were a System administrator (and could touch everything) or you weren't (and could touch nothing in System). Roles are the middle ground: a named bundle of <strong>settings capabilities</strong> that you grant to specific people or teams.</p>
-    <div class="help-note"><strong>This is about settings, not everyday work.</strong> Roles govern who can <em>configure</em> a module — its statuses, its rules, its content. They do not gate the ordinary job: replying to a ticket, taking a course, running a report. That's decided by plain module access, which hasn't changed.</div>
+    <div class="help-note"><strong>Mostly settings, plus a few everyday permissions.</strong> Roles mainly govern who can <em>configure</em> a module — its statuses, its rules, its content. The ordinary job — replying to a ticket, taking a course, running a report — is decided by plain module access. The exceptions are the few <strong>everyday work</strong> permissions in the next-but-one section.</div>
 </div>
 
 <!-- 2. Two layers -->
@@ -40,7 +40,28 @@ require __DIR__ . '/_top.php';
     <p>The two stack: module access gets someone <em>into</em> the LMS to take their courses; an <strong>LMS Manager</strong> role is what additionally lets them build and assign courses. One without the other is perfectly normal — most learners have the first and not the second.</p>
 </div>
 
-<!-- 3. Creating a role -->
+<!-- 3. Everyday work (#180) -->
+<div class="help-section" id="everyday">
+    <div class="help-section-header"><?php echo helpSectionNum('everyday'); ?>
+        <div>
+            <h3>Everyday work</h3>
+            <p>A few permissions are about doing a job rather than configuring a module. In a role they are listed under <strong>Everyday work</strong>:</p>
+        </div>
+    </div>
+    <div class="help-table"><table>
+        <tr><th>Permission</th><th>What it lets someone do</th><th>When it applies</th></tr>
+        <tr><td><strong>Choose approvers</strong> (Change Management)</td><td>Set a change's CAB, its required members and its named approver.</td><td>Only once Change Management &rarr; Settings &rarr; <strong>Approvals</strong> limits it to this permission. Until then everyone with the module can.</td></tr>
+        <tr><td><strong>Design forms</strong> (Forms)</td><td>Create, edit, publish and delete forms, including who approves them and what happens next.</td><td>Only once Forms &rarr; Settings &rarr; <strong>Access</strong> limits it to this permission. Until then everyone with Forms can.</td></tr>
+        <tr><td><strong>Approve standard-change templates</strong> (Change Management)</td><td>Approve or reject a template version, which pre-authorises the changes raised from it. Nobody can approve a version they wrote.</td><td>Always.</td></tr>
+        <tr><td><strong>Run the evidence report</strong> (Tasks)</td><td>Open a repeating task's evidence report and print or export it.</td><td>Only once Tasks &rarr; Settings &rarr; <strong>Evidence</strong> limits it to this permission. Until then everyone who can see the repeating task can.</td></tr>
+        <tr><td><strong>View background job health</strong> (Reporting)</td><td>Open Reporting &rarr; System logs &rarr; Background jobs, and see the Watchtower card while a job needs attention. Also needs access to every company: job health is install-wide.</td><td>Always.</td></tr>
+        <tr><td><strong>Change what background jobs are expected to do</strong> (Reporting)</td><td>Change how often a background job is expected to run, or mark one &ldquo;not used here&rdquo; - which silences its alarm, so it is recorded with who did it.</td><td>Always.</td></tr>
+    </table></div>
+    <div class="help-note ok"><strong>Nobody loses anything by upgrading.</strong> The ones marked &ldquo;only once&rdquo; take effect when you switch them on in the module's settings, so build the role and give it out first. Forms' Access tab lists who would keep designing before you switch.</div>
+    <div class="help-note"><strong>An Auditor role.</strong> Read only access to Tasks (Module access) plus <strong>Run the evidence report</strong> gives someone everything an audit of repeating tasks needs - every record, its history, the evidence report and its exports - and nothing they can change.</div>
+</div>
+
+<!-- 4. Creating a role -->
 <div class="help-section" id="creating">
     <div class="help-section-header"><?php echo helpSectionNum('creating'); ?>
         <div>

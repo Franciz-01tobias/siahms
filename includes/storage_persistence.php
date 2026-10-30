@@ -157,7 +157,7 @@ function storagePersistenceDirectories(): array
     $dirs = [
         ['rel' => 'tickets/attachments',              'label' => 'Attachments that arrived on inbound email'],
         ['rel' => 'change-management/attachments',    'label' => 'Files attached to a change record'],
-        ['rel' => 'uploads',                          'label' => 'Documents attached to tickets, notes, assets and articles, and asset import files'],
+        ['rel' => 'uploads',                          'label' => 'Documents attached to tickets, notes, assets and articles, asset import files, and everything shared in Files'],
         ['rel' => 'recordings',                       'label' => 'Screen recordings made from the self-service portal'],
         ['rel' => 'lms/content',                      'label' => 'Uploaded course content and SCORM packages'],
         ['rel' => 'contracts/rfp-builder/uploads',    'label' => 'Files uploaded to an RFP'],
@@ -193,6 +193,9 @@ function storagePersistenceDirectories(): array
 
 /**
  * Assess one directory. Returns 'persisted' | 'at_risk' | 'missing' | 'unknown'.
+ *
+ * @param string $dir  the absolute directory to check
+ * @param ?int $rootDev  the device number of '/', when the caller already has it; null stats '/' here
  */
 function storagePersistenceStatus(string $dir, ?int $rootDev = null): string
 {
@@ -280,6 +283,8 @@ function storagePersistenceReport(): array
  *
  * The execution guards are shipped in these folders, so they are not evidence of
  * use and are excluded.
+ *
+ * @param string $dir  the absolute directory to look in, sub-directories included
  */
 function storagePersistenceHasFiles(string $dir): bool
 {
@@ -307,6 +312,8 @@ function storagePersistenceHasFiles(string $dir): bool
 
 /**
  * Is anything actually stored in the directories that are at risk?
+ *
+ * @param array $report  the report from storagePersistenceReport()
  */
 function storagePersistenceAnythingToLose(array $report): bool
 {
@@ -323,6 +330,8 @@ function storagePersistenceAnythingToLose(array $report): bool
  * Only the directories actually at risk are offered. A block that lists
  * everything, including what is already correct, invites the operator to paste
  * over a working configuration.
+ *
+ * @param array $report  the report from storagePersistenceReport()
  */
 function storagePersistenceSuggestedVolumes(array $report): array
 {
@@ -336,7 +345,11 @@ function storagePersistenceSuggestedVolumes(array $report): array
     return $lines;
 }
 
-/** A volume name derived from the directory, stable and readable. */
+/**
+ * A volume name derived from the directory, stable and readable.
+ *
+ * @param string $rel  the directory as listed by storagePersistenceDirectories(), e.g. 'tickets/attachments'
+ */
 function storagePersistenceVolumeName(string $rel): string
 {
     $name = strtolower(preg_replace('/[^a-z0-9]+/i', '-', trim($rel, '/')));
@@ -364,6 +377,8 @@ function storagePersistenceVolumeName(string $rel): string
  * It is also a better instruction to give: "create this file with this content"
  * needs no judgement about where to paste or how far to indent, and it can be
  * checked by eye against what we printed.
+ *
+ * @param array $report  the report from storagePersistenceReport()
  */
 function storagePersistenceOverrideFile(array $report): string
 {

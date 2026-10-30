@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 
+/** Loads the Tasks settings the calendar uses - the span mode and whether tags show on the calendar. */
 async function loadSettings() {
     try {
         const d = await fetch(API_BASE + 'get_settings.php').then(r => r.json());
@@ -60,6 +61,7 @@ async function loadSettings() {
     } catch (e) { console.error('Failed to load settings:', e); }
 }
 
+/** Loads the task statuses and redraws the colour legend. */
 async function loadStatuses() {
     try {
         const d = await fetch(API_BASE + 'get_task_statuses.php').then(r => r.json());
@@ -70,6 +72,7 @@ async function loadStatuses() {
     } catch (e) { console.error('Failed to load statuses:', e); }
 }
 
+/** Loads the active task priorities for the quick-look panel. */
 async function loadPriorities() {
     try {
         const d = await fetch(API_BASE + 'get_task_priorities.php').then(r => r.json());
@@ -77,6 +80,7 @@ async function loadPriorities() {
     } catch (e) { console.error('Failed to load priorities:', e); }
 }
 
+/** Loads analysts and teams and fills the Analyst and Team filter drop-downs. */
 async function loadDropdowns() {
     try {
         const [aRes, tRes] = await Promise.all([
@@ -121,11 +125,16 @@ function visibleProjected() {
     });
 }
 
+/**
+ * Loads the projected future occurrences of repeating tasks, from two months before to a year after
+ * the month in view; a failure leaves none.
+ */
 async function loadProjected() {
     // A generous window either side of anything the calendar can show, so paging
     // a month does not need another round trip.
     const from = new Date(viewDate.getFullYear(), viewDate.getMonth() - 2, 1);
     const to   = new Date(viewDate.getFullYear(), viewDate.getMonth() + 12, 0);
+    /** Formats a Date as YYYY-MM-DD through toISOString, so in UTC. */
     const ymd  = d => d.toISOString().slice(0, 10);
     try {
         const d = await fetch(`${API_BASE}projected.php?from=${ymd(from)}&to=${ymd(to)}`).then(r => r.json());
@@ -135,6 +144,10 @@ async function loadProjected() {
     }
 }
 
+/**
+ * Loads the tasks for the current filter and subtask scope, then the projected repeats, and redraws
+ * the calendar.
+ */
 async function loadTasks() {
     let url = API_BASE + 'list.php?filter=' + currentFilter;
     if (currentSubtaskScope) url += '&subtasks=' + currentSubtaskScope;
@@ -165,6 +178,7 @@ function setSubtaskScope(scope) {
     }).catch(() => {});
 }
 
+/** Switches to a preset filter (my, all...), clears the team and analyst filters and reloads. */
 function setFilter(filter) {
     currentFilter = filter;
     currentFilterTeamId = null;
@@ -177,6 +191,7 @@ function setFilter(filter) {
     loadTasks();
 }
 
+/** Shows one team's tasks, or goes back to My tasks when cleared. */
 function setTeamFilter(teamId) {
     if (!teamId) { setFilter('my'); return; }
     currentFilter = 'team';
@@ -187,6 +202,7 @@ function setTeamFilter(teamId) {
     loadTasks();
 }
 
+/** Shows one analyst's tasks, or goes back to My tasks when cleared. */
 function setAnalystFilter(analystId) {
     if (!analystId) { setFilter('my'); return; }
     currentFilter = 'analyst';
@@ -204,12 +220,14 @@ function calPrev() {
     else viewDate.setDate(viewDate.getDate() - 1);
     renderCalendar();
 }
+/** Moves forward one month, week or day, depending on the view. */
 function calNext() {
     if (viewMode === 'month') viewDate.setMonth(viewDate.getMonth() + 1);
     else if (viewMode === 'week') viewDate.setDate(viewDate.getDate() + 7);
     else viewDate.setDate(viewDate.getDate() + 1);
     renderCalendar();
 }
+/** Jumps back to today (the 1st of this month in month view). */
 function calToday() {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -219,6 +237,7 @@ function calToday() {
     renderCalendar();
 }
 
+/** Switches between month, week and day views. */
 function setView(mode) {
     viewMode = mode;
     document.querySelectorAll('.view-btn').forEach(b =>
@@ -305,6 +324,7 @@ function renderWeekRow(weekStart, todayStr, placed, monthCtx) {
     return { cells, bars, lanes: laneEnd.length };
 }
 
+/** Draws the month view - one row per week from Monday, each high enough for its lanes of bars. */
 function renderMonth() {
     const grid = document.getElementById('calGrid');
     document.getElementById('calWeekdays').style.display = '';
@@ -342,6 +362,7 @@ function renderMonth() {
     grid.innerHTML = html;
 }
 
+/** Draws the week view for the Monday-to-Sunday week holding the view date, with a compact range title. */
 function renderWeek() {
     const grid = document.getElementById('calGrid');
     document.getElementById('calWeekdays').style.display = '';
@@ -374,6 +395,10 @@ function renderWeek() {
     </div>`;
 }
 
+/**
+ * Draws the day view as a list of the tasks on that date, open before done, with status, assignee,
+ * dates, parent and tags.
+ */
 function renderDay() {
     const grid = document.getElementById('calGrid');
     document.getElementById('calWeekdays').style.display = 'none';
@@ -430,6 +455,12 @@ function renderDay() {
     grid.innerHTML = `<div class="cal-day-list">${rows}</div>`;
 }
 
+/**
+ * Returns the bar markup for one task's interval in a week row - one spanning bar in span mode,
+ * otherwise a chip per day.
+ *
+ * Clicking a projected repeat opens the task its series comes from.
+ */
 function renderBars(iv) {
     const t = iv.p.task;
     const colour = t.status_colour || '#6b7280';
@@ -456,6 +487,10 @@ function renderBars(iv) {
             `<span class="mini-tag-dot" style="background:${esc(tg.colour || '#6b7280')}"></span>`).join('')
         : '';
 
+    /**
+     * Returns one bar or chip at a column and span, coloured by status and marked for done, subtask,
+     * repeating and projected.
+     */
     const make = (col, span, extraCls) => {
         const left = `calc(${col} / 7 * 100% + 3px)`;
         const width = `calc(${span} / 7 * 100% - 6px)`;
@@ -477,6 +512,7 @@ function renderBars(iv) {
     return out;
 }
 
+/** Draws the legend of active statuses and their colours. */
 function renderLegend() {
     const el = document.getElementById('calLegend');
     if (!el) return;
@@ -494,6 +530,7 @@ function openTask(id) { TasksQuickPanel.open(id); }
 // Monday-based column index (Mon=0 … Sun=6)
 function mondayCol(d) { return (d.getDay() + 6) % 7; }
 
+/** Formats a Date as a local YYYY-MM-DD. */
 function ymd(d) {
     return d.getFullYear() + '-' +
         String(d.getMonth() + 1).padStart(2, '0') + '-' +
@@ -507,10 +544,12 @@ function dayDiff(a, b) {
     return Math.round((db - da) / 86400000);
 }
 
+/** Formats a YYYY-MM-DD as a short day and month. */
 function fmt(ds) {
     return fmtNaiveDayMonth(new Date(ds + 'T00:00:00'));
 }
 
+/** HTML-escapes a value through a text node; null and undefined become an empty string. */
 function esc(text) {
     if (text == null) return '';
     const div = document.createElement('div');

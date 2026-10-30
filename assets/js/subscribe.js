@@ -11,6 +11,8 @@
  *
  * ⚠️ Needs qrcode.min.js. Without it everything still works; only the QR is
  * missing, which is why its failure is swallowed rather than reported.
+ *
+ * @wiki Ticket-Calendar-Sync-Developer-Guide
  */
 (function () {
     'use strict';
@@ -19,8 +21,10 @@
 
     var mounts = {};      // id -> { endpoint, state, onReset }
 
+    /** Shorthand for document.getElementById. */
     function $(id) { return document.getElementById(id); }
 
+    /** Translates a key, or returns the English fallback when i18n is not loaded or has no string for it. */
     function t(key, fallback) {
         if (typeof window.t === 'function') {
             var got = window.t(key);
@@ -56,6 +60,10 @@
         }
     }
 
+    /**
+     * Stores a mount's feed URL parts, fills the host box (the LAN address instead of localhost, so a
+     * phone can reach it), shows the insecure warning when needed and redraws.
+     */
     function apply(id, d) {
         var m = mounts[id];
         m.state = { scheme: d.scheme, host: d.host, path: d.path };
@@ -66,6 +74,7 @@
             // phone cannot resolve localhost — the URL would be useless as shown.
             var isLocal = /^(localhost|127\.|\[?::1\]?)/i.test(d.host || '');
             hostEl.value = (isLocal && d.suggestedHost) ? d.suggestedHost : d.host;
+            /** Rebuilds the link and QR code as the host is edited. */
             hostEl.oninput = function () { refresh(id); };
         }
 
@@ -99,10 +108,12 @@
             mounts[id] = { endpoint: endpoint, state: null, opts: opts || {} };
         },
 
+        /** Opens a subscribe dialogue, fetching its feed URL from the endpoint the first time. */
         open: function (id) {
             var m = mounts[id];
             if (!m) return;
             var modal = $(id + 'Modal');
+            /** Shows the dialogue. */
             var show = function () { if (modal) modal.classList.add('active'); };
             if (m.state) { show(); return; }
             fetch(m.endpoint, { credentials: 'same-origin' })
@@ -118,15 +129,18 @@
                 .catch(function () {});
         },
 
+        /** Closes a subscribe dialogue. */
         close: function (id) {
             var modal = $(id + 'Modal');
             if (modal) modal.classList.remove('active');
         },
 
+        /** Copies the feed link and confirms with a toast when the copy worked. */
         copy: function (id) {
             var el = $(id + 'Url');
             if (!el) return;
             el.select();
+            /** Shows the "Link copied" toast. */
             var done = function () {
                 if (typeof showToast === 'function') {
                     showToast(t('common.subscribe.copied', 'Link copied'), 'success');
@@ -144,6 +158,10 @@
         reset: function (id) {
             var m = mounts[id];
             if (!m) return;
+            /**
+             * Resets the feed token through the endpoint when confirmed, then shows the new link and
+             * calls the mount's onReset.
+             */
             var go = function (ok) {
                 if (!ok) return;
                 fetch(m.endpoint, {

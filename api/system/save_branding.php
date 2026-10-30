@@ -24,6 +24,7 @@ require_once '../../includes/functions.php';
 require_once '../../includes/uploads.php';         // the ONE home for file writes
 require_once '../../includes/branding.php';        // the login designer's field table
 require_once '../../includes/landing.php';         // install-wide landing default (#63)
+require_once '../../includes/back_link.php';       // the "Back to ..." link (3.5.0)
 
 header('Content-Type: application/json');
 
@@ -79,8 +80,64 @@ try {
         }
     }
 
+    // Files desktop logo (Files module). Both are fixed lists; anything else is
+    // refused before anything is written, like landing_page above. Only sent by
+    // a form that has the card, so an older client leaves them alone.
+    $filesLogo = [];
+    if (array_key_exists('files_logo_mode', $_POST)) {
+        $m = (string)$_POST['files_logo_mode'];
+        if (!in_array($m, ['company', 'none'], true)) throw new Exception("'files_logo_mode' must be company or none");
+        $filesLogo['files_logo_mode'] = $m;
+    }
+    if (array_key_exists('files_logo_position', $_POST)) {
+        $p = (string)$_POST['files_logo_position'];
+        if (!in_array($p, ['top-right', 'bottom-right'], true)) throw new Exception("'files_logo_position' must be top-right or bottom-right");
+        $filesLogo['files_logo_position'] = $p;
+    }
+
+    // System name (moved here from Tickets -> Settings -> General). Only sent by
+    // a form that has the box, so an older client leaves it alone. Blank is a
+    // real value - it means "use the default", which systemName() supplies.
+    $systemName = null;
+    if (array_key_exists('system_name', $_POST)) {
+        $systemName = trim((string)$_POST['system_name']);
+        if (mb_strlen($systemName) > 100) throw new Exception("'system_name' is too long (max 100 characters)");
+    }
+
+    // The "Back to ..." link (3.5.0). Only when the form sends it. Validated
+    // before anything is written: an address goes into every header, so only a
+    // plain http(s) one is accepted.
+    $backLink = null;
+    if (array_key_exists('back_link_url', $_POST)) {
+        $backLink = [
+            'back_link_label' => trim((string)($_POST['back_link_label'] ?? '')),
+            'back_link_url'   => trim((string)$_POST['back_link_url']),
+            'back_link_where' => (string)($_POST['back_link_where'] ?? 'portal'),
+        ];
+        if (mb_strlen($backLink['back_link_label']) > 60) throw new Exception('The link text is too long (max 60 characters).');
+        if (mb_strlen($backLink['back_link_url']) > 500) throw new Exception('The link address is too long (max 500 characters).');
+        if ($backLink['back_link_url'] !== '' && !backLinkUrlValid($backLink['back_link_url'])) {
+            throw new Exception('The link address must start with https:// or http://.');
+        }
+        if (($backLink['back_link_url'] === '') !== ($backLink['back_link_label'] === '')) {
+            throw new Exception('Fill in both the link text and its address, or neither.');
+        }
+        if (!in_array($backLink['back_link_where'], BACK_LINK_PLACES, true)) {
+            throw new Exception("'back_link_where' must be one of: " . implode(', ', BACK_LINK_PLACES));
+        }
+    }
+
     foreach ($values as $k => $v) {
         $upsert($conn, 'branding_' . $k, $v);
+    }
+    if ($backLink !== null) {
+        foreach ($backLink as $k => $v) $upsert($conn, $k, $v);
+    }
+    if ($systemName !== null) {
+        $upsert($conn, 'system_name', $systemName);
+    }
+    foreach ($filesLogo as $k => $v) {
+        $upsert($conn, $k, $v);
     }
     if ($landing !== null) {
         $upsert($conn, LANDING_SETTING_KEY, $landing);

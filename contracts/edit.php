@@ -8,6 +8,7 @@ require_once '../includes/functions.php';
 require_once __DIR__ . '/../includes/i18n.php';
 require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
+require_once '../includes/money.php';
 I18n::initFromSession();
 Tz::init();
 
@@ -24,13 +25,15 @@ $contract_id = $_GET['id'] ?? null;
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($contract_id ? t('contracts.edit.page_title_edit') : t('contracts.edit.page_title_add')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('contracts', $contract_id ? t('contracts.edit.page_title_edit') : t('contracts.edit.page_title_add'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <?php echo Money::scriptTag(); ?>
+    <script src="../assets/js/money.js?v=1"></script>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <script src="../assets/js/tinymce/tinymce.min.js"></script>
     <style>
         /* Full-screen layout with sidebar - matches contracts dashboard */
@@ -211,9 +214,24 @@ $contract_id = $_GET['id'] ?? null;
         .terms-empty a { color: var(--con-accent, #f59e0b); }
 
         [data-theme-mode="dark"] .sidebar-link:hover { background: #3a2e12; }
+        /* Supplier / Customer (#153) */
+        .party-label { display: block; margin-bottom: 6px; font-weight: 500; color: var(--text, #333); font-size: 14px; }
+        .party-switch { display: inline-flex; border: 1px solid var(--border, #ddd); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+        .party-switch label { display: flex; align-items: center; gap: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; color: var(--text, #333); margin: 0; }
+        .party-switch label:first-child { border-right: 1px solid var(--border, #ddd); }
+        .party-switch label:has(input:checked) { background: var(--con-accent-soft, #fef3c7); color: var(--text, #222); font-weight: 600; }
+        #partyCustomer > select { margin-bottom: 8px; }
+        .person-picker { position: relative; }
+        .person-picker input[type=text] { width: 100%; box-sizing: border-box; padding-right: 30px; }
+        .person-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: none; background: none; font-size: 18px; color: var(--text-muted, #777); cursor: pointer; line-height: 1; }
+        .person-results { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; margin: 2px 0 0; padding: 4px; list-style: none; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); max-height: 240px; overflow-y: auto; }
+        .person-results li { padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; color: var(--text, #333); }
+        .person-results li small { display: block; color: var(--text-muted, #777); font-size: 11.5px; }
+        .person-results li[aria-selected="true"], .person-results li:hover { background: var(--surface-hover, #f3f4f6); }
+        .party-hint { display: block; margin-top: 6px; color: var(--text-muted, #777); font-size: 12px; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="contracts" data-mobile-page="contract-edit">
     <?php include 'includes/header.php'; ?>
@@ -280,6 +298,13 @@ $contract_id = $_GET['id'] ?? null;
             </div>
             <div class="form-card-body">
                 <form id="contractForm" autocomplete="off">
+                    <!-- The company the contract BELONGS to (3.5.0) - who can see it. Hidden
+                         on a single-company install; who it is WITH is set further down. -->
+                    <div class="form-group" id="ownerCompanyGroup" hidden>
+                        <label for="ownerTenantId"><?php echo htmlspecialchars(t('contracts.edit.company')); ?> *</label>
+                        <select id="ownerTenantId"></select>
+                        <small class="party-hint"><?php echo htmlspecialchars(t('contracts.edit.company_hint')); ?></small>
+                    </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="contractNumber"><?php echo htmlspecialchars(t('contracts.edit.contract_number')); ?> *</label>
@@ -305,10 +330,29 @@ $contract_id = $_GET['id'] ?? null;
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="supplierId"><?php echo htmlspecialchars(t('contracts.detail.supplier')); ?></label>
-                            <select id="supplierId">
-                                <option value="">-- <?php echo htmlspecialchars(t('contracts.edit.select_supplier')); ?> --</option>
-                            </select>
+                            <!-- Who the contract is WITH (#153): a supplier (we buy) or a customer (we sell). -->
+                            <span class="party-label"><?php echo htmlspecialchars(t('contracts.party.with')); ?></span>
+                            <div class="party-switch" role="radiogroup" aria-label="<?php echo htmlspecialchars(t('contracts.party.with')); ?>">
+                                <label><input type="radio" name="partyType" value="supplier" checked onchange="showParty()"> <?php echo htmlspecialchars(t('contracts.party.supplier')); ?></label>
+                                <label><input type="radio" name="partyType" value="customer" onchange="showParty()"> <?php echo htmlspecialchars(t('contracts.party.customer')); ?></label>
+                            </div>
+                            <div id="partySupplier">
+                                <select id="supplierId" aria-label="<?php echo htmlspecialchars(t('contracts.detail.supplier')); ?>">
+                                    <option value="">-- <?php echo htmlspecialchars(t('contracts.edit.select_supplier')); ?> --</option>
+                                </select>
+                            </div>
+                            <div id="partyCustomer" hidden>
+                                <select id="customerTenantId" aria-label="<?php echo htmlspecialchars(t('contracts.party.company')); ?>" onchange="clearPersonIfOtherCompany()" hidden>
+                                    <option value="">-- <?php echo htmlspecialchars(t('contracts.party.select_company')); ?> --</option>
+                                </select>
+                                <div class="person-picker">
+                                    <input type="text" id="customerPersonSearch" autocomplete="off" placeholder="<?php echo htmlspecialchars(t('contracts.party.person_ph')); ?>" aria-label="<?php echo htmlspecialchars(t('contracts.party.person')); ?>" oninput="searchPeople()" onkeydown="personKeys(event)">
+                                    <input type="hidden" id="customerUserId">
+                                    <button type="button" class="person-clear" id="customerPersonClear" onclick="clearPerson()" title="<?php echo htmlspecialchars(t('contracts.party.clear_person')); ?>" aria-label="<?php echo htmlspecialchars(t('contracts.party.clear_person')); ?>" hidden>&times;</button>
+                                    <ul class="person-results" id="customerPersonResults" role="listbox" hidden></ul>
+                                </div>
+                                <small class="party-hint" id="partyCustomerHint"></small>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="ownerId"><?php echo htmlspecialchars(t('contracts.detail.owner')); ?></label>
@@ -361,8 +405,12 @@ $contract_id = $_GET['id'] ?? null;
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="costCentre"><?php echo htmlspecialchars(t('contracts.detail.cost_centre')); ?></label>
-                            <input type="text" id="costCentre">
+                            <label for="costCentreId"><?php echo htmlspecialchars(t('contracts.detail.cost_centre')); ?></label>
+                            <!-- GH #160: a cost centre of the contract's company (System -> Cost Centres). -->
+                            <select id="costCentreId">
+                                <option value="">-- <?php echo htmlspecialchars(t('contracts.edit.none')); ?> --</option>
+                            </select>
+                            <small class="party-hint" id="costCentreLegacy" hidden></small>
                         </div>
                     </div>
 
@@ -465,28 +513,6 @@ $contract_id = $_GET['id'] ?? null;
         const TICKETS_API = '../api/tickets/';
         let contractId = <?php echo json_encode($contract_id); ?>;
 
-        const currencies = [
-            { code: 'GBP', name: 'British Pound (GBP)' },
-            { code: 'USD', name: 'US Dollar (USD)' },
-            { code: 'EUR', name: 'Euro (EUR)' },
-            { code: 'AUD', name: 'Australian Dollar (AUD)' },
-            { code: 'CAD', name: 'Canadian Dollar (CAD)' },
-            { code: 'CHF', name: 'Swiss Franc (CHF)' },
-            { code: 'CNY', name: 'Chinese Yuan (CNY)' },
-            { code: 'DKK', name: 'Danish Krone (DKK)' },
-            { code: 'HKD', name: 'Hong Kong Dollar (HKD)' },
-            { code: 'INR', name: 'Indian Rupee (INR)' },
-            { code: 'JPY', name: 'Japanese Yen (JPY)' },
-            { code: 'KRW', name: 'South Korean Won (KRW)' },
-            { code: 'MXN', name: 'Mexican Peso (MXN)' },
-            { code: 'NOK', name: 'Norwegian Krone (NOK)' },
-            { code: 'NZD', name: 'New Zealand Dollar (NZD)' },
-            { code: 'PLN', name: 'Polish Zloty (PLN)' },
-            { code: 'SEK', name: 'Swedish Krona (SEK)' },
-            { code: 'SGD', name: 'Singapore Dollar (SGD)' },
-            { code: 'ZAR', name: 'South African Rand (ZAR)' }
-        ];
-
         let termTabs = [];
         let termEditorIds = [];
 
@@ -494,6 +520,7 @@ $contract_id = $_GET['id'] ?? null;
             loadStats();
             populateCurrencies();
             await Promise.all([
+                loadCustomerCompanies(),
                 loadSuppliers(),
                 loadAnalysts(),
                 loadContractStatuses(),
@@ -501,6 +528,9 @@ $contract_id = $_GET['id'] ?? null;
                 loadContractTermTabs()
             ]);
             if (contractId) await loadContract();
+            await loadCostCentres();
+            // A different company means a different list of cost centres.
+            document.getElementById('ownerTenantId').addEventListener('change', loadCostCentres);
 
             buildTermEditors();
             initTermEditors(() => {
@@ -522,10 +552,17 @@ $contract_id = $_GET['id'] ?? null;
             } catch (error) { console.error('Error loading stats:', error); }
         }
 
-        function populateCurrencies() {
-            const select = document.getElementById('currency');
-            select.innerHTML = '<option value="">-- ' + escapeHtml(window.t('contracts.edit.none')) + ' --</option>' +
-                currencies.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+        /**
+         * Every current currency, favourites first (System -> Currencies, GH #189).
+         * A new contract starts in the install's default; "None" stays for the
+         * contracts that never had one.
+         *
+         * @param {string} [selected]  the stored code; omitted on a new contract
+         */
+        function populateCurrencies(selected) {
+            Money.fill(document.getElementById('currency'),
+                selected !== undefined ? selected : (contractId ? '' : Money.def()),
+                { blank: '-- ' + window.t('contracts.edit.none') + ' --' });
         }
 
         async function loadSuppliers() {
@@ -541,6 +578,107 @@ $contract_id = $_GET['id'] ?? null;
                 }
             } catch (error) { console.error('Error loading suppliers:', error); }
         }
+
+        // ── Supplier or customer (#153) ─────────────────────────────────
+        let multiCompany = false;
+        // ── Cost centre (GH #160) ───────────────────────────────────────
+        // The contract's company's active cost centres, plus the one it holds if
+        // that has since been made inactive. A choice that is not in the new list
+        // (after changing company) falls back to none.
+        let contractCostCentreId = null;
+        async function loadCostCentres() {
+            const sel = document.getElementById('costCentreId');
+            const keep = sel.value || contractCostCentreId || '';
+            const company = multiCompany ? document.getElementById('ownerTenantId').value : '';
+            try {
+                const r = await fetch('../api/cost-centres/options.php?' + new URLSearchParams({ company_id: company || '', keep: contractCostCentreId || '' }), { credentials: 'same-origin' });
+                const d = await r.json();
+                if (!d.success) return;
+                sel.innerHTML = '<option value="">-- ' + escapeHtml(window.t('contracts.edit.none')) + ' --</option>'
+                    + d.cost_centres.map(c => `<option value="${c.id}">${escapeHtml(c.code + ' ' + c.name)}${c.is_active ? '' : ' (' + escapeHtml(window.t('contracts.edit.cost_centre_inactive')) + ')'}</option>`).join('');
+                sel.value = d.cost_centres.some(c => String(c.id) === String(keep)) ? String(keep) : '';
+            } catch (e) { /* the box keeps what it had */ }
+        }
+
+        async function loadCustomerCompanies() {
+            try {
+                const r = await fetch(API_BASE + 'customer_lookup.php');
+                const d = await r.json();
+                if (!d.success) return;
+                multiCompany = d.multi_company;
+                // The owning company: every company the analyst can reach, the active one preselected.
+                const own = document.getElementById('ownerTenantId');
+                document.getElementById('ownerCompanyGroup').hidden = !multiCompany;
+                own.innerHTML = d.companies.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+                if (d.active_company) own.value = String(d.active_company);
+                const sel = document.getElementById('customerTenantId');
+                sel.hidden = !multiCompany;
+                sel.innerHTML = '<option value="">-- ' + escapeHtml(window.t('contracts.party.select_company')) + ' --</option>' +
+                    d.companies.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+                document.getElementById('partyCustomerHint').textContent = window.t(multiCompany ? 'contracts.party.hint_multi' : 'contracts.party.hint_single');
+            } catch (e) { console.error('Error loading companies:', e); }
+        }
+        function partyType() { return document.querySelector('input[name="partyType"]:checked').value; }
+        function showParty() {
+            const customer = partyType() === 'customer';
+            document.getElementById('partySupplier').hidden = customer;
+            document.getElementById('partyCustomer').hidden = !customer;
+        }
+        function setPerson(id, label) {
+            document.getElementById('customerUserId').value = id || '';
+            document.getElementById('customerPersonSearch').value = label || '';
+            document.getElementById('customerPersonClear').hidden = !id;
+            hidePeople();
+        }
+        function clearPerson() { setPerson('', ''); document.getElementById('customerPersonSearch').focus(); }
+        function clearPersonIfOtherCompany() { if (document.getElementById('customerUserId').value) clearPerson(); }
+        function hidePeople() { const ul = document.getElementById('customerPersonResults'); ul.hidden = true; ul.replaceChildren(); }
+        let peopleTimer = null, peopleSeq = 0;
+        function searchPeople() {
+            document.getElementById('customerUserId').value = '';   // typing again means choosing again
+            document.getElementById('customerPersonClear').hidden = true;
+            clearTimeout(peopleTimer);
+            const q = document.getElementById('customerPersonSearch').value.trim();
+            if (q.length < 2) { hidePeople(); return; }
+            peopleTimer = setTimeout(async () => {
+                const seq = ++peopleSeq;
+                const tenant = document.getElementById('customerTenantId').value;
+                const r = await fetch(API_BASE + 'customer_lookup.php?q=' + encodeURIComponent(q) + (tenant ? '&tenant_id=' + encodeURIComponent(tenant) : ''));
+                const d = await r.json();
+                if (seq !== peopleSeq) return;
+                const ul = document.getElementById('customerPersonResults');
+                if (!d.success || !d.people.length) {
+                    const li = document.createElement('li'); li.textContent = window.t('contracts.party.no_people'); li.setAttribute('aria-disabled', 'true');
+                    ul.replaceChildren(li); ul.hidden = false; return;
+                }
+                ul.replaceChildren(...d.people.map((p, i) => {
+                    const li = document.createElement('li');
+                    li.setAttribute('role', 'option'); li.dataset.id = p.id;
+                    li.dataset.label = p.name;
+                    li.append(document.createTextNode(p.name));
+                    const meta = document.createElement('small');
+                    meta.textContent = [p.email, multiCompany ? p.company : ''].filter(Boolean).join(' · ');
+                    li.append(meta);
+                    li.addEventListener('mousedown', (e) => { e.preventDefault(); setPerson(p.id, p.name); });
+                    return li;
+                }));
+                ul.hidden = false;
+            }, 220);
+        }
+        function personKeys(e) {
+            const ul = document.getElementById('customerPersonResults');
+            const items = Array.from(ul.querySelectorAll('li[role=option]'));
+            if (ul.hidden || !items.length) return;
+            let i = items.findIndex(li => li.getAttribute('aria-selected') === 'true');
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                i = e.key === 'ArrowDown' ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+                items.forEach((li, n) => li.setAttribute('aria-selected', n === i ? 'true' : 'false'));
+            } else if (e.key === 'Enter' && i >= 0) {
+                e.preventDefault(); setPerson(items[i].dataset.id, items[i].dataset.label);
+            } else if (e.key === 'Escape') { hidePeople(); }
+        }
+        document.addEventListener('click', (e) => { if (!e.target.closest('.person-picker')) hidePeople(); });
 
         async function loadAnalysts() {
             try {
@@ -590,10 +728,15 @@ $contract_id = $_GET['id'] ?? null;
                 const data = await response.json();
                 if (data.success) {
                     const c = data.contract;
+                    if (c.tenant_id) document.getElementById('ownerTenantId').value = String(c.tenant_id);
                     document.getElementById('contractNumber').value = c.contract_number;
                     document.getElementById('title').value = c.title;
                     document.getElementById('description').value = c.description || '';
                     document.getElementById('supplierId').value = c.supplier_id || '';
+                    document.querySelector('input[name="partyType"][value="' + (c.party_type === 'customer' ? 'customer' : 'supplier') + '"]').checked = true;
+                    document.getElementById('customerTenantId').value = c.customer_tenant_id || '';
+                    setPerson(c.customer_user_id || '', c.customer_person_name || '');
+                    showParty();
                     document.getElementById('ownerId').value = c.contract_owner_id || '';
                     document.getElementById('contractStatusId').value = c.contract_status_id || '';
                     document.getElementById('contractStart').value = c.contract_start || '';
@@ -601,9 +744,14 @@ $contract_id = $_GET['id'] ?? null;
                     document.getElementById('noticePeriod').value = c.notice_period_days || '';
                     document.getElementById('noticeDate').value = c.notice_date || '';
                     document.getElementById('contractValue').value = c.contract_value || '';
-                    document.getElementById('currency').value = c.currency || '';
+                    populateCurrencies(c.currency || '');
                     document.getElementById('paymentScheduleId').value = c.payment_schedule_id || '';
-                    document.getElementById('costCentre').value = c.cost_centre || '';
+                    contractCostCentreId = c.cost_centre_id || null;
+                    // Typed in before 3.5.0 and matching no cost centre code: shown, so it
+                    // is not lost, until somebody chooses a real one.
+                    const legacy = document.getElementById('costCentreLegacy');
+                    legacy.hidden = !(c.cost_centre && !c.cost_centre_id);
+                    legacy.textContent = legacy.hidden ? '' : window.t('contracts.edit.cost_centre_previous', { text: c.cost_centre });
                     document.getElementById('dmsLink').value = c.dms_link || '';
                     document.getElementById('termsStatus').value = c.terms_status || '';
                     document.getElementById('personalDataTransferred').checked = !!c.personal_data_transferred;
@@ -621,10 +769,14 @@ $contract_id = $_GET['id'] ?? null;
             saveBtn.textContent = window.t('common.saving');
 
             const payload = {
+                tenant_id: multiCompany ? (document.getElementById('ownerTenantId').value || null) : null,
                 contract_number: document.getElementById('contractNumber').value.trim(),
                 title: document.getElementById('title').value.trim(),
                 description: document.getElementById('description').value.trim(),
-                supplier_id: document.getElementById('supplierId').value || null,
+                party_type: partyType(),
+                supplier_id: partyType() === 'supplier' ? (document.getElementById('supplierId').value || null) : null,
+                customer_tenant_id: partyType() === 'customer' ? (document.getElementById('customerTenantId').value || null) : null,
+                customer_user_id: partyType() === 'customer' ? (document.getElementById('customerUserId').value || null) : null,
                 contract_owner_id: document.getElementById('ownerId').value || null,
                 contract_status_id: document.getElementById('contractStatusId').value || null,
                 contract_start: document.getElementById('contractStart').value || null,
@@ -634,7 +786,7 @@ $contract_id = $_GET['id'] ?? null;
                 contract_value: document.getElementById('contractValue').value || null,
                 currency: document.getElementById('currency').value || null,
                 payment_schedule_id: document.getElementById('paymentScheduleId').value || null,
-                cost_centre: document.getElementById('costCentre').value.trim(),
+                cost_centre_id: document.getElementById('costCentreId').value || null,
                 dms_link: document.getElementById('dmsLink').value.trim(),
                 terms_status: document.getElementById('termsStatus').value || null,
                 personal_data_transferred: document.getElementById('personalDataTransferred').checked ? 1 : 0,
@@ -815,6 +967,6 @@ $contract_id = $_GET['id'] ?? null;
         }
 
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

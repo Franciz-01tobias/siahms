@@ -39,9 +39,9 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('knowledge.assistant.browser_title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('knowledge', t('knowledge.assistant.browser_title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/knowledge.css?v=2">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
@@ -126,7 +126,7 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
         .ka-draft-note { font-size:12px; color:var(--text-muted); margin-top:12px; }
     </style>
     <!-- Mobile: LAYER 17g. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body>
 <?php require_once '../includes/header.php'; ?>
@@ -191,9 +191,11 @@ function esc(s) {
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function fmtDate(s) {
+/* Was a top-level `function fmtDate` that called itself - it shadowed tz.js's
+   global (#1195) - until the stack overflowed, and then showed the raw UTC string. */
+function kaFmtDate(s) {
     if (!s) return '';
-    try { return fmtDate(s); }
+    try { return window.fmtDate(s) || s; }
     catch (e) { return s; }
 }
 
@@ -217,7 +219,7 @@ async function kaLoad() {
 
     renderClusters(data.clusters || []);
     if (data.last_run) {
-        document.getElementById('kaSayMeta').textContent = ka('last_looked', { date: fmtDate(data.last_run) });
+        document.getElementById('kaSayMeta').textContent = ka('last_looked', { date: kaFmtDate(data.last_run) });
     }
 }
 
@@ -234,7 +236,7 @@ function renderClusters(clusters) {
 
     list.innerHTML = clusters.map(c => {
         const span = (c.first_ticket_datetime && c.last_ticket_datetime)
-            ? fmtDate(c.first_ticket_datetime) + ' – ' + fmtDate(c.last_ticket_datetime) : '';
+            ? kaFmtDate(c.first_ticket_datetime) + ' – ' + kaFmtDate(c.last_ticket_datetime) : '';
 
         const evidence = (c.tickets || []).map(t =>
             '<li><a href="<?php echo BASE_URL; ?>tickets/?ticket_id=' + t.ticket_id + '" target="_blank">' +
@@ -568,6 +570,6 @@ async function kaSaveDraft() {
     } catch (e) { /* the list still works without the status line */ }
 })();
 </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

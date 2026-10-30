@@ -47,6 +47,18 @@ try {
     $id  = (int)($input['id'] ?? 0);
     $verb = $input['_method'] ?? $method;
 
+    // 3.5.0 (PR #174): a role the REST API manages for one analyst is changed only
+    // through PATCH /api/v1/analysts/{id}/access. Edited here it would be silently
+    // overwritten by the next sync; assigned to others it would hand them that
+    // analyst's grants. It goes when its analyst is deleted.
+    try {
+        $mg = $conn->prepare("SELECT managed_for_analyst_id FROM rbac_roles WHERE id = ?");
+        $mg->execute([$id]);
+        if ($mg->fetchColumn()) {
+            throw new Exception('This role is managed through the REST API for one analyst and cannot be changed or deleted here.');
+        }
+    } catch (PDOException $e) { /* column not added yet: no managed roles exist */ }
+
     if ($verb === 'DELETE') {
         // Capabilities + assignments cascade away with the role (FKs).
         $conn->prepare("DELETE FROM rbac_roles WHERE id = ?")->execute([$id]);

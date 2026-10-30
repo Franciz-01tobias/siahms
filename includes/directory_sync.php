@@ -52,6 +52,8 @@ const DSYNC_UAC_DISABLED = 2;
  * ⚠️ AD and OpenLDAP genuinely differ — sAMAccountName vs uid, and OpenLDAP has
  * no equivalent of most of the rest. Guessing is not possible, which is why every
  * one of these is configurable per provider.
+ *
+ * @param string $flavour  'openldap' or 'ad'; anything other than 'openldap' gets the AD names
  */
 function dsyncAttrDefaults(string $flavour): array
 {
@@ -95,6 +97,8 @@ function dsyncAttrDefaults(string $flavour): array
  * Inferring beats adding a column: the existing values are what the directory is
  * actually being queried with, so they cannot disagree with reality the way a
  * separate flavour field could after somebody hand-edits an attribute.
+ *
+ * @param array $provider  the auth_providers row - ldap_attr_username and ldap_attr_guid are read
  */
 function dsyncFlavour(array $provider): string
 {
@@ -104,7 +108,12 @@ function dsyncFlavour(array $provider): string
     return 'ad';
 }
 
-/** The configured attribute name for one field, falling back to the flavour default. */
+/**
+ * The configured attribute name for one field, falling back to the flavour default.
+ *
+ * @param array $provider  the auth_providers row
+ * @param string $field  a dsyncAttrDefaults() key, e.g. 'email' - read from the ldap_attr_<field> column
+ */
 function dsyncAttr(array $provider, string $field): string
 {
     $col = 'ldap_attr_' . $field;
@@ -129,6 +138,8 @@ function dsyncAttr(array $provider, string $field): string
  *
  * Lower-cased, because a DN is case-insensitive but string comparison is not,
  * and every comparison in this file (is X under Y?) is a string comparison.
+ *
+ * @param ?string $raw  the stored newline-separated DN list, e.g. sync_ou_includes; null gives []
  */
 function dsyncDnList(?string $raw): array
 {
@@ -152,6 +163,9 @@ function dsyncDnList(?string $raw): array
  * ⚠️ Falls back to sync_base_dn, then ldap_base_dn. An install upgraded from
  * before the OU browser has neither column set, and MUST go on importing
  * exactly who it imported yesterday.
+ *
+ * @param array $provider  the auth_providers row - sync_ou_includes, sync_ou_excludes, sync_base_dn,
+ *     ldap_base_dn are read
  */
 function dsyncScopes(array $provider): array
 {
@@ -183,6 +197,9 @@ function dsyncScopes(array $provider): array
  * ⚠️ The comma matters. Without it "OU=Sales,DC=x" tests true against
  * "OU=WholesaleSales,DC=x", and a carve-out would silently swallow an OU whose
  * name merely ends the same way.
+ *
+ * @param string $dn  the entry's distinguished name (compared case-insensitively)
+ * @param string $ancestor  the branch DN to test against; empty always gives false
  */
 function dsyncDnIsUnder(string $dn, string $ancestor): bool
 {
@@ -205,6 +222,9 @@ function dsyncDnIsUnder(string $dn, string $ancestor): bool
  * A base search returning nothing is treated as gone. That conflates "deleted"
  * with "the bind account can no longer read it", which is the right call: the
  * consequence for the import is identical, and so is the thing to go and look at.
+ *
+ * @param mixed $ds  a bound LDAP connection
+ * @param array $provider  the auth_providers row whose stored branches are checked
  */
 function dsyncMissingScopes($ds, array $provider): array
 {
@@ -224,7 +244,11 @@ function dsyncMissingScopes($ds, array $provider): array
     return $missing;
 }
 
-/** Say which branches are gone, and lead with the one that changes who gets in. */
+/**
+ * Say which branches are gone, and lead with the one that changes who gets in.
+ *
+ * @param array $gone  missing branches as dsyncMissingScopes() returns them: [['dn' => ..., 'kind' => ...], ...]
+ */
 function dsyncMissingScopeMessage(array $gone): string
 {
     $ex = array_values(array_filter($gone, fn($g) => $g['kind'] === 'exclude'));
@@ -243,6 +267,14 @@ function dsyncMissingScopeMessage(array $gone): string
     return implode(' ', $bits);
 }
 
+/**
+ * Reads every person under the provider's ticked directory branches with a paged LDAP search, skipping carved-out branches and counting each DN once.
+ *
+ * Throws when nothing is ticked, a branch cannot be searched, or more than DSYNC_MAX_PEOPLE match.
+ * @param resource $ds  a bound LDAP connection
+ * @param array $provider  the auth_providers row being synced (its ldap_attr_* and sync_* columns)
+ * @return array  raw LDAP entries
+ */
 function dsyncFetchPeople($ds, array $provider): array
 {
     $scopes = dsyncScopes($provider);
@@ -308,7 +340,12 @@ function dsyncFetchPeople($ds, array $provider): array
     return array_values($byDn);
 }
 
-/** Does this DN sit inside any carved-out branch? */
+/**
+ * Does this DN sit inside any carved-out branch?
+ *
+ * @param string $dn  the entry's distinguished name
+ * @param array $excludes  carved-out branch DNs, as dsyncScopes() returns them
+ */
 function dsyncDnIsExcluded(string $dn, array $excludes): bool
 {
     foreach ($excludes as $ex) {
@@ -317,7 +354,12 @@ function dsyncDnIsExcluded(string $dn, array $excludes): bool
     return false;
 }
 
-/** One attribute off a raw entry, as a plain string ('' when absent). */
+/**
+ * One attribute off a raw entry, as a plain string ('' when absent).
+ *
+ * @param array $entry  one raw entry from ldap_get_entries() (attribute keys lower-cased)
+ * @param string $attr  the attribute name, any case; '' gives ''
+ */
 function dsyncValue(array $entry, string $attr): string
 {
     if ($attr === '') return '';
@@ -331,6 +373,9 @@ function dsyncValue(array $entry, string $attr): string
 /**
  * Turn a raw directory entry into the fields FreeITSM stores.
  * Returns null when the entry has no usable identity at all.
+ *
+ * @param array $entry  one raw entry from ldap_get_entries()
+ * @param array $provider  the auth_providers row being synced (its ldap_attr_* and sync_* columns)
  */
 function dsyncMapPerson(array $entry, array $provider): ?array
 {
@@ -372,6 +417,9 @@ function dsyncMapPerson(array $entry, array $provider): ?array
  *   3. the email address        — a person who already exists here, see §4.2
  *
  * Returns [row|null, howMatched].
+ *
+ * @param array $provider  the auth_providers row - id and tenant_id are read
+ * @param array $p  the person as dsyncMapPerson() (or the CardDAV mapper) returns it
  */
 function dsyncFindExisting(PDO $conn, array $provider, array $p): array
 {
@@ -423,6 +471,11 @@ function dsyncFindExisting(PDO $conn, array $provider, array $p): array
  *
  * A first run (no baseline) is never braked — there is nothing to compare with,
  * and refusing to import anybody the first time would make the feature unusable.
+ *
+ * @param array $provider  the auth_providers row - sync_brake_percent and sync_last_count are read
+ * @param int $seen  how many people this run found
+ * @param ?array $words  optional wording for the message: source (e.g. 'address book') and causes;
+ *     null keeps the LDAP wording
  */
 function syncBrakeTripped(array $provider, int $seen, ?array $words = null): ?string
 {
@@ -452,7 +505,16 @@ function syncBrakeTripped(array $provider, int $seen, ?array $words = null): ?st
     );
 }
 
-/** Record one thing a run did to one person. */
+/**
+ * Record one thing a run did to one person.
+ *
+ * @param int $runId  directory_sync_runs.id
+ * @param string $action  what happened: 'create', 'update', 'adopt', 'unchanged', 'deactivate',
+ *     'conflict', 'skip' or 'error'
+ * @param ?int $userId  users.id it happened to; null when there is no record (yet)
+ * @param array $p  the person - only username and name are read
+ * @param string $detail  plain-English explanation, cut to 1000 characters
+ */
 function dsyncLogEntry(PDO $conn, int $runId, string $action, ?int $userId, array $p, string $detail = ''): void
 {
     try {
@@ -475,6 +537,7 @@ function dsyncLogEntry(PDO $conn, int $runId, string $action, ?int $userId, arra
 /**
  * Run a sync.
  *
+ * @param array $provider  the auth_providers row being synced (its ldap_attr_* and sync_* columns)
  * @param string $mode 'live' | 'preview'
  * @return array the run row, including counts and status
  */
@@ -651,6 +714,8 @@ function directorySyncRun(PDO $conn, array $provider, string $mode = 'live', ?in
  * translation keys — the same choice the rest of the detail text already makes.
  * A column with no entry here falls back to itself, so adding a field to the
  * sync can never make the log throw.
+ *
+ * @param string $col  a users column name, e.g. 'job_title'
  */
 function dsyncFieldLabel(string $col): string
 {
@@ -674,6 +739,8 @@ function dsyncFieldLabel(string $col): string
  * "Office: (empty)" for everybody who has no office would bury the fields that
  * do carry something. An account with nothing but a name says so plainly, which
  * is itself worth seeing before an import.
+ *
+ * @param array $p  the person as dsyncMapPerson() (or the CardDAV mapper) returns it
  */
 function dsyncNewPersonSummary(array $p): string
 {
@@ -686,6 +753,16 @@ function dsyncNewPersonSummary(array $p): string
     return $bits ? implode('; ', $bits) : 'No details beyond a name.';
 }
 
+/**
+ * Brings an existing person in line with the directory - the fields it owns, leaver or returner status, and the sync bookkeeping - and returns the changes in plain words.
+ *
+ * An address already held is never blanked. With $preview nothing is written.
+ * @param array $provider  the auth_providers row being synced (its ldap_attr_* and sync_* columns)
+ * @param array $existing  the person's users row as dsyncFindExisting() found it
+ * @param array $p  the person as dsyncMapPerson() (or the CardDAV mapper) returns it
+ * @param bool $preview  true to work out the changes without writing anything
+ * @writes users(display_name, job_title, department, office, phone, mobile, employee_id, email, is_active, deactivated_datetime, last_seen_in_source, sync_missed_count, is_managed, auth_provider_id, directory_username)
+ */
 function dsyncApplyToExisting(PDO $conn, array $provider, array $existing, array $p, bool $preview): string
 {
     $changes = [];
@@ -746,7 +823,13 @@ function dsyncApplyToExisting(PDO $conn, array $provider, array $existing, array
     return implode('; ', $changes);
 }
 
-/** Create a person. Returns the new id, 0 on a preview, or null on failure. */
+/**
+ * Create a person. Returns the new id, 0 on a preview, or null on failure.
+ *
+ * @param array $provider  the auth_providers row - id and tenant_id are read
+ * @param array $p  the person as dsyncMapPerson() (or the CardDAV mapper) returns it
+ * @param bool $preview  true to create nothing and return 0
+ */
 function dsyncCreate(PDO $conn, array $provider, array $p, bool $preview): ?int
 {
     if ($preview) return 0;
@@ -774,7 +857,14 @@ function dsyncCreate(PDO $conn, array $provider, array $p, bool $preview): ?int
     }
 }
 
-/** Store the directory's own id for this person, so a rename or OU move is survivable. */
+/**
+ * Store the directory's own id for this person, so a rename or OU move is survivable.
+ *
+ * @param int $providerId  auth_providers.id
+ * @param int $userId  users.id to link
+ * @param array $p  the person - guid, email, dn (or CardDAV card URL) and carddav_etag are read;
+ *     an empty guid does nothing
+ */
 function dsyncLinkIdentity(PDO $conn, int $providerId, int $userId, array $p): void
 {
     if ($p['guid'] === '') return;
@@ -811,6 +901,11 @@ function dsyncLinkIdentity(PDO $conn, int $providerId, int $userId, array $p): v
  * They are not deactivated on the spot — sync_missed_count is incremented, and
  * only somebody who has been missing for the provider's threshold number of runs
  * is marked as left. Rule 3 at the top of this file.
+ *
+ * @param array $provider  the auth_providers row - id and sync_deactivate_after are read
+ * @param array $seenUserIds  users.id of everyone this run found
+ * @param int $runId  directory_sync_runs.id to log against
+ * @param bool $preview  true to count and log without writing to users
  */
 function dsyncHandleMissing(PDO $conn, array $provider, array $seenUserIds, int $runId, bool $preview): int
 {
@@ -871,6 +966,11 @@ function dsyncHandleMissing(PDO $conn, array $provider, array $seenUserIds, int 
  * A manager OUTSIDE the synced scope is not an error: plenty of organisations
  * have people reporting to someone in an OU nobody chose to import. Those are
  * left unset and counted, rather than logged forty times.
+ *
+ * @param array $people  every mapped person this run found, as dsyncMapPerson() returns them
+ * @param array $dnToUserId  lower-cased DN => users.id for everyone matched or created this run
+ * @param int $runId  directory_sync_runs.id to log against
+ * @param bool $preview  true to work it out without writing manager_id
  */
 function dsyncResolveManagers(PDO $conn, array $people, array $dnToUserId, int $runId, bool $preview): void
 {
@@ -911,7 +1011,14 @@ function dsyncResolveManagers(PDO $conn, array $people, array $dnToUserId, int $
     }
 }
 
-/** Close a run off. */
+/**
+ * Close a run off.
+ *
+ * @param int $runId  directory_sync_runs.id
+ * @param string $status  'ok', 'stopped' or 'failed'
+ * @param array $c  the run's counts: seen, created, updated, adopted, deactivated, conflict, error
+ * @param string $message  the run's summary or error text; empty stores NULL
+ */
 function dsyncFinishRun(PDO $conn, int $runId, string $status, array $c, string $message): void
 {
     $conn->prepare(
@@ -926,7 +1033,11 @@ function dsyncFinishRun(PDO $conn, int $runId, string $status, array $c, string 
     ]);
 }
 
-/** Read a run back. */
+/**
+ * Read a run back.
+ *
+ * @param int $runId  directory_sync_runs.id
+ */
 function dsyncGetRun(PDO $conn, int $runId): array
 {
     $s = $conn->prepare("SELECT * FROM directory_sync_runs WHERE id = ?");

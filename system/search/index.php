@@ -41,9 +41,9 @@ if (!isset($_SESSION['analyst_id'])) {
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.search.heading')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.search.heading'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         /* System module accent — same pinning as the other System screens, and
            for the same reason: System's dark accent is a LIGHT colour, so
@@ -118,7 +118,7 @@ if (!isset($_SESSION['analyst_id'])) {
         .srch-muted { color: var(--text-faint, #9ca3af); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="search">
     <?php include '../includes/header.php'; ?>
@@ -135,7 +135,7 @@ if (!isset($_SESSION['analyst_id'])) {
         </div>
 
         <div class="srch-panel">
-            <h3><?php echo htmlspecialchars(t('system.search.index_heading')); ?></h3>
+            <h3 id="index"><?php echo htmlspecialchars(t('system.search.index_heading')); ?></h3>
             <div id="statusBody" class="srch-muted"><?php echo htmlspecialchars(t('common.loading')); ?></div>
             <div class="srch-progress" id="progress"><span id="progressBar"></span></div>
             <div class="srch-status" id="rebuildStatus"></div>
@@ -342,6 +342,6 @@ if (!isset($_SESSION['analyst_id'])) {
 
         loadStatus();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

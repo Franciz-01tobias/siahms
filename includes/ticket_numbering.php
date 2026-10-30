@@ -69,6 +69,12 @@ class TicketNumbering
     /** @var array|null cached settings; a class property so forget() can clear it */
     private static $cache = null;
 
+    /**
+     * The saved numbering settings over the built-in defaults, read once and
+     * cached for the request. Without a settings table the defaults are returned.
+     *
+     * @reads system_settings - the numbering keys named in DEFAULTS
+     */
     public static function settings(PDO $conn): array
     {
         if (self::$cache !== null) {
@@ -102,12 +108,17 @@ class TicketNumbering
     /** @var array|null test/preview override, bypassing system_settings */
     private static $override = null;
 
-    /** Run with a specific configuration — used by the live preview and tests. */
+    /**
+     * Run with a specific configuration — used by the live preview and tests.
+     *
+     * @param ?array $settings  numbering settings keyed as in DEFAULTS, laid over the defaults; null goes back to the saved settings
+     */
     public static function withSettings(?array $settings): void
     {
         self::$override = $settings;
     }
 
+    /** The settings to number with: a withSettings() override over the defaults when one is set, otherwise settings(). */
     private static function config(PDO $conn): array
     {
         return self::$override !== null
@@ -172,6 +183,9 @@ class TicketNumbering
      *
      * Shared by the collision jump above and by applyRenumber(), so there is one
      * statement in the codebase that decides what "wind a counter on" means.
+     *
+     * @param string $key  the counter (ticket_number_counters.counter_key), from counterKey()
+     * @param int $value  the lowest next_value the counter may hold afterwards
      */
     private static function windCounterTo(PDO $conn, string $key, int $value): void
     {
@@ -200,6 +214,11 @@ class TicketNumbering
      *
      * 🔑 `{####}` pads to at least four digits and NEVER truncates — the width
      * is a floor, so an install that outgrows it just gets longer numbers.
+     *
+     * @param string $format  the number format, e.g. 'INC-{YYYY}-{######}'
+     * @param int $seq  the sequence number for the {#...} token
+     * @param ?int $ticketTypeId  the ticket type, for {TYPE}; null renders it empty
+     * @param ?DateTimeImmutable $at  the date for {YYYY}, {YY}, {MM} and {DD}; null means now (UTC)
      */
     public static function render(string $format, int $seq, ?PDO $conn = null, ?int $ticketTypeId = null, ?DateTimeImmutable $at = null, ?int $tenantId = null): string
     {
@@ -234,6 +253,8 @@ class TicketNumbering
      * Derived from the name rather than stored: an install that never uses
      * {TYPE} should not have to fill in a column, and one that does gets
      * something sensible without configuring anything. "Incident" -> INC.
+     *
+     * @param ?int $ticketTypeId  the ticket type (ticket_types.id); null or 0 gives ''
      */
     private static function typeCode(?PDO $conn, ?int $ticketTypeId): string
     {
@@ -329,6 +350,8 @@ class TicketNumbering
      * Separate from companyCode() so the settings screen can show somebody the
      * code they are about to get before anything is saved, using the very same
      * rule that will be applied for real.
+     *
+     * @param array $tenant  a tenants row: ticket_code, slug and name are read, in that order of preference
      */
     public static function codeFor(array $tenant): string
     {
@@ -345,7 +368,11 @@ class TicketNumbering
         return substr($clean, 0, 3);
     }
 
-    /** Letters and digits, upper case, at most 12 — the shape a code may take. */
+    /**
+     * Letters and digits, upper case, at most 12 — the shape a code may take.
+     *
+     * @param string $raw  the code as typed
+     */
     public static function cleanCode(string $raw): string
     {
         return substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $raw)), 0, 12);
@@ -393,6 +420,9 @@ class TicketNumbering
      * this safe: the read and the increment are one statement, so two tickets
      * created in the same instant cannot take the same number. A SELECT then an
      * UPDATE would race, and the collision would only appear under load.
+     *
+     * @param array $cfg  the numbering settings, as from config()
+     * @param ?int $ticketTypeId  the ticket type, for the per-type counter
      */
     private static function claimNext(PDO $conn, array $cfg, ?int $ticketTypeId, ?int $tenantId): int
     {
@@ -423,6 +453,10 @@ class TicketNumbering
      * The reset period is part of the KEY rather than a stored date: a yearly
      * reset is simply a different counter each year, so nothing has to notice
      * midnight on the 31st of December or run a job to zero anything.
+     *
+     * @param array $cfg  the numbering settings (ticket_number_scope, ticket_number_reset)
+     * @param ?int $ticketTypeId  the ticket type, for the per-type scope
+     * @param ?DateTimeImmutable $at  the ticket's date, for a yearly or monthly reset; null means now (UTC)
      */
     public static function counterKey(array $cfg, ?int $ticketTypeId, ?int $tenantId, ?DateTimeImmutable $at = null): string
     {
@@ -452,6 +486,8 @@ class TicketNumbering
      * 🔑 History counts. A number that once belonged to a renumbered ticket must
      * never be handed to a different one, or a reply to an old email would land
      * on somebody else's ticket. That is worse than not matching at all.
+     *
+     * @param string $number  a ticket number as it would be stored
      */
     public static function inUse(PDO $conn, string $number): bool
     {
@@ -475,6 +511,8 @@ class TicketNumbering
      * This is what makes renumbering safe. It is the same principle merges
      * already use (`resolveMergedTicket`): an old identifier keeps working
      * forever, because the emails quoting it do.
+     *
+     * @param string $number  a ticket number, current or one a ticket used to have
      */
     public static function findTicketId(PDO $conn, string $number): ?int
     {
@@ -515,6 +553,9 @@ class TicketNumbering
     /**
      * What the next few numbers would look like under a given configuration,
      * without writing anything. Drives the live preview in settings.
+     *
+     * @param array $cfg  numbering settings to preview, laid over DEFAULTS - may be unsaved
+     * @param int $count  how many numbers to show
      */
     public static function preview(array $cfg, int $count = 3): array
     {
@@ -543,6 +584,8 @@ class TicketNumbering
     /**
      * Sanity-check a format before it is saved.
      *
+     * @param string $format  the number format to check
+     * @param string $scope  the counting scope it will be used with: 'global', 'per_type' or 'per_company'
      * @return string[] problems, empty when the format is usable
      */
     public static function validateFormat(string $format, string $scope = "global"): array
@@ -608,6 +651,7 @@ class TicketNumbering
      * @throws Exception if the plan would produce a number twice, or reuse a
      *                   number another ticket has retired.
      *
+     * @param array $cfg  the numbering settings to renumber to, laid over DEFAULTS; must be sequential
      * @param ?array $rows the tickets to plan over. Defaults to ALL of them,
      *        which is what the tool does; tests pass a set of their own so a
      *        run cannot rewrite the real estate.
@@ -707,6 +751,8 @@ class TicketNumbering
      * type was deleted years ago is not one of them.
      *
      * So the plan is checked for what it IS, not for how it was built.
+     *
+     * @param array $planned  the 'planned' list from planRenumber(): [{id, from, to}, ...]
      */
     private static function assertPlanSafe(PDO $conn, array $planned): void
     {
@@ -755,6 +801,8 @@ class TicketNumbering
      *
      * ⚠️ ONE TRANSACTION for the whole run. A half-renumbered estate would have
      * two schemes in it and a counter that matched neither.
+     *
+     * @param array $plan  the result of planRenumber() - its 'planned' and 'seqs' are used
      */
     public static function applyRenumber(PDO $conn, array $plan): void
     {

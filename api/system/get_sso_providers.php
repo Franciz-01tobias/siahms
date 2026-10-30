@@ -12,6 +12,7 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/admin_api_guard.php'; // System admins only (issue #34)
 require_once '../../includes/functions.php';
+require_once '../../includes/sso_identity.php';
 
 header('Content-Type: application/json');
 
@@ -23,9 +24,26 @@ if (!isset($_SESSION['analyst_id'])) {
 try {
     $conn = connectToDatabase();
 
+    // 🔴 The #155 columns only once Database Verification has added them. A
+    // query naming a missing column fails, and this page reads a failure as
+    // "No providers yet". Until then, report what the old single switch meant.
+    $jitCols = ssoJitColumnsReady($conn)
+        ? 'p.auto_create_analysts, p.analyst_fallback_mode, p.profile_sync_mode'
+        : "p.auto_create_users AS auto_create_analysts, 'block' AS analyst_fallback_mode, 'never' AS profile_sync_mode";
+    $claimColsJit = ssoJitCompanyReady($conn) ? 'p.jit_company_access' : "'all' AS jit_company_access";
+    // And the claim-mapping columns (3.5.0).
+    require_once '../../includes/sso_claims.php';
+    $claimCols = ssoClaimsReady($conn)
+        ? 'p.oidc_group_claim, p.oidc_analyst_group, p.oidc_admin_group, p.oidc_groups_last_seen'
+        : 'NULL AS oidc_group_claim, NULL AS oidc_analyst_group, NULL AS oidc_admin_group, NULL AS oidc_groups_last_seen';
+    // Same for the GH #147 portal routing columns.
+    $portalCols = ssoPortalRoutingColumnsReady($conn)
+        ? 'p.portal_email_domains, p.portal_show_button'
+        : 'NULL AS portal_email_domains, 1 AS portal_show_button';
+
     $stmt = $conn->query(
         "SELECT p.id, p.display_name, p.protocol, p.issuer_url, p.client_id, p.client_secret,
-                p.scopes, p.enabled, p.auto_create_users, p.require_verified_email,
+                p.scopes, p.enabled, p.auto_create_users, $jitCols, $portalCols, $claimCols, $claimColsJit, p.require_verified_email,
                 p.default_modules, p.sort_order, p.tenant_id, t.name AS tenant_name,
                 p.ldap_host, p.ldap_port, p.ldap_encryption, p.ldap_bind_dn, p.ldap_bind_password,
                 p.ldap_base_dn, p.ldap_user_filter, p.ldap_attr_username, p.ldap_attr_email,
@@ -50,8 +68,23 @@ try {
             'scopes'            => $r['scopes'],
             'enabled'           => (int)$r['enabled'],
             'auto_create_users' => (int)$r['auto_create_users'],
+            'auto_create_analysts' => (int)($r['auto_create_analysts'] ?? 0),
+            'analyst_fallback_mode' => $r['analyst_fallback_mode'] ?? 'confirm',
             'require_verified_email' => (int)$r['require_verified_email'],
+            'profile_sync_mode'      => $r['profile_sync_mode'] ?? 'never',
+            // GH #147: newline-separated, as stored; the dialog shows one per line.
+            'portal_email_domains'   => $r['portal_email_domains'] ?? null,
+            'portal_show_button'     => (int)($r['portal_show_button'] ?? 1),
             'default_modules'   => $r['default_modules'],
+            'jit_company_access'    => $r['jit_company_access'] ?: 'all',
+            // SSO claim mapping (3.5.0) - see includes/sso_claims.php.
+            'oidc_group_claim'      => $r['oidc_group_claim'],
+            'oidc_analyst_group'    => $r['oidc_analyst_group'],
+            'oidc_admin_group'      => $r['oidc_admin_group'],
+            // Group -> team rows, and every group seen at sign-in for the dropdowns.
+            'team_mappings'         => $r['protocol'] === 'oidc' ? ssoTeamMappings($conn, (int)$r['id']) : [],
+            'groups_seen'           => $r['protocol'] === 'oidc' ? ssoSeenGroups($conn, (int)$r['id']) : [],
+            'oidc_groups_last_seen' => $r['oidc_groups_last_seen'] ? json_decode($r['oidc_groups_last_seen'], true) : null,
             'sort_order'        => (int)$r['sort_order'],
             // Which client company owns this IdP (null = global / MSP-internal).
             'tenant_id'         => isset($r['tenant_id']) ? (int)$r['tenant_id'] : null,

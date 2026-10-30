@@ -53,7 +53,11 @@ function assetLocationScope(PDO $conn, int $tenantId, string $alias = 'l'): arra
     return [" AND ((" . substr($sql, 5) . ") OR $shared = 1)", $args];
 }
 
-/** Is this location shared? False for a missing row or an un-verified install. */
+/**
+ * Is this location shared? False for a missing row or an un-verified install.
+ *
+ * @param int $locationId  the asset_locations id to check
+ */
 function assetLocationIsShared(PDO $conn, int $locationId): bool {
     if (!assetLocationsSharedReady($conn)) {
         return false;

@@ -20,6 +20,12 @@ if (!isset($_SESSION['analyst_id'])) {
 requireModuleAccessJson('cmdb');
 requireCapabilityJson(Cap::CMDB_CLASSES);   // settings tab — see docs/design/rbac.md
 
+/**
+ * Turns a class name into a lower-case key of letters, digits and underscores, falling
+ * back to 'class' when nothing is left.
+ *
+ * @param mixed $name  the class name as typed
+ */
 function slugify($name) {
     $slug = strtolower(trim($name));
     $slug = preg_replace('/[^a-z0-9]+/', '_', $slug);

@@ -86,6 +86,8 @@ function publicBaseUrlSetting(PDO $conn): string
  * `.../freeitsm-app/freeitsm-app/...` for anyone who typed the sub-path in. So the
  * sub-path is added only when it is not already on the end, which is the same guard
  * messagingWebhookUrl() arrived at for the same reason.
+ *
+ * @param string $root  the configured public address, with or without the app's sub-path
  */
 function publicUrlWithAppPath(string $root): string
 {
@@ -96,6 +98,20 @@ function publicUrlWithAppPath(string $root): string
         return $root;
     }
     return $root . $app;
+}
+
+/** The per-request cache behind publicBaseUrl(); see publicBaseUrlForget(). */
+function &publicBaseUrlCache(): ?string
+{
+    static $root = null;
+    return $root;
+}
+
+/** Forget the cached root - after the setting is saved, or between test cases. */
+function publicBaseUrlForget(): void
+{
+    $root = &publicBaseUrlCache();
+    $root = null;
 }
 
 /**
@@ -109,7 +125,7 @@ function publicUrlWithAppPath(string $root): string
  */
 function publicBaseUrl(PDO $conn): string
 {
-    static $root = null;
+    $root = &publicBaseUrlCache();
     if ($root !== null) {
         return $root;
     }
@@ -121,24 +137,34 @@ function publicBaseUrl(PDO $conn): string
     }
 
     if (!empty($_SERVER['HTTP_HOST'])) {
-        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-              || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        // The ONE answer to "is this request HTTPS?" (GH #152): it honours a
+        // proxy's X-Forwarded-Proto only when TRUST_PROXY_HTTPS says the proxy
+        // is ours, takes the first hop of a chained header, and counts port 443.
+        // This used to trust the header outright, so a client could choose the
+        // scheme of a link put in somebody else's inbox, and a sign-in link and
+        // an emailed link could disagree about the same site.
+        require_once __DIR__ . '/session_security.php';
+        $https = requestIsHttps();
         // The Host header is attacker-controllable and this value ends up in mail
         // sent to other people, so only characters a hostname may legally contain
         // survive. A link we put in somebody else's inbox is not somewhere to
         // reflect an unchecked header.
         $host = preg_replace('/[^A-Za-z0-9\.\-:]/', '', (string)$_SERVER['HTTP_HOST']);
         if ($host !== '') {
-            $root = ($https ? 'https://' : 'http://') . $host . rtrim(BASE_URL, '/');
+            $root = ($https ? 'https://' : 'http://') . $host . rtrim(defined('BASE_URL') ? BASE_URL : '/', '/');
             return $root;
         }
     }
 
-    $root = rtrim(BASE_URL, '/');
+    $root = rtrim(defined('BASE_URL') ? BASE_URL : '/', '/');
     return $root;
 }
 
-/** An absolute URL for an app-relative path, e.g. 'self-service/tickets.php?id=9'. */
+/**
+ * An absolute URL for an app-relative path, e.g. 'self-service/tickets.php?id=9'.
+ *
+ * @param string $path  an app-relative path, e.g. 'self-service/tickets.php?id=9'; a leading slash is ignored
+ */
 function publicAbsoluteUrl(PDO $conn, string $path): string
 {
     return publicBaseUrl($conn) . '/' . ltrim($path, '/');

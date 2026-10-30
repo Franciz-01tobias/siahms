@@ -10,10 +10,17 @@
  *   t('common.welcome', {name: 'Ed'}) -> uses {name} placeholder substitution
  *
  * Missing keys return the key itself so unfilled strings are visible in the UI.
+ *
+ * @wiki Internationalisation
  */
 (function () {
     'use strict';
 
+    /**
+     * Fills {name} placeholders from params and turns a literal \n into a real line break.
+     *
+     * A placeholder with no matching param is left as it is.
+     */
     function interpolate(s, params) {
         // A translation authored with a literal "\n" (single-quoted PHP strings
         // don't turn \n into a real newline) should still render as a line break.
@@ -29,6 +36,11 @@
         });
     }
 
+    /**
+     * Translates a dotted key from window.translations and fills its placeholders (exposed as window.t).
+     *
+     * @return the translation, or the key itself when it is missing
+     */
     function lookup(key, params) {
         if (typeof key !== 'string') return key;
         var translations = window.translations || {};

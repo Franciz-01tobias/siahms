@@ -30,6 +30,12 @@
     // for the first frame every time.
     let moveCompanies = [];
 
+    /**
+     * Sets the page's menu configuration, loads the companies for "Move to company" and wires the
+     * document listeners once.
+     *
+     * Hides "Create subtask" (and the separator before it) when the page gives no onCreateSubtask.
+     */
     function init(config) {
         cfg = Object.assign({
             targetSelector: '.task-card',
@@ -82,12 +88,15 @@
         }
     }
 
+    /** Closes the menu. */
     function close() { closeCtx(); }
+    /** Whether the menu is showing. */
     function isOpen() {
         const menu = cfg && document.getElementById(cfg.menuId);
         return !!menu && menu.style.display === 'block';
     }
 
+    /** Opens the menu when a task element is right-clicked, and closes it on a right-click anywhere else. */
     function onDocCtx(e) {
         if (!cfg) return;
         const target = e.target.closest(cfg.targetSelector);
@@ -95,6 +104,10 @@
         else closeCtx();
     }
 
+    /**
+     * Opens the menu for a task at the pointer, kept inside the window, with submenus flipped when
+     * they would run off screen.
+     */
     function openCtx(e, taskId) {
         e.preventDefault();
         const task = cfg.getTask(taskId);
@@ -113,6 +126,7 @@
         menu.classList.toggle('flip-sub-v', e.clientY > window.innerHeight * 0.55);
     }
 
+    /** Hides the menu and forgets the task it was opened on. */
     function closeCtx() {
         if (!cfg) return;
         const menu = document.getElementById(cfg.menuId);
@@ -120,15 +134,25 @@
         ctxTaskId = null;
     }
 
+    /**
+     * Fills the submenus for a task - analyst, team, status, company, priority and due-date shortcuts,
+     * each with its current value ticked.
+     *
+     * Also sets the Complete / Reopen label and hides Log time, Repeat and Move to company where they
+     * do not apply.
+     */
     function buildSubmenus(task) {
         const lookups = cfg.getLookups();
+        /** Translates a key under tasks.*. */
         const T = (k) => window.t('tasks.' + k);
 
+        /** Returns one submenu option for a field and value, ticked when it is the task's current value. */
         const opt = (field, value, label, current, swatch) =>
             `<div class="ctx-sub-item${current ? ' current' : ''}" data-field="${field}" data-value="${escAttr(value)}">
                 ${swatch || ''}<span class="ctx-sub-label">${esc(label)}</span>
                 ${current ? '<span class="ctx-check">✓</span>' : ''}
             </div>`;
+        /** Returns a colour swatch for a status or priority option. */
         const sw = c => `<span class="ctx-swatch" style="background:${escAttr(c || '#888')}"></span>`;
 
         const elA = document.getElementById('ctxAnalyst');
@@ -219,6 +243,11 @@
         }
     }
 
+    /**
+     * Runs a menu choice - a submenu value is saved (or the task moved company), and the actions
+     * (subtask, open, repeat, assign to me, complete / reopen, log time, copy link, delete) are
+     * carried out or handed to the page.
+     */
     function onMenuClick(e) {
         const subOpt = e.target.closest('.ctx-sub-item');
         if (subOpt) {
@@ -336,6 +365,7 @@
         }
     }
 
+    /** Saves one field of the menu's task through save.php, then toasts and calls onUpdate. */
     async function setField(field, value) {
         const id = ctxTaskId;
         closeCtx();
@@ -370,6 +400,7 @@
         div.textContent = String(text);
         return div.innerHTML;
     }
+    /** Escapes a value for use inside a double-quoted HTML attribute. */
     function escAttr(value) {
         return String(value == null ? '' : value)
             .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');

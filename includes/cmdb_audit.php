@@ -59,7 +59,14 @@ function cmdbRunAudit(PDO $conn, int $analystId): array {
     ];
 }
 
-/** Shape every check returns, so the UI can render them uniformly. */
+/**
+ * Shape every check returns, so the UI can render them uniformly.
+ *
+ * @param string $key  the check's identifier, e.g. 'broken_reference', 'stale'
+ * @param string $severity  'error', 'warning' or 'info'
+ * @param int $count  the true number of findings, which may exceed the items listed
+ * @param array $items  up to CMDB_AUDIT_MAX_ITEMS finding rows (object_id, object_name, class_name, detail)
+ */
 function cmdbAuditResult(string $key, string $severity, int $count, array $items): array {
     return [
         'key'      => $key,
@@ -228,7 +235,11 @@ function cmdbAuditNoImpactEdges(PDO $conn): array {
     return cmdbAuditResult('no_impact_edges', 'warning', $configured ? 0 : 1, []);
 }
 
-/** Normalise ids to ints for the JSON. */
+/**
+ * Normalise ids to ints for the JSON.
+ *
+ * @param PDOStatement $st  an executed finding query whose rows include an object_id column
+ */
 function cmdbAuditRows(PDOStatement $st): array {
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) { $r['object_id'] = (int) $r['object_id']; }

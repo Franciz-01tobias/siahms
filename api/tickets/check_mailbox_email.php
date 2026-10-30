@@ -51,6 +51,24 @@ try {
         exit;
     }
 
+    /* TRAP: every open ticket inbox polls every mailbox every minute, so five
+       analysts meant five checks a minute - and two landing together both
+       fetched the same unread email. The second found it already imported and
+       logged "import: success, ticket_id: null" (GH #183); had both looked
+       before either saved, they would have made TWO tickets. So: one check per
+       mailbox at a time (the lock is released when this request's connection
+       closes), and an automatic poll stands down if any check of this mailbox
+       finished in the last 50 seconds. A manual Check is never throttled. */
+    $lock = $conn->prepare("SELECT GET_LOCK(CONCAT('freeitsm_mbx_', LEFT(SHA1(DATABASE()), 12), '_', ?), 0)");
+    $lock->execute([(int)$mailboxId]);
+    if ((int)$lock->fetchColumn() !== 1) {
+        mailboxCheckStandDown($mailbox, 'busy', 'Another check of ' . $mailbox['target_mailbox'] . ' is already running');
+    }
+    if (!empty($data['auto']) && !empty($mailbox['last_checked_datetime'])
+        && time() - strtotime($mailbox['last_checked_datetime'] . ' UTC') < 50) {
+        mailboxCheckStandDown($mailbox, 'recent', $mailbox['target_mailbox'] . ' was checked less than a minute ago');
+    }
+
     // Determine provider + auth mode
     $provider = $mailbox['provider'] ?? 'microsoft';
     $authMode = $mailbox['auth_mode'] ?? 'delegated';
@@ -175,6 +193,10 @@ try {
         'rejected_action' => $rejectedAction,
     ];
 
+    // Attachment size limits and what an oversized email does (GH #170) - the
+    // install defaults, or this mailbox's own. See includes/attachment_limits.php.
+    $oversizeRules = oversizeRules($conn, $mailbox);
+
     // Save emails to database
     $savedCount = 0;
     $rejectedCount = 0;
@@ -223,8 +245,57 @@ try {
             continue;
         }
 
+        // ── Size check (GH #170) ─────────────────────────────────────────────
+        // Attachments are fetched HERE, before the email is imported, because
+        // "reject the whole email" has to be decided before a ticket exists. The
+        // same fetched list is handed on to saveEmailToDatabase(), so nothing is
+        // downloaded twice. An email already imported is left to the de-dup below.
+        $prefetched = null;
+        $sizePlan = null;
+        $sizeAtts = [];
+        try {
+            [$prefetched, $sizeAtts] = oversizeMeasure($conn, $email, $accessToken);
+            if ($sizeAtts) $sizePlan = oversizePlan($sizeAtts, $oversizeRules);
+        } catch (Exception $measureEx) {
+            $prefetched = null;   // measuring failed: import exactly as before, and say so
+            $errors[] = 'Could not measure attachments on email from ' . $fromAddress . ': ' . $measureEx->getMessage();
+        }
+
+        if ($sizePlan && $sizePlan['reject']) {
+            $processingLog = ['steps' => [], 'mailbox_settings' => $mailboxSettings];
+            $processingLog['steps'][] = oversizeLogStep($sizeAtts, $sizePlan, $oversizeRules, 'rejected');
+            $postAction = ['step' => 'post_action', 'action' => $rejectedAction];
+            try {
+                $httpCode = handleEmailAfterProcessing($accessToken, $email['id'], $rejectedAction, null, $provider, $mailbox);
+                $postAction['result'] = 'success';
+                $postAction['http_code'] = $httpCode;
+            } catch (Exception $delEx) {
+                $errors[] = 'Failed to handle oversized email from ' . $fromAddress . ': ' . $delEx->getMessage();
+                $postAction['result'] = 'error';
+                $postAction['error'] = $delEx->getMessage();
+            }
+            $processingLog['steps'][] = $postAction;
+            foreach (oversizeNotify($conn, $mailbox, $oversizeRules, $fromAddress, $fromName, $subject, $sizeAtts, $sizePlan, 'rejected') as $s) {
+                $processingLog['steps'][] = $s;
+            }
+            $rejectedCount++;
+            $activityEntries[] = [
+                'action' => 'rejected',
+                'from_address' => $fromAddress,
+                'from_name' => $fromName,
+                'subject' => $subject,
+                'reason' => mb_substr('Too large: ' . oversizeSummary($sizeAtts, $sizePlan), 0, 255),
+                'ticket_id' => null,
+                'processing_log' => json_encode($processingLog)
+            ];
+            continue;
+        }
+
         try {
             $processingLog = ['steps' => [], 'mailbox_settings' => $mailboxSettings];
+            if ($sizePlan && $sizePlan['over']) {
+                $processingLog['steps'][] = oversizeLogStep($sizeAtts, $sizePlan, $oversizeRules, 'stripped');
+            }
 
             if ($hasWhitelist) {
                 $domain = explode('@', $fromAddress)[1] ?? '';
@@ -235,16 +306,28 @@ try {
                 ];
             }
 
-            $importResult = saveEmailToDatabase($conn, $email, $accessToken, $mailboxId);
-            $ticketId = $importResult['ticket_id'] ?? $importResult;
+            $importResult = saveEmailToDatabase($conn, $email, $accessToken, $mailboxId, $prefetched,
+                                                $sizePlan['strip'] ?? [], (int)$oversizeRules['max_bytes']);
+            $ticketId = $importResult['ticket_id'] ?? null;
             $isNewTicket = $importResult['is_new_ticket'] ?? false;
-            $processingLog['steps'][] = [
+            // Already in the database (GH #183): an earlier check imported it and
+            // the email is still in the mailbox - usually because the action after
+            // importing failed that time. Nothing new is saved; it is logged as
+            // what it is, with the ticket it went to, and the action below runs
+            // again so it does not come back on every check.
+            $alreadyImported = !empty($importResult['already_imported']);
+            $processingLog['steps'][] = $alreadyImported ? [
+                'step' => 'import',
+                'result' => 'already_imported',
+                'details' => 'This email was imported by an earlier check; nothing new was saved',
+                'ticket_id' => $ticketId ?: null,
+            ] : [
                 'step' => 'import',
                 'result' => 'success',
                 'ticket_id' => $ticketId ?: null,
                 'is_new_ticket' => $isNewTicket
             ];
-            $savedCount++;
+            if (!$alreadyImported) $savedCount++;
 
             // Handle imported email according to imported_action setting
             $postAction = ['step' => 'post_action', 'action' => $importedAction];
@@ -276,12 +359,22 @@ try {
                 $processingLog['steps'][] = $templateStep;
             }
 
+            // Attachments removed for size: tell whoever the settings say, and
+            // record it on the log row so it is findable without opening it.
+            $sizeReason = null;
+            if ($sizePlan && $sizePlan['over'] && !$alreadyImported) {
+                foreach (oversizeNotify($conn, $mailbox, $oversizeRules, $fromAddress, $fromName, $subject, $sizeAtts, $sizePlan, 'stripped', $ticketId ? (int)$ticketId : null) as $s) {
+                    $processingLog['steps'][] = $s;
+                }
+                $sizeReason = mb_substr('Attachments removed (too large): ' . oversizeSummary($sizeAtts, $sizePlan), 0, 255);
+            }
+
             $activityEntries[] = [
-                'action' => 'imported',
+                'action' => $alreadyImported ? 'already_imported' : 'imported',
                 'from_address' => $fromAddress,
                 'from_name' => $fromName,
                 'subject' => $subject,
-                'reason' => null,
+                'reason' => $sizeReason,
                 'ticket_id' => $ticketId ?: null,
                 'processing_log' => json_encode($processingLog)
             ];
@@ -338,6 +431,8 @@ try {
 
 /**
  * Get mailbox configuration from database
+ *
+ * @param mixed $mailboxId  the target_mailboxes id to load
  */
 function getMailboxConfig($conn, $mailboxId) {
     $sql = "SELECT * FROM target_mailboxes WHERE id = ?";
@@ -356,6 +451,9 @@ function getMailboxConfig($conn, $mailboxId) {
 
 /**
  * Get valid access token (refresh if expired)
+ *
+ * @param mixed $mailbox  the target_mailboxes row, decrypted (id and the azure_* columns are used for a refresh)
+ * @param mixed $tokenData  the mailbox's decoded token_data: access_token, refresh_token, expires_at (Unix time)
  */
 function getValidAccessToken($conn, $mailbox, $tokenData) {
     if (!$tokenData || !isset($tokenData['access_token'])) {
@@ -378,6 +476,9 @@ function getValidAccessToken($conn, $mailbox, $tokenData) {
 
 /**
  * Refresh the access token using refresh token
+ *
+ * @param mixed $mailbox  the target_mailboxes row, decrypted - azure_tenant_id, azure_client_id/secret, oauth_scopes
+ * @param mixed $refreshToken  the OAuth refresh token to trade for a new access token
  */
 function refreshAccessToken($mailbox, $refreshToken) {
     $tokenUrl = 'https://login.microsoftonline.com/' . $mailbox['azure_tenant_id'] . '/oauth2/v2.0/token';
@@ -429,6 +530,9 @@ function refreshAccessToken($mailbox, $refreshToken) {
 
 /**
  * Save token data to database
+ *
+ * @param mixed $mailboxId  the target_mailboxes id to update
+ * @param mixed $tokenData  the token array to store (encrypted) in token_data, as built by refreshAccessToken()
  */
 function saveTokenData($conn, $mailboxId, $tokenData) {
     // Encrypted at rest — see ENCRYPTED_MAILBOX_COLUMNS; decryptMailboxRow() reverses it.
@@ -460,6 +564,7 @@ function saveTokenData($conn, $mailboxId, $tokenData) {
  * the reason buried in an errors array nobody was reading. A check that fetched
  * mail it could not turn into tickets has not worked, whatever its status said.
  *
+ * @param mixed $mailboxId  the target_mailboxes id the check was for
  * @param ?string $error null on a clean run; the reason otherwise.
  */
 function recordMailboxCheckOutcome($conn, $mailboxId, ?string $error = null) {
@@ -485,6 +590,10 @@ function recordMailboxCheckOutcome($conn, $mailboxId, ?string $error = null) {
  *
  * One function rather than a recording line beside each of the eight exits,
  * because the exit somebody forgets to update is exactly the silent one.
+ *
+ * @param mixed $mailboxId  the target_mailboxes id the check was for
+ * @param string $error  the reason, recorded on the mailbox and sent back as the error
+ * @param array $extra  more fields to add to the JSON reply
  */
 function failMailboxCheck($conn, $mailboxId, string $error, array $extra = []) {
     recordMailboxCheckOutcome($conn, $mailboxId, $error);
@@ -493,7 +602,29 @@ function failMailboxCheck($conn, $mailboxId, string $error, array $extra = []) {
 }
 
 /**
+ * A check that did not run because it did not need to: another check of this
+ * mailbox is running, or (for an automatic poll) one finished moments ago.
+ * Not an error and not a check, so the mailbox's last-checked time and last
+ * error are left exactly as they were.
+ *
+ * @param array $mailbox  the target_mailboxes row
+ * @param string $why  'busy' or 'recent'
+ * @param string $message  what to say
+ */
+function mailboxCheckStandDown(array $mailbox, string $why, string $message) {
+    echo json_encode([
+        'success' => true,
+        'skipped' => $why,
+        'message' => $message,
+        'details' => ['emails_saved' => 0, 'mailbox' => $mailbox['target_mailbox']],
+    ]);
+    exit;
+}
+
+/**
  * Update last checked datetime (clean run).
+ *
+ * @param mixed $mailboxId  the target_mailboxes id the check was for
  */
 function updateLastChecked($conn, $mailboxId) {
     recordMailboxCheckOutcome($conn, $mailboxId, null);
@@ -501,6 +632,9 @@ function updateLastChecked($conn, $mailboxId) {
 
 /**
  * Retrieve emails from Microsoft Graph API
+ *
+ * @param mixed $accessToken  the mailbox's Microsoft Graph access token, from getValidAccessToken()
+ * @param mixed $mailbox  the target_mailboxes row - email_folder and max_emails_per_check are read
  */
 function getEmails($accessToken, $mailbox) {
     // The configured folder is a NAME a person typed. Graph wants an id (or one of
@@ -550,6 +684,9 @@ function getEmails($accessToken, $mailbox) {
 
 /**
  * Delete an email from the mailbox via Microsoft Graph API
+ *
+ * @param mixed $accessToken  the mailbox's Microsoft Graph access token, from getValidAccessToken()
+ * @param mixed $messageId  the Graph message id to delete for good
  */
 function deleteEmailFromMailbox($accessToken, $messageId) {
     $graphUrl = 'https://graph.microsoft.com/v1.0' . mailboxGraphBase() . '/messages/' . $messageId;
@@ -587,6 +724,9 @@ function deleteEmailFromMailbox($accessToken, $messageId) {
  * two disagreed: Verify resolved "freeitsm" happily while the code that actually
  * READ the mailbox never called either of them (GH #77). One implementation now,
  * so the button and the fetch can no longer answer differently.
+ *
+ * @param mixed $accessToken  the mailbox's Microsoft Graph access token, from getValidAccessToken()
+ * @param mixed $folderName  the folder name as typed in the mailbox settings, or a well-known alias such as 'deleteditems'
  */
 function resolveMailFolderId($accessToken, $folderName) {
     return mailboxResolveFolderId($folderName,
@@ -595,6 +735,10 @@ function resolveMailFolderId($accessToken, $folderName) {
 
 /**
  * Move an email to a folder via Microsoft Graph API
+ *
+ * @param mixed $accessToken  the mailbox's Microsoft Graph access token, from getValidAccessToken()
+ * @param mixed $messageId  the Graph message id to move
+ * @param mixed $folderName  the destination folder name, or a well-known alias such as 'deleteditems'
  */
 function moveEmailToFolder($accessToken, $messageId, $folderName) {
     $destinationId = resolveMailFolderId($accessToken, $folderName);
@@ -633,6 +777,9 @@ function moveEmailToFolder($accessToken, $messageId, $folderName) {
 
 /**
  * Mark an email as read via Microsoft Graph API
+ *
+ * @param mixed $accessToken  the mailbox's Microsoft Graph access token, from getValidAccessToken()
+ * @param mixed $messageId  the Graph message id to mark as read
  */
 function markEmailAsRead($accessToken, $messageId) {
     $graphUrl = 'https://graph.microsoft.com/v1.0' . mailboxGraphBase() . '/messages/' . $messageId;
@@ -668,6 +815,13 @@ function markEmailAsRead($accessToken, $messageId) {
 /**
  * Handle email after processing based on action setting
  * Actions: 'delete' (permanent), 'move_to_deleted' (Deleted Items), 'mark_read' (leave in inbox), 'move_to_folder' (custom folder)
+ *
+ * @param mixed $accessToken  the provider access token (Graph or Gmail); unused for IMAP
+ * @param mixed $messageId  the provider's message id - the IMAP UID for a basic mailbox
+ * @param mixed $action  'delete', 'move_to_deleted', 'mark_read' or 'move_to_folder'
+ * @param mixed $folderName  the folder for 'move_to_folder'; without one the email is deleted instead (Microsoft)
+ * @param mixed $provider  'microsoft', 'google' or 'imap'
+ * @param mixed $mailbox  the target_mailboxes row; needed only for IMAP
  */
 function handleEmailAfterProcessing($accessToken, $messageId, $action, $folderName = null, $provider = 'microsoft', $mailbox = null) {
     if ($provider === 'imap') {
@@ -728,6 +882,8 @@ function generateTicketNumber($conn, ?int $tenantId = null) {
 
 /**
  * Extract ticket reference from subject
+ *
+ * @param mixed $subject  the inbound email's subject, which may carry an [SDREF:...] tag
  */
 function extractTicketReference($subject) {
     // ⚠️ FORMAT-AGNOSTIC, and it has to stay that way. This used to look for
@@ -752,6 +908,8 @@ function extractTicketReference($subject) {
  *
  * This is the single point every inbound reply passes through, which is exactly why
  * the redirect belongs here rather than at each call site.
+ *
+ * @param mixed $ticketNumber  the ticket number taken from the subject tag; old and renumbered numbers are found too
  */
 function findTicketByNumber($conn, $ticketNumber) {
     // 🔑 Looks in ticket_number_history as well as tickets (GH #71). A ticket
@@ -775,6 +933,9 @@ function findTicketByNumber($conn, $ticketNumber) {
 /**
  * Get or create user by email address
  * Returns the user ID
+ *
+ * @param mixed $email  the sender's address; lower-cased and trimmed before use
+ * @param mixed $displayName  the sender's name from the email; empty leaves an existing name alone
  */
 function getOrCreateUser($conn, $email, $displayName) {
     // Normalize email to lowercase
@@ -806,6 +967,9 @@ function getOrCreateUser($conn, $email, $displayName) {
 
 /**
  * Fetch attachments from Graph API
+ *
+ * @param mixed $accessToken  the mailbox's Microsoft Graph access token, from getValidAccessToken()
+ * @param mixed $emailId  the Graph message id whose attachments are wanted
  */
 function fetchEmailAttachments($accessToken, $emailId) {
     $graphUrl = 'https://graph.microsoft.com/v1.0' . mailboxGraphBase() . '/messages/' . $emailId . '/attachments';
@@ -838,8 +1002,12 @@ function fetchEmailAttachments($accessToken, $emailId) {
 
 /**
  * Save attachment to filesystem and database
+ *
+ * @param mixed $dbEmailId  the emails.id the attachment belongs to; also names its folder on disk
+ * @param mixed $attachment  one Graph fileAttachment: name, contentType, contentId, isInline, contentBytes (base64)
+ * @param ?int $maxBytes  the mailbox's per-attachment limit in bytes; null uses the install's
  */
-function saveAttachment($conn, $dbEmailId, $attachment) {
+function saveAttachment($conn, $dbEmailId, $attachment, ?int $maxBytes = null) {
     $attachmentId = $attachment['id'] ?? '';
     $filename = $attachment['name'] ?? 'unknown';
     $contentType = $attachment['contentType'] ?? 'application/octet-stream';
@@ -867,7 +1035,8 @@ function saveAttachment($conn, $dbEmailId, $attachment) {
         $filename,
         $emailDir,
         attachmentRejectPolicy($conn),
-        attachmentAllowedTypes($conn)
+        attachmentAllowedTypes($conn),
+        $maxBytes   // the mailbox's own limit when it has one; null = the install's
     );
 
     if (!$stored['stored']) {
@@ -912,6 +1081,10 @@ function saveAttachment($conn, $dbEmailId, $attachment) {
 
 /**
  * Rewrite CID references in email body
+ *
+ * @param mixed $bodyContent  the email's HTML body
+ * @param mixed $dbEmailId  the emails.id the attachments were saved under
+ * @param mixed $attachments  the saved attachment rows; each content_id is pointed at get_attachment.php
  */
 function rewriteCidReferences($bodyContent, $dbEmailId, $attachments) {
     foreach ($attachments as $attachment) {
@@ -943,21 +1116,29 @@ function rewriteCidReferences($bodyContent, $dbEmailId, $attachments) {
 
 /**
  * Save email to database
+ *
+ * @param mixed $email  one message in Graph's shape (id, subject, from, body, hasAttachments...); IMAP adds internet_message_id
+ * @param mixed $accessToken  the provider access token, used to fetch attachments on Microsoft
+ * @param mixed $mailboxId  the target_mailboxes id the email came in through
+ * @param ?array $prefetched  the attachment list already fetched by oversizeMeasure(); null fetches it here
+ * @param array $strip  attachments to leave out, file-attachment index => reason, from oversizePlan()
+ * @param ?int $maxBytes  the mailbox's per-attachment limit in bytes; null uses the install's
  */
-function saveEmailToDatabase($conn, $email, $accessToken, $mailboxId) {
+function saveEmailToDatabase($conn, $email, $accessToken, $mailboxId, ?array $prefetched = null, array $strip = [], ?int $maxBytes = null) {
     // De-dup / stored message id. Providers whose native message id isn't globally
     // unique (IMAP UIDs collide across mailboxes) supply an 'internet_message_id'
     // (the Message-ID header) to key on instead.
     $emailId = $email['internet_message_id'] ?? $email['id'] ?? null;
 
     // Check if email already exists
-    $checkSql = "SELECT id FROM emails WHERE exchange_message_id = ?";
+    $checkSql = "SELECT id, ticket_id FROM emails WHERE exchange_message_id = ? LIMIT 1";
     $checkStmt = $conn->prepare($checkSql);
     $checkStmt->execute([$emailId]);
     $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
 
     if ($existing) {
-        return false;
+        // Not false: the caller logged false as "import: success" with no ticket (GH #183).
+        return ['already_imported' => true, 'ticket_id' => $existing['ticket_id'] ? (int)$existing['ticket_id'] : null, 'is_new_ticket' => false];
     }
 
     // The provider-native id (Graph/Gmail message id, or IMAP UID) — used only for
@@ -1118,6 +1299,12 @@ function saveEmailToDatabase($conn, $email, $accessToken, $mailboxId) {
     // Placed here so the opening message row already exists: the search indexer
     // reads the ticket and its messages together.
     if (!empty($ticketWasCreatedHere) && $ticketId) {
+        // Confidential mailbox (discussion #62) - BEFORE the ticket is announced.
+        // This is the path a grievance emailed to HR takes, and an emailed ticket
+        // gets no department, so the mailbox is the only thing that can protect it.
+        require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
+        ticketSensitivityApplyDefaults($conn, (int)$ticketId, isset($mailboxId) ? (int)$mailboxId : null);
+
         require_once __DIR__ . '/../../includes/ticket_events.php';
         // created_by is null on purpose — nobody signed in created this, it
         // arrived. The requester's address is resolved from the linked user.
@@ -1160,7 +1347,8 @@ function saveEmailToDatabase($conn, $email, $accessToken, $mailboxId) {
     //    IMAP can't re-fetch a part after disconnecting, so they ride along with the
     //    message. (This also fixes Gmail, whose attachments a Graph-only fetch missed.)
     //  - Fetched on demand from Microsoft Graph via a second call.
-    $preloadedAttachments = $email['attachments_inline'] ?? null;
+    // Already fetched by the size check in the main loop: use that list.
+    $preloadedAttachments = $prefetched ?? ($email['attachments_inline'] ?? null);
     if (($hasAttachments || $hasCidReferences) && ($preloadedAttachments !== null || $accessToken)) {
         try {
             $graphAttachments = ($preloadedAttachments !== null)
@@ -1170,9 +1358,17 @@ function saveEmailToDatabase($conn, $email, $accessToken, $mailboxId) {
             $rejectedAttachments = [];
             $quarantinedAttachments = [];
 
+            $fileIndex = -1;
             foreach ($graphAttachments as $attachment) {
                 if (($attachment['@odata.type'] ?? '') === '#microsoft.graph.fileAttachment') {
-                    $savedAttachment = saveAttachment($conn, $dbEmailId, $attachment);
+                    // Removed by the size check (GH #170): not stored, and listed in
+                    // the note at the foot of the message, where it would have been.
+                    $fileIndex++;
+                    if (isset($strip[$fileIndex])) {
+                        $rejectedAttachments[] = ['name' => $attachment['name'] ?? 'attachment', 'reason' => $strip[$fileIndex]];
+                        continue;
+                    }
+                    $savedAttachment = saveAttachment($conn, $dbEmailId, $attachment, $maxBytes);
                     if (!$savedAttachment) continue;
 
                     // A file we would not store is reported, never dropped silently —
@@ -1258,6 +1454,8 @@ function saveEmailToDatabase($conn, $email, $accessToken, $mailboxId) {
  * Strip the quoted thread from an inbound reply
  * Relies on our own visible marker text which survives all email clients,
  * with a generic blockquote fallback
+ *
+ * @param mixed $bodyContent  the reply's HTML body, with the quoted thread still in it
  */
 function stripInboundThread($bodyContent) {
     $stripped = null;
@@ -1297,6 +1495,81 @@ function stripInboundThread($bodyContent) {
 /**
  * Log email import to system_logs
  */
+/**
+ * Fetch (or take the pre-loaded) attachments of one email and measure them.
+ * Returns [the attachment list to hand on, [['name','size'], ...] for the file
+ * attachments in order]. Sizes are the DECODED bytes where the content is here,
+ * else the size the provider reports.
+ *
+ * @param array $email  one message in Graph's shape; attachments_inline is used when the provider supplied them
+ * @param mixed $accessToken  the Graph access token, used to fetch attachments when they are not inline
+ */
+function oversizeMeasure($conn, array $email, $accessToken): array
+{
+    // Not if it is already in the database: saveEmailToDatabase() skips it anyway,
+    // and measuring it would alert and auto-reply about the same email twice.
+    $st = $conn->prepare("SELECT 1 FROM emails WHERE exchange_message_id = ? LIMIT 1");
+    $st->execute([$email['internet_message_id'] ?? $email['id'] ?? '']);
+    if ($st->fetchColumn()) return [null, []];
+
+    $hasAtt = ($email['hasAttachments'] ?? false) || preg_match('/cid:/i', $email['body']['content'] ?? '');
+    $list = $email['attachments_inline'] ?? null;
+    if ($list === null) {
+        if (!$hasAtt || !$accessToken) return [null, []];
+        $list = fetchEmailAttachments($accessToken, $email['id'] ?? '');
+    }
+    $atts = [];
+    foreach ($list as $a) {
+        if (($a['@odata.type'] ?? '') !== '#microsoft.graph.fileAttachment') continue;
+        $b64 = (string)($a['contentBytes'] ?? '');
+        $size = $b64 !== '' ? (int)floor(strlen($b64) * 3 / 4) - substr_count(substr($b64, -2), '=') : (int)($a['size'] ?? 0);
+        $atts[] = ['name' => (string)($a['name'] ?? 'attachment'), 'size' => max(0, $size)];
+    }
+    return [$list, $atts];
+}
+
+/**
+ * The processing-log step describing the size check.
+ *
+ * @param array $atts  the file attachments as measured: [['name' => string, 'size' => bytes], ...]
+ * @param array $plan  the decision from oversizePlan() - total and reasons are read
+ * @param array $rules  the mailbox's rules from oversizeRules()
+ * @param string $outcome  what happened to the email, e.g. 'rejected' or 'stripped'
+ */
+function oversizeLogStep(array $atts, array $plan, array $rules, string $outcome): array
+{
+    return [
+        'step'    => 'size_check',
+        'result'  => $outcome,
+        'limits'  => ['per_attachment' => oversizeMbWords((int)$rules['max_bytes']),
+                      'total' => $rules['max_total_bytes'] > 0 ? oversizeMbWords((int)$rules['max_total_bytes']) : 'none',
+                      'from' => $rules['source'], 'mode' => $rules['mode'], 'strip_order' => $rules['strip_order']],
+        'total'   => oversizeMbWords((int)$plan['total']),
+        'details' => array_map(fn($i, $a) => $a['name'] . ' (' . oversizeMbWords((int)$a['size']) . ')' . (isset($plan['reasons'][$i]) ? ' - ' . $plan['reasons'][$i] : ''),
+                               array_keys($atts), $atts),
+    ];
+}
+
+/**
+ * "big.zip (40 MB), video.mp4 (30 MB)" - what broke the limits, for the log's reason column.
+ *
+ * @param array $atts  the file attachments as measured: [['name' => string, 'size' => bytes], ...]
+ * @param array $plan  the decision from oversizePlan(); its reasons say which attachments broke a limit
+ */
+function oversizeSummary(array $atts, array $plan): string
+{
+    $out = [];
+    foreach ($plan['reasons'] as $i => $_) $out[] = $atts[$i]['name'] . ' (' . oversizeMbWords((int)$atts[$i]['size']) . ')';
+    return implode(', ', $out);
+}
+
+/**
+ * Writes one email_import row to system_logs with the mailbox id added to the details. A
+ * logging failure goes to the PHP error log and never stops the import.
+ *
+ * @param mixed $mailboxId  the target_mailboxes id the email came in through
+ * @param mixed $details  what to log, as an array; stored as JSON with mailbox_id added
+ */
 function logEmailImport($conn, $mailboxId, $details) {
     try {
         $details['mailbox_id'] = $mailboxId;
@@ -1312,6 +1585,8 @@ function logEmailImport($conn, $mailboxId, $details) {
 
 /**
  * Load whitelist entries for a mailbox
+ *
+ * @param mixed $mailboxId  the target_mailboxes id whose whitelist is wanted
  */
 function loadWhitelist($conn, $mailboxId) {
     $stmt = $conn->prepare("SELECT entry_type, entry_value FROM mailbox_email_whitelist WHERE mailbox_id = ?");
@@ -1335,6 +1610,9 @@ function loadWhitelist($conn, $mailboxId) {
 
 /**
  * Check if a sender address is whitelisted
+ *
+ * @param mixed $fromAddress  the sender's address, any case
+ * @param mixed $whitelist  the lists from loadWhitelist(): ['domains' => [...], 'emails' => [...]], lower-case
  */
 function isWhitelisted($fromAddress, $whitelist) {
     $fromAddress = strtolower(trim($fromAddress));
@@ -1358,6 +1636,9 @@ function isWhitelisted($fromAddress, $whitelist) {
 
 /**
  * Log mailbox activity (imports and rejections)
+ *
+ * @param mixed $mailboxId  the target_mailboxes id the activity belongs to
+ * @param mixed $entries  one row per email: action, from_address, from_name, subject, reason, ticket_id, processing_log
  */
 function logMailboxActivity($conn, $mailboxId, $entries) {
     try {

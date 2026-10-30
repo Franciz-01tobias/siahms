@@ -46,6 +46,13 @@ header('Connection: keep-alive');
 
 set_time_limit(0);
 
+/**
+ * Sends one server-sent event (an event name and a JSON data line) and flushes it to the
+ * browser straight away.
+ *
+ * @param string $event  the event name the browser listens for: 'text', 'verdict', 'usage', 'done' or 'error'
+ * @param array $data  the payload, sent as one JSON line
+ */
 function sse_send(string $event, array $data): void
 {
     echo "event: {$event}\n";
@@ -87,7 +94,7 @@ try {
     // Its own namespace if configured, otherwise the module's existing Knowledge
     // AI key — see writeupAiConfig().
     $aiCfg = writeupAiConfig($conn);
-    if (($aiCfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($aiCfg)) {
         sse_send('error', ['message' => 'The Knowledge assistant is not set up yet. Add a provider and key in Knowledge → Settings → Assistant.']);
         exit;
     }
@@ -119,10 +126,13 @@ try {
         $clusterCount = (int)$cluster['ticket_count'];
         $mode = 'cluster';
 
+        // The other tickets' subjects go to the model too - never a confidential
+        // one's (discussion #62).
+        require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
         $st = $conn->prepare(
             "SELECT t.subject FROM knowledge_gap_cluster_tickets ct
                JOIN tickets t ON t.id = ct.ticket_id
-              WHERE ct.cluster_id = ? AND ct.ticket_id <> ?
+              WHERE ct.cluster_id = ? AND ct.ticket_id <> ?" . ticketAiExclusionSql($conn, 't') . "
               LIMIT 15"
         );
         $st->execute([$clusterId, $ticketId]);
@@ -133,6 +143,13 @@ try {
     // cluster still has to be one this analyst may read.
     if (!analystCanAccessTicket($conn, $analystId, $ticketId)) {
         sse_send('error', ['message' => 'Ticket not found']);
+        exit;
+    }
+    // A confidential ticket is not sent to an AI provider unless Tickets -> Settings
+    // says so (discussion #62) - checked here, on the server, whatever the page does.
+    require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
+    if (!ticketAiAllowed($conn, $ticketId)) {
+        sse_send('error', ['message' => TICKET_AI_CONFIDENTIAL_ERROR, 'confidential' => true]);
         exit;
     }
 

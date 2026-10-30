@@ -47,6 +47,7 @@ const TasksPriority = (function () {
         return /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : null;
     }
 
+    /** HTML-escapes a value; null and undefined become an empty string. */
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'

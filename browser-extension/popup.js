@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 
+/** Replaces the popup content with the welcome message and a Setup button that opens the options page. */
 function showNotConfigured() {
     document.getElementById('content').innerHTML = `
         <div class="not-configured">
@@ -65,6 +66,7 @@ function showNotConfigured() {
     });
 }
 
+/** Shows the error banner with a message. */
 function showError(msg) {
     document.getElementById('errorBanner').style.display = 'flex';
     document.getElementById('errorText').textContent = msg;
@@ -78,10 +80,12 @@ function escapeHtml(s) {
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/** Hides the error banner. */
 function hideError() {
     document.getElementById('errorBanner').style.display = 'none';
 }
 
+/** Shows when the data was last fetched - "Just now", minutes ago, or a clock time in the browser's own locale. */
 function updateTimestamp(iso) {
     const d = new Date(iso);
     const now = new Date();
@@ -102,6 +106,7 @@ function updateTimestamp(iso) {
     document.getElementById('lastUpdated').textContent = text;
 }
 
+/** Draws every Watchtower card into the popup from the stored dashboard data. */
 function renderDashboard(data) {
     const html = `
         <div class="cards">
@@ -119,6 +124,7 @@ function renderDashboard(data) {
     document.getElementById('content').innerHTML = html;
 }
 
+/** Returns the Checks card - done of total, with not started, needing attention, all completed or remaining. */
 function renderMorningChecks(mc) {
     if (!mc) return '';
     const done = mc.completed_today || 0;
@@ -154,6 +160,7 @@ function renderMorningChecks(mc) {
     `;
 }
 
+/** Returns the Tickets card - total open, with high priority and unassigned counts, or the biggest open status. */
 function renderTickets(tk) {
     if (!tk) return '';
     // Was open + in_progress + on_hold, three hardcoded English status names, so
@@ -185,6 +192,7 @@ function renderTickets(tk) {
     `;
 }
 
+/** Returns the Changes card - changes in the next 7 days, with unapproved and in-progress counts. */
 function renderChanges(ch) {
     if (!ch) return '';
     let details = [];
@@ -209,6 +217,7 @@ function renderChanges(ch) {
     `;
 }
 
+/** Returns the Services card - all operational, or the count of degraded services and active incidents. */
 function renderServiceStatus(ss) {
     if (!ss) return '';
     if (ss.all_operational) {
@@ -241,6 +250,7 @@ function renderServiceStatus(ss) {
     `;
 }
 
+/** Returns the Calendar card - events today and this week. */
 function renderCalendar(cal) {
     if (!cal) return '';
     return `
@@ -260,6 +270,7 @@ function renderCalendar(cal) {
     `;
 }
 
+/** Returns the Contracts card - contracts expiring in 90 days, highlighting 30 days and notice periods. */
 function renderContracts(ct) {
     if (!ct) return '';
     let detail = '';
@@ -292,6 +303,7 @@ function renderContracts(ct) {
     `;
 }
 
+/** Returns the Knowledge card - recent articles and any overdue reviews. */
 function renderKnowledge(kb) {
     if (!kb) return '';
     let detail = '';
@@ -316,6 +328,7 @@ function renderKnowledge(kb) {
     `;
 }
 
+/** Returns the Assets card - total assets and how many have not reported in 7 days. */
 function renderAssets(as) {
     if (!as) return '';
     let detail = '';
@@ -341,6 +354,7 @@ function renderAssets(as) {
     `;
 }
 
+/** Returns the Tasks card - open tasks, with overdue or due-today counts. */
 function renderTasks(tk) {
     if (!tk) return '';
     let detail = '';

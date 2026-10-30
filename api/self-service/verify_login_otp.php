@@ -106,6 +106,12 @@ try {
     mfaThrottleReset($conn, 'users', (int)$userId);
 
     // Complete login — rotate the session id first, see includes/session_security.php
+    // Marked as left between the password and the code (3.5.0).
+    if (!requesterIsActive($conn, (int)$_SESSION['mfa_pending_ss_user_id'])) {
+        unset($_SESSION['mfa_pending_ss_user_id'], $_SESSION['mfa_pending_ss_email'], $_SESSION['mfa_pending_ss_name']);
+        echo json_encode(['success' => false, 'error' => 'Your account is no longer active. Contact the service desk if you think this is a mistake.']);
+        exit;
+    }
     sessionPromoteToAuthenticated();
     $_SESSION['ss_user_id'] = (int)$_SESSION['mfa_pending_ss_user_id'];
     $_SESSION['ss_user_email'] = $_SESSION['mfa_pending_ss_email'];

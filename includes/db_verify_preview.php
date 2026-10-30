@@ -69,7 +69,12 @@ const DB_VERIFY_DESTRUCTIVE = [
      'why'  => 'Index on the team_id column being removed above. No data is lost.'],
 ];
 
-/** Does this table exist? */
+/**
+ * Does this table exist?
+ *
+ * @param string $dbName  the database (schema) name to look in
+ * @param string $table  the table name
+ */
 function dbPreviewTableExists(PDO $conn, string $dbName, string $table): bool
 {
     $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?");
@@ -77,7 +82,13 @@ function dbPreviewTableExists(PDO $conn, string $dbName, string $table): bool
     return (int) $stmt->fetchColumn() > 0;
 }
 
-/** Does this column exist? */
+/**
+ * Does this column exist?
+ *
+ * @param string $dbName  the database (schema) name to look in
+ * @param string $table  the table name
+ * @param string $column  the column name
+ */
 function dbPreviewColumnExists(PDO $conn, string $dbName, string $table, string $column): bool
 {
     $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?");
@@ -85,7 +96,13 @@ function dbPreviewColumnExists(PDO $conn, string $dbName, string $table, string 
     return (int) $stmt->fetchColumn() > 0;
 }
 
-/** Does this index exist? */
+/**
+ * Does this index exist?
+ *
+ * @param string $dbName  the database (schema) name to look in
+ * @param string $table  the table name
+ * @param string $index  the index name, as information_schema.statistics.index_name
+ */
 function dbPreviewIndexExists(PDO $conn, string $dbName, string $table, string $index): bool
 {
     $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?");
@@ -114,6 +131,7 @@ function dbPreviewIndexExists(PDO $conn, string $dbName, string $table, string $
  *
  * COUNTS ONLY. Nothing here writes, and nothing here may.
  *
+ * @param string $dbName  the database (schema) name being verified
  * @return array<int,array{key:string,table:string,rows:int,what:string}>
  */
 function dbPreviewRepairs(PDO $conn, string $dbName): array
@@ -149,6 +167,12 @@ function dbPreviewRepairs(PDO $conn, string $dbName): array
     return $out;
 }
 
+/**
+ * Works out, without changing anything, what a Database Verification run would do - tables to create, columns to add, drops whose target is present, and data repairs with rows to rewrite.
+ * @param array $schema  the db_verify table => [column => definition] map
+ * @param string $dbName  the database (schema) name being verified
+ * @return array  the four lists plus a summary of counts, and read_only => true
+ */
 function dbVerifyPreview(PDO $conn, array $schema, string $dbName): array
 {
     $tablesToCreate = [];

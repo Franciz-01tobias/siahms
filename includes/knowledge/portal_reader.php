@@ -43,6 +43,8 @@ require_once __DIR__ . '/visibility.php';
  * The portal session carries only ss_user_id, so this is a lookup rather than
  * something the caller can pass in — which also means a caller cannot pass in
  * somebody else's company.
+ *
+ * @param int $userId  the portal user's users.id (from the session's ss_user_id)
  */
 function portalUserTenantId(PDO $conn, int $userId): ?int {
     $stmt = $conn->prepare("SELECT tenant_id FROM users WHERE id = ?");
@@ -86,6 +88,25 @@ function portalKnowledgeScope(PDO $conn, ?int $tenantId, string $alias = 'a'): a
 }
 
 /**
+ * May this portal requester read this article in the Help Centre?
+ *
+ * The single-article form of portalKnowledgeScope(), for a caller that already
+ * has an id - the Help Centre's document download (GH #177). Built on the scope
+ * rather than beside it, so it cannot disagree with the article page that
+ * listed the document.
+ *
+ * @param int $userId  the portal user's users.id, from the session's ss_user_id
+ * @param int $articleId  knowledge_articles.id
+ */
+function portalCanReadArticle(PDO $conn, int $userId, int $articleId): bool {
+    if ($articleId <= 0) return false;
+    [$where, $params] = portalKnowledgeScope($conn, portalUserTenantId($conn, $userId), 'a');
+    $st = $conn->prepare("SELECT 1 FROM knowledge_articles a WHERE $where AND a.id = ? LIMIT 1");
+    $st->execute(array_merge($params, [$articleId]));
+    return (bool) $st->fetchColumn();
+}
+
+/**
  * Turn an article body into a short plain-text preview.
  *
  * strip_tags() removes TAGS but keeps their CONTENTS, so a <script> or <style>
@@ -98,16 +119,39 @@ function portalKnowledgeScope(PDO $conn, ?int $tenantId, string $alias = 'a'): a
  * pushed in front of every tag first, then the run is collapsed — which keeps
  * strip_tags() (and its tolerance of malformed markup) rather than swapping in
  * a hand-rolled tag regex.
+ *
+ * The caller cuts the body in SQL (LEFT(body, 400)), and that cut is in HTML
+ * characters - so the plain text left over is usually far SHORTER than the
+ * limit, and the length check below never fired: previews just stopped
+ * mid-word ("Close ot") with nothing to say there was more. $wasCut is the
+ * caller telling us the body really was longer; the half-word (and any
+ * half-entity) at the end is then dropped and an ellipsis added.
+ *
+ * @param ?string $body  the article body HTML; null gives ''
+ * @param int $length  the most characters kept before an ellipsis is added
+ * @param bool $wasCut  true when $body is the start of a longer article (CHAR_LENGTH(body) > the LEFT() taken)
  */
-function portalArticlePreview(?string $body, int $length = 400): string {
+function portalArticlePreview(?string $body, int $length = 400, bool $wasCut = false): string {
     $raw = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', ' ', (string) $body);
     $raw = str_replace('<', ' <', (string) $raw);
-    $text = trim(preg_replace('/\s+/', ' ', strip_tags($raw)));
+    // strip_tags() leaves ENTITIES alone, and every caller escapes the preview
+    // as it draws it - so "Settings &gt; Mail" reached the page as the literal
+    // text "&gt;". Decode to plain text here; the escaping on output is what
+    // keeps it safe (help-centre.php, index.php, new-ticket.php all escape).
+    // A cut body can end inside an entity ("&am"); drop that stub before decoding.
+    if ($wasCut) $raw = preg_replace('/&#?\w*$/', '', (string) $raw);
+    $text = html_entity_decode(strip_tags($raw), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = trim(preg_replace('/\s+/u', ' ', $text));
 
-    // The caller already LEFT()s the body, so this is a tidy-up of the tail
-    // rather than the real truncation.
     if (function_exists('mb_substr') && mb_strlen($text) > $length) {
-        $text = rtrim(mb_substr($text, 0, $length)) . '…';
+        $text   = mb_substr($text, 0, $length);
+        $wasCut = true;
+    }
+    if ($wasCut && $text !== '') {
+        // End on a whole word: the last one is almost certainly cut in half.
+        // Kept as-is when there is only one word, rather than emptying it.
+        $trimmed = preg_replace('/\s+\S*$/u', '', $text);
+        $text = rtrim($trimmed !== '' ? $trimmed : $text, " \t,;:.-–—") . '…';
     }
     return $text;
 }

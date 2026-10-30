@@ -15,6 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('forms');
+requireModuleWriteJson('forms');   // Read only access (#180) changes nothing here
 
 $input = json_decode(file_get_contents('php://input'), true);
 if (!$input) {

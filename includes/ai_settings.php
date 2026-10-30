@@ -4,9 +4,10 @@
  * an AI provider/model/key panel.
  *
  * Config for a namespace `<ns>` lives in three system_settings rows:
- *   <ns>_provider     anthropic | openai | openrouter
+ *   <ns>_provider     anthropic | openai | openrouter | azure | openai_compatible
  *   <ns>_model        model id (curated for anthropic/openai; namespaced for openrouter)
  *   <ns>_api_key      encrypted at rest (key must be in ENCRYPTED_SETTING_KEYS + MASKED_SETTING_KEYS)
+ *   <ns>_compatible_base_url  openai_compatible only (GH #192) - the server's base URL, not a secret
  *
  * SSL certificate verification is NOT configured here — it is a single global
  * switch (SSL_VERIFY_PEER in config.php, applied via sslApplyCurl). There is no
@@ -85,15 +86,34 @@ function aiSettingsRegistry(): array
             'default_provider'=> 'anthropic',
             'default_model'   => 'claude-sonnet-4-6',
         ],
+        // The AI project manager (3.2.0): the Overview's briefing and drafted
+        // highlight / exception / checkpoint reports. Sonnet, like the war room
+        // report: the job is judgement - what slipped, what needs a decision -
+        // and a report goes to a board under the project manager's name.
+        'projects_ai' => [
+            'label'           => 'Projects AI',
+            'default_provider'=> 'anthropic',
+            'default_model'   => 'claude-sonnet-4-6',
+        ],
         // Deferred: 'rfp_ai' (RFP Builder) — needs real OpenRouter SSE streaming first.
     ];
 }
 
+/**
+ * True when $ns is a namespace registered in aiSettingsRegistry().
+ *
+ * @param string $ns  the namespace to check, possibly from the request (e.g. 'knowledge_ai')
+ */
 function aiSettingsIsValidNs(string $ns): bool
 {
     return array_key_exists($ns, aiSettingsRegistry());
 }
 
+/**
+ * Returns a namespace's registry entry (label, default provider and model); throws RuntimeException for an unknown namespace.
+ *
+ * @param string $ns  a namespace key from aiSettingsRegistry(), e.g. 'workflow_ai'
+ */
 function aiSettingsEntry(string $ns): array
 {
     $reg = aiSettingsRegistry();
@@ -103,7 +123,11 @@ function aiSettingsEntry(string $ns): array
     return $reg[$ns];
 }
 
-/** The system_settings keys for a namespace. */
+/**
+ * The system_settings keys for a namespace.
+ *
+ * @param string $ns  the namespace, used as the prefix of every key; not checked against the registry here
+ */
 function aiSettingsKeys(string $ns): array
 {
     return [
@@ -124,6 +148,13 @@ function aiSettingsKeys(string $ns): array
         'azure_endpoint'    => $ns . '_azure_endpoint',
         'azure_deployment'  => $ns . '_azure_deployment',
         'azure_api_version' => $ns . '_azure_api_version',
+        /* GH #192: a custom OpenAI-compatible endpoint (Ollama, LM Studio, vLLM...).
+           NOT a secret, so returned in the clear like the Azure endpoint.
+           ⚠️ Deliberately NOT called `base_url`: aiProviderChat() has long accepted a
+           `base_url` override for openai/openrouter, and a saved custom address
+           arriving under that name would quietly redirect an OpenAI-configured
+           feature to it. */
+        'compatible_base_url' => $ns . '_compatible_base_url',
     ];
 }
 
@@ -131,6 +162,8 @@ function aiSettingsKeys(string $ns): array
  * Load a ready-to-use config (decrypted key) for aiProviderChat().
  * Defaults: provider/model from the registry; verify_ssl from the row, else the
  * global SSL_VERIFY_PEER constant (preserves existing localhost behaviour).
+ *
+ * @param string $ns  a registered namespace, e.g. 'workflow_ai'; an unknown one throws
  */
 function aiSettingsLoad(PDO $conn, string $ns): array
 {
@@ -185,12 +218,16 @@ function aiSettingsLoad(PDO $conn, string $ns): array
         'azure_endpoint'    => (string)($rows[$keys['azure_endpoint']]    ?? ''),
         'azure_deployment'  => (string)($rows[$keys['azure_deployment']]  ?? ''),
         'azure_api_version' => (string)($rows[$keys['azure_api_version']] ?? ''),
+        // Only meaningful when provider === 'openai_compatible' (GH #192).
+        'compatible_base_url' => (string)($rows[$keys['compatible_base_url']] ?? ''),
     ];
 }
 
 /**
  * UI-safe view of the config — never returns the plaintext key, only a mask
  * and a has_key flag.
+ *
+ * @param string $ns  a registered namespace, e.g. 'workflow_ai'; an unknown one throws
  */
 function aiSettingsForUi(PDO $conn, string $ns): array
 {
@@ -207,6 +244,7 @@ function aiSettingsForUi(PDO $conn, string $ns): array
         'azure_endpoint'    => $cfg['azure_endpoint'],
         'azure_deployment'  => $cfg['azure_deployment'],
         'azure_api_version' => $cfg['azure_api_version'],
+        'compatible_base_url' => $cfg['compatible_base_url'],
     ];
 }
 
@@ -214,6 +252,7 @@ function aiSettingsForUi(PDO $conn, string $ns): array
  * Persist a config. Validates provider; encrypts the key; honours
  * masked/empty "no change" so saving provider+model alone never wipes the key.
  *
+ * @param string $ns  a registered namespace, e.g. 'workflow_ai'; an unknown one throws
  * @param array $data ['provider','model','api_key'?]
  */
 function aiSettingsSave(PDO $conn, string $ns, array $data): void
@@ -238,9 +277,6 @@ function aiSettingsSave(PDO $conn, string $ns, array $data): void
         }
     };
 
-    $upsert($keys['provider'], $provider);
-    $upsert($keys['model'], $model);
-
     /* Azure's three fields. Written whenever they are PRESENT in the payload,
        not only when the provider is Azure — so switching to OpenAI and back does
        not silently empty an endpoint the administrator spent time getting right.
@@ -251,9 +287,49 @@ function aiSettingsSave(PDO $conn, string $ns, array $data): void
         }
     }
 
+    /* GH #192: the custom endpoint's address. Checked when it is the provider in
+       use - an address FreeITSM will not send to is better refused here than
+       found at the first AI request. Kept whatever the provider, like Azure's,
+       so switching away and back does not empty it; an unusable one is simply
+       not stored when it is not in use. */
+    if (array_key_exists('compatible_base_url', $data)) {
+        $baseUrl = trim((string)$data['compatible_base_url']);
+        if ($provider === 'openai_compatible') {
+            if (!aiCompatibleBaseUrlValid($baseUrl)) {
+                throw new InvalidArgumentException('Enter the base URL as an http:// or https:// address, for example http://llm-host:11434/v1');
+            }
+            if ($model === '') {
+                throw new InvalidArgumentException('Enter the model ID, exactly as the server names it.');
+            }
+        }
+        if ($baseUrl === '' || aiCompatibleBaseUrlValid($baseUrl)) {
+            $upsert($keys['compatible_base_url'], $baseUrl);
+        }
+    } elseif ($provider === 'openai_compatible') {
+        throw new InvalidArgumentException('Enter the base URL as an http:// or https:// address, for example http://llm-host:11434/v1');
+    }
+
+    $old = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
+    $old->execute([$keys['provider']]);
+    $oldProvider = (string)($old->fetchColumn() ?: '');
+
+    $upsert($keys['provider'], $provider);
+    $upsert($keys['model'], $model);
+
     // Key: only write when the user actually entered a new one.
     $rawKey = $data['api_key'] ?? '';
     if (!isMaskedNoChangeValue($rawKey)) {
         $upsert($keys['api_key'], encryptValue(trim((string)$rawKey)));
+    } elseif (!empty($data['clear_api_key'])) {
+        // GH #192: a custom endpoint's key is optional, so it must be removable.
+        $upsert($keys['api_key'], '');
+    } elseif ($oldProvider !== '' && $oldProvider !== $provider
+              && ($provider === 'openai_compatible' || $oldProvider === 'openai_compatible')) {
+        /* 🔴 TRAP: a kept key follows the feature to its NEW address. Switching
+           from OpenAI to a custom endpoint without typing a key would otherwise
+           send the OpenAI key, as a Bearer token, to whatever server the base URL
+           names - and switching back would send a local server's key to OpenAI.
+           Across that boundary an untyped key is dropped, never carried. */
+        $upsert($keys['api_key'], '');
     }
 }

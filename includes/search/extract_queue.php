@@ -40,7 +40,11 @@ const EXTRACT_SETTING_OPPORTUNISTIC = 'attachment_extract_opportunistic';
 const EXTRACT_OPPORTUNISTIC_BATCH   = 1;
 const EXTRACT_OPPORTUNISTIC_SECONDS = 8;
 
-/** Read a boolean setting that defaults to ON when absent. */
+/**
+ * Read a boolean setting that defaults to ON when absent.
+ *
+ * @param string $key  the system_settings key to read, e.g. EXTRACT_SETTING_CRON; absent or blank counts as on
+ */
 function extractQueueSettingOn(PDO $conn, string $key): bool {
     try {
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
@@ -74,6 +78,8 @@ function extractQueueDepth(PDO $conn): int {
  *
  * Never throws. Returns what it managed.
  *
+ * @param int $limit  the most pending attachments to claim this pass (at least 1)
+ * @param float $deadline  a microtime(true) moment to stop starting new tickets at; 0 means no time limit
  * @return array{done:int,still_pending:int,skipped_reason:string}
  */
 function extractQueueDrain(PDO $conn, int $limit, float $deadline = 0): array {
@@ -207,6 +213,8 @@ function extractQueueDrain(PDO $conn, int $limit, float $deadline = 0): array {
 /**
  * Did the attachments we just tried stay pending? If so the extractor is
  * unreachable again and there is no point continuing this pass.
+ *
+ * @param array $rows  the claimed rows just processed, each with an attachment_id
  */
 function extractQueueDepthUnchanged(PDO $conn, array $rows): bool {
     if (!$rows) return false;

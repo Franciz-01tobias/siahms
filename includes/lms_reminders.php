@@ -89,7 +89,12 @@ function lmsReminderSettings(PDO $conn): array
     return $defaults;
 }
 
-/** Write one setting. */
+/**
+ * Write one setting.
+ *
+ * @param string $key  the system_settings key, one of the LMS_REM_* constants
+ * @param string $value  the value to store, as text
+ */
 function lmsReminderSaveSetting(PDO $conn, string $key, string $value): void
 {
     $st = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value, updated_datetime)
@@ -106,6 +111,8 @@ function lmsReminderSaveSetting(PDO $conn, string $key, string $value): void
  * a reminder "-3 days before" is the overdue chase, which is a separate setting
  * with its own repeat, and accepting it here would send two different emails
  * about the same day.
+ *
+ * @param string $raw  the "days before" setting as typed, e.g. '7, 1'; numbers outside 0-365 are dropped
  */
 function lmsReminderParseDays(string $raw): array
 {
@@ -133,6 +140,7 @@ function lmsReminderParseDays(string $raw): array
  * decide it. Three screens and this run must not disagree about when something
  * is due, or the email says one thing and the portal says another.
  *
+ * @param array $settings  the reminder settings from lmsReminderSettings()
  * @return array<int,array<string,mixed>>
  */
 function lmsRemindersDue(PDO $conn, array $settings): array
@@ -270,7 +278,11 @@ function lmsRemindersDue(PDO $conn, array $settings): array
     return $out;
 }
 
-/** Subject and HTML body for one reminder. */
+/**
+ * Subject and HTML body for one reminder.
+ *
+ * @param array $row  one entry from lmsRemindersDue() (name, course_title, due_day, reminder_kind, days_left, learner_type)
+ */
 function lmsReminderMessage(array $row): array
 {
     $name   = trim((string)($row['name'] ?? ''));
@@ -317,6 +329,8 @@ function lmsReminderMessage(array $row): array
  * the portal's verification and password-reset links are: these emails are sent
  * by a cron, where there is no browser request to work a hostname out from, and
  * a link that lands on the wrong host reads as a phishing attempt.
+ *
+ * @param string $learnerType  'user' links to the portal's Training page; anything else to the analyst app's My courses
  */
 function lmsReminderLinkFor(string $learnerType): string
 {
@@ -337,7 +351,11 @@ function lmsReminderLinkFor(string $learnerType): string
         : $base . '/lms/my-courses.php';
 }
 
-/** 'YYYY-MM-DD' → '20 November 2026'. Plain, unambiguous, and not zone-shifted. */
+/**
+ * 'YYYY-MM-DD' → '20 November 2026'. Plain, unambiguous, and not zone-shifted.
+ *
+ * @param string $ymd  a 'YYYY-MM-DD' date; anything else is returned unchanged
+ */
 function fmt_naive_date_for_email(string $ymd): string
 {
     $dt = DateTime::createFromFormat('Y-m-d', $ymd);
@@ -438,8 +456,34 @@ function lmsRemindersRunOpportunistic(PDO $conn): void
             return;
         }
 
-        lmsRemindersRun($conn, false);
+        // #182: a PAGE run - recorded, never proof that the schedule is alive.
+        require_once __DIR__ . '/job_runs.php';
+        $runId = JobRun::start($conn, 'lms_reminders', 'page', isset($_SESSION['analyst_id']) ? (int)$_SESSION['analyst_id'] : null);
+        try {
+            $r = lmsRemindersRun($conn, false);
+        } catch (Throwable $e) {
+            JobRun::fail($conn, $runId, $e);
+            throw $e;
+        }
+        lmsRemindersJobFinish($conn, $runId, $r);
     } catch (Throwable $e) {
         error_log('lms reminders (opportunistic): ' . $e->getMessage());
     }
+}
+
+/**
+ * Records the end of a reminders run in the job history (#182): some emails failing makes it
+ * PARTIAL, all of them FAILED. Reaching the per-run cap is the design working, not a failure.
+ *
+ * @param ?int $runId  from JobRun::start()
+ * @param array $r  what lmsRemindersRun() returned
+ */
+function lmsRemindersJobFinish(PDO $conn, ?int $runId, array $r): void
+{
+    require_once __DIR__ . '/job_runs.php';
+    $failed = (int)($r['failed'] ?? 0);
+    $sent   = (int)($r['sent'] ?? 0);
+    JobRun::finish($conn, $runId, $failed === 0 ? 'ok' : ($sent > 0 ? 'partial' : 'failed'),
+        ['sent' => $sent, 'already_sent' => (int)($r['skipped'] ?? 0), 'no_email' => (int)($r['unreachable'] ?? 0), 'failed' => $failed],
+        "Sent {$sent}, failed {$failed}.");
 }

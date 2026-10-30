@@ -19,7 +19,7 @@
  * table, not a leak.
  */
 
-const TABLE_VIEW_KEYS = ['assets', 'tasks', 'calendar', 'changes'];
+const TABLE_VIEW_KEYS = ['assets', 'tasks', 'calendar', 'changes', 'domains'];
 const TABLE_VIEW_VISIBILITIES = ['private', 'team', 'public'];
 
 /** The teams this analyst belongs to. Empty array is a valid answer. */
@@ -66,7 +66,11 @@ function tableViewSelect(): string
          LEFT JOIN teams    t ON t.id = v.team_id";
 }
 
-/** Coerce the types the browser cares about. */
+/**
+ * Coerce the types the browser cares about.
+ *
+ * @param array $r  a table_views row from tableViewSelect()
+ */
 function tableViewShape(array $r, int $analystId): array
 {
     $r['id']       = (int)$r['id'];
@@ -83,6 +87,9 @@ function tableViewShape(array $r, int $analystId): array
  *
  * $q searches the name, the description and the owner's name — "that one Dave
  * made" is how people look for a view they did not write.
+ *
+ * @param string $tableKey  which table the views belong to: 'assets', 'tasks', 'calendar', 'changes' or 'domains'
+ * @param string $q  search text matched against the name, description and owner's name; '' for all
  */
 function tableViewList(PDO $conn, int $analystId, string $tableKey, string $q = ''): array
 {
@@ -109,6 +116,8 @@ function tableViewList(PDO $conn, int $analystId, string $tableKey, string $q = 
 
 /**
  * One view, if this analyst may see it.
+ *
+ * @param int $viewId  the view (table_views.id) to load
  * @throws RuntimeException when it does not exist or is out of reach — the same
  *         message either way, because telling them apart tells you it exists.
  */
@@ -132,6 +141,8 @@ function tableViewLoad(PDO $conn, int $analystId, int $viewId): array
  * that team and writable by nobody else — Ed's choice, and the one that makes
  * "who changed my view?" a question that never gets asked.
  *
+ * @param array $in  id (to change one the analyst owns), table_key, name (required, up to 120), description (up to 500),
+ *     visibility ('private', 'team', 'public'), team_id (a team the analyst is in, for 'team'), config (JSON or array)
  * @throws RuntimeException on anything invalid or out of reach.
  */
 function tableViewSave(PDO $conn, int $analystId, array $in): int
@@ -203,6 +214,8 @@ function tableViewSave(PDO $conn, int $analystId, array $in): int
 
 /**
  * Delete a view. Owner only.
+ *
+ * @param int $viewId  the view (table_views.id) to delete; must be the analyst's own
  * @throws RuntimeException when it is not theirs.
  */
 function tableViewDelete(PDO $conn, int $analystId, int $viewId): void
@@ -221,6 +234,8 @@ function tableViewDelete(PDO $conn, int $analystId, int $viewId): void
  * answers "is anybody still using this?", which is the question that decides
  * whether it can be deleted. "When did I last use it?" would need a row per
  * person per view to answer, and nobody has asked that.
+ *
+ * @param int $viewId  the view (table_views.id) just opened
  */
 function tableViewTouch(PDO $conn, int $analystId, int $viewId): void
 {

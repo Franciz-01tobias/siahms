@@ -21,6 +21,8 @@
  * being stolen off an existing ticket, the second stops one user claiming
  * another's pending upload. Recording ids are sequential and guessable, so this
  * is the only thing standing between them.
+ *
+ * @wiki Self-Service-Developer-Guide
  */
 
 /**

@@ -39,6 +39,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/documents.php';
 require_once __DIR__ . '/../includes/search/documents_index.php';
+require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $opts    = getopt('', ['extract::', 'collect::', 'no-collect', 'no-extract', 'quiet']);
 $quiet   = isset($opts['quiet']);
@@ -55,6 +56,9 @@ try {
 }
 
 $exit = 0;
+// #182: its two halves are its two sources, so a stuck queue or a failing tidy-up
+// is named on the health page instead of only in an exit code nobody reads.
+$runId = JobRun::start($conn, 'documents_maintenance', 'cron');
 
 if ($extract > 0) {
     $depth = documentTextQueueDepth($conn);
@@ -69,6 +73,10 @@ if ($extract > 0) {
         // A queue that will not drain is worth a non-zero exit, so a monitored
         // cron notices rather than reporting success for ever.
         if ($res['done'] === 0 && $res['still_pending'] > 0) $exit = 2;
+        JobRun::source($conn, $runId, 'documents_maintenance', 'part:extract', 'Reading document text', $exit !== 2,
+            $exit === 2 ? 'Nothing cleared: the extraction service is probably unreachable.' : "Read {$res['done']}, {$res['still_pending']} waiting.");
+    } else {
+        JobRun::source($conn, $runId, 'documents_maintenance', 'part:extract', 'Reading document text', true, 'Nothing waiting.');
     }
 }
 
@@ -85,6 +93,10 @@ if ($collect > 0) {
         foreach ($res['errors'] as $err) fwrite(STDERR, "  tidy-up error: {$err}\n");
         $exit = 3;
     }
+    JobRun::source($conn, $runId, 'documents_maintenance', 'part:tidy', 'Tidy-up', empty($res['errors']),
+        empty($res['errors']) ? null : implode('; ', array_slice($res['errors'], 0, 3)));
 }
+
+JobRun::finish($conn, $runId);
 
 exit($exit);

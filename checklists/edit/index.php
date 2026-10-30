@@ -53,9 +53,9 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('checklists.editor.page_title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('checklists', t('checklists.editor.page_title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <style>
@@ -136,7 +136,7 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
 
         .ed-empty { text-align: center; padding: 26px; font-size: 13px; color: var(--text-muted, #64748b); border: 1px dashed var(--border-soft, #cbd5e1); border-radius: 6px; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-page="checklists-edit" data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>" class="ed-shell">
     <?php include __DIR__ . '/../includes/header.php'; ?>
@@ -173,6 +173,15 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
                         <option value="ticket"><?php echo htmlspecialchars(t('checklists.editor.applies_ticket')); ?></option>
                         <option value="task"><?php echo htmlspecialchars(t('checklists.editor.applies_task')); ?></option>
                     </select>
+                    <?php
+                    // Checklists on tasks are behind Tasks → Settings → Checklists
+                    // (discussion #138). Until that is on, a checklist "for Tasks"
+                    // can never be attached to one - so say so here, where the
+                    // choice is made, rather than let it look like it worked.
+                    require_once '../../includes/services/checklists.php';
+                    if (!ChecklistsService::tasksEnabled($conn)): ?>
+                    <div class="ed-hint" style="margin-top:4px;font-size:12px;color:var(--text-muted, #666);"><?php echo htmlspecialchars(t('checklists.editor.tasks_off_hint')); ?></div>
+                    <?php endif; ?>
                 </div>
                 <div class="ed-field">
                     <label for="edClosureMode"><?php echo htmlspecialchars(t('checklists.editor.closure_mode')); ?></label>
@@ -280,6 +289,9 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
                   '<div class="step-opts">' +
                     '<span class="step-opt"><label class="toggle-switch"><input type="checkbox" data-f="is_mandatory"' + (s.is_mandatory ? ' checked' : '') + '><span class="toggle-slider"></span></label> ' + esc(t('checklists.editor.mandatory')) + '</span>' +
                     '<span class="step-opt"><label class="toggle-switch"><input type="checkbox" data-f="requires_input"' + (s.requires_input ? ' checked' : '') + '><span class="toggle-slider"></span></label> ' + esc(t('checklists.editor.ask_for_value')) + '</span>' +
+                    // #181: on a TASK the step records Pass / Fail / Not applicable, and Fail
+                    // asks for an exception note. Tickets keep a plain tick.
+                    '<span class="step-opt" title="' + esc(t('checklists.editor.ask_for_result_hint')) + '"><label class="toggle-switch"><input type="checkbox" data-f="result_mode"' + (s.result_mode === 'pass_fail' ? ' checked' : '') + '><span class="toggle-slider"></span></label> ' + esc(t('checklists.editor.ask_for_result')) + '</span>' +
                     '<span class="step-ph-wrap"' + (s.requires_input ? '' : ' hidden') + '>' +
                       '<input type="text" class="ed-input step-ph" data-f="input_placeholder" value="' + esc(s.input_placeholder) + '" placeholder="' + esc(t('checklists.editor.value_prompt_ph')) + '">' +
                     '</span>' +
@@ -300,7 +312,9 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
             const li = e.target.closest('.step-item');
             if (!li || !e.target.dataset.f) return;
             const i = +li.dataset.index, f = e.target.dataset.f;
-            if (e.target.type === 'checkbox') {
+            if (e.target.type === 'checkbox' && f === 'result_mode') {
+                steps[i][f] = e.target.checked ? 'pass_fail' : 'none';
+            } else if (e.target.type === 'checkbox') {
                 steps[i][f] = e.target.checked ? 1 : 0;
                 if (f === 'requires_input') {
                     const wrap = li.querySelector('.step-ph-wrap');
@@ -331,7 +345,7 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
         });
 
         document.getElementById('edAddStep').addEventListener('click', function () {
-            steps.push({ title: '', suggested_role: '', is_mandatory: 1, requires_input: 0, input_placeholder: '' });
+            steps.push({ title: '', suggested_role: '', is_mandatory: 1, requires_input: 0, input_placeholder: '', result_mode: 'none' });
             markDirty(); renderSteps();
             const inputs = document.querySelectorAll('#edSteps .step-title');
             if (inputs.length) inputs[inputs.length - 1].focus();
@@ -399,7 +413,8 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
                         suggested_role: it.suggested_role || '',
                         is_mandatory: Number(it.is_mandatory) ? 1 : 0,
                         requires_input: Number(it.requires_input) ? 1 : 0,
-                        input_placeholder: it.input_placeholder || ''
+                        input_placeholder: it.input_placeholder || '',
+                        result_mode: it.result_mode === 'pass_fail' ? 'pass_fail' : 'none'
                     };
                 });
                 renderSteps();
@@ -450,6 +465,6 @@ $categories   = $conn->query("SELECT name FROM checklist_categories ORDER BY nam
 
         load();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

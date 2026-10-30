@@ -44,6 +44,8 @@ class SlackProvider extends MessagingProvider
      * url_verification, NOT a GET — so the base class's GET-shaped hook can't
      * serve it. The webhook endpoint calls verifyUrlChallenge() instead; this
      * stays null so nothing tries the Meta handshake on a Slack channel.
+     *
+     * @param array $get  the request's query parameters (not used - Slack's handshake is a POST)
      */
     public function verifyChallenge(array $get): ?string
     {
@@ -73,6 +75,8 @@ class SlackProvider extends MessagingProvider
      * requires a valid signature, secret or no secret, so nothing can be
      * injected into the ticket system through the gap. The worst an outsider can
      * do is learn that a FreeITSM install answers at a URL they already knew.
+     *
+     * @param string $rawBody  the raw JSON request body; only a url_verification payload gives a challenge
      */
     public function verifyUrlChallenge(string $rawBody): ?string
     {
@@ -101,6 +105,11 @@ class SlackProvider extends MessagingProvider
      * request stays valid forever, so anyone who once saw a legitimate payload
      * could replay it and inject tickets indefinitely. Slack documents the
      * five-minute window for exactly this reason.
+     *
+     * @param string $rawBody  the raw request body, exactly as received - it is part of the signed string
+     * @param array $headers  the request headers, lower-cased keys (x-slack-signature, x-slack-request-timestamp)
+     * @param array $params  the parsed POST parameters (not used)
+     * @param string $url  the public URL that was hit (not used)
      */
     public function verifyWebhook(string $rawBody, array $headers, array $params, string $url): bool
     {
@@ -136,6 +145,9 @@ class SlackProvider extends MessagingProvider
      * every analyst reply into a new inbound message on the same ticket — an
      * endless loop of the ticket talking to itself. Three separate guards below,
      * because Slack marks bot messages inconsistently across message subtypes.
+     *
+     * @param string $rawBody  the raw JSON Events API body
+     * @param array $params  the parsed POST parameters (not used)
      */
     public function parseInbound(string $rawBody, array $params): array
     {
@@ -214,6 +226,9 @@ class SlackProvider extends MessagingProvider
      * Post a reply. $to is the reply address parseInbound produced —
      * "C08ABCDE:1719500000.123456" — so the reply lands in the same thread
      * rather than as a new top-level message in the channel.
+     *
+     * @param string $to  the reply address "<slackChannel>:<threadTs>" from parseInbound()
+     * @param string $body  the reply text; HTML from the editor is flattened to text
      */
     public function sendMessage(string $to, string $body): string
     {
@@ -234,6 +249,11 @@ class SlackProvider extends MessagingProvider
         return (string) ($json['ts'] ?? '');
     }
 
+    /**
+     * Checks the bot token with auth.test and returns the workspace and bot name.
+     *
+     * Warns when the token lacks the chat:write scope, since replies would then fail.
+     */
     public function testConnection(): string
     {
         $json = $this->call('auth.test');
@@ -257,6 +277,8 @@ class SlackProvider extends MessagingProvider
      * Download a file shared in Slack. url_private needs the bot token as a
      * bearer header; without it Slack silently returns its sign-in HTML page
      * with HTTP 200, which is why the content type is checked rather than trusted.
+     *
+     * @param array $item  one entry from parseInbound()'s 'media' list (url, content_type, filename)
      */
     public function downloadMedia(array $item): array
     {
@@ -348,6 +370,7 @@ class SlackProvider extends MessagingProvider
      * diagnostic would mean asking every Slack admin to approve a permission the
      * product does not otherwise use.
      *
+     * @param string $slackChannelId  the Slack channel id, e.g. 'C08ABCDE'
      * @return array ['in' => bool, 'error' => string]  error is '' when in.
      */
     public function channelMembership(string $slackChannelId): array
@@ -364,6 +387,8 @@ class SlackProvider extends MessagingProvider
      * Look up a Slack user. Returns ['name' => …, 'email' => …]; either may be ''.
      * Never throws — identity is a nice-to-have and must not stop a ticket being
      * raised. A missing email simply means the app has no users:read.email scope.
+     *
+     * @param string $slackUserId  the Slack user id, e.g. 'U012ABC'
      */
     public function lookupUser(string $slackUserId): array
     {
@@ -379,7 +404,11 @@ class SlackProvider extends MessagingProvider
         }
     }
 
-    /** Split "C08ABCDE:1719500000.123456" into [channel, threadTs]. */
+    /**
+     * Split "C08ABCDE:1719500000.123456" into [channel, threadTs].
+     *
+     * @param string $addr  the reply address "<slackChannel>:<threadTs>"; a missing part comes back as ''
+     */
     private function splitAddress(string $addr): array
     {
         $parts = explode(':', trim($addr), 2);
@@ -405,6 +434,9 @@ class SlackProvider extends MessagingProvider
      * ⚠️ Slack also answers HTTP 200 for its own errors and puts the truth in
      * {"ok": false, "error": "…"} — so a status-code check alone reports a failed
      * call as a success. The body is what matters.
+     *
+     * @param string $method  the Slack Web API method, e.g. 'chat.postMessage'
+     * @param array $args  the method's arguments, sent form-encoded
      */
     private function call(string $method, array $args = []): array
     {
@@ -440,6 +472,8 @@ class SlackProvider extends MessagingProvider
      * Slack's error strings are terse machine tokens. An analyst reading
      * "not_in_channel" has no idea the fix is to invite the app to the channel,
      * so the common ones are translated into the action that fixes them.
+     *
+     * @param string $err  Slack's error token, e.g. 'not_in_channel'
      */
     private function explainError(string $err): string
     {
@@ -460,6 +494,9 @@ class SlackProvider extends MessagingProvider
      * httpRequest() drops response headers, but Slack reports the token's granted
      * scopes in X-OAuth-Scopes and that is the only way to warn about a missing
      * one BEFORE it fails in use. Same cURL setup, including sslApplyCurl().
+     *
+     * @param string $url  the full URL to call
+     * @param array $opts  method, headers and body, as for httpRequest()
      */
     private function httpRequestWithHeaders(string $url, array $opts = []): array
     {
@@ -497,6 +534,8 @@ class SlackProvider extends MessagingProvider
      * Slack text → plain text for the ticket body. Unwraps the link syntax
      * (<https://x|label> and <@U123>) which would otherwise show as raw angle
      * brackets, and decodes the three entities Slack escapes.
+     *
+     * @param string $text  message text in Slack's own markup
      */
     private function toPlainText(string $text): string
     {
@@ -511,7 +550,11 @@ class SlackProvider extends MessagingProvider
         return strtr($text, ['&amp;' => '&', '&lt;' => '<', '&gt;' => '>']);
     }
 
-    /** Plain text → Slack mrkdwn. Escapes the three characters Slack reserves. */
+    /**
+     * Plain text → Slack mrkdwn. Escapes the three characters Slack reserves.
+     *
+     * @param string $body  the analyst's reply, plain text or editor HTML
+     */
     private function toMrkdwn(string $body): string
     {
         // Analyst replies can contain HTML from the editor; flatten to text first.

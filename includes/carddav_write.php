@@ -63,6 +63,10 @@ const CARDDAV_FOLD_AT = 75;
  * exists to prevent. No stored ETag means we have not really read this card, and
  * the correct move is to fetch it, not to write over it.
  *
+ * @param array $cfg  request settings from cardDavConfigFromProvider()
+ * @param string $cardUrl  the card's absolute URL
+ * @param string $vcard  the whole card to store, already edited
+ * @param string $etag  the ETag the card had when it was read, sent as If-Match; '' refuses the write
  * @return array ['ok'=>bool, 'status'=>int, 'etag'=>string, 'conflict'=>bool,
  *                'error'=>string]  `etag` is the card's NEW tag when the server
  *                returned one; '' means re-read before writing again.
@@ -117,6 +121,8 @@ function cardDavPutCard(array $cfg, string $cardUrl, string $vcard, string $etag
 /**
  * Fetch one card by its own URL, with the ETag the server currently holds.
  *
+ * @param array $cfg  request settings from cardDavConfigFromProvider()
+ * @param string $cardUrl  the card's absolute URL
  * @return array ['ok'=>bool, 'vcard'=>string, 'etag'=>string, 'error'=>string]
  */
 function cardDavGetCard(array $cfg, string $cardUrl): array
@@ -157,6 +163,8 @@ function cardDavGetCard(array $cfg, string $cardUrl): array
  * treated as UNKNOWN, not as permitted. The setting then stays off, and the
  * screen says the server did not answer rather than pretending it said no.
  *
+ * @param array $cfg  request settings from cardDavConfigFromProvider()
+ * @param string $bookHref  the address book's href, absolute or relative to $cfg['url']
  * @return array ['writable'=>bool, 'known'=>bool, 'privileges'=>string[], 'error'=>string]
  */
 function cardDavCanWrite(array $cfg, string $bookHref): array
@@ -216,6 +224,9 @@ function cardDavCanWrite(array $cfg, string $bookHref): array
  *
  * ⚠️ Folds on a CONTINUATION BYTE boundary (`10xxxxxx`), walking back at most
  * three bytes, so a character is never split.
+ *
+ * @param string $logical  one unfolded content line
+ * @param string $eol  the line ending to fold with - the card's own, from cardDavDetectEol()
  */
 function cardDavFoldLine(string $logical, string $eol = "\r\n"): string
 {
@@ -251,6 +262,8 @@ function cardDavFoldLine(string $logical, string $eol = "\r\n"): string
  * plenty of cards in the wild are stored LF-only — and a file that mixes the two
  * after an edit is the kind of thing that parses fine everywhere except the one
  * client the operator actually uses.
+ *
+ * @param string $raw  the card exactly as the server returned it
  */
 function cardDavDetectEol(string $raw): string
 {
@@ -266,6 +279,7 @@ function cardDavDetectEol(string $raw): string
  * physical lines it occupied, continuations included, so the replacement lands
  * in the right place and takes the fold with it.
  *
+ * @param string $raw  the card exactly as the server returned it
  * @return array of ['logical' => string, 'start' => int, 'end' => int] where the
  *               offsets are byte positions into $raw and `end` is exclusive of
  *               the line ending.
@@ -305,6 +319,8 @@ function cardDavLineSpans(string $raw): array
  * ⚠️ Strips a group prefix. `item1.TEL;TYPE=WORK:…` is how Apple Contacts writes
  * a property it wants to attach a label to, and reading the name as `ITEM1.TEL`
  * means every such line is invisible to both the reader and the writer.
+ *
+ * @param string $logical  one unfolded content line
  */
 function cardDavLineProperty(string $logical): string
 {
@@ -328,6 +344,9 @@ function cardDavLineProperty(string $logical): string
  * and any vendor parameter that made the entry meaningful in the client that
  * created it.
  *
+ * @param string $raw  the card as it stands
+ * @param array $spans  cardDavLineSpans() of that same $raw
+ * @param int $index  which span's value to replace
  * @param string $newValue ALREADY ESCAPED — this function does not escape, so
  *                         that a structured value assembled from components
  *                         (each escaped separately) can be passed through whole.
@@ -355,6 +374,9 @@ function cardDavReplaceLineValue(string $raw, array $spans, int $index, string $
  *
  * Returns the card unchanged if there is no END:VCARD to insert before: a card
  * that malformed is not one to start editing.
+ *
+ * @param string $raw  the card as it stands
+ * @param string $logicalLine  the whole new content line, value already escaped; folded here
  */
 function cardDavInsertLine(string $raw, string $logicalLine): string
 {
@@ -373,6 +395,10 @@ function cardDavInsertLine(string $raw, string $logicalLine): string
 
 /**
  * Remove the logical line at $index, its continuations and its line ending.
+ *
+ * @param string $raw  the card as it stands
+ * @param array $spans  cardDavLineSpans() of that same $raw
+ * @param int $index  which span to remove
  */
 function cardDavRemoveLine(string $raw, array $spans, int $index): string
 {
@@ -398,8 +424,11 @@ function cardDavRemoveLine(string $raw, array $spans, int $index): string
  * all, and appending one requires the two empty separators in between or the
  * town lands in `street`.
  *
+ * @param string $value  the property's current value after the colon, still escaped; '' for a new line
+ * @param int $index  which component to set, from 0 (ORG department is 1, ADR town is 3)
  * @param int $arity how many components the property is defined to have, so a
  *                   padded value is not left shorter than parsers expect
+ * @param string $escapedNew  the new component, already escaped with cardDavEscapeText(); '' blanks it
  */
 function cardDavSetComponent(string $value, int $index, int $arity, string $escapedNew): string
 {
@@ -443,6 +472,9 @@ function cardDavWritableFields(): array
  * several `TEL` lines rather than a property name, and a writer with its own
  * copy of that rule would eventually disagree with the reader — overwriting the
  * desk number when asked to change the mobile, silently and with no error.
+ *
+ * @param array $spans  cardDavLineSpans() of the card
+ * @param string $field  a person field from cardDavWritableFields(), e.g. 'mobile'; any other gives null
  */
 function cardDavLocateField(array $spans, string $field): ?int
 {
@@ -565,6 +597,15 @@ const CARDDAV_LOG_RESPONSE_MAX = 4000;
  * ⚠️ NEVER THROWS. This is called on the failure path of a feature that is
  * itself already reported as failed; a logging error must not become the thing
  * the analyst sees instead.
+ *
+ * @param int $providerId  auth_providers.id of the address book
+ * @param ?int $userId  users.id of the person; null or 0 stores NULL
+ * @param string $displayName  the person's name, kept so the row still says who it was after a delete
+ * @param string $outcome  'ok', 'created', 'conflict', 'failed' or 'skipped'
+ * @param array $fields  the person fields involved, e.g. ['mobile']
+ * @param ?int $status  the HTTP status the server gave; null or 0 when no request was made
+ * @param string $response  the server's response body, stored verbatim up to CARDDAV_LOG_RESPONSE_MAX
+ * @param string $message  a plain sentence for the write log; cut to 1000 characters
  */
 function cardDavLogWrite(PDO $conn, int $providerId, ?int $userId, string $displayName,
                          string $outcome, array $fields, ?int $status, string $response,
@@ -634,6 +675,7 @@ function cardDavLogWrite(PDO $conn, int $providerId, ?int $userId, string $displ
  * function itself is the same either way; `$fromPortal` only changes what the
  * write log says about who made the change.
  *
+ * @param int $userId  users.id of the person whose card is updated
  * @param array $changes  field => the value just saved
  * @param array $previous field => the value FreeITSM held BEFORE this save
  * @param bool  $fromPortal the person changed it themselves, in the portal

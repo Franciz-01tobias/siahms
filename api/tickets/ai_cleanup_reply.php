@@ -36,6 +36,13 @@ header('Connection: keep-alive');
 
 set_time_limit(0);
 
+/**
+ * Sends one server-sent event (an event name and a JSON data line) and flushes it to the
+ * browser straight away.
+ *
+ * @param string $event  the event name the browser listens for: 'text', 'usage', 'done' or 'error'
+ * @param array $data  the payload, sent as one JSON line
+ */
 function sse_send(string $event, array $data): void
 {
     echo "event: {$event}\n";
@@ -75,12 +82,19 @@ try {
         sse_send('error', ['message' => 'Ticket not found']);
         exit;
     }
+    // A confidential ticket is not sent to an AI provider unless Tickets -> Settings
+    // says so (discussion #62) - checked here, on the server, whatever the page does.
+    require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
+    if (!ticketAiAllowed($conn, $ticketId)) {
+        sse_send('error', ['message' => TICKET_AI_CONFIDENTIAL_ERROR, 'confidential' => true]);
+        exit;
+    }
 
     // Provider / model / key / verify_ssl come from the shared AI block
     // (ns=tickets_reply_cleanup) so this feature keeps its own key + billing
     // line. Tone + custom instructions are reply-cleanup specific.
     $aiCfg = aiSettingsLoad($conn, 'tickets_reply_cleanup');
-    if (($aiCfg['api_key'] ?? '') === '') {
+    if (!aiConfigured($aiCfg)) {
         sse_send('error', ['message' => 'Reply Cleanup AI not configured. Set up the provider and key in Tickets → Settings → Reply Cleanup.']);
         exit;
     }

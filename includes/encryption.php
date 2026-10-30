@@ -57,6 +57,7 @@ define('ENCRYPTED_SETTING_KEYS', [
     'lms_ai_api_key',
     'knowledge_writeup_api_key',
     'warroom_ai_api_key',
+    'projects_ai_api_key',
 ]);
 
 /**
@@ -82,10 +83,13 @@ define('MASKED_SETTING_KEYS', [
     'lms_ai_api_key',
     'knowledge_writeup_api_key',
     'warroom_ai_api_key',
+    'projects_ai_api_key',
 ]);
 
 /**
  * Check if a system_settings key should be masked when returned to the client.
+ *
+ * @param mixed $key  a system_settings.setting_key, matched exactly against MASKED_SETTING_KEYS
  */
 function isMaskedSettingKey($key) {
     return in_array($key, MASKED_SETTING_KEYS, true);
@@ -93,6 +97,8 @@ function isMaskedSettingKey($key) {
 
 /**
  * Produce a "****<last4>" mask. Empty input returns ''.
+ *
+ * @param mixed $value  the plaintext secret (string or null); under 4 characters gives just "****"
  */
 function maskSecret($value) {
     if ($value === null || $value === '') return '';
@@ -104,6 +110,8 @@ function maskSecret($value) {
  * Treat a save-time value as "leave existing untouched" when it's empty,
  * null, or starts with one or more asterisks (i.e. the user submitted the
  * masked placeholder unchanged).
+ *
+ * @param mixed $value  the value submitted from a settings form (string or null)
  */
 function isMaskedNoChangeValue($value) {
     if ($value === null || $value === '') return true;
@@ -178,10 +186,23 @@ define('SETTING_KEYS_NEVER_ENCRYPT', [
  * Safe to switch on for values already stored in plaintext: decryptValue() passes
  * an unencrypted value straight through, so old rows keep reading and re-encrypt on
  * the next save. db_verify re-encrypts the existing ones in place.
+ *
+ * @param mixed $key  a system_settings.setting_key
  */
 function isEncryptedSettingKey($key) {
     if (in_array($key, SETTING_KEYS_NEVER_ENCRYPT, true)) return false;
     if (in_array($key, ENCRYPTED_SETTING_KEYS, true))     return true;
+    return isSecretSettingName($key);
+}
+
+/**
+ * Is this key named like a credential (*_password, *_secret, *_token, *_api_key)?
+ * The rule isEncryptedSettingKey() falls back on, shared so a reader can refuse to
+ * send such a key in the clear (api/settings/get_system_settings.php).
+ *
+ * @param mixed $key  a system_settings.setting_key; cast to string, matched case-insensitively
+ */
+function isSecretSettingName($key) {
     return (bool)preg_match('/_(password|secret|token|api_key)$/i', (string)$key);
 }
 
@@ -333,7 +354,7 @@ function decryptMailboxRow($row) {
  * maskSecret() on top of this; a screen that merely says "configured" should not
  * decrypt at all.
  *
- * @param string[] $keys
+ * @param string[] $keys  the system_settings.setting_key values to load; an empty list returns []
  * @return array<string,string> key => plaintext value, missing keys absent
  */
 function settingsGetDecrypted(PDO $conn, array $keys): array
@@ -358,7 +379,12 @@ function settingsGetDecrypted(PDO $conn, array $keys): array
     return $out;
 }
 
-/** One setting, decrypted. See settingsGetDecrypted(). */
+/**
+ * One setting, decrypted. See settingsGetDecrypted().
+ *
+ * @param string $key  the system_settings.setting_key to load
+ * @param string $default  returned when no row exists (a value that will not decrypt still gives '')
+ */
 function settingGetDecrypted(PDO $conn, string $key, string $default = ''): string
 {
     $values = settingsGetDecrypted($conn, [$key]);

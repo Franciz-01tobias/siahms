@@ -18,11 +18,52 @@
 const DEMO_MODULES = [
     'core', 'tickets', 'assets', 'knowledge', 'changes', 'calendar', 'checks',
     'checklists',
-    'contracts', 'services', 'software', 'forms', 'software-assets',
+    'contracts', 'domains', 'cost-centres', 'services', 'software', 'forms', 'software-assets',
     'dashboards', 'tasks', 'process-mapper', 'cmdb', 'lms', 'workflow',
     'network-mapper',
 ];
 
+/**
+ * After a module's rows are in, inside the import's transaction (3.3.0).
+ *
+ * tasks: a demo project baseline is a snapshot of the plan (includes/projects/
+ * control.php) holding stage and milestone IDS, which only exist once inserted,
+ * so the JSON gives each baseline a recipe instead -
+ *   snapshot: {"_demo": {"target_shift": -14, "budget_delta": -4500, "stage_shift": -10}}
+ * - and this takes the project's plan as imported and moves it by that much:
+ * the plan as it stood before the change request that moved it.
+ *
+ * @param string $module  the DEMO_MODULES key just imported, e.g. 'tasks'; only 'tasks' does anything
+ */
+function demoAfterImport(PDO $conn, string $module): void {
+    if ($module !== 'tasks') return;
+    try { $rows = $conn->query("SELECT id, project_id, snapshot FROM project_baselines WHERE is_demo = 1")->fetchAll(PDO::FETCH_ASSOC); }
+    catch (Throwable $e) { return; }   // before Database Verification
+    if (!$rows) return;
+    require_once __DIR__ . '/projects/control.php';
+    $shift = fn(?string $d, int $days) => $d ? gmdate('Y-m-d', strtotime($d . ' 00:00:00 UTC') + $days * 86400) : null;
+    $up = $conn->prepare("UPDATE project_baselines SET snapshot = ?, start_date = ?, target_end_date = ?, budget_planned = ?, task_count = ?, estimate_hours = ?, must_count = ? WHERE id = ?");
+    foreach ($rows as $b) {
+        $recipe = json_decode((string)$b['snapshot'], true)['_demo'] ?? null;
+        if (!is_array($recipe)) continue;
+        $s = projectPlanSnapshot($conn, (int)$b['project_id']);
+        $t = (int)($recipe['target_shift'] ?? 0); $st = (int)($recipe['stage_shift'] ?? 0);
+        $s['target_end_date'] = $shift($s['target_end_date'], $t);
+        foreach ($s['stages'] as &$x) { if ($x['end_date'] && $x['end_date'] >= gmdate('Y-m-d', time() - 30 * 86400)) { $x['end_date'] = $shift($x['end_date'], $st); } }
+        unset($x);
+        foreach ($s['milestones'] as &$x) { if ($x['due_date'] >= gmdate('Y-m-d')) $x['due_date'] = $shift($x['due_date'], $st); }
+        unset($x);
+        if ($s['budget_planned'] !== null) $s['budget_planned'] = round($s['budget_planned'] + (float)($recipe['budget_delta'] ?? 0), 2);
+        if (isset($recipe['task_delta'])) $s['task_count'] = max(0, (int)$s['task_count'] + (int)$recipe['task_delta']);
+        $up->execute([json_encode($s), $s['start_date'], $s['target_end_date'], $s['budget_planned'], $s['task_count'] ?? null, $s['estimate_hours'] ?? null, isset($s['must']) ? count($s['must']) : null, (int)$b['id']]);
+    }
+}
+
+/**
+ * Returns the path of a module's demo data file, database/demo-data/{module}.json.
+ *
+ * @param string $module  a DEMO_MODULES key, e.g. 'tickets' (trusted - put straight into the path)
+ */
 function demoDataPath(string $module): string {
     return __DIR__ . "/../database/demo-data/{$module}.json";
 }
@@ -35,6 +76,8 @@ function demoDataPath(string $module): string {
  * icons) and the importer never creates or removes them. Getting this wrong in
  * the clearing direction is what makes an importer destructive, so it is
  * deliberately the narrow reading.
+ *
+ * @param array $demoData  a decoded demo-data JSON file: tier1..tier5 => [table => [record, ...]]
  */
 function demoTablesWithInserts(array $demoData): array {
     $tables = [];
@@ -52,7 +95,11 @@ function demoTablesWithInserts(array $demoData): array {
     return $tables;
 }
 
-/** As above, but reads the module's JSON from disk. Returns [] if unreadable. */
+/**
+ * As above, but reads the module's JSON from disk. Returns [] if unreadable.
+ *
+ * @param string $module  a DEMO_MODULES key, e.g. 'tickets'
+ */
 function demoModuleTables(string $module): array {
     $path = demoDataPath($module);
     if (!file_exists($path)) return [];
@@ -66,6 +113,8 @@ function demoModuleTables(string $module): array {
  * Counts only rows marked is_demo = 1, so real data is never mistaken for
  * demo data. A missing table or column counts as zero rather than throwing —
  * a module whose feature was never set up simply has no demo rows.
+ *
+ * @param string $module  a DEMO_MODULES key, e.g. 'tickets'
  */
 function demoRowCount(PDO $conn, string $module): int {
     $total = 0;
@@ -91,6 +140,9 @@ function demoRowCount(PDO $conn, string $module): int {
  * finds the demo tables that reference $table and still hold demo rows, and
  * names the modules they belong to so the message can tell the administrator
  * what to deal with first.
+ *
+ * @param string $table  the table whose demo rows could not be cleared
+ * @param string $exceptModule  the DEMO_MODULES key being imported, left out of the answer
  */
 function demoBlockingModules(PDO $conn, string $table, string $exceptModule): array {
     $blocking = [];
@@ -129,6 +181,10 @@ function demoBlockingModules(PDO $conn, string $table, string $exceptModule): ar
  * message is true and useless — it names a row the administrator never created
  * and says nothing about what to do. It is also the likeliest failure on
  * exactly the installations most at risk, so it is worth spelling out.
+ *
+ * @param string $module  the DEMO_MODULES key being imported
+ * @param string $table  the table the insert collided in
+ * @param string $dbMessage  the database error text; the "Duplicate entry '...'" value is quoted from it
  */
 function demoDuplicateExplanation(PDO $conn, string $module, string $table, string $dbMessage): string {
     $value = '';

@@ -34,6 +34,7 @@ return [
 
     'sidebar' => [
         'new_process'        => '+ New',
+        'new_process_tip'    => 'New process',
         'search_placeholder' => 'Search processes...',
         'no_processes_yet'   => 'No processes yet',
     ],
@@ -249,7 +250,7 @@ return [
         // 2. Creating a process
         'creating_heading' => 'Creating a process',
         'creating_intro'   => 'A process is one diagram &mdash; usually a single workflow with a start, a few steps, maybe a decision or two, and an end. Start by creating an empty process from the sidebar, then build it up step by step on the canvas.',
-        'creating_step1'   => '<strong>Click "+ New Process"</strong> &mdash; the button at the top of the left sidebar creates a new, empty process and selects it. You will be prompted for a title; keep it short and recognisable, e.g. "Incident triage" or "New starter onboarding".',
+        'creating_step1'   => '<strong>Click New</strong> &mdash; the button at the top right creates a new, empty process and selects it. You will be prompted for a title; keep it short and recognisable, e.g. "Incident triage" or "New starter onboarding".',
         'creating_step2'   => '<strong>Add the first step</strong> &mdash; click any of the shape buttons in the toolbar (Process, Decision, Terminal, Document) to drop a new step on the canvas. Most processes start with a Terminal labelled "Start" or describing the trigger event.',
         'creating_step3'   => '<strong>Set its label</strong> &mdash; double-click the step to rename it inline, or single-click to open the slide-in detail panel on the right where you can change label, type, description, and colour.',
         'creating_step4'   => '<strong>Build out the rest</strong> &mdash; keep adding steps and connectors until the diagram tells the full story. Use Decision diamonds for any "yes/no" or branching points, and Document shapes for outputs like reports, certificates, or sign-offs.',

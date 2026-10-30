@@ -18,6 +18,8 @@
  * the one page that did not load i18n.js, and because the throw happened above
  * the try, it never even made its request (GH #78). Same pattern as calendar.js
  * and war-room.js: fall back to English rather than take the page down.
+ *
+ * @wiki Attached-Documents-Developer-Guide
  */
 (function () {
     'use strict';
@@ -57,9 +59,21 @@
         idx_failed:   'Its contents could not be read.',
         find_existing:'Or attach a document already in FreeITSM — start typing its name',
         find_none:    'No documents match, that you can see and that are not already here.',
-        currently_on: 'currently on {where}'
+        currently_on: 'currently on {where}',
+        // The Help Centre - knowledge articles only (GH #177).
+        hc_customer:  'Customers who can read this article in the Help Centre can download the documents marked Shown.',
+        hc_internal:  'Customers cannot read this article, so none of its documents are in the Help Centre.',
+        hc_verify:    'Run System → Database Verification to choose which documents customers can download.',
+        hc_how:       'How this works',
+        hc_shown:     'Shown in Help Centre',
+        hc_hidden:    'Hidden from Help Centre',
+        hc_show:      'Show',
+        hc_hide:      'Hide'
     };
 
+    /**
+     * Translates a key under common.documents, falling back to the English in FALLBACK with {name} placeholders filled.
+     */
     function t(key, params) {
         var full = 'common.documents.' + key;
         if (typeof window.t === 'function') {
@@ -75,12 +89,14 @@
         return s;
     }
 
+    /** HTML-escapes a value for building the panel's markup. */
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
 
+    /** Formats a byte count as B, KB or MB. */
     function bytes(n) {
         if (n == null) return '';
         if (n < 1024) return n + ' B';
@@ -93,12 +109,18 @@
         return /^https?:\/\//i.test(String(url || '')) ? String(url) : '#';
     }
 
+    /** The inline SVG icon for a document row - a chain link for a DMS link, a page for an uploaded file. */
     function icon(kind) {
         return kind === 'link'
             ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>'
             : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
     }
 
+    /**
+     * One Documents panel mounted on a record: reads the options, draws the panel and loads the first page of documents.
+     *
+     * Created by FreeITSMDocuments.mount().
+     */
     function Panel(el, opts) {
         this.el         = el;
         this.parentType = opts.parentType;
@@ -110,6 +132,10 @@
         // The COUNT still shows, because that is the part the host does not know.
         this.showHeading = opts.showHeading === true;
         this.pageSize   = opts.pageSize || 25;
+        // Where "How this works" points, on a knowledge article (GH #177). The
+        // server decides whether the Help Centre applies; this is only the link.
+        this.helpCentreHelp = opts.helpCentreHelpUrl || '';
+        this.helpCentre = null;
         this.offset     = 0;
         this.items      = [];
         this.total      = 0;
@@ -145,6 +171,7 @@
                   '</div>'
                 : '') +
             '<div class="fd-error" hidden></div>' +
+            '<div class="fd-hc" hidden></div>' +
             '<div class="fd-list"></div>' +
             '<div class="fd-more" hidden><button type="button" class="fd-btn fd-moreBtn">' + esc(t('show_more')) + '</button></div>';
 
@@ -152,6 +179,7 @@
         this.$list  = this.el.querySelector('.fd-list');
         this.$err   = this.el.querySelector('.fd-error');
         this.$more  = this.el.querySelector('.fd-more');
+        this.$hc    = this.el.querySelector('.fd-hc');
 
         var self = this;
         if (this.canEdit) {
@@ -192,6 +220,8 @@
         this.$list.addEventListener('click', function (e) {
             var rm = e.target.closest('[data-remove]');
             if (rm) { self.remove(parseInt(rm.getAttribute('data-remove'), 10), rm.getAttribute('data-name')); return; }
+            var hc = e.target.closest('[data-hc]');
+            if (hc) { self.setHelpCentre(parseInt(hc.getAttribute('data-hc'), 10), hc.getAttribute('data-show') === '1'); return; }
             var nfo = e.target.closest('[data-info]');
             if (nfo) {
                 // The panel sits at a module path, the parent links are relative
@@ -247,6 +277,7 @@
                 if (!d.success) { self.fail(d.error); return; }
                 self.clearFail();
                 self.total  = d.total;
+                self.helpCentre = d.help_centre || null;
                 self.items  = self.items.concat(d.documents || []);
                 self.offset = self.items.length;
                 self.paint();
@@ -257,6 +288,31 @@
     Panel.prototype.paint = function () {
         this.$count.textContent = this.total === 1
             ? t('count_one') : t('count_many', { n: this.total });
+        // Told to whoever holds the panel - the task window puts it on its
+        // Documents tab, which is drawn before the list has loaded.
+        try {
+            this.el.dispatchEvent(new CustomEvent('fd:count', { bubbles: true, detail: { total: this.total } }));
+        } catch (e) {}
+
+        // The Help Centre line (GH #177). Present only when the server sent
+        // help_centre, i.e. on a knowledge article - every other record type is
+        // untouched. Also told to the host, so the article editor can warn when
+        // a change of audience is about to publish these documents.
+        var hc = this.helpCentre;
+        if (hc && this.items.length) {
+            var msg = !hc.ready ? t('hc_verify') : (hc.customer_facing ? t('hc_customer') : t('hc_internal'));
+            this.$hc.innerHTML = esc(msg) +
+                (this.helpCentreHelp ? ' <a href="' + esc(this.helpCentreHelp) + '" target="_blank" rel="noopener">' + esc(t('hc_how')) + '</a>' : '');
+            this.$hc.hidden = false;
+        } else {
+            this.$hc.hidden = true;
+        }
+        if (hc) {
+            try {
+                this.el.dispatchEvent(new CustomEvent('fd:helpcentre', { bubbles: true, detail: hc }));
+            } catch (e) {}
+        }
+        var hcRows = !!(hc && hc.ready);
 
         if (!this.items.length) {
             this.$list.innerHTML = '<div class="fd-empty">' + esc(t('none')) + '</div>';
@@ -289,6 +345,10 @@
                     (d.description ? '<div class="fd-desc">' + esc(d.description) + '</div>' : '') +
                     (meta.length ? '<div class="fd-meta">' + meta.join(' · ') + '</div>' : '') +
                     (also ? '<div class="fd-also">' + also + '</div>' : '') +
+                    (hcRows
+                        ? '<span class="fd-hc-tag' + (d.show_in_help_centre ? '' : ' fd-hc-hidden') + '">' +
+                          esc(d.show_in_help_centre ? t('hc_shown') : t('hc_hidden')) + '</span>'
+                        : '') +
                 '</div>' +
                 '<div class="fd-actions">' +
                     '<button type="button" class="fd-btn fd-info" data-info="' + d.id +
@@ -296,6 +356,11 @@
                     '<a class="fd-btn" href="' + esc(href) + '"' +
                         (isLink ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' +
                         esc(isLink ? t('open') : t('download')) + '</a>' +
+                    (self.canEdit && hcRows
+                        ? '<button type="button" class="fd-btn" data-hc="' + d.id + '" data-show="' +
+                          (d.show_in_help_centre ? '0' : '1') + '">' +
+                          esc(d.show_in_help_centre ? t('hc_hide') : t('hc_show')) + '</button>'
+                        : '') +
                     (self.canEdit
                         ? '<button type="button" class="fd-btn fd-danger" data-remove="' + d.id +
                           '" data-name="' + esc(d.title) + '">' + esc(t('remove')) + '</button>'
@@ -435,6 +500,23 @@
           .catch(function () { self.fail(); });
     };
 
+    /** Show (true) or hide (false) one document in the Help Centre, then redraw. */
+    Panel.prototype.setHelpCentre = function (documentId, show) {
+        var self = this;
+        this.clearFail();
+        fetch(this.api + 'help_centre.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ document_id: documentId, parent_id: this.parentId, show: show ? 1 : 0 })
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+              if (!d.success) { self.fail(d.error); return; }
+              self.load(true);
+          })
+          .catch(function () { self.fail(); });
+    };
+
     Panel.prototype.remove = function (id, name) {
         var self = this;
         var ask = t('remove_confirm', { name: name || '' });
@@ -494,13 +576,20 @@
        overlay, not a list on a record. One implementation, two callers, same
        reason the resolver is shared server-side. */
 
+    /** Removes the document details dialog and its Escape handler. */
     function closeInfo() {
         var old = document.getElementById('fdInfoOverlay');
         if (old) old.remove();
         document.removeEventListener('keydown', onInfoKey);
     }
+    /** Closes the document details dialog on Escape. */
     function onInfoKey(e) { if (e.key === 'Escape') closeInfo(); }
 
+    /**
+     * Opens the document details dialog: what the document is, whether its contents are searchable, and every record it is attached to.
+     *
+     * Reads api/documents/links.php. Records the analyst cannot see are shown only as a count.
+     */
     function showInfo(apiBase, documentId, baseUrl) {
         closeInfo();
         var ov = document.createElement('div');
@@ -575,6 +664,9 @@
     }
 
     window.FreeITSMDocuments = {
+        /**
+         * Mounts a Documents panel in an element (or a selector) and returns it, or null when the element is missing.
+         */
         mount: function (el, opts) {
             if (typeof el === 'string') el = document.querySelector(el);
             if (!el) return null;

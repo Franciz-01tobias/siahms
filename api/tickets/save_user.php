@@ -11,6 +11,7 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/users.php';   // USER_PERSON_FIELDS, manager-loop guard
+require_once '../../includes/cost_centre_assign.php';   // GH #160
 
 header('Content-Type: application/json');
 
@@ -18,7 +19,11 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
-requireModuleAccessJson('tickets');
+// Either module: the one shared person editor (includes/person_editor.php) is
+// opened from Tickets -> Users AND Assets -> Users. Tickets-only locked out every
+// analyst who has Assets but not Tickets, on a screen that offered them Edit.
+// Who may edit a given person is still decided below, by analystCanAccessUser().
+requireAnyModuleAccessJson(['tickets', 'assets']);
 
 $data = json_decode(file_get_contents('php://input'), true);
 if (!$data) {
@@ -128,6 +133,38 @@ try {
         exit;
     }
 
+    // The cost centre this person is charged to (GH #160): an ACTIVE one of the
+    // company they will be in (no company = the Default company's), or the one they
+    // already hold. Not sent: unchanged - unless they are moving company, when their
+    // old company's cost centre cannot come with them, so that is refused.
+    $ccSent = array_key_exists('cost_centre_id', $data) && costCentreReady($conn, 'users');
+    $ccValue = null;
+    if (costCentreReady($conn, 'users')) {
+        $cur = ['tenant_id' => null, 'cost_centre_id' => null];
+        if ($id) {
+            $cq = $conn->prepare("SELECT tenant_id, cost_centre_id FROM users WHERE id = ?");
+            $cq->execute([$id]);
+            $cur = $cq->fetch(PDO::FETCH_ASSOC) ?: $cur;
+        }
+        $ccTenant = costCentreRecordTenant($conn, $tenantSent ? $tenantId : ($id ? $cur['tenant_id'] : $destinationTenantId));
+        $curCc = $cur['cost_centre_id'] !== null ? (int)$cur['cost_centre_id'] : null;
+        try {
+            if ($ccSent) {
+                $ccValue = costCentreCheck($conn, $ccTenant, $data['cost_centre_id'], $curCc);
+            } elseif ($curCc !== null && $tenantSent) {
+                $ct = $conn->prepare("SELECT tenant_id FROM cost_centres WHERE id = ?");
+                $ct->execute([$curCc]);
+                if ((int)$ct->fetchColumn() !== $ccTenant) {
+                    echo json_encode(['success' => false, 'error' => "This person's cost centre belongs to their current company. Choose one of the new company's (or none) when moving them."]);
+                    exit;
+                }
+            }
+        } catch (ServiceError $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            exit;
+        }
+    }
+
     // Is this record owned by a directory, and by WHICH KIND of directory? Both
     // halves matter: `is_managed` says somebody else maintains this person, and
     // the provider's protocol says which parts of them. An address book owns a
@@ -222,6 +259,7 @@ try {
         if (array_key_exists('preferred_name', $data)) { $sets[] = 'preferred_name = ?'; $args[] = $preferredName ?: null; }
         if ($password !== '')                          { $sets[] = 'password_hash = ?';  $args[] = password_hash($password, PASSWORD_BCRYPT); }
         if ($tenantSent)                               { $sets[] = 'tenant_id = ?';      $args[] = $tenantId; }
+        if ($ccSent)                                   { $sets[] = 'cost_centre_id = ?'; $args[] = $ccValue; }
 
         // The person fields, same "absent means don't touch" rule as above.
         // ⚠️ Directory-owned ones are refused outright on a MANAGED record rather
@@ -306,6 +344,7 @@ try {
             $cols[] = $f;
             $vals[] = userPersonFieldValue($f, $data[$f]);
         }
+        if ($ccSent) { $cols[] = 'cost_centre_id'; $vals[] = $ccValue; }
         // is_active defaults to 1 in the schema; a create is never a deactivation.
         $ph = implode(', ', array_fill(0, count($cols), '?'));
         $stmt = $conn->prepare("INSERT INTO users (" . implode(', ', $cols) . ", created_at) VALUES ($ph, UTC_TIMESTAMP())");

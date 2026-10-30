@@ -116,6 +116,7 @@ function warRoomEnsureChannels(PDO $conn, int $analystId): void
  * channels, then DMs. In an outage the room everyone shares should be the first
  * thing under the cursor, not the thing you scroll past your DMs to reach.
  *
+ * @param bool $includeArchived  true to include archived channels as well
  * @return array<int,array{id:int,kind:string,name:string,topic:?string,
  *                         is_private:bool,archived:bool,unread:int,members:?int}>
  */
@@ -187,6 +188,8 @@ function warRoomChannelList(PDO $conn, int $analystId, bool $includeArchived = f
  * A team channel shows the team's CURRENT name and a DM the other person's, both
  * read live rather than copied at creation — so renaming a team or an analyst
  * renames the channel, and there is no stored name that can quietly become wrong.
+ *
+ * @param array $row  a channel row with kind, name, team_name and other_members (the other DM members' names)
  */
 function warRoomChannelName(array $row): string
 {
@@ -206,7 +209,11 @@ function warRoomChannelName(array $row): string
     }
 }
 
-/** One channel row, or null. Raw — callers must still check access. */
+/**
+ * One channel row, or null. Raw — callers must still check access.
+ *
+ * @param int $channelId  the warroom_channels id
+ */
 function warRoomChannel(PDO $conn, int $channelId): ?array
 {
     $stmt = $conn->prepare(
@@ -229,6 +236,8 @@ function warRoomChannel(PDO $conn, int $channelId): ?array
  *
  * ⚠️ Enforced HERE, server-side, on every read and every write — never by only
  * rendering a shorter channel list. Anything unexpected fails CLOSED.
+ *
+ * @param int $channelId  the warroom_channels id
  */
 function warRoomCanAccessChannel(PDO $conn, int $analystId, int $channelId): bool
 {
@@ -255,6 +264,11 @@ function warRoomCanAccessChannel(PDO $conn, int $analystId, int $channelId): boo
     }
 }
 
+/**
+ * True when the analyst is a listed member of the channel - what decides access to a private channel or a DM.
+ *
+ * @param int $channelId  the warroom_channels id
+ */
 function warRoomIsMember(PDO $conn, int $analystId, int $channelId): bool
 {
     $s = $conn->prepare("SELECT 1 FROM warroom_channel_members WHERE channel_id = :c AND analyst_id = :a LIMIT 1");
@@ -268,6 +282,8 @@ function warRoomIsMember(PDO $conn, int $analystId, int $channelId): bool
  * Archiving deliberately leaves a channel readable: the point of archiving an
  * incident channel is to stop it collecting new chatter, not to hide what was
  * said during the incident.
+ *
+ * @param int $channelId  the warroom_channels id
  */
 function warRoomCanPostChannel(PDO $conn, int $analystId, int $channelId): bool
 {
@@ -280,6 +296,9 @@ function warRoomCanPostChannel(PDO $conn, int $analystId, int $channelId): bool
  * Create a custom channel. Any analyst may — during an incident, needing an
  * administrator to make you a room is exactly the wrong dependency.
  *
+ * @param string $name  the channel name; blank throws 'name_required'; spaces collapsed, cut to 120 characters
+ * @param string $topic  an optional topic; blank stores NULL; cut to 255 characters
+ * @param bool $isPrivate  true for a members-only channel
  * @param int[] $memberIds ignored unless $isPrivate; the creator is always added
  * @return int the new channel id
  * @throws InvalidArgumentException with a message safe to show a user
@@ -315,7 +334,12 @@ function warRoomCreateChannel(PDO $conn, int $analystId, string $name, string $t
     return $id;
 }
 
-/** Add analysts to a channel. Idempotent — re-inviting somebody is not an error. */
+/**
+ * Add analysts to a channel. Idempotent — re-inviting somebody is not an error.
+ *
+ * @param int $channelId  the warroom_channels id
+ * @param array $analystIds  analysts.id values to add; ids of 0 or less and inactive analysts are skipped
+ */
 function warRoomAddMembers(PDO $conn, int $channelId, array $analystIds): void
 {
     $stmt = $conn->prepare(
@@ -335,6 +359,9 @@ function warRoomAddMembers(PDO $conn, int $channelId, array $analystIds): void
 /**
  * Archive or restore a custom channel. Team and all-hands channels cannot be
  * archived — they are derived, so the way to remove one is to remove the team.
+ *
+ * @param int $channelId  the warroom_channels id; only custom and DM channels change
+ * @param bool $archived  true to archive, false to restore
  */
 function warRoomSetArchived(PDO $conn, int $channelId, bool $archived): bool
 {
@@ -347,7 +374,13 @@ function warRoomSetArchived(PDO $conn, int $channelId, bool $archived): bool
     return $stmt->rowCount() > 0;
 }
 
-/** Rename / re-topic a custom channel. Team and DM names are derived, never stored. */
+/**
+ * Rename / re-topic a custom channel. Team and DM names are derived, never stored.
+ *
+ * @param int $channelId  the warroom_channels id; only a custom channel changes
+ * @param string $name  the new name; blank changes nothing; cut to 120 characters
+ * @param string $topic  the new topic; blank clears it; cut to 255 characters
+ */
 function warRoomUpdateChannel(PDO $conn, int $channelId, string $name, string $topic): bool
 {
     $name = trim(preg_replace('/\s+/u', ' ', $name));
@@ -371,6 +404,8 @@ function warRoomUpdateChannel(PDO $conn, int $channelId, string $name, string $t
  * UNIQUE. Without it, two people opening a DM with each other at the same moment
  * get two conversations and each sees half of it — which is precisely the failure
  * you would hit during an incident, when both are trying to reach the other.
+ *
+ * @param int $otherId  the other analyst's id; must be active and not the caller
  */
 function warRoomOpenDm(PDO $conn, int $analystId, int $otherId): int
 {
@@ -445,6 +480,10 @@ function warRoomDirectory(PDO $conn, int $analystId): array
  *
  * A NULL analyst_id is a deleted account, rendered as "Former analyst" rather
  * than blank or "Unknown" so the reader can tell WHICH case it is.
+ *
+ * @param int $channelId  the warroom_channels id; the caller has already checked access
+ * @param int $sinceId  the newest message id the page holds; 0 for the first load (the latest $limit)
+ * @param int $limit  the most messages to return, 1-500
  */
 function warRoomMessages(PDO $conn, int $channelId, int $sinceId = 0, int $limit = 200): array
 {
@@ -550,6 +589,9 @@ function warRoomMessages(PDO $conn, int $channelId, int $sinceId = 0, int $limit
  * The edit is stamped rather than silent: this is the record of an incident, and a
  * message that changed after the fact has to say so. Mentions are re-resolved,
  * because an edit can add or remove a name.
+ *
+ * @param int $messageId  the warroom_messages id; only its author may edit it
+ * @param string $body  the new text; blank changes nothing; cut to WARROOM_MAX_BODY
  */
 function warRoomEditMessage(PDO $conn, int $analystId, int $messageId, string $body): bool
 {
@@ -584,6 +626,9 @@ function warRoomEditMessage(PDO $conn, int $analystId, int $messageId, string $b
  * transcript is worse than a visible one: the reader cannot tell whether something
  * was removed or never said, and that is exactly the question a post-incident
  * review asks.
+ *
+ * @param int $messageId  the warroom_messages id
+ * @param bool $mayManage  true when the caller holds war_room.manage and may delete anyone's message
  */
 function warRoomDeleteMessage(PDO $conn, int $analystId, int $messageId, bool $mayManage = false): bool
 {
@@ -612,7 +657,11 @@ function warRoomDeleteMessage(PDO $conn, int $analystId, int $messageId, bool $m
     return true;
 }
 
-/** One message row, raw. Callers do their own access checks. */
+/**
+ * One message row, raw. Callers do their own access checks.
+ *
+ * @param int $messageId  the warroom_messages id
+ */
 function warRoomMessageRow(PDO $conn, int $messageId): ?array
 {
     $stmt = $conn->prepare("SELECT * FROM warroom_messages WHERE id = :id LIMIT 1");
@@ -621,7 +670,12 @@ function warRoomMessageRow(PDO $conn, int $messageId): ?array
     return $row === false ? null : $row;
 }
 
-/** Post a message. Returns the new id, or 0 if the body was empty. */
+/**
+ * Post a message. Returns the new id, or 0 if the body was empty.
+ *
+ * @param int $channelId  the warroom_channels id; the caller has already checked it may post there
+ * @param string $body  the message text as typed; blank posts nothing; cut to WARROOM_MAX_BODY
+ */
 function warRoomSend(PDO $conn, int $analystId, int $channelId, string $body): int
 {
     $body = trim($body);
@@ -675,6 +729,9 @@ function warRoomSend(PDO $conn, int $analystId, int $channelId, string $body): i
  * somebody who cannot see a private channel would otherwise put its name and a
  * snippet of it into their notifications panel.
  *
+ * @param int $channelId  the channel the message is in; only its readers can be mentioned
+ * @param int $authorId  the analyst who wrote it, never notified of their own message
+ * @param string $body  the message text as typed
  * @return int[] the analyst ids notified
  */
 function warRoomResolveMentions(PDO $conn, int $channelId, int $authorId, string $body): array
@@ -728,6 +785,8 @@ function warRoomResolveMentions(PDO $conn, int $channelId, int $authorId, string
  *
  * This is warRoomCanAccessChannel turned inside out, and the two must agree — a
  * name that resolves here but fails there would post a mention nobody can open.
+ *
+ * @param int $channelId  the warroom_channels id
  */
 function warRoomChannelAudience(PDO $conn, int $channelId): array
 {
@@ -770,7 +829,12 @@ function warRoomChannelAudience(PDO $conn, int $channelId): array
     return $out;
 }
 
-/** Record the mentions for a message. Idempotent via the UNIQUE on (message, analyst). */
+/**
+ * Record the mentions for a message. Idempotent via the UNIQUE on (message, analyst).
+ *
+ * @param int $messageId  the warroom_messages id
+ * @param array $analystIds  the analysts.id values it names, from warRoomResolveMentions()
+ */
 function warRoomStoreMentions(PDO $conn, int $messageId, array $analystIds): void
 {
     if (!$analystIds) return;
@@ -791,6 +855,8 @@ function warRoomStoreMentions(PDO $conn, int $messageId, array $analystIds): voi
  * ⚠️ Channel access is re-checked in SQL, not assumed from the mention row. A
  * mention written before somebody was removed from a private channel must stop
  * being visible to them, not linger in their panel with a snippet attached.
+ *
+ * @param int $limit  the most to return, 1-50
  */
 function warRoomMyMentions(PDO $conn, int $analystId, int $limit = 20): array
 {
@@ -886,6 +952,9 @@ function warRoomMentionCounts(PDO $conn, int $analystId): array
  * serve time (security F5). Keeping the uploader's claim in the database would
  * only create something for a future endpoint to trust by mistake, so the
  * temptation is removed rather than documented.
+ *
+ * @param int $messageId  the warroom_messages id it belongs to
+ * @param array $file  one entry from $_FILES - untrusted; uploadStoreFile() checks it
  */
 function warRoomStoreAttachment(PDO $conn, int $messageId, array $file): array
 {
@@ -918,6 +987,8 @@ function warRoomStoreAttachment(PDO $conn, int $messageId, array $file): array
  * answer to "may I read this file" and it is the same answer as "may I read the
  * conversation it is in". Guessing an attachment id from another channel returns
  * nothing rather than a file.
+ *
+ * @param int $attachmentId  the warroom_attachments id asked for
  */
 function warRoomAttachmentFor(PDO $conn, int $analystId, int $attachmentId): ?array
 {
@@ -963,6 +1034,10 @@ function warRoomAttachmentFor(PDO $conn, int $analystId, int $attachmentId): ?ar
  * Scoping is inside the query, not applied to the results afterwards: filtering
  * afterwards silently starves the result set when the matches are in channels you
  * cannot see.
+ *
+ * @param string $query  the words typed; up to six, all must appear (substring match)
+ * @param ?int $channelId  limit to one channel; null searches every channel the analyst can read
+ * @param int $limit  the most results, 1-200
  */
 function warRoomSearch(PDO $conn, int $analystId, string $query, ?int $channelId = null, int $limit = 60): array
 {
@@ -1038,6 +1113,10 @@ function warRoomSearch(PDO $conn, int $analystId, string $query, ?int $channelId
  * A window of the message around the first term that matched, so a result is
  * readable without opening it. Plain text — the page inserts it with textContent
  * and highlights client-side, so nothing here can emit markup.
+ *
+ * @param string $body  the message text
+ * @param array $terms  the search words; the window centres near the first one found ([] for the start)
+ * @param int $len  the most characters to return, before the ellipses
  */
 function warRoomSnippet(string $body, array $terms, int $len = 200): string
 {
@@ -1064,6 +1143,8 @@ function warRoomSnippet(string $body, array $terms, int $len = 200): string
  * The poll that fetches messages calls this, so presence costs no extra request
  * and there is no separate heartbeat to keep alive. The UPSERT onto the UNIQUE
  * analyst_id is what stops the table growing — one row per person, forever.
+ *
+ * @param int $channelId  the channel the analyst has open
  */
 function warRoomTouchPresence(PDO $conn, int $analystId, int $channelId): void
 {
@@ -1083,6 +1164,8 @@ function warRoomTouchPresence(PDO $conn, int $analystId, int $channelId): void
  * incident — it is the difference between nobody is reading this and everybody is
  * in the other room.
  *
+ * @param int $excludeAnalystId  the analyst asking, left out of both lists; 0 leaves nobody out
+ * @param int $channelId  the channel that counts as "here"
  * @return array{here:string[],elsewhere:string[]}
  */
 function warRoomPresent(PDO $conn, int $excludeAnalystId, int $channelId): array
@@ -1110,6 +1193,9 @@ function warRoomPresent(PDO $conn, int $excludeAnalystId, int $channelId): array
 /**
  * Remember how far this analyst has read, so the channel list can show what is
  * new. Only ever moves forward: an out-of-order poll must not un-read a channel.
+ *
+ * @param int $channelId  the warroom_channels id
+ * @param int $messageId  the newest message id read; 0 or less does nothing
  */
 function warRoomMarkRead(PDO $conn, int $analystId, int $channelId, int $messageId): void
 {
@@ -1261,6 +1347,8 @@ function warRoomSweepOrphanFiles(PDO $conn): void
  * would be a novel way to leak a DM.
  *
  * @param string $sinceUtc 'Y-m-d H:i:s' in UTC
+ * @param ?int $channelId  limit to one channel; null takes every channel the analyst can read
+ * @param int $maxMessages  the most messages to include, oldest first, 1-1000
  * @return array{lines:string[],messages:int,channels:int}
  */
 function warRoomTranscriptSince(PDO $conn, int $analystId, string $sinceUtc, ?int $channelId = null, int $maxMessages = 400): array
@@ -1326,6 +1414,9 @@ function warRoomTranscriptSince(PDO $conn, int $analystId, string $sinceUtc, ?in
  * does not support a conclusion. A summary that invents a cause reads exactly like
  * one that found a cause, and it goes out to the whole company under somebody's
  * name.
+ *
+ * @param array $lines  the transcript lines from warRoomTranscriptSince()
+ * @param string $sinceLabel  how far back the transcript goes, in words, e.g. '30 minutes ago'
  */
 function warRoomSitrepPrompt(array $lines, string $sinceLabel): string
 {

@@ -28,6 +28,9 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('forms');
+if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['POST', 'DELETE'], true)) {
+    requireModuleWriteJson('forms');   // Read only access (#180) fills in nothing
+}
 
 $ownerId = (int)$_SESSION['analyst_id'];
 $method  = $_SERVER['REQUEST_METHOD'] ?? 'GET';

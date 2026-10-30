@@ -15,6 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tasks');
+requireModuleWriteJson('tasks');   // Read only access to Tasks writes nothing (#181 Part G)
 
 $input = json_decode(file_get_contents('php://input'), true);
 if (!$input) {

@@ -28,6 +28,8 @@
  * plenty do not mark it at all, and a forward can look identical to a reply — so
  * any approach is wrong some of the time, and a wrong boundary should cost a
  * click, never a fact.
+ *
+ * @wiki Reading-Long-Tickets-Developer-Guide
  */
 
 /** Roughly what one line of message text occupies once rendered. */

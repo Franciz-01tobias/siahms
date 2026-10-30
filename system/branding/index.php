@@ -27,9 +27,9 @@ $translationNamespaces = ['common', 'system'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('system.branding.title')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.branding.title'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <style>
         body {
             /* System is the FIRST module whose DARK accent is a LIGHT colour (#90a4ae).
@@ -326,7 +326,7 @@ $translationNamespaces = ['common', 'system'];
         [data-theme-mode="dark"] .btn-link { color: #ef5350; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="branding">
     <?php include '../includes/header.php'; ?>
@@ -336,9 +336,38 @@ $translationNamespaces = ['common', 'system'];
         <p class="page-subtitle">Set the organisation logo and default header/footer text used on diagrams and exported documents</p>
 
         <form id="brandingForm" enctype="multipart/form-data">
+            <!-- System name. Moved here from Tickets -> Settings -> General: it is
+                 the first word of every page title in every module, so it was an
+                 install-wide setting living in one module's settings. -->
+            <div class="settings-card">
+                <h3 id="system-name"><?php echo htmlspecialchars(t('system.branding.system_name_heading')); ?></h3>
+                <p class="card-desc"><?php echo htmlspecialchars(t('system.branding.system_name_desc')); ?></p>
+                <input type="text" id="systemName" class="slot-input" maxlength="100" style="max-width:420px;"
+                       placeholder="Service Desk" autocomplete="off">
+            </div>
+
+            <!-- The "Back to ..." link (3.5.0) - includes/back_link.php -->
+            <div class="settings-card">
+                <h3 id="back-link"><?php echo htmlspecialchars(t('system.branding.back_link_heading')); ?></h3>
+                <p class="card-desc"><?php echo htmlspecialchars(t('system.branding.back_link_desc')); ?></p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                    <label style="flex:1 1 200px;font-size:13px;"><?php echo htmlspecialchars(t('system.branding.back_link_label')); ?>
+                        <input type="text" id="backLinkLabel" class="slot-input" maxlength="60" autocomplete="off"
+                               placeholder="<?php echo htmlspecialchars(t('system.branding.back_link_label_ph')); ?>"></label>
+                    <label style="flex:2 1 280px;font-size:13px;"><?php echo htmlspecialchars(t('system.branding.back_link_url')); ?>
+                        <input type="url" id="backLinkUrl" class="slot-input" maxlength="500" autocomplete="off" placeholder="https://intranet.example.com"></label>
+                    <label style="flex:1 1 180px;font-size:13px;"><?php echo htmlspecialchars(t('system.branding.back_link_where')); ?>
+                        <select id="backLinkWhere" class="slot-input">
+                            <option value="portal"><?php echo htmlspecialchars(t('system.branding.back_link_where_portal')); ?></option>
+                            <option value="analyst"><?php echo htmlspecialchars(t('system.branding.back_link_where_analyst')); ?></option>
+                            <option value="both"><?php echo htmlspecialchars(t('system.branding.back_link_where_both')); ?></option>
+                        </select></label>
+                </div>
+            </div>
+
             <!-- Logo -->
             <div class="settings-card">
-                <h3><?php echo htmlspecialchars(t('system.branding.logo_heading')); ?></h3>
+                <h3 id="logo"><?php echo htmlspecialchars(t('system.branding.logo_heading')); ?></h3>
                 <p class="card-desc"><?php echo t('system.branding.logo_desc', ['code' => '<code>{{logo}}</code>']); ?></p>
                 <div class="logo-row">
                     <div class="logo-preview" id="logoPreview">
@@ -361,7 +390,7 @@ $translationNamespaces = ['common', 'system'];
 
             <!-- Landing page (discussion #63) -->
             <div class="settings-card">
-                <h3><?php echo htmlspecialchars(t('system.branding.landing_heading')); ?></h3>
+                <h3 id="start-page"><?php echo htmlspecialchars(t('system.branding.landing_heading')); ?></h3>
                 <p class="card-desc"><?php echo htmlspecialchars(t('system.branding.landing_desc')); ?></p>
                 <select id="landingPage" class="slot-input" style="max-width:420px;">
                     <option value="analyst"><?php echo htmlspecialchars(t('system.branding.landing_analyst')); ?></option>
@@ -369,6 +398,31 @@ $translationNamespaces = ['common', 'system'];
                 </select>
                 <div class="info-note" style="margin-top:12px;">
                     <?php echo htmlspecialchars(t('system.branding.landing_note')); ?>
+                </div>
+            </div>
+
+            <!-- Files desktop: the logo in the desktop's corner. Saved with the
+                 rest of the page; validated in api/system/save_branding.php.
+                 Each person may only choose their own desktop COLOUR - the logo
+                 and its corner are decided here, for everyone. -->
+            <div class="settings-card">
+                <h3 id="files-desktop"><?php echo htmlspecialchars(t('system.branding.files_heading')); ?></h3>
+                <p class="card-desc"><?php echo htmlspecialchars(t('system.branding.files_desc')); ?></p>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
+                        <?php echo htmlspecialchars(t('system.branding.files_logo')); ?>
+                        <select id="filesLogoMode" class="slot-input" style="max-width:420px;">
+                            <option value="company"><?php echo htmlspecialchars(t('system.branding.files_logo_company')); ?></option>
+                            <option value="none"><?php echo htmlspecialchars(t('system.branding.files_logo_none')); ?></option>
+                        </select>
+                    </label>
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
+                        <?php echo htmlspecialchars(t('system.branding.files_position')); ?>
+                        <select id="filesLogoPosition" class="slot-input" style="max-width:220px;">
+                            <option value="top-right"><?php echo htmlspecialchars(t('system.branding.files_top_right')); ?></option>
+                            <option value="bottom-right"><?php echo htmlspecialchars(t('system.branding.files_bottom_right')); ?></option>
+                        </select>
+                    </label>
                 </div>
             </div>
 
@@ -384,7 +438,7 @@ $translationNamespaces = ['common', 'system'];
                  without the server knowing about it.
                  ============================================================ -->
             <div class="settings-card">
-                <h3><?php echo htmlspecialchars(t('system.branding.login_heading')); ?></h3>
+                <h3 id="sign-in-screens"><?php echo htmlspecialchars(t('system.branding.login_heading')); ?></h3>
                 <p class="card-desc"><?php echo htmlspecialchars(t('system.branding.login_desc')); ?></p>
 
                 <!-- Presets. The quickest way from "eighteen empty controls"
@@ -504,6 +558,10 @@ $translationNamespaces = ['common', 'system'];
                                 <input type="text" id="ln_subheading" class="slot-input" maxlength="160"
                                        placeholder="<?php echo htmlspecialchars(t('system.branding.login_subheading_ph')); ?>">
                             </label>
+                            <label class="dlabel"><?php echo htmlspecialchars(t('system.branding.login_subheading2')); ?>
+                                <input type="text" id="ln_subheading2" class="slot-input" maxlength="160"
+                                       placeholder="<?php echo htmlspecialchars(t('system.branding.login_subheading2_ph')); ?>">
+                            </label>
                         </div>
 
                         <div class="dgroup">
@@ -568,7 +626,7 @@ $translationNamespaces = ['common', 'system'];
 
             <!-- Header slots -->
             <div class="settings-card">
-                <h3><?php echo htmlspecialchars(t('system.branding.header_heading')); ?></h3>
+                <h3 id="header-text"><?php echo htmlspecialchars(t('system.branding.header_heading')); ?></h3>
                 <p class="card-desc"><?php echo htmlspecialchars(t('system.branding.header_desc')); ?></p>
                 <div class="slot-grid">
                     <div></div>
@@ -585,7 +643,7 @@ $translationNamespaces = ['common', 'system'];
 
             <!-- Footer slots -->
             <div class="settings-card">
-                <h3><?php echo htmlspecialchars(t('system.branding.footer_heading')); ?></h3>
+                <h3 id="footer-text"><?php echo htmlspecialchars(t('system.branding.footer_heading')); ?></h3>
                 <p class="card-desc"><?php echo htmlspecialchars(t('system.branding.footer_desc')); ?></p>
                 <div class="slot-grid">
                     <div></div>
@@ -656,6 +714,14 @@ $translationNamespaces = ['common', 'system'];
             document.getElementById('footerRight').value = b.footer_right || '';
             // Sits outside `branding` — it is an install behaviour, not a slot (#63).
             document.getElementById('landingPage').value = data.landing_page || 'analyst';
+            document.getElementById('systemName').value = data.system_name || '';
+            const bl = data.back_link || {};
+            document.getElementById('backLinkLabel').value = bl.label || '';
+            document.getElementById('backLinkUrl').value = bl.url || '';
+            document.getElementById('backLinkWhere').value = bl.where || 'portal';
+            const fdk = data.files_desktop || {};
+            document.getElementById('filesLogoMode').value = fdk.logo_mode || 'company';
+            document.getElementById('filesLogoPosition').value = fdk.logo_position || 'top-right';
 
             currentLogoPath = b.logo_path || null;
             renderLogoPreview();
@@ -785,7 +851,7 @@ $translationNamespaces = ['common', 'system'];
             const msg = {
                 css: lnCss(d), formPos: d.form_position, card: d.card_style,
                 logoPos: d.logo_position, logo: LN_LOGO,
-                heading: d.heading, subheading: d.subheading,
+                heading: d.heading, subheading: d.subheading, subheading2: d.subheading2,
                 bannerText: d.banner_text, bannerAt: d.banner_position,
                 footerText: d.footer_text
             };
@@ -967,6 +1033,12 @@ $translationNamespaces = ['common', 'system'];
         fd.append('footer_center', document.getElementById('footerCenter').value);
         fd.append('footer_right',  document.getElementById('footerRight').value);
         fd.append('landing_page',  document.getElementById('landingPage').value);
+        fd.append('system_name',   document.getElementById('systemName').value.trim());
+        fd.append('back_link_label', document.getElementById('backLinkLabel').value.trim());
+        fd.append('back_link_url',   document.getElementById('backLinkUrl').value.trim());
+        fd.append('back_link_where', document.getElementById('backLinkWhere').value);
+        fd.append('files_logo_mode',     document.getElementById('filesLogoMode').value);
+        fd.append('files_logo_position', document.getElementById('filesLogoPosition').value);
 
         const logoInput = document.getElementById('logoFile');
         if (logoInput.files && logoInput.files[0]) {
@@ -998,6 +1070,6 @@ $translationNamespaces = ['common', 'system'];
 
     loadBranding();
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

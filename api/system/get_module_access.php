@@ -18,8 +18,20 @@ try {
     // Module registry (key => name), as a stable ordered list.
     $modules = [];
     foreach (getModuleRegistry() as $key => $name) {
-        $modules[] = ['key' => $key, 'name' => $name];
+        $modules[] = ['key' => $key, 'name' => $name, 'read_only' => in_array($key, MODULES_WITH_READ_ONLY, true)];
     }
+    // The Read only grants (#180), entity => [module_key => 'read'].
+    $readBy = function (string $table, string $idCol) use ($conn): array {
+        $map = [];
+        try {
+            foreach ($conn->query("SELECT $idCol AS eid, module_key FROM $table WHERE access_level = 'read'") as $r) {
+                $map[(int) $r['eid']][$r['module_key']] = 'read';
+            }
+        } catch (Throwable $e) { /* access_level not added yet */ }
+        return $map;
+    };
+    $analystRead = $readBy('analyst_modules', 'analyst_id');
+    $teamRead    = $readBy('team_modules', 'team_id');
 
     // Helper to group "entity_id => [module_key,…]" from a grant table.
     $grantsBy = function (string $table, string $idCol) use ($conn): array {
@@ -40,6 +52,7 @@ try {
             'name'        => $t['name'],
             'all_modules' => (int) $t['can_access_all_modules'] === 1,
             'modules'     => $teamGrants[$id] ?? [],
+            'levels'      => (object) ($teamRead[$id] ?? []),
         ];
     }
 
@@ -52,6 +65,7 @@ try {
             'username'    => $a['username'],
             'all_modules' => (int) $a['can_access_all_modules'] === 1,
             'modules'     => $analystGrants[$id] ?? [],
+            'levels'      => (object) ($analystRead[$id] ?? []),
         ];
     }
 

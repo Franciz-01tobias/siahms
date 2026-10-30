@@ -76,6 +76,9 @@ function renderAiSettingsPanel(string $ns, array $opts = []): void
     .ai-settings-panel .ai-result.ok   { color: var(--success-text, #107c10); }
     .ai-settings-panel .ai-result.err  { color: var(--danger-accent, #d13438); }
     .ai-settings-panel .ai-result.busy { color: var(--text-muted, #666); }
+    .ai-settings-panel .ai-key-clear { margin-top: 6px; font-size: 13px; }
+    .ai-settings-panel .ai-key-clear[hidden] { display: none; }
+    .ai-settings-panel .ai-result-hint { margin-top: 6px; color: var(--text-muted, #666); line-height: 1.45; }
     </style>
     <?php endif; ?>
 
@@ -92,6 +95,7 @@ function renderAiSettingsPanel(string $ns, array $opts = []): void
                 <option value="openai"><?php echo $t('provider_openai'); ?></option>
                 <option value="openrouter"><?php echo $t('provider_openrouter'); ?></option>
                 <option value="azure"><?php echo $t('provider_azure'); ?></option>
+                <option value="openai_compatible"><?php echo $t('provider_compatible'); ?></option>
             </select>
         </div>
 
@@ -134,6 +138,24 @@ function renderAiSettingsPanel(string $ns, array $opts = []): void
             </div>
         </div>
 
+        <!--
+            GH #192: any server that speaks the OpenAI API at an address the
+            administrator chooses - most often a model they run themselves. Only
+            the address is new; the model box and the key below are reused, and
+            the key becomes optional.
+        -->
+        <div data-ai-compatible hidden>
+            <div class="ai-note show"><?php echo $t('compatible_note'); ?></div>
+
+            <div class="form-group">
+                <label><?php echo $t('compatible_base_url'); ?></label>
+                <input type="text" data-ai-compatible-base-url
+                       placeholder="http://llm-host:11434/v1"
+                       autocomplete="off" spellcheck="false" style="max-width: 420px;">
+                <small class="ai-model-hint"><?php echo $t('compatible_base_url_help'); ?></small>
+            </div>
+        </div>
+
         <div class="form-group" data-ai-model-group>
             <label><?php echo $t('model'); ?></label>
             <div class="ai-model-combo">
@@ -147,6 +169,11 @@ function renderAiSettingsPanel(string $ns, array $opts = []): void
             <label><?php echo $t('api_key'); ?></label>
             <input type="password" data-ai-key placeholder="sk-..." autocomplete="off" style="max-width: 420px;">
             <small class="ai-model-hint" data-ai-key-hint><?php echo $t('api_key_help'); ?></small>
+            <?php /* A div, not the label itself: settings pages style `.form-group label`
+                     as display:block, which would beat [hidden] and show the box with no key saved. */ ?>
+            <div class="ai-key-clear" data-ai-key-clear-wrap hidden>
+                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; margin:0;"><input type="checkbox" data-ai-key-clear> <?php echo $t('api_key_clear'); ?></label>
+            </div>
         </div>
 
         <div class="form-actions">

@@ -25,6 +25,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * App-only access token via the client-credentials flow (no user, no interactive
      * sign-in). Cached in target_mailboxes.token_data until it expires (app-only tokens
      * carry no refresh token — we just re-fetch).
+     *
+     * @param mixed $mailbox  the target_mailboxes row, decrypted (azure_tenant_id, azure_client_id, azure_client_secret, token_data, id)
      */
     function mailboxAppOnlyToken($conn, $mailbox) {
         $cached = json_decode(preg_replace('/[\x00-\x1F\x7F]/', '', (string) ($mailbox['token_data'] ?? '')), true);
@@ -75,6 +77,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * it offline, with NO Graph permission. This matters because the usual mailbox
      * scopes (Mail.*) do NOT include User.Read, so a /me call 403s and can't tell us
      * who signed in. Returns a lowercased email, or '' if the token has no usable claim.
+     *
+     * @param mixed $jwt  a Graph access token (a JWT); its payload is read without checking the signature
      */
     function mailboxIdentityFromToken($jwt) {
         $parts = explode('.', (string) $jwt);
@@ -98,6 +102,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      *
      * Reads the token's own JWT claims first (offline, no permission needed); only
      * falls back to Graph /me if the token isn't a readable JWT (needs User.Read).
+     *
+     * @param mixed $accessToken  a delegated Graph access token
      */
     function mailboxDelegatedIdentity($accessToken) {
         $fromToken = mailboxIdentityFromToken($accessToken);
@@ -122,6 +128,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * an alias of the edmozley@ mailbox: the token only carries the UPN, so we have to
      * ask Graph for the alias list. Needs the lightweight User.Read scope; returns []
      * if it isn't granted (older mailboxes) so the caller can fall back to the token claim.
+     *
+     * @param mixed $accessToken  a delegated Graph access token; needs User.Read for the alias list
      */
     function mailboxFetchAddresses($accessToken) {
         $ch = curl_init('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName,proxyAddresses');
@@ -153,6 +161,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * Combines the token's own claim (always available, offline) with the Graph alias
      * list (when User.Read is granted). 'primary' is what we show; 'addresses' is what
      * we match the configured target against.
+     *
+     * @param mixed $accessToken  a freshly issued delegated Graph access token
      */
     function mailboxIdentityRecord($accessToken) {
         $claim     = mailboxIdentityFromToken($accessToken);   // UPN, offline
@@ -166,6 +176,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * The set of addresses a (delegated) mailbox is known to own, read back from the
      * stored columns (authenticated_addresses JSON + authenticated_as). Offline, lowercased.
      * Empty means "we don't know yet" — callers treat that as grandfathered, not a mismatch.
+     *
+     * @param mixed $mailbox  the target_mailboxes row (authenticated_addresses JSON, authenticated_as)
      */
     function mailboxAcceptedSet($mailbox) {
         $set = [];
@@ -186,6 +198,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * Returns an error message to show/throw, or null if it's fine. A configured target
      * that matches ANY owned address (primary OR alias) passes; an unknown identity set
      * (legacy mailboxes that predate alias capture) is grandfathered through.
+     *
+     * @param mixed $mailbox  the target_mailboxes row, decrypted (provider, auth_mode, target_mailbox, authenticated_*)
      */
     function mailboxIdentityMismatch($mailbox) {
         if (($mailbox['provider'] ?? 'microsoft') !== 'microsoft') return null;
@@ -206,6 +220,9 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * mailbox that doesn't have them yet (signed in before we recorded identity, or
      * before alias capture). Returns the (possibly updated) $mailbox. No-op for Google
      * and app-only.
+     *
+     * @param mixed $mailbox  the target_mailboxes row, decrypted; returned with the identity columns filled in
+     * @param mixed $accessToken  the mailbox's current delegated Graph access token
      */
     function mailboxBackfillIdentity($conn, $mailbox, $accessToken) {
         if (($mailbox['provider'] ?? 'microsoft') !== 'microsoft') return $mailbox;
@@ -231,6 +248,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * resolve silently gets '/me', and a loop over several mailboxes keeps the previous
      * one's base. Read the return value of mailboxResolveGraphBase() and pass it along
      * explicitly rather than relying on this being set — see templateGraphContext().
+     *
+     * @param mixed $set  the new base path ('/me' or '/users/<address>'), or null just to read it
      */
     function mailboxGraphBase($set = null) {
         static $base = '/me';
@@ -243,6 +262,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * There is no signed-in user in that mode, so '/me' is meaningless to Graph and
      * every call has to name the mailbox: /users/<target_mailbox>.
      * Google and IMAP mailboxes always behave as delegated.
+     *
+     * @param mixed $mailbox  the target_mailboxes row (provider, auth_mode)
      */
     function mailboxIsAppOnly($mailbox) {
         return (($mailbox['provider'] ?? 'microsoft') === 'microsoft')
@@ -252,6 +273,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
     /**
      * Resolve the base path for a mailbox from its auth_mode (Microsoft only).
      * Google mailboxes always behave as delegated.
+     *
+     * @param mixed $mailbox  the target_mailboxes row, decrypted (provider, auth_mode, target_mailbox)
      */
     function mailboxResolveGraphBase($mailbox) {
         return mailboxGraphBase(mailboxIsAppOnly($mailbox)
@@ -267,6 +290,8 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * mint one from its client secret on demand. Testing for a stored token therefore
      * hides a perfectly working app-only mailbox — which is why a clean app-only
      * install reported "no email mailbox is configured" when one plainly was.
+     *
+     * @param mixed $mailbox  the target_mailboxes row, decrypted
      */
     function mailboxCanSend($mailbox) {
         $provider = $mailbox['provider'] ?? 'microsoft';
@@ -290,6 +315,9 @@ if (!function_exists('mailboxAppOnlyToken')) {
     /**
      * An authenticated Graph GET, shaped for mailboxResolveFolderId().
      * Every caller was writing the same twelve lines of curl.
+     *
+     * @param mixed $accessToken  a Graph access token for the mailbox
+     * @param mixed $url  the full Graph URL to GET
      */
     function mailboxGraphGet($accessToken, $url) {
         $ch = curl_init();
@@ -329,6 +357,7 @@ if (!function_exists('mailboxAppOnlyToken')) {
      * segment after the first is resolved through childFolders, since
      * /mailFolders lists TOP-LEVEL folders only.
      *
+     * @param mixed $folderName  the folder as typed in the mailbox settings, e.g. 'Inbox/freeitsm'; a slash means a nested folder
      * @param  callable $get  fn(string $url): array — performs an authenticated GET
      *                        and returns ['code' => int, 'body' => array|null]. Passed
      *                        in so this has no opinion about how callers do HTTP.

@@ -61,6 +61,8 @@ const CDSYNC_MAX_CONTACTS = 20000;
  *                    guessing one from `UID` would put an opaque server
  *                    identifier into a field an analyst reads as an HR number.
  *
+ * @param string $vcard  one raw vCard as the server sent it
+ * @param string $href  the card's href, kept as the 'dn' for logging and display
  * @return array|null null when the card cannot be a person — no UID, or it is
  *                    a group card rather than somebody.
  */
@@ -141,6 +143,8 @@ function cdsyncMapCard(string $vcard, string $href): ?array
  * ⚠️ `TEL;TYPE=CELL` and `TEL;TYPE="voice,cell"` and `TEL;TYPE=cell;TYPE=voice`
  * are all legal ways to say the same thing, so the whole parameter string is
  * searched for the word rather than compared to it.
+ *
+ * @param array $lines  the card's unfolded lines from cardDavUnfold()
  */
 function cdsyncPhones(array $lines): array
 {
@@ -167,6 +171,7 @@ function cdsyncPhones(array $lines): array
  * their desk number and leave the mobile untouched, with no error anywhere.
  * One selector, used by both ends, makes that class of bug unrepresentable.
  *
+ * @param array $lines  the card's unfolded lines from cardDavUnfold()
  * @return array ['phone' => int|null, 'mobile' => int|null] indexes into $lines
  */
 function cdsyncPhoneLines(array $lines): array
@@ -204,6 +209,8 @@ function cdsyncPhoneLines(array $lines): array
  * department. FreeITSM has nowhere to put the organisation itself (a person's
  * company is `users.tenant_id`, a real relationship rather than a string), so
  * only the department is taken.
+ *
+ * @param array $lines  the card's unfolded lines from cardDavUnfold()
  */
 function cdsyncOrg(array $lines): array
 {
@@ -226,6 +233,8 @@ function cdsyncOrg(array $lines): array
  *
  * ADR has seven components: PO box, extended, street, locality, region,
  * postcode, country. The fourth is the town.
+ *
+ * @param array $lines  the card's unfolded lines from cardDavUnfold()
  */
 function cdsyncLocality(array $lines): ?string
 {
@@ -250,6 +259,9 @@ function cdsyncLocality(array $lines): ?string
  * All three are legal and clients differ, so the scheme is stripped and both
  * the UID and the email are accepted as ways of naming a member.
  *
+ * @param array $cards  the 'cards' list from cardDavFetchCards() - each with href, etag, vcard
+ * @param string $scope  auth_providers.carddav_scope - 'all', 'category' or 'group'
+ * @param array $wanted  the chosen tags or group UIDs/names, from cardDavScopeList(); empty means everything
  * @return array ['uids' => set of in-scope UIDs, 'emails' => set of in-scope emails]
  *               or null when the scope is 'all' and everything is in scope.
  */
@@ -310,7 +322,12 @@ function cdsyncResolveScope(array $cards, string $scope, array $wanted): ?array
     return ['uids' => $uids, 'emails' => $emails];
 }
 
-/** Is this mapped person inside the resolved scope? */
+/**
+ * Is this mapped person inside the resolved scope?
+ *
+ * @param ?array $resolved  the result of cdsyncResolveScope(); null means everything is in scope
+ * @param array $p  one person as cdsyncMapCard() returns it - 'guid' and 'email' are read
+ */
 function cdsyncInScope(?array $resolved, array $p): bool
 {
     if ($resolved === null) return true;                     // scope = all
@@ -326,6 +343,7 @@ function cdsyncInScope(?array $resolved, array $p): bool
  * every one of its safety rules — including preview, which runs this identical
  * code path and writes nothing to `users`.
  *
+ * @param array $provider  the auth_providers row (protocol 'carddav') as stored, password still encrypted
  * @param string $mode 'live' | 'preview'
  */
 function cardDavSyncRun(PDO $conn, array $provider, string $mode = 'live', ?int $analystId = null): array

@@ -30,6 +30,10 @@ require_once __DIR__ . '/corpus.php';
 require_once __DIR__ . '/indexer.php';   // the shared per-ticket document builder
 
 /**
+ * Fills the search corpus from existing tickets, emails, notes, attachments and Knowledge
+ * articles, in resumable batches.
+ *
+ * @param array $opts  batch (50-2000), max_body_chars, since_ticket_id (resume point), limit (0 = all), articles (false skips)
  * @param callable|null $progress fn(string $stage, int $done, int $total): void
  * @return array{tickets:int,emails:int,notes:int,articles:int,skipped:int,seconds:float}
  */

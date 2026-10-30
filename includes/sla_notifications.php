@@ -134,6 +134,10 @@ function sla_run_breach_check(PDO $conn): array {
  * The full ticket is loaded into the payload so an escalation can act on the
  * ticket itself (reassign, reprioritise, message about it) — not just announce
  * that a number went red.
+ *
+ * @param string $targetType  'response' or 'resolution'
+ * @param string $trigger  'warning' or 'breach'
+ * @param array $target  that target's state from sla_get_state(): target_minutes, elapsed_minutes, remaining_minutes, percent
  */
 function sla_emit_workflow_event(PDO $conn, int $ticketId, string $targetType, string $trigger, array $target): void
 {
@@ -202,6 +206,9 @@ function sla_emit_workflow_event(PDO $conn, int $ticketId, string $targetType, s
  *
  * 'both' rules match either target — they're the "applies to all SLAs"
  * convenience shortcut.
+ *
+ * @param string $trigger  'warning' or 'breach'
+ * @param string $targetType  'response' or 'resolution'
  */
 function sla_find_matching_rule(PDO $conn, int $ticketId, string $trigger, string $targetType): ?array {
     $stmt = $conn->prepare("SELECT department_id FROM tickets WHERE id = ?");
@@ -228,6 +235,8 @@ function sla_find_matching_rule(PDO $conn, int $ticketId, string $trigger, strin
  * Expand a rule into a unique list of recipient email addresses.
  * Resolves assignee, department-team members, named analyst, and the
  * explicit emails list; dedupes case-insensitively.
+ *
+ * @param array $rule  the sla_notification_rules row: notify_assignee, notify_department_teams, notify_analyst_id, notify_emails
  */
 function sla_resolve_recipients(PDO $conn, int $ticketId, array $rule): array {
     $out = [];
@@ -282,6 +291,11 @@ function sla_resolve_recipients(PDO $conn, int $ticketId, array $rule): array {
  * Send a breach / warning email via the ticket's originating mailbox.
  * Falls back to the first active mailbox if the ticket has none (e.g.
  * manually-created ticket).
+ *
+ * @param array $state  the ticket's SLA state from sla_get_state()
+ * @param string $targetType  'response' or 'resolution' - which part of $state the email is about
+ * @param string $trigger  'warning' or 'breach'
+ * @param array $recipients  the email addresses to send to, from sla_resolve_recipients()
  */
 function sla_send_breach_email(PDO $conn, int $ticketId, array $state, string $targetType, string $trigger, array $recipients): void {
     $merge = buildTicketMergeData($conn, $ticketId);
@@ -315,6 +329,12 @@ function sla_send_breach_email(PDO $conn, int $ticketId, array $state, string $t
 
 /**
  * Render the HTML body for a breach / warning email.
+ *
+ * @param array $merge  the ticket merge data from buildTicketMergeData()
+ * @param array $target  that target's state: target_minutes, elapsed_minutes, remaining_minutes
+ * @param string $targetLabel  'Response' or 'Resolution'
+ * @param string $headline  the banner text - trusted HTML, written into the email as it is
+ * @param string $trigger  'warning' or 'breach'; sets the banner colour and the status line
  */
 function sla_build_breach_email_body(array $merge, array $target, string $targetLabel, string $headline, string $trigger): string {
     $bannerColour = $trigger === 'breach' ? '#dc2626' : '#f59e0b';
@@ -362,6 +382,9 @@ function sla_build_breach_email_body(array $merge, array $target, string $target
 
 /**
  * Check if we've already fired this notification for (ticket, target, trigger).
+ *
+ * @param string $targetType  'response' or 'resolution'
+ * @param string $trigger  'warning' or 'breach'
  */
 function sla_notification_already_sent(PDO $conn, int $ticketId, string $targetType, string $trigger): bool {
     $stmt = $conn->prepare("SELECT 1 FROM sla_notifications_sent WHERE ticket_id = ? AND target_type = ? AND trigger_type = ?");
@@ -369,11 +392,19 @@ function sla_notification_already_sent(PDO $conn, int $ticketId, string $targetT
     return (bool)$stmt->fetchColumn();
 }
 
+/**
+ * Records that an SLA notification went out for a ticket, so it is not sent twice.
+ *
+ * @param string $targetType  'response' or 'resolution'
+ * @param string $trigger  'warning' or 'breach'
+ * @param array $recipients  the addresses it went to, stored comma-separated
+ */
 function sla_mark_notification_sent(PDO $conn, int $ticketId, string $targetType, string $trigger, array $recipients): void {
     $stmt = $conn->prepare("INSERT IGNORE INTO sla_notifications_sent (ticket_id, target_type, trigger_type, recipients) VALUES (?, ?, ?, ?)");
     $stmt->execute([$ticketId, $targetType, $trigger, implode(',', $recipients)]);
 }
 
+/** The active mailbox with the lowest id, decrypted; null when there is none. */
 function sla_get_first_active_mailbox(PDO $conn): ?array {
     $stmt = $conn->query("SELECT * FROM target_mailboxes WHERE is_active = 1 ORDER BY id ASC LIMIT 1");
     $mailbox = $stmt->fetch(PDO::FETCH_ASSOC);

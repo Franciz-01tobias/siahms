@@ -17,6 +17,8 @@
  * so server-side date math on a page is unaffected. Conversion is always
  * explicit (fmt_local / setTimezone), which keeps UTC-at-rest the single
  * source of truth.
+ *
+ * @wiki Timezones-and-Time-Handling
  */
 class Tz {
     /** Effective display zone for this request. Null until init(); then always a valid IANA id. */
@@ -74,7 +76,11 @@ class Tz {
         return self::$zone;
     }
 
-    /** True if $tz is a known IANA identifier. */
+    /**
+     * True if $tz is a known IANA identifier.
+     *
+     * @param mixed $tz  the zone name to check, e.g. 'Europe/London'; non-strings and '' are invalid
+     */
     public static function isValid($tz) {
         return is_string($tz) && $tz !== '' && in_array($tz, timezone_identifiers_list(), true);
     }
@@ -195,6 +201,8 @@ class DateFmt {
      * Resolve both formats for this request. Safe without a DB - falls back to
      * the defaults. Normally reached via Tz::init(), which passes its own
      * connection; call it directly only in a context that has no Tz.
+     *
+     * @param ?PDO $existing  a connection to reuse; null opens one (or keeps the defaults when none can be opened)
      */
     public static function init(?PDO $existing = null) {
         if (!function_exists('connectToDatabase') && is_file(__DIR__ . '/functions.php')) {
@@ -235,7 +243,12 @@ class DateFmt {
         }
     }
 
-    /** Accept a candidate value for one of the two keys, ignoring blanks and unknown values. */
+    /**
+     * Accept a candidate value for one of the two keys, ignoring blanks and unknown values.
+     *
+     * @param mixed $key  'date_format' or 'time_format'; any other key is ignored
+     * @param mixed $value  a key of DATE_TEMPLATES or TIME_TEMPLATES; null, '' or unknown values are ignored
+     */
     private static function apply($key, $value) {
         if ($value === null || $value === '') return;
         if ($key === 'date_format' && isset(self::DATE_TEMPLATES[$value])) self::$date = $value;
@@ -277,6 +290,9 @@ class DateFmt {
      *
      * A locale supplies 'months_in_date' only if it needs one; everything else
      * falls through to 'months' and is unaffected.
+     *
+     * @param mixed $short  true for the abbreviated names
+     * @param mixed $inDate  true for the form used beside a day number (full names only; ignored when $short)
      */
     public static function months($short = false, $inDate = false) {
         $keys = [
@@ -290,7 +306,11 @@ class DateFmt {
         return self::names('months', $short, $keys);
     }
 
-    /** Ordered weekday names, MONDAY FIRST (index 0 = Monday). */
+    /**
+     * Ordered weekday names, MONDAY FIRST (index 0 = Monday).
+     *
+     * @param mixed $short  true for the abbreviated names
+     */
     public static function weekdays($short = false) {
         return self::names('weekdays', $short, [
             'monday','tuesday','wednesday','thursday','friday','saturday','sunday',
@@ -298,6 +318,13 @@ class DateFmt {
     }
 
     /**
+     * The translated names in one calendar group (common.calendar.<group>, or
+     * <group>_short), in the order of $keys - a missing string falls back to the
+     * capitalised English key rather than a dotted key path.
+     *
+     * @param mixed $group  the calendar group: 'months', 'weekdays' or 'months_in_date'
+     * @param mixed $short  true for the abbreviated set (<group>_short)
+     * @param array $keys  the English keys in display order, e.g. 'january'..'december'
      * @param bool $optional When true, return NULL if the locale does not define
      *                       this group at all, rather than falling back. Used by
      *                       months_in_date, which most languages do not need.
@@ -340,7 +367,12 @@ class DateFmt {
         return $out;
     }
 
-    /** Render a DateTime through a token template. The single PHP-side renderer. */
+    /**
+     * Render a DateTime through a token template. The single PHP-side renderer.
+     *
+     * @param DateTime $dt  the moment to render, already in the display zone
+     * @param mixed $template  a token template such as 'DD MON YYYY' (tokens: MONTH YYYY MON DD MM YY mi HH D h A)
+     */
     public static function render(DateTime $dt, $template) {
         // A day number beside the month selects the in-date month form for the
         // languages that inflect (see months()). "March 2026" on a calendar
@@ -398,7 +430,11 @@ class DateFmt {
 // tables the moment somebody picks a different format.
 // ---------------------------------------------------------------------------
 
-/** Internal: UTC string -> DateTime in the display zone, or null if unparseable. */
+/**
+ * Internal: UTC string -> DateTime in the display zone, or null if unparseable.
+ *
+ * @param ?string $utc  a UTC datetime as stored in the database; null or '' gives null
+ */
 function _fmt_dt(?string $utc): ?DateTime {
     if ($utc === null || $utc === '') return null;
     try {
@@ -410,7 +446,11 @@ function _fmt_dt(?string $utc): ?DateTime {
     }
 }
 
-/** '25 Aug 2026' */
+/**
+ * '25 Aug 2026'
+ *
+ * @param ?string $utc  a UTC datetime as stored; null or '' gives '', an unparseable value comes back as it is
+ */
 function fmt_date(?string $utc): string {
     if ($utc === null || $utc === '') return '';
     $dt = _fmt_dt($utc);
@@ -418,7 +458,11 @@ function fmt_date(?string $utc): string {
     return DateFmt::render($dt, DateFmt::DATE_TEMPLATES[DateFmt::dateKey()]);
 }
 
-/** '14:30' */
+/**
+ * '14:30'
+ *
+ * @param ?string $utc  a UTC datetime as stored; null or '' gives '', an unparseable value comes back as it is
+ */
 function fmt_time(?string $utc): string {
     if ($utc === null || $utc === '') return '';
     $dt = _fmt_dt($utc);
@@ -426,7 +470,11 @@ function fmt_time(?string $utc): string {
     return DateFmt::render($dt, DateFmt::TIME_TEMPLATES[DateFmt::timeKey()]);
 }
 
-/** '25 Aug 2026 14:30' */
+/**
+ * '25 Aug 2026 14:30'
+ *
+ * @param ?string $utc  a UTC datetime as stored; null or '' gives '', an unparseable value comes back as it is
+ */
 function fmt_datetime(?string $utc): string {
     if ($utc === null || $utc === '') return '';
     $dt = _fmt_dt($utc);
@@ -435,7 +483,11 @@ function fmt_datetime(?string $utc): string {
          . ' ' . DateFmt::render($dt, DateFmt::TIME_TEMPLATES[DateFmt::timeKey()]);
 }
 
-/** '25 Aug' - compact chips and list rows where the year is implied. */
+/**
+ * '25 Aug' - compact chips and list rows where the year is implied.
+ *
+ * @param ?string $utc  a UTC datetime as stored; null or '' gives '', an unparseable value comes back as it is
+ */
 function fmt_day_month(?string $utc): string {
     if ($utc === null || $utc === '') return '';
     $dt = _fmt_dt($utc);
@@ -443,7 +495,11 @@ function fmt_day_month(?string $utc): string {
     return DateFmt::render($dt, DateFmt::DAY_MONTH_TEMPLATES[DateFmt::dateKey()]);
 }
 
-/** 'August 2026' - calendar headers. Always the full month name. */
+/**
+ * 'August 2026' - calendar headers. Always the full month name.
+ *
+ * @param ?string $utc  a UTC datetime as stored; null or '' gives '', an unparseable value comes back as it is
+ */
 function fmt_month_year(?string $utc): string {
     if ($utc === null || $utc === '') return '';
     $dt = _fmt_dt($utc);
@@ -518,7 +574,12 @@ function naive_today_sql(): string {
     return preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? "'" . $d . "'" : 'CURDATE()';
 }
 
-/** 'Tuesday' / 'Tue' */
+/**
+ * 'Tuesday' / 'Tue'
+ *
+ * @param ?string $utc  a UTC datetime as stored; null or '' gives '', an unparseable value comes back as it is
+ * @param bool $short  true for the abbreviated name ('Tue')
+ */
 function fmt_weekday(?string $utc, bool $short = false): string {
     if ($utc === null || $utc === '') return '';
     $dt = _fmt_dt($utc);

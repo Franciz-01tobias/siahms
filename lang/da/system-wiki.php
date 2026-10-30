@@ -1,11 +1,15 @@
 <?php
 /**
- * Danish (da) - system-wiki strings.
+ * FreeITSM — system-wiki strings (da).
  *
- * Mirrors lang/en/system-wiki.php. Keys absent here fall back to English, so this
- * file may be a subset; what IS here must match the English key structure
- * exactly, because I18n::t() splits on every dot.
+ * Keys mirror lang/en/system-wiki.php exactly. A key absent here falls back to
+ * English at runtime, so this file may be incomplete without breaking
+ * anything. Check coverage with: php scripts/i18n_audit.php da
+ *
+ * ⚠️ Placeholders like {name} and %d are substituted at runtime — printf
+ * tokens substitute BY POSITION, so their order must match English.
  */
+
 return [
     'title' => 'System Wiki',
     'nav' => [
@@ -47,7 +51,7 @@ return [
         'files_count' => '{n} filer',
     ],
     'search' => [
-        'page_title' => 'Service Desk - Wiki-søgning',
+        'page_title' => 'Wikisøgning',
         'search_placeholder' => 'Søg i filer, funktioner, databasetabeller...',
         'search_btn' => 'Søg',
         'tab_files' => 'Filer',
@@ -63,7 +67,7 @@ return [
         'refs_across_files' => '{refs} referencer på tværs af {files} filer',
     ],
     'scan' => [
-        'page_title' => 'Service Desk - Scanningsstyring',
+        'page_title' => 'Scanningsstyring',
         'heading' => 'Scanningsstyring',
         'subtitle' => 'Kør PowerShell-scanneren for at katalogisere kodebasen',
         'run_now' => 'Kør scanning nu',
@@ -83,7 +87,7 @@ return [
         'error_prefix' => 'Fejl:',
     ],
     'file' => [
-        'page_title' => 'Service Desk - Filoplysninger',
+        'page_title' => 'Fildetaljer',
         'loading' => 'Indlæser filoplysninger...',
         'no_id' => 'Intet fil-id angivet.',
         'error_prefix' => 'Fejl:',
@@ -116,7 +120,7 @@ return [
         'static' => 'static',
     ],
     'function' => [
-        'page_title' => 'Service Desk - Funktionsoplysninger',
+        'page_title' => 'Funktionsdetaljer',
         'loading' => 'Indlæser funktionsoplysninger...',
         'no_id' => 'Intet funktions-id angivet.',
         'error_prefix' => 'Fejl:',
@@ -131,7 +135,7 @@ return [
         'col_line' => 'Linje',
     ],
     'table' => [
-        'page_title' => 'Service Desk - Tabelreferencer',
+        'page_title' => 'Tabelreferencer',
         'loading' => 'Indlæser tabelreferencer...',
         'no_name' => 'Intet tabelnavn angivet.',
         'error_prefix' => 'Fejl:',
@@ -142,7 +146,7 @@ return [
         'no_references' => 'Ingen referencer fundet for denne tabel.',
     ],
     'tables' => [
-        'page_title' => 'Service Desk - Databasetabeller',
+        'page_title' => 'Databasetabeller',
         'heading' => 'Databasetabeller',
         'loading' => 'Indlæser...',
         'col_name' => 'Tabelnavn',

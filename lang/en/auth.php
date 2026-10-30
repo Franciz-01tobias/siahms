@@ -47,7 +47,8 @@ return [
     'mfa_cancel'      => 'Cancel and return to login',
 
     // The way across to the requester portal (discussion #82)
-    'portal_link'   => 'Go to the IT Help Desk',
+    'portal_link'   => 'Go to the Self-Service Portal',
+    'powered_by'    => 'Powered by FreeITSM',
 
     // --- Messages -----------------------------------------------------------
     'err_missing'   => 'Please enter both username and password',
@@ -97,7 +98,7 @@ return [
     'reset_err_mismatch'  => 'Passwords do not match.',
 
     // ── Password expired (auth/force_password_change.php) ───────────────
-    'expired_title'       => 'Service Desk - Change Password',
+    'expired_title'       => 'Change Password',
     'expired_heading'     => 'Password Expired',
     'expired_intro'       => 'Your password has expired and must be changed before you can continue.',
     'expired_current_pw'  => 'Current Password',
@@ -115,4 +116,12 @@ return [
     'back_to_login'       => 'Back to login',
     'new_password'        => 'New Password',
     'err_generic'         => 'Something went wrong. Please try again.',
+
+    // ── SSO Fallback to Self-Service (auth/sso_confirm_portal.php) ──────
+    'sso_fallback_title'         => 'No analyst account',
+    'sso_fallback_heading'       => 'No analyst account',
+    'sso_fallback_desc'          => 'You signed in as <strong>{email}</strong>. There is no analyst account for this address.',
+    'sso_fallback_prompt'        => 'Would you like to proceed to the Self-Service Portal to submit or view support tickets, access assigned equipment, or complete training?',
+    'sso_fallback_btn_continue'  => 'Continue',
+    'sso_fallback_btn_signout'   => 'Cancel',
 ];

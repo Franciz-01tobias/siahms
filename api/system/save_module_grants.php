@@ -28,30 +28,48 @@ try {
     $conn = connectToDatabase();
     $conn->beginTransaction();
 
+    // The level of each grant (#180): 'read' only on a module that offers Read only, and
+    // only when the request names it. A request that says nothing about levels (an older
+    // page) keeps whatever each grant had.
+    $readOnlyOk = in_array($moduleKey, MODULES_WITH_READ_ONLY, true);
+    $sent = $input['levels'] ?? null;
+    $old  = ['team' => [], 'analyst' => []];
+    foreach (['team' => 'team_modules', 'analyst' => 'analyst_modules'] as $kind => $table) {
+        $col = $kind === 'team' ? 'team_id' : 'analyst_id';
+        $s = $conn->prepare("SELECT {$col}, access_level FROM {$table} WHERE module_key = ?");
+        $s->execute([$moduleKey]);
+        $old[$kind] = $s->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+    }
+    $levelFor = function (string $kind, int $id) use ($readOnlyOk, $sent, $old): string {
+        if (!$readOnlyOk) return 'full';
+        $v = is_array($sent) ? ($sent[$kind][$id] ?? $sent[$kind][(string)$id] ?? 'full') : ($old[$kind][$id] ?? 'full');
+        return $v === 'read' ? 'read' : 'full';
+    };
+
     // Teams: replace this module's specific grants with exactly the listed teams
     // (skipping any that are all-access — they don't use rows).
     $conn->prepare("DELETE FROM team_modules WHERE module_key = ?")->execute([$moduleKey]);
     if ($teamIds) {
-        $ins = $conn->prepare("INSERT INTO team_modules (team_id, module_key) VALUES (?, ?)");
+        $ins = $conn->prepare("INSERT INTO team_modules (team_id, module_key, access_level) VALUES (?, ?, ?)");
         $isAll = $conn->prepare("SELECT can_access_all_modules FROM teams WHERE id = ?");
         foreach ($teamIds as $tid) {
             if ($tid <= 0) continue;
             $isAll->execute([$tid]);
             if ((int) $isAll->fetchColumn() === 1) continue; // all-access → managed by flag
-            $ins->execute([$tid, $moduleKey]);
+            $ins->execute([$tid, $moduleKey, $levelFor('team', $tid)]);
         }
     }
 
     // Analysts: same.
     $conn->prepare("DELETE FROM analyst_modules WHERE module_key = ?")->execute([$moduleKey]);
     if ($analystIds) {
-        $ins = $conn->prepare("INSERT INTO analyst_modules (analyst_id, module_key) VALUES (?, ?)");
+        $ins = $conn->prepare("INSERT INTO analyst_modules (analyst_id, module_key, access_level) VALUES (?, ?, ?)");
         $isAll = $conn->prepare("SELECT can_access_all_modules FROM analysts WHERE id = ?");
         foreach ($analystIds as $aid) {
             if ($aid <= 0) continue;
             $isAll->execute([$aid]);
             if ((int) $isAll->fetchColumn() === 1) continue;
-            $ins->execute([$aid, $moduleKey]);
+            $ins->execute([$aid, $moduleKey, $levelFor('analyst', $aid)]);
         }
     }
 

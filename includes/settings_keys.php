@@ -104,6 +104,12 @@ function settingKeyOwners(): array
         // --- System: Security area. The lockout policy — an analyst able to raise
         // max_failed_logins could switch off brute-force protection entirely. ---
         'self_service_registration_enabled' => ['module' => 'system', 'cap' => null, 'tab' => 'security'],
+        // The first word of every page title - System -> Branding (moved from Tickets' General tab).
+        'system_name'              => ['module' => 'system', 'cap' => null, 'tab' => 'branding'],
+        // The "Back to ..." link in the headers (3.5.0) - includes/back_link.php.
+        'back_link_label'          => ['module' => 'system', 'cap' => null, 'tab' => 'branding'],
+        'back_link_url'            => ['module' => 'system', 'cap' => null, 'tab' => 'branding'],
+        'back_link_where'          => ['module' => 'system', 'cap' => null, 'tab' => 'branding'],
         'trusted_device_days'      => ['module' => 'system', 'cap' => null, 'tab' => 'security'],
         'password_expiry_days'     => ['module' => 'system', 'cap' => null, 'tab' => 'security'],
         'max_failed_logins'        => ['module' => 'system', 'cap' => null, 'tab' => 'security'],
@@ -116,6 +122,10 @@ function settingKeyOwners(): array
         // Which attachment types this install accepts. Narrows the catalogue in
         // includes/uploads.php; it can never widen past it.
         'attachment_allowed_extensions' => ['module' => 'system', 'cap' => null, 'tab' => 'security'],
+        // Size limits (GH #170): the largest attachment anywhere, and the largest
+        // total per inbound email. Read and clamped in includes/attachment_limits.php.
+        'attachment_max_mb'             => ['module' => 'system', 'cap' => null, 'tab' => 'security'],
+        'attachment_max_total_mb'       => ['module' => 'system', 'cap' => null, 'tab' => 'security'],
 
         // --- Tickets: time tracking (discussion #72) ---
         // The INSTALL-WIDE defaults. A company may override either of them —
@@ -154,6 +164,16 @@ function settingKeyOwners(): array
         // everyone who has not chosen sees, and the only format the portal reads.
         'date_format'              => ['module' => 'system', 'cap' => null, 'tab' => 'date-formats'],
         'time_format'              => ['module' => 'system', 'cap' => null, 'tab' => 'date-formats'],
+
+        // --- System: Currencies area (GH #189) ---
+        // The default currency, the favourites shown first in every currency
+        // dropdown, and the install-wide format (plus per-currency exceptions).
+        // Analysts override the FORMAT in Preferences (user_preferences). Stored
+        // as given; includes/money.php validates every one of them on read.
+        'currency_default'         => ['module' => 'system', 'cap' => null, 'tab' => 'currencies'],
+        'currency_favourites'      => ['module' => 'system', 'cap' => null, 'tab' => 'currencies'],
+        'currency_format'          => ['module' => 'system', 'cap' => null, 'tab' => 'currencies'],
+        'currency_formats'         => ['module' => 'system', 'cap' => null, 'tab' => 'currencies'],
     ];
 }
 
@@ -178,6 +198,7 @@ function settingKeyPrefixes(): array
  * Who owns this setting key? null = nobody, so it may not be written through the
  * generic endpoint. Exact matches win over prefixes.
  *
+ * @param string $key  a system_settings key, e.g. 'vcenter_server' or 'module_color_tickets'
  * @return array{module:string,cap:?string,tab:string}|null
  */
 function settingKeyOwner(string $key): ?array
@@ -206,6 +227,8 @@ function settingKeyOwner(string $key): ?array
  *   - the module has been CONVERTED (its manifest claims those keys) → the tab's capability;
  *   - it has NOT been converted yet                                  → is_admin, exactly as
  *     today, so nothing loosens by accident.
+ *
+ * @param string $ns  the AI settings namespace, e.g. 'knowledge_ai', 'cmdb_ai', 'tickets_reply_cleanup'
  */
 function analystCanManageAiNamespace(PDO $conn, int $analystId, string $ns): bool
 {
@@ -234,6 +257,8 @@ function analystCanManageAnyAiNamespace(PDO $conn, int $analystId): bool
 
 /**
  * The API twin: refuse with a 403 unless this analyst may manage the namespace's AI config.
+ *
+ * @param string $ns  the AI settings namespace, e.g. 'knowledge_ai'; checked for the signed-in analyst
  */
 function requireAiNamespaceJson(PDO $conn, string $ns): void
 {
@@ -252,6 +277,8 @@ function requireAiNamespaceJson(PDO $conn, string $ns): void
  * Once a module converts (phase 3b) its keys name a capability, and that capability is
  * required. Until then the key falls back to its module's Layer 1 access. is_admin
  * bypasses both — via analystHasCapability() and via analystCanAccessModule('system').
+ *
+ * @param string $key  the system_settings key to be written; a key with no owner is always refused
  */
 function analystCanWriteSettingKey(PDO $conn, int $analystId, string $key): bool
 {

@@ -39,6 +39,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 });
 
+/** Recreates the 'watchtower-poll' alarm at the saved poll interval (default 5 minutes). */
 async function setupAlarm() {
     await chrome.alarms.clear('watchtower-poll');
     const settings = await chrome.storage.sync.get({ pollInterval: DEFAULT_INTERVAL });
@@ -47,6 +48,9 @@ async function setupAlarm() {
     });
 }
 
+/**
+ * Fetches get_dashboard_ext.php with the saved API key, stores the result (or the error) in chrome.storage.local for the popup, and sets the toolbar badge to the attention count or '!'.
+ */
 async function fetchDashboard() {
     const settings = await chrome.storage.sync.get(['serverUrl', 'apiKey']);
 
@@ -127,6 +131,9 @@ async function fetchDashboard() {
     }
 }
 
+/**
+ * Adds up the items needing attention for the badge - urgent/high and unassigned tickets, unapproved changes, active incidents, contracts expiring in 30 days, overdue reviews, morning checks, and overdue or due-today tasks.
+ */
 function computeAttentionCount(data) {
     let count = 0;
     if (data.tickets) {
@@ -162,6 +169,9 @@ function computeAttentionCount(data) {
     return count;
 }
 
+/**
+ * True when there are urgent/high tickets, active incidents or morning checks needing attention - the badge then turns red instead of amber.
+ */
 function hasUrgent(data) {
     if (data.tickets && data.tickets.urgent_high > 0) return true;
     if (data.service_status && data.service_status.active_incidents > 0) return true;

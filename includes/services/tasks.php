@@ -36,12 +36,15 @@
  *
  * Canonical input keys: title, description, status / status_id, priority /
  * priority_id, assigned_analyst_id, assigned_team_id, start_date, due_date,
- * parent_task_id, ticket_id, change_id, contract_id, board_position, tags[].
+ * parent_task_id, ticket_id, change_id, contract_id, board_position, tags[],
+ * estimate_hours (3.3.0; hours, up to two decimals, NULL = not estimated).
  */
 
 require_once __DIR__ . '/../service_context.php';
 require_once __DIR__ . '/../tenancy.php';                       // isMultiTenant / getDefaultTenantId for ticket scope
+require_once __DIR__ . '/checklists.php';                        // the checklist completion gate (discussion #138)
 require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
+require_once __DIR__ . '/task_history.php';   // the record a task keeps (#181) - and THE status hook
 
 class TasksService
 {
@@ -49,15 +52,27 @@ class TasksService
     //  Tasks
     // ======================================================================
 
-    /** Create (no id) or update (id present) a task. Returns ['id','created']. */
+    /**
+     * Create (no id) or update (id present) a task. Returns ['id','created'].
+     *
+     * @param array $in  the canonical task fields (see the file comment); with id it updates that task, without one it creates
+     */
     public static function saveTask(PDO $conn, ActorContext $ctx, array $in): array
     {
+        self::assertCanWrite($conn, $ctx);
         if (!empty($in['id'])) {
             return ['id' => self::updateTask($conn, $ctx, (int)$in['id'], $in), 'created' => false];
         }
         return ['id' => self::createTask($conn, $ctx, $in), 'created' => true];
     }
 
+    /**
+     * Creates a task with its status, priority, assignee, team or contractor, links, dates
+     * and tags, and fires task.created. Returns the new id.
+     *
+     * @param array $in  the canonical task fields (title required), plus tenant_id, assigned_supplier_id, assigned_contact_id
+     *     and work_start_at / work_end_at / work_all_day
+     */
     private static function createTask(PDO $conn, ActorContext $ctx, array $in): int
     {
         $title = trim((string)($in['title'] ?? ''));
@@ -76,6 +91,15 @@ class TasksService
             self::resolveAnalyst($conn, $analystId);
         }
         $teamId = self::validateTeam($conn, $in['assigned_team_id'] ?? null);
+        // A contractor (3.3.0) - checked before anything is written.
+        $contractor = [null, null];
+        if (!empty($in['assigned_supplier_id']) || !empty($in['assigned_contact_id'])) {
+            require_once __DIR__ . '/../task_contractors.php';
+            if (tasksContractorReady($conn)) {
+                self::contractorAllowed($conn, $ctx);
+                $contractor = tasksContractorValidate($conn, $in['assigned_supplier_id'] ?? null, $in['assigned_contact_id'] ?? null);
+            }
+        }
 
         $links = [];
         foreach (['parent_task_id', 'ticket_id', 'change_id', 'contract_id'] as $field) {
@@ -85,6 +109,7 @@ class TasksService
         $startDate = self::parseDateOnly($in['start_date'] ?? null, 'start_date');
         $dueDate   = self::parseDateOnly($in['due_date'] ?? null, 'due_date');
         $description = trim((string)($in['description'] ?? '')) ?: null;
+        $estimate  = self::parseEstimate($in['estimate_hours'] ?? null);
 
         $tagIds = null;
         if (isset($in['tags']) && is_array($in['tags'])) {
@@ -95,6 +120,13 @@ class TasksService
         $posStmt = $conn->prepare("SELECT COALESCE(MAX(board_position), -1) + 1 FROM tasks WHERE status_id = ? AND parent_task_id IS NULL");
         $posStmt->execute([$status[0]]);
         $boardPosition = (int)$posStmt->fetchColumn();
+        // A subtask goes to the end of ITS PARENT'S list instead - the order
+        // dragged in the task window is stored in the same column.
+        if ($links['parent_task_id']) {
+            $posStmt = $conn->prepare("SELECT COALESCE(MAX(board_position), -1) + 1 FROM tasks WHERE parent_task_id = ?");
+            $posStmt->execute([(int) $links['parent_task_id']]);
+            $boardPosition = (int)$posStmt->fetchColumn();
+        }
 
         // A subtask always belongs wherever its parent does — it is not an
         // independent piece of work and must never be reachable from a company
@@ -117,6 +149,14 @@ class TasksService
             !empty($status[2]) ? gmdate('Y-m-d H:i:s') : null,
         ]);
         $taskId = (int)$conn->lastInsertId();
+        // Its own statement, so an install that has not run Database Verification
+        // (no estimate_hours column yet) can still create tasks.
+        if ($estimate !== null) $conn->prepare("UPDATE tasks SET estimate_hours = ? WHERE id = ?")->execute([$estimate, $taskId]);
+        // Likewise the contractor (3.3.0), and its contact hears about it if Projects says so.
+        if ($contractor[0] !== null) {
+            $conn->prepare("UPDATE tasks SET assigned_supplier_id = ?, assigned_contact_id = ? WHERE id = ?")->execute([$contractor[0], $contractor[1], $taskId]);
+            if ($contractor[1] !== null) tasksContractorEmail($conn, $taskId, 'assigned');
+        }
 
         if ($tagIds !== null) {
             self::syncTags($conn, $taskId, $tagIds);
@@ -130,6 +170,11 @@ class TasksService
         if ($work) {
             self::updateTask($conn, $ctx, $taskId, $work);
         }
+
+        // #181: the task's history starts here. created_via says a PERSON made it,
+        // as opposed to the repeat - TaskRecurrence::createOccurrence() writes its own.
+        try { $conn->prepare("UPDATE tasks SET created_via = 'manual' WHERE id = ?")->execute([$taskId]); } catch (Throwable $e) { /* before Database Verification */ }
+        TaskHistory::record($conn, $taskId, 'created', $ctx, null, $dueDate, ['via' => 'manual', 'status' => $status[1] ?? null]);
 
         try {
             WorkflowEngine::dispatch('task.created', [
@@ -152,9 +197,20 @@ class TasksService
         return $taskId;
     }
 
+    /**
+     * Changes the fields sent for a task and fires the workflow and notification events the
+     * changes call for.
+     *
+     * Closing a task stamps its completed time and lets a recurring task schedule its next
+     * occurrence.
+     *
+     * @param array $in  only the fields to change - the canonical keys, plus assigned_supplier_id, assigned_contact_id,
+     *     work_start_at, work_end_at, work_all_day; id is ignored
+     */
     private static function updateTask(PDO $conn, ActorContext $ctx, int $taskId, array $in): int
     {
         $current = self::loadTaskRow($conn, $ctx, $taskId);           // 404 if gone
+        $before  = TaskHistory::before($conn, $taskId);                // #181: for the status hook and the history
         if (!array_diff_key($in, ['id' => true])) {
             throw new ServiceError('validation', 'missing_field', 'No fields to update.');
         }
@@ -174,6 +230,10 @@ class TasksService
             $updates[] = 'description = ?';
             $args[]    = trim((string)$in['description']) ?: null;
         }
+        if (array_key_exists('estimate_hours', $in)) {
+            $updates[] = 'estimate_hours = ?';
+            $args[]    = self::parseEstimate($in['estimate_hours']);
+        }
 
         // Status — completed_datetime mechanics + workflow dispatch.
         $wasClosed = (bool)($current['status_is_closed'] ?? false);
@@ -185,6 +245,12 @@ class TasksService
             $args[]    = $status[0];
             $statusChanged = true;
             if ($status[2]) {
+                // 🔴 Checklist gate BEFORE the write (discussion #138): a Critical
+                // checklist with steps outstanding refuses; a Standard one is
+                // recorded after the write, below.
+                if (!$wasClosed) {
+                    ChecklistsService::assertTaskCompletionAllowed($conn, $taskId);
+                }
                 $updates[] = 'completed_datetime = COALESCE(completed_datetime, UTC_TIMESTAMP())';
                 $firesCompleted = !$wasClosed;
             } else {
@@ -218,8 +284,28 @@ class TasksService
             $updates[] = 'assigned_team_id = ?';
             $args[]    = $newTeam;
         }
+        // A contractor (3.3.0) - includes/task_contractors.php. Changing the supplier
+        // drops a contact who works for the old one; a new contact may be emailed.
+        $emailContractor = false;
+        if ((array_key_exists('assigned_supplier_id', $in) || array_key_exists('assigned_contact_id', $in)) && array_key_exists('assigned_supplier_id', $current)) {
+            require_once __DIR__ . '/../task_contractors.php';
+            $curS = $current['assigned_supplier_id'] !== null ? (int)$current['assigned_supplier_id'] : null;
+            $curC = $current['assigned_contact_id'] !== null ? (int)$current['assigned_contact_id'] : null;
+            $sIn = array_key_exists('assigned_supplier_id', $in) ? $in['assigned_supplier_id'] : $curS;
+            $cIn = array_key_exists('assigned_contact_id', $in) ? $in['assigned_contact_id']
+                  : (($sIn === '' || $sIn === null || (int)$sIn !== $curS) ? null : $curC);
+            if ($sIn === '' || $sIn === null) $cIn = array_key_exists('assigned_contact_id', $in) ? $cIn : null;
+            [$newS, $newC] = tasksContractorValidate($conn, $sIn, $cIn);
+            if ($newS !== $curS || $newC !== $curC) {
+                self::contractorAllowed($conn, $ctx);
+                $updates[] = 'assigned_supplier_id = ?'; $args[] = $newS;
+                $updates[] = 'assigned_contact_id = ?';  $args[] = $newC;
+                $emailContractor = $newC !== null && $newC !== $curC;
+            }
+        }
 
         $dueChanged = false;                // GH #89 — see the dispatches below
+        $dateChanges = [];                  // #181: field => [from, to]
         foreach (['start_date', 'due_date'] as $field) {
             if (array_key_exists($field, $in)) {
                 $newDate   = self::parseDateOnly($in[$field], $field);
@@ -231,6 +317,11 @@ class TasksService
                 // somebody re-picked the day it already was.
                 if ($field === 'due_date' && $newDate !== ($current['due_date'] ?? null)) {
                     $dueChanged = true;
+                }
+                // #181: both dates go on the record. The report tells a deadline that
+                // was MOVED from one that was always that date.
+                if ($newDate !== ($current[$field] ?? null)) {
+                    $dateChanges[$field] = [$current[$field] ?? null, $newDate];
                 }
             }
         }
@@ -297,23 +388,61 @@ class TasksService
             $tagIds = self::resolveTags($conn, $in['tags']);
         }
 
-        if ($updates) {
-            $updates[] = 'updated_datetime = UTC_TIMESTAMP()';
-            $args[]    = $taskId;
-            $conn->prepare('UPDATE tasks SET ' . implode(', ', $updates) . ' WHERE id = ?')->execute($args);
+        /* #181 (Dr4inder's review): the change and its history are ONE transaction. Every
+           evidence write below is strict - if one fails, the whole change rolls back and the
+           caller is told, rather than the task changing with no record of it. Successor
+           creation, workflow events and the calendar follow the commit. */
+        $own = !$conn->inTransaction();
+        if ($own) $conn->beginTransaction();
+        $statusResult = null;
+        try {
+            if ($updates) {
+                $updates[] = 'updated_datetime = UTC_TIMESTAMP()';
+                $args[]    = $taskId;
+                $conn->prepare('UPDATE tasks SET ' . implode(', ', $updates) . ' WHERE id = ?')->execute($args);
+            }
+            if ($tagIds !== null) {
+                self::syncTags($conn, $taskId, $tagIds);
+                $conn->prepare("UPDATE tasks SET updated_datetime = UTC_TIMESTAMP() WHERE id = ?")->execute([$taskId]);
+            }
+            if ($firesCompleted) {
+                ChecklistsService::recordTaskCompletionOverride($conn, $ctx, $taskId, true);
+            }
+            // THE status hook's evidence half - the change, who completed it, and
+            // whether a repeat's successor is now expected.
+            if ($statusChanged) {
+                $statusResult = TaskHistory::recordStatusChange($conn, $ctx, $taskId, $before, $status[0]);
+            }
+            foreach ($dateChanges as $field => [$from, $to]) {
+                TaskHistory::recordStrict($conn, $taskId, $field . '_changed', $ctx, $from, $to,
+                    $field === 'due_date' ? ['task_closed' => !empty($before['status_is_closed'])] : []);
+            }
+            if (array_key_exists('assigned_analyst_id', $in)
+                && (int)($current['assigned_analyst_id'] ?? 0) !== (int)($in['assigned_analyst_id'] ?: 0)) {
+                TaskHistory::recordStrict($conn, $taskId, 'assigned', $ctx,
+                    self::analystLabel($conn, $current['assigned_analyst_id'] ?? null),
+                    self::analystLabel($conn, $in['assigned_analyst_id'] ?: null));
+            }
+            if (array_key_exists('assigned_team_id', $in)
+                && (int)($current['assigned_team_id'] ?? 0) !== (int)($in['assigned_team_id'] ?: 0)) {
+                TaskHistory::recordStrict($conn, $taskId, 'team_assigned', $ctx,
+                    self::teamLabel($conn, $current['assigned_team_id'] ?? null),
+                    self::teamLabel($conn, $in['assigned_team_id'] ?: null));
+            }
+            if ($own) $conn->commit();
+        } catch (Throwable $e) {
+            if ($own && $conn->inTransaction()) $conn->rollBack();
+            throw $e;
         }
-        if ($tagIds !== null) {
-            self::syncTags($conn, $taskId, $tagIds);
-            $conn->prepare("UPDATE tasks SET updated_datetime = UTC_TIMESTAMP() WHERE id = ?")->execute([$taskId]);
-        }
-
         if ($firesCompleted) {
             self::completedDispatch($conn, $taskId);
-            self::recurrenceOnClosed($conn, $taskId);
         }
+        // The successor, whose expectation is already on the record.
+        TaskHistory::afterCommit($conn, $ctx, $statusResult);
         if ($assignedTo !== null) {
             self::assignedDispatch($conn, $taskId, $assignedTo);
         }
+        if ($emailContractor) tasksContractorEmail($conn, $taskId, 'assigned');   // 3.3.0: only when project_contractor_email is on
         // GH #89. Once other people can be ON a task, "what happened to it" has an
         // audience beyond the owner — so the moments that matter have to announce
         // themselves. Each is separately switchable per analyst under
@@ -335,10 +464,17 @@ class TasksService
         return $taskId;
     }
 
-    /** Kanban move: change status (+ completed mechanics) and re-pack the target column. No workflow event. Returns the id. */
+    /**
+     * Kanban move: change status (+ completed mechanics) and re-pack the target column. No workflow event. Returns the id.
+     *
+     * @param array $in  status_id or status (a name; neither keeps the current status), position (0-based place in the
+     *     column; null or '' puts it at the end)
+     */
     public static function moveTask(PDO $conn, ActorContext $ctx, int $taskId, array $in): int
     {
+        self::assertCanWrite($conn, $ctx);
         $current = self::loadTaskRow($conn, $ctx, $taskId);
+        $before  = TaskHistory::before($conn, $taskId);
 
         $status = self::resolveLookup($conn, $in, 'status', 'task_statuses', true);
         $targetStatusId = $status !== null ? $status[0] : (int)$current['status_id'];
@@ -347,6 +483,12 @@ class TasksService
         $position = array_key_exists('position', $in) && $in['position'] !== null && $in['position'] !== ''
             ? max(0, (int)$in['position'])
             : null; // null = end of column
+
+        // Checklist gate (discussion #138) - before the write, like updateTask.
+        $completing = $targetIsClosed && !(bool)$current['status_is_closed'];
+        if ($completing) {
+            ChecklistsService::assertTaskCompletionAllowed($conn, $taskId);
+        }
 
         $conn->beginTransaction();
         try {
@@ -372,8 +514,14 @@ class TasksService
             foreach ($column as $i => $id) {
                 $posUpd->execute([$i, $id]);
             }
+            // #181: the move's evidence, IN its transaction - a move whose history
+            // cannot be written does not happen (Dr4inder's review).
+            if ($completing) {
+                ChecklistsService::recordTaskCompletionOverride($conn, $ctx, $taskId, true);
+            }
+            $statusResult = TaskHistory::recordStatusChange($conn, $ctx, $taskId, $before, $targetStatusId);
             $conn->commit();
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             if ($conn->inTransaction()) $conn->rollBack();
             throw $e;
         }
@@ -384,22 +532,14 @@ class TasksService
         // would give a task that repeats when you tick it and silently does not
         // when you drag it. Outside the transaction: the move is committed and
         // must stand whatever the recurrence does.
-        if ($targetIsClosed && !(bool)$current['status_is_closed']) {
-            self::recurrenceOnClosed($conn, $taskId);
-        }
+        // #181: the successor, after the commit - its expectation is already recorded.
+        TaskHistory::afterCommit($conn, $ctx, $statusResult);
         // Completing by DRAGGING must take the calendar entry away too, exactly
         // as ticking the box does. Same reason recurrence fires from here.
         self::calendarOnTaskChanged($conn, $taskId);
         return $taskId;
     }
 
-    /**
-     * Make the next occurrence, if this task repeats on completion (#94).
-     *
-     * Wrapped rather than called directly so both completion paths go through
-     * one place, and so a missing recurrence service — an install part-way
-     * through an upgrade — cannot break completing a task.
-     */
     /**
      * Put this task into (or take it out of) its assignee's calendar (#75).
      *
@@ -410,6 +550,8 @@ class TasksService
      * ⚠️ Wrapped, and swallowing Throwable rather than Exception: a task must
      * save even if the calendar file is missing on a part-upgraded install,
      * and a missing class raises an Error, which `catch (Exception)` misses.
+     *
+     * @param bool $gone  true when the task has been deleted, so its calendar entry is removed
      */
     private static function calendarOnTaskChanged(PDO $conn, int $taskId, bool $gone = false): void
     {
@@ -421,20 +563,33 @@ class TasksService
         }
     }
 
-    private static function recurrenceOnClosed(PDO $conn, int $taskId): void
-    {
-        try {
-            require_once __DIR__ . '/task_recurrence.php';
-            TaskRecurrence::onTaskClosed($conn, $taskId);
-        } catch (Throwable $e) {
-            error_log('Task recurrence hook failed for task ' . $taskId . ': ' . $e->getMessage());
-        }
-    }
-
-    /** Hard-delete a task + its whole subtask tree (comments/tags too). Returns ['id','subtasks_deleted']. */
+    /**
+     * Hard-delete a task + its whole subtask tree (comments/tags too). Returns ['id','subtasks_deleted'].
+     *
+     * #181: an occurrence of a repeat is evidence. Tasks -> Settings -> Evidence decides
+     * whether it may be deleted at all (refused: skip it instead); where it may, a frozen
+     * copy of everything the evidence report reads is kept first, owned by the series.
+     */
     public static function deleteTask(PDO $conn, ActorContext $ctx, int $taskId): array
     {
+        self::assertCanWrite($conn, $ctx);
         $row = self::loadTaskRow($conn, $ctx, $taskId);
+
+        $isOccurrence = !empty($row['recurrence_id']) && empty($row['parent_task_id']);
+        if ($isOccurrence) {
+            if (self::evidenceSetting($conn, 'tasks_evidence_delete_occurrence', 'allow') === 'refuse') {
+                throw new ServiceError('validation', 'occurrence_delete_refused',
+                    function_exists('t') ? t('tasks.evidence.delete_refused') : 'This task is an occurrence of a repeat, and repeats are kept as evidence here. Skip it instead.');
+            }
+            /* #181 (Dr4inder's review): build the complete retained record FIRST - a failed
+               read throws instead of becoming an empty section - and write it in the same
+               transaction as the delete below. No record, no delete. */
+            try {
+                $removalSnapshot = TaskHistory::ready($conn) ? TaskHistory::snapshot($conn, $taskId, true) : null;
+            } catch (Throwable $e) {
+                throw TaskHistory::notRecorded('removal', $e);
+            }
+        }
 
         $ids = [$taskId];
         $frontier = [$taskId];
@@ -459,10 +614,36 @@ class TasksService
         }
 
         $ph = implode(',', array_fill(0, count($ids), '?'));
+        $own = !$conn->inTransaction();
+        if ($own) $conn->beginTransaction();
+        try {
+        if ($isOccurrence) {
+            TaskHistory::recordRemoval($conn, $ctx, $taskId, $removalSnapshot ?? null, true);
+        }
         $conn->prepare("DELETE FROM task_comments WHERE task_id IN ($ph)")->execute($ids);
         $conn->prepare("DELETE FROM task_tag_map WHERE task_id IN ($ph)")->execute($ids);
+        // The links to attached documents went nowhere once the task was gone
+        // (#181 section 5). The documents themselves stay; the tidy-up job
+        // collects any that nothing links to any more.
+        try { $conn->prepare("DELETE FROM document_links WHERE parent_type = 'task' AND parent_id IN ($ph)")->execute($ids); }
+        catch (Throwable $e) { /* an install without the documents tables */ }
+        // Their checklists too (discussion #138) - whether or not the feature is
+        // switched on now, or the rows are stranded pointing at deleted tasks.
+        ChecklistsService::deleteForTasks($conn, $ids);
+        // Their form requirements (GH #190). The submissions themselves stay - evidence.
+        require_once __DIR__ . '/task_forms.php';
+        TaskForms::deleteForTasks($conn, $ids);
+        require_once __DIR__ . '/task_procedures.php';
+        TaskProcedures::deleteForTasks($conn, $ids);
+        require_once __DIR__ . '/task_follow_ups.php';
+        TaskFollowUps::deleteForTasks($conn, $ids);
         foreach (array_reverse($ids) as $id) {
             $conn->prepare("DELETE FROM tasks WHERE id = ?")->execute([$id]);
+        }
+            if ($own) $conn->commit();
+        } catch (Throwable $e) {
+            if ($own && $conn->inTransaction()) $conn->rollBack();
+            throw $e;
         }
         WorkflowEngine::dispatch('task.deleted', ['task' => [
             'id'          => $taskId,
@@ -473,9 +654,14 @@ class TasksService
         return ['id' => $taskId, 'subtasks_deleted' => count($ids) - 1];
     }
 
-    /** Add a comment to a task (create-only). Returns the comment id. */
+    /**
+     * Add a comment to a task (create-only). Returns the comment id.
+     *
+     * @param string $text  the comment text (trimmed; required)
+     */
     public static function createComment(PDO $conn, ActorContext $ctx, int $taskId, string $text): int
     {
+        self::assertCanWrite($conn, $ctx);
         self::loadTaskRow($conn, $ctx, $taskId);
         $text = trim($text);
         if ($text === '') {
@@ -500,6 +686,9 @@ class TasksService
      * a workflow reading these the way it reads task.assigned finds the person
      * accountable. Who is TOLD is a separate question, answered by the router:
      * these events reach the owner AND everybody involved.
+     *
+     * @param string $event  the workflow event, e.g. 'task.comment_added', 'task.status_changed'
+     * @param array $extra  more keys merged into the 'task' payload, e.g. ['comment_id' => 12]
      */
     private static function taskEventDispatch(PDO $conn, string $event, int $taskId, array $extra = []): void
     {
@@ -593,6 +782,8 @@ class TasksService
      * ⚠️ ONE QUERY, NOT ONE PER TASK. The board renders every task on the desk;
      * a per-task lookup here would add a query per card to the module's busiest
      * endpoint. Same reason list.php already batches its subtask and tag lookups.
+     *
+     * @param array $taskIds  task ids; non-numeric, zero and repeated values are dropped
      */
     public static function collaboratorsForMany(PDO $conn, array $taskIds): array
     {
@@ -633,6 +824,7 @@ class TasksService
     /** Put somebody on a task. Idempotent — adding twice is not a second fact. */
     public static function addCollaborator(PDO $conn, ActorContext $ctx, int $taskId, int $analystId): array
     {
+        self::assertCanWrite($conn, $ctx);
         $task = self::loadTaskRow($conn, $ctx, $taskId);          // 404 + company scope
         self::assertCollaboratorsAllowed($task);
         self::resolveAnalyst($conn, $analystId);                  // exists and is active
@@ -664,6 +856,7 @@ class TasksService
     /** Take somebody off a task. */
     public static function removeCollaborator(PDO $conn, ActorContext $ctx, int $taskId, int $analystId): array
     {
+        self::assertCanWrite($conn, $ctx);
         self::loadTaskRow($conn, $ctx, $taskId);
         $stmt = $conn->prepare("DELETE FROM task_collaborators WHERE task_id = ? AND analyst_id = ?");
         $stmt->execute([$taskId, $analystId]);
@@ -686,9 +879,13 @@ class TasksService
      *
      * ⚠️ Only the person themselves, or the task's owner, may move a tick. Anyone
      * else marking your work done is a statement about you that you did not make.
+     *
+     * @param int $analystId  the collaborator whose tick to change - not the actor; only they or the task's owner may
+     * @param bool $done  true ticks their part, false unticks it
      */
     public static function setCollaboratorDone(PDO $conn, ActorContext $ctx, int $taskId, int $analystId, bool $done): array
     {
+        self::assertCanWrite($conn, $ctx);
         $task = self::loadTaskRow($conn, $ctx, $taskId);
         $isSelf  = $ctx->actorId === $analystId;
         $isOwner = (int)($task['assigned_analyst_id'] ?? 0) === (int)$ctx->actorId;
@@ -733,6 +930,8 @@ class TasksService
      * how you say "these four are each doing a piece"; collaborators on top of
      * that would give two overlapping ways to express the same thing and no rule
      * for which wins.
+     *
+     * @param array $taskRow  the tasks row, as loaded by loadTaskRow()
      */
     private static function assertCollaboratorsAllowed(array $taskRow): void
     {
@@ -751,6 +950,9 @@ class TasksService
      * list through this too, rather than validating only on save.
      *
      * Permissive on a single-company install, where the question does not arise.
+     *
+     * @param array $taskRow  the tasks row, as loaded by loadTaskRow()
+     * @param int $analystId  the analyst being added as a collaborator - not the actor
      */
     private static function assertAnalystInTaskCompany(PDO $conn, array $taskRow, int $analystId): void
     {
@@ -779,6 +981,9 @@ class TasksService
      * `task.assigned` once per collaborator instead would make workflows that
      * fired once fire four times. Both failures are silent. A separate event
      * cannot do either.
+     *
+     * @param string $event  'task.collaborator_added' or 'task.collaborator_removed'
+     * @param int $analystId  the collaborator added or removed - sent as collaborator_id, not the actor
      */
     private static function collaboratorDispatch(PDO $conn, string $event, int $taskId, int $analystId): void
     {
@@ -808,7 +1013,11 @@ class TasksService
     //  Internals
     // ======================================================================
 
-    /** Load a task with its status is_closed flag, or throw 404. */
+    /**
+     * Load a task with its status is_closed flag, or throw 404.
+     *
+     * @param int $id  the task to load
+     */
     private static function loadTaskRow(PDO $conn, ActorContext $ctx, int $id): array
     {
         $stmt = $conn->prepare(
@@ -863,10 +1072,12 @@ class TasksService
      * SUBTASKS MOVE WITH THE PARENT. That is not a convenience - leaving them
      * behind is the same broken state as (1), reached from the other direction.
      *
+     * @param int $targetTenantId  the company (tenants.id) to move the task and its subtasks to; the actor must reach it
      * @return array{moved:int, from:string, to:string}
      */
     public static function moveTaskToCompany(PDO $conn, ActorContext $ctx, int $taskId, int $targetTenantId): array
     {
+        self::assertCanWrite($conn, $ctx);
         $row = self::loadTaskRow($conn, $ctx, $taskId);          // 404 if gone or out of scope
 
         if (!isMultiTenant($conn)) {
@@ -988,6 +1199,8 @@ class TasksService
      * differs per table and changes over time: tickets and changes have one,
      * contracts do not. Cached per request - the move loop asks about the same
      * three tables, and this is called on a path a person is waiting on.
+     *
+     * @param string $table  a table name - a developer literal such as 'tickets', 'changes' or 'contracts'
      */
     private static function tableHasTenantColumn(PDO $conn, string $table): bool
     {
@@ -1014,6 +1227,8 @@ class TasksService
      * this product still supports it. The visited set is not decoration - a
      * parent chain that somehow loops would otherwise spin here for ever, and a
      * bad row in the database should not be able to hang a request.
+     *
+     * @param int $rootId  the task to start from; it is included in the result
      */
     private static function taskAndDescendantIds(PDO $conn, int $rootId): array
     {
@@ -1038,7 +1253,11 @@ class TasksService
         return $all;
     }
 
-    /** A subtask inherits its parent's company, always. */
+    /**
+     * A subtask inherits its parent's company, always.
+     *
+     * @param int $parentId  the parent task whose company a new subtask takes
+     */
     private static function parentTaskTenant(PDO $conn, int $parentId): ?int
     {
         $stmt = $conn->prepare("SELECT tenant_id FROM tasks WHERE id = ?");
@@ -1047,7 +1266,11 @@ class TasksService
         return ($v === false || $v === null) ? null : (int) $v;
     }
 
-    /** Is an already-loaded task row inside the actor's company scope? */
+    /**
+     * Is an already-loaded task row inside the actor's company scope?
+     *
+     * @param array $row  a tasks row (SELECT t.*); no tenant_id key means the column is not there yet, and allows
+     */
     private static function taskAccessible(PDO $conn, ActorContext $ctx, array $row): bool
     {
         // Column absent = an install that has not run Database Verification since
@@ -1084,6 +1307,8 @@ class TasksService
      *    working on a client does not vanish from the board the moment it is made.
      * 4. Otherwise → NULL, i.e. the Default company. The state every existing task
      *    is already in.
+     *
+     * @param array $in  the create input; only tenant_id is read (an explicit company, checked against the actor's scope)
      */
     private static function resolveNewTaskTenant(PDO $conn, ActorContext $ctx, array $in, ?int $ticketId): ?int
     {
@@ -1117,7 +1342,14 @@ class TasksService
         return null;
     }
 
-    /** Resolve a status/priority lookup by name or id — strict 422 on unknown. Returns [id, name(, is_closed)] or null. */
+    /**
+     * Resolve a status/priority lookup by name or id — strict 422 on unknown. Returns [id, name(, is_closed)] or null.
+     *
+     * @param array $in  the request; {$key}_id wins over $key (a name), neither gives null
+     * @param string $key  'status' or 'priority'
+     * @param string $table  the lookup table: 'task_statuses' or 'task_priorities' - a developer literal
+     * @param bool $withClosed  true to read and return is_closed as a third element (statuses only)
+     */
     private static function resolveLookup(PDO $conn, array $in, string $key, string $table, bool $withClosed = false): ?array
     {
         $cols = 'id, name' . ($withClosed ? ', is_closed' : '');
@@ -1157,6 +1389,9 @@ class TasksService
      * reproduce the symptom by another route; is_closed is deliberately not
      * filtered, because an admin who makes a closed status the default has said
      * what they meant.
+     *
+     * @param string $table  the lookup table: 'task_statuses' or 'task_priorities' - a developer literal
+     * @param bool $withClosed  true to read and return is_closed as a third element (statuses only)
      */
     private static function lookupDefault(PDO $conn, string $table, bool $withClosed = false): array
     {
@@ -1175,7 +1410,22 @@ class TasksService
         return $out;
     }
 
-    /** Validate an optional team id (422 on unknown). */
+    /**
+     * Contractors (3.3.0): suppliers live in Contracts, so CHOOSING one needs it -
+     * from the board, the REST API or Ask AI alike. The system (actorId 0) may.
+     */
+    private static function contractorAllowed(PDO $conn, ActorContext $ctx): void
+    {
+        if ($ctx->actorId > 0 && !analystCanAccessModule($conn, $ctx->actorId, 'contracts')) {
+            throw new ServiceError('forbidden', 'forbidden', 'Choosing a contractor needs access to Contracts.');
+        }
+    }
+
+    /**
+     * Validate an optional team id (422 on unknown).
+     *
+     * @param mixed $value  a team id as sent; null or '' means no team
+     */
     private static function validateTeam(PDO $conn, $value): ?int
     {
         if ($value === '' || $value === null) {
@@ -1193,6 +1443,9 @@ class TasksService
     /**
      * Validate a link column + parent task. Ticket links are checked against the
      * actor's company scope (tickets are tenant-scoped; tasks aren't).
+     *
+     * @param string $field  which link: 'ticket_id', 'change_id', 'contract_id' or 'parent_task_id'; anything else gives null
+     * @param mixed $value  the linked record's id as sent; null or '' means no link
      */
     private static function validateLink(PDO $conn, ActorContext $ctx, string $field, $value): ?int
     {
@@ -1210,7 +1463,10 @@ class TasksService
                 $stmt = $conn->prepare("SELECT id FROM changes WHERE id = ?");
                 break;
             case 'contract_id':
-                $stmt = $conn->prepare("SELECT id FROM contracts WHERE id = ?");
+                // A customer contract outside the actor's companies is unknown (#153).
+                require_once __DIR__ . '/../contract_party.php';
+                [$kVis, $extra] = contractVisibilitySqlForScope($conn, $ctx->companyScope, 'k');
+                $stmt = $conn->prepare("SELECT k.id FROM contracts k WHERE k.id = ?$kVis");
                 break;
             case 'parent_task_id':
                 $stmt = $conn->prepare("SELECT id FROM tasks WHERE id = ?");
@@ -1219,7 +1475,7 @@ class TasksService
                 return null;
         }
         try {
-            $stmt->execute([$id]);
+            $stmt->execute(array_merge([$id], $extra ?? []));
             if (!$stmt->fetchColumn()) {
                 throw new ServiceError('validation', 'invalid_field', "Unknown " . str_replace('_id', '', $field) . " id: {$id}");
             }
@@ -1264,7 +1520,11 @@ class TasksService
         }
     }
 
-    /** Resolve a tags array (names or ids) to ids — strict 422 on unknown (curated list). */
+    /**
+     * Resolve a tags array (names or ids) to ids — strict 422 on unknown (curated list).
+     *
+     * @param array $tags  tag ids or names, mixed; each must already exist in task_tags
+     */
     private static function resolveTags(PDO $conn, array $tags): array
     {
         $ids = [];
@@ -1285,6 +1545,11 @@ class TasksService
         return array_keys($ids);
     }
 
+    /**
+     * Replaces a task's tags with $tagIds.
+     *
+     * @param array $tagIds  the task_tags ids the task should end up with; an empty array removes them all
+     */
     private static function syncTags(PDO $conn, int $taskId, array $tagIds): void
     {
         $conn->prepare("DELETE FROM task_tag_map WHERE task_id = ?")->execute([$taskId]);
@@ -1330,6 +1595,8 @@ class TasksService
      * somebody recorded. The same applies when a task changes level: drag a
      * top-level task under a parent and its time is still there, shown again the
      * moment the setting allows it.
+     *
+     * @param ?int $parentTaskId  the task's parent, or null for a top-level task
      */
     public static function timeAllowedFor(PDO $conn, ?int $parentTaskId): bool
     {
@@ -1340,9 +1607,14 @@ class TasksService
         return $scope === 'subtasks' ? $isSubtask : !$isSubtask;
     }
 
-    /** Log time against a task. Returns the entry id. */
+    /**
+     * Log time against a task. Returns the entry id.
+     *
+     * @param array $in  minutes (required, above 0), notes, entry_at (an ISO 8601 instant; default now in UTC)
+     */
     public static function createTimeEntry(PDO $conn, ActorContext $ctx, int $taskId, array $in): int
     {
+        self::assertCanWrite($conn, $ctx);
         $task = self::loadTaskRow($conn, $ctx, $taskId);          // 404 + company scope
         self::assertTimeAllowed($conn, $task);
         $minutes = isset($in['minutes']) ? (int)$in['minutes'] : 0;
@@ -1363,9 +1635,14 @@ class TasksService
         return (int)$conn->lastInsertId();
     }
 
-    /** Soft-delete a time entry. Only the analyst who logged it may remove it. */
+    /**
+     * Soft-delete a time entry. Only the analyst who logged it may remove it.
+     *
+     * @param int $entryId  the time entry (task_time_entries.id) to remove
+     */
     public static function deleteTimeEntry(PDO $conn, ActorContext $ctx, int $entryId): void
     {
+        self::assertCanWrite($conn, $ctx);
         $stmt = $conn->prepare("SELECT task_id, analyst_id FROM task_time_entries WHERE id = ? AND is_active = 1");
         $stmt->execute([$entryId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -1427,7 +1704,11 @@ class TasksService
         ];
     }
 
-    /** Refuse the WRITE too, not only the display — a stale tab must not slip past a setting. */
+    /**
+     * Refuse the WRITE too, not only the display — a stale tab must not slip past a setting.
+     *
+     * @param array $taskRow  the tasks row, as loaded by loadTaskRow()
+     */
     private static function assertTimeAllowed(PDO $conn, array $taskRow): void
     {
         $parent = isset($taskRow['parent_task_id']) && $taskRow['parent_task_id'] !== null
@@ -1455,6 +1736,8 @@ class TasksService
      * assigned it to yourself" is the notification layer's rule, enforced in
      * includes/notifications_router.php; a workflow may legitimately want the
      * event either way, and duplicating the rule here would let the two drift.
+     *
+     * @param int $assigneeId  the analyst the task is now assigned to
      */
     private static function assignedDispatch(PDO $conn, int $taskId, int $assigneeId): void
     {
@@ -1498,6 +1781,7 @@ class TasksService
         }
     }
 
+    /** Throws unless the id is an active analyst. */
     private static function resolveAnalyst(PDO $conn, int $analystId): void
     {
         $stmt = $conn->prepare("SELECT full_name FROM analysts WHERE id = ? AND is_active = 1");
@@ -1507,6 +1791,27 @@ class TasksService
         }
     }
 
+    /**
+     * An estimate in hours (3.3.0): empty = not estimated; otherwise more than 0
+     * and at most 9999, to two decimals ("1.5" = an hour and a half).
+     *
+     * @param mixed $v  the estimate in hours as sent; null or blank means not estimated
+     */
+    private static function parseEstimate($v): ?float
+    {
+        if ($v === null || (is_string($v) && trim($v) === '')) return null;
+        if (!is_numeric($v) || (float)$v <= 0 || (float)$v > 9999) {
+            throw new ServiceError('validation', 'invalid_field', "'estimate_hours' must be a number of hours above 0 and at most 9999.");
+        }
+        return round((float)$v, 2);
+    }
+
+    /**
+     * Validates an optional YYYY-MM-DD date for $field; blank gives null.
+     *
+     * @param mixed $value  the date as sent (YYYY-MM-DD); null or '' gives null
+     * @param string $field  the field name, used in the error message
+     */
     private static function parseDateOnly($value, string $field): ?string
     {
         if ($value === null || $value === '') {
@@ -1526,6 +1831,9 @@ class TasksService
      * who reads it, so this value is never zone-converted in either direction; a
      * zone offset in the input is therefore refused rather than quietly dropped,
      * because accepting it would imply a conversion that will not happen.
+     *
+     * @param mixed $value  a wall-clock time as sent (YYYY-MM-DD HH:MM[:SS], a T allowed); null or '' gives null, an offset is refused
+     * @param string $field  the field name, used in the error message
      */
     private static function parseNaiveDateTime($value, string $field): ?string
     {
@@ -1554,6 +1862,9 @@ class TasksService
      * The opposite kind of value to the one above, and the distinction that GH
      * #116 turned on: this one IS zone-converted for each reader, so a zone-less
      * string can only be read as UTC. The browser sends ISO-8601 with a Z.
+     *
+     * @param string $value  a date and time, ISO 8601; with no zone it is read as UTC
+     * @param string $field  the field name, used in the error message
      */
     private static function parseInstant(string $value, string $field): string
     {
@@ -1564,5 +1875,132 @@ class TasksService
             throw new ServiceError('bad_request', 'invalid_parameter',
                 "'{$field}' is not a valid date/time. Use ISO 8601, e.g. 2026-07-02T09:00:00Z.");
         }
+    }
+
+    // ======================================================================
+    //  Repeating task evidence (#181) and Read only access
+    // ======================================================================
+
+    /**
+     * Refuse a write to an analyst with Read only access to Tasks (#181 Part G) - the same rule
+     * Change Management and Forms enforce. In the service, so the board, the task window, the
+     * REST API and anything added later all refuse alike; the endpoints check it as well.
+     */
+    public static function assertCanWrite(PDO $conn, ActorContext $ctx): void
+    {
+        if ($ctx->actorId > 0 && function_exists('analystModuleLevel') && analystModuleLevel($conn, $ctx->actorId, 'tasks') === 'read') {
+            throw new ServiceError('forbidden', 'read_only',
+                function_exists('t') ? t('common.module_read_only') : 'You have read-only access to this module.');
+        }
+    }
+
+    /**
+     * One of the Tasks -> Settings -> Evidence settings, or its default.
+     *
+     * @param string $key  tasks_evidence_completed_checklist, tasks_evidence_delete_occurrence,
+     *     tasks_evidence_skip_status_id or tasks_evidence_report_access
+     * @param string $default  the value when unset - always the forgiving choice
+     */
+    public static function evidenceSetting(PDO $conn, string $key, string $default): string
+    {
+        try {
+            $s = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
+            $s->execute([$key]);
+            $v = $s->fetchColumn();
+            return ($v === false || $v === null || $v === '') ? $default : (string)$v;
+        } catch (Throwable $e) {
+            return $default;
+        }
+    }
+
+    /**
+     * The closed status a skipped occurrence moves to: the one chosen in Tasks -> Settings -> Evidence
+     * if it is still an active closed status, otherwise the LAST closed status in the admin's order -
+     * "Cancelled" on a standard install, and never the first, which is "Done".
+     */
+    public static function skipStatusId(PDO $conn): ?int
+    {
+        $chosen = (int)self::evidenceSetting($conn, 'tasks_evidence_skip_status_id', '0');
+        if ($chosen > 0) {
+            $s = $conn->prepare("SELECT id FROM task_statuses WHERE id = ? AND is_closed = 1 AND is_active = 1");
+            $s->execute([$chosen]);
+            if ($s->fetchColumn()) return $chosen;
+        }
+        $id = $conn->query("SELECT id FROM task_statuses WHERE is_closed = 1 AND is_active = 1
+                             ORDER BY display_order DESC, id DESC LIMIT 1")->fetchColumn();
+        return $id ? (int)$id : null;
+    }
+
+    /**
+     * Skip an occurrence of a repeat, with a reason (#181 Part D): it closes, recorded as SKIPPED -
+     * not done, not merely cancelled - and in a repeat set to "after completion" the next one is
+     * made, just as completing it would. Returns the status it moved to.
+     *
+     * @param string $reason  why it was skipped (required)
+     */
+    public static function skipOccurrence(PDO $conn, ActorContext $ctx, int $taskId, string $reason): array
+    {
+        self::assertCanWrite($conn, $ctx);
+        $row = self::loadTaskRow($conn, $ctx, $taskId);
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new ServiceError('validation', 'missing_field',
+                function_exists('t') ? t('tasks.evidence.skip_reason_required') : 'Say why it is being skipped.');
+        }
+        if (empty($row['recurrence_id']) || !empty($row['parent_task_id'])) {
+            throw new ServiceError('validation', 'invalid_field', 'Only an occurrence of a repeating task can be skipped.');
+        }
+        if (!empty($row['status_is_closed'])) {
+            throw new ServiceError('validation', 'invalid_field', 'This occurrence is already closed.');
+        }
+        $statusId = self::skipStatusId($conn);
+        if ($statusId === null) {
+            throw new ServiceError('validation', 'invalid_field', 'No active closed status is configured for tasks.');
+        }
+        $before = TaskHistory::before($conn, $taskId);
+        // No checklist gate: skipping is the explicit decision NOT to do the work,
+        // so outstanding steps are the point, not an obstacle.
+        // The skip and its record, together (#181).
+        $conn->beginTransaction();
+        try {
+            $conn->prepare("UPDATE tasks SET status_id = ?, completed_datetime = COALESCE(completed_datetime, UTC_TIMESTAMP()),
+                                   updated_datetime = UTC_TIMESTAMP() WHERE id = ?")
+                 ->execute([$statusId, $taskId]);
+            $statusResult = TaskHistory::recordStatusChange($conn, $ctx, $taskId, $before, $statusId, mb_substr($reason, 0, 255));
+            $conn->commit();
+        } catch (Throwable $e) {
+            if ($conn->inTransaction()) $conn->rollBack();
+            throw $e;
+        }
+        TaskHistory::afterCommit($conn, $ctx, $statusResult);
+        self::taskEventDispatch($conn, 'task.status_changed', $taskId);
+        self::calendarOnTaskChanged($conn, $taskId);
+        return ['id' => $taskId, 'status_id' => $statusId];
+    }
+
+    /**
+     * An analyst's name for the history, or null for nobody.
+     *
+     * @param mixed $id  an analyst id, or null / '' for nobody
+     */
+    private static function analystLabel(PDO $conn, $id): ?string
+    {
+        if (!$id) return null;
+        $s = $conn->prepare("SELECT full_name FROM analysts WHERE id = ?");
+        $s->execute([(int)$id]);
+        return (string)($s->fetchColumn() ?: ('#' . (int)$id));
+    }
+
+    /**
+     * A team's name for the history, or null for none.
+     *
+     * @param mixed $id  a team id, or null / '' for none
+     */
+    private static function teamLabel(PDO $conn, $id): ?string
+    {
+        if (!$id) return null;
+        $s = $conn->prepare("SELECT name FROM teams WHERE id = ?");
+        $s->execute([(int)$id]);
+        return (string)($s->fetchColumn() ?: ('#' . (int)$id));
     }
 }

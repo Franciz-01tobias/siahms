@@ -27,9 +27,9 @@ $translationNamespaces = ['common', 'change-management'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('change-management.page.calendar')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('changes', t('change-management.nav.calendar'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/calendar-grid.css?v=1">
     <link rel="stylesheet" href="../assets/css/itsm_calendar.css?v=8">
     <style>
@@ -138,14 +138,22 @@ $translationNamespaces = ['common', 'change-management'];
             text-align: right;
         }
     </style>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
 </head>
+<?php $cmLevel = analystModuleLevel(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'changes'); ?>
 <body>
     <?php include 'includes/header.php'; ?>
+    <?php /* The action row (#185): New change was at the foot of the list's
+             sidebar and missing from the Calendar and Table views. Read only
+             access (#180) gets the row without New. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('change-management.nav.changes'),
+              $cmLevel !== 'read' ? [actionRowNew(BASE_URL . 'change-management/new/', t('change-management.sidebar.new_change_tip'), true)] : [],
+              ['accent' => 'cm']); ?>
 
     <div class="calendar-container">
         <!-- Sidebar with status filters -->
@@ -189,7 +197,7 @@ $translationNamespaces = ['common', 'change-management'];
     </div>
 
     <script>window.API_BASE = '../api/change-management/';</script>
-    <script src="../assets/js/change-calendar.js?v=3"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/change-calendar.js?v=4"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
 </body>
 </html>

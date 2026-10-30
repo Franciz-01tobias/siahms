@@ -28,9 +28,9 @@ $translationNamespaces = ['common', 'workflow'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('workflow.list.page_title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('workflow')); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/workflow.css?v=11">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
@@ -42,20 +42,20 @@ $translationNamespaces = ['common', 'workflow'];
     <!-- Mobile layer LAST, after this page's own stylesheet AND its inline
          <style> block, or a rule at equal specificity loses on document order
          (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="workflow" data-mobile-page="wf-list">
     <?php include 'includes/header.php'; ?>
+    <?php /* The action row (#185) is what was the list's section header: New from
+             template, then New. */
+          require_once __DIR__ . '/../includes/action_row.php';
+          renderActionRow(t('workflow.list.page_title'), [
+              ['label' => t('workflow.templates.btn'), 'onclick' => 'WF.openTemplates()'],
+              actionRowNew('editor.php', t('workflow.list.new_tip'), true),
+          ], ['accent' => 'wf']); ?>
 
     <div class="container">
         <div class="tab-content active">
-            <div class="section-header">
-                <h2><?php echo htmlspecialchars(t('workflow.list.page_title')); ?></h2>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <button class="add-btn" style="background: var(--surface, #fff); color: var(--text, #333); border: 1px solid var(--border, #d0d0d0);" onclick="WF.openTemplates()"><?php echo htmlspecialchars(t('workflow.templates.btn')); ?></button>
-                    <a class="add-btn" href="editor.php"><?php echo htmlspecialchars(t('workflow.list.add_btn')); ?></a>
-                </div>
-            </div>
             <p style="margin-bottom: 20px; color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('workflow.list.intro')); ?></p>
 
             <table>
@@ -296,6 +296,6 @@ $translationNamespaces = ['common', 'workflow'];
         window.WF = { del, openTemplates, closeTemplates, useTemplate, filterTemplates };
     })();
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

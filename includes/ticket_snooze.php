@@ -115,6 +115,8 @@ function snoozeWakeHour(PDO $conn): int {
  * that lists or counts the working queue. No placeholders, so it never disturbs
  * a caller's parameter ordering — the same property that lets the trashed-ticket
  * predicate be appended to $ttSql in get_ticket_counts.php.
+ *
+ * @param string $alias  the alias the calling query gives the tickets table
  */
 function snoozeHiddenSql(PDO $conn, string $alias = 't'): string {
     // No columns yet = nothing is asleep, so hide nothing. The queue is exactly
@@ -128,6 +130,8 @@ function snoozeHiddenSql(PDO $conn, string $alias = 't'): string {
  * Note the pre-upgrade answer is `1=0` and NOT the empty string — an empty
  * fragment here would turn "only the sleeping ones" into "every ticket you own",
  * which is the one failure mode worse than the folder simply being empty.
+ *
+ * @param string $alias  the alias the calling query gives the tickets table
  */
 function snoozeOnlySql(PDO $conn, string $alias = 't'): string {
     if (!snoozeSchemaReady($conn)) return ' AND 1=0';
@@ -145,6 +149,7 @@ function snoozeOnlySql(PDO $conn, string $alias = 't'): string {
  *
  * @param string      $preset      three_hours | tonight | tomorrow | next_week | custom
  * @param string|null $customLocal 'Y-m-d H:i' in the analyst's zone, required when $preset is custom
+ * @param string      $localZone   the analyst's display time zone name (Tz::current()), e.g. 'Europe/London'
  * @return string UTC datetime, 'Y-m-d H:i:s'
  * @throws Exception on an unknown preset, an unparseable date, or a time in the past
  */
@@ -211,6 +216,9 @@ function resolveSnoozeUntil(PDO $conn, string $preset, ?string $customLocal, str
  * Deliberately does NOT bump updated_datetime — snoozing is the desk deciding
  * not to act, not activity on the ticket, and shoving it to the top of a sort
  * by last-updated on its way out of the list would be a lie.
+ *
+ * @param string $untilUtc  the wake time, UTC 'Y-m-d H:i:s' (from resolveSnoozeUntil)
+ * @param string $reason  the analyst's note on why; '' stores NULL; cut to 255 characters
  */
 function snoozeTicket(PDO $conn, int $ticketId, int $analystId, string $untilUtc, string $reason): void {
     if (!snoozeSchemaReady($conn)) {
@@ -228,6 +236,8 @@ function snoozeTicket(PDO $conn, int $ticketId, int $analystId, string $untilUtc
 /**
  * Wake a ticket early. Returns true if it was actually asleep, so a caller can
  * stay quiet rather than announcing a wake that woke nothing.
+ *
+ * @param string $why  the audit trail text; '' records 'Woken'
  */
 function wakeTicket(PDO $conn, int $ticketId, ?int $analystId, string $why = ''): bool {
     // Nothing can be asleep on a database with no snooze columns, so waking is a
@@ -300,7 +310,12 @@ function snoozeStateFor(PDO $conn, int $ticketId): ?array {
     }
 }
 
-/** Best-effort trail entry. Never fails the action it is recording. */
+/**
+ * Best-effort trail entry. Never fails the action it is recording.
+ *
+ * @param ?string $old  the previous wake time (UTC), or null when snoozing
+ * @param ?string $new  the new wake time with its reason, or the reason it was woken
+ */
 function snoozeAudit(PDO $conn, int $ticketId, int $analystId, ?string $old, ?string $new): void {
     try {
         $conn->prepare(

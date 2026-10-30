@@ -50,7 +50,7 @@ return [
         'delete_failed' => 'Usuwanie nie powiodło się: {message}',
     ],
     'editor' => [
-        'browser_title' => 'FreeITSM — Diagram sieciowy',
+        'browser_title' => 'Diagram sieci',
         'browser_title_named' => 'FreeITSM — {title}',
         'back' => '← Wszystkie diagramy',
         'loading' => 'Wczytywanie…',

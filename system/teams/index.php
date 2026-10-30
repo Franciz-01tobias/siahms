@@ -42,9 +42,9 @@ $translationNamespaces = ['common', 'tickets'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars(t('tickets.settings.headings.teams')); ?></title>
-    <link rel="stylesheet" href="../../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('tickets.settings.headings.teams'))); ?></title>
+    <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <style>
@@ -115,7 +115,7 @@ $translationNamespaces = ['common', 'tickets'];
         .form-group input[type="checkbox"] { accent-color: var(--accent, #546e7a); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
@@ -129,6 +129,7 @@ $translationNamespaces = ['common', 'tickets'];
             <div></div>
             <button class="add-btn" onclick="openTeamModal()"><?php echo htmlspecialchars(t('common.add')); ?></button>
         </div>
+        <div id="teamsNoDeptWarning" style="display:none; margin:0 0 15px; padding:12px 15px; border-radius:6px; background:var(--warning-bg, #fef3c7); color:var(--warning-text, #92400e); border:1px solid var(--warning-border, #f0d9a8); font-size:13px; line-height:1.5;"></div>
         <table>
             <thead>
                 <tr>
@@ -184,6 +185,24 @@ $translationNamespaces = ['common', 'tickets'];
                         <?php echo htmlspecialchars(t('tickets.settings.modals.analyst.all_modules')); ?>
                     </label>
                     <small style="display:block;color:var(--text-muted,#666);margin-top:4px;">On = members of this team can use every module (added to their own access). Off = only the modules granted on System → Modules.</small>
+                </div>
+                <div class="form-group">
+                    <label for="teamAuthMethod"><?php echo htmlspecialchars(t('tickets.settings.analyst_extra.signin_method')); ?></label>
+                    <select id="teamAuthMethod">
+                        <option value=""><?php echo htmlspecialchars(t('tickets.settings.team_signin.not_set')); ?></option>
+                        <option value="local"><?php echo htmlspecialchars(t('tickets.settings.team_signin.local')); ?></option>
+                        <?php
+                        // The same list System -> Analysts offers, so a team can set
+                        // anything an analyst could have set on their own (GH #41).
+                        try {
+                            $apConn = connectToDatabase();
+                            foreach ($apConn->query("SELECT id, display_name FROM auth_providers ORDER BY sort_order, display_name") as $ap) {
+                                echo '<option value="' . (int)$ap['id'] . '">' . htmlspecialchars($ap['display_name']) . '</option>';
+                            }
+                        } catch (Exception $e) { /* table may not exist yet */ }
+                        ?>
+                    </select>
+                    <small style="display:block;color:var(--text-muted,#666);margin-top:4px;"><?php echo htmlspecialchars(t('tickets.settings.team_signin.team_help')); ?></small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeTeamModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
@@ -262,6 +281,14 @@ $translationNamespaces = ['common', 'tickets'];
             isMultiCompany = allCompanies.length > 1;
         }
 
+        // After a save that can move people between sign-in methods (GH #41):
+        // say how many changed, and warn about anyone left waiting for a choice.
+        function showSigninOutcome(signin) {
+            if (!signin) return;
+            if (signin.changed > 0) showToast(t('tickets.settings.team_signin.summary_changed', { count: signin.changed }), 'info', 6000);
+            if (signin.conflict > 0) showToast(t('tickets.settings.team_signin.summary_conflict', { count: signin.conflict }), 'warning', 9000);
+        }
+
         async function loadTeams() {
             const tbody = document.getElementById('teams-list');
             try {
@@ -317,12 +344,31 @@ $translationNamespaces = ['common', 'tickets'];
                 return { ...team, deptCount, analystCount, companyChip };
             }));
 
+            // A team with members but no departments narrows those members' ticket
+            // folders to tickets with no department. Fine on an install with no
+            // departments yet; a surprise anywhere else - so say it, once, here.
+            const noDept = teamsWithCounts.filter(tm => tm.deptCount === 0 && tm.analystCount > 0);
+            const warn = document.getElementById('teamsNoDeptWarning');
+            if (noDept.length) {
+                // Every word from the translation files, escaped (GH #186) - wording in
+                // this script once ended a string early and stopped the whole page.
+                const TC = (k, p) => t('tickets.settings.team_counts.' + k, p);
+                const link = '<a href="../../tickets/settings/#departments" style="color:inherit; font-weight:600;">' + escapeHtml(TC('warn_link')) + '</a>';
+                warn.innerHTML = '<strong>' + escapeHtml(noDept.length === 1 ? TC('warn_one') : TC('warn_many', { count: noDept.length })) + '</strong> '
+                    + noDept.map(tm => escapeHtml(tm.name)).join(', ') + '. '
+                    + escapeHtml(TC('warn_body')) + ' '
+                    + escapeHtml(TC('warn_none', { link: '\u0000' })).replace('\u0000', link);
+                warn.style.display = 'block';
+            } else {
+                warn.style.display = 'none';
+            }
+
             tbody.innerHTML = teamsWithCounts.map(team => `
                 <tr>
-                    <td><strong>${escapeHtml(team.name)}</strong>${team.companyChip}</td>
+                    <td><strong>${escapeHtml(team.name)}</strong>${team.companyChip}${signinChip(team)}</td>
                     <td>${escapeHtml(team.description || '')}</td>
-                    <td>${team.deptCount} department(s)</td>
-                    <td>${team.analystCount} analyst(s)</td>
+                    <td>${escapeHtml(t('tickets.settings.team_counts.departments', { count: team.deptCount }))}${team.deptCount === 0 && team.analystCount > 0 ? ` <span class="status-badge" style="background:var(--warning-bg, #fef3c7);color:var(--warning-text, #92400e);margin-left:6px;" title="${escapeHtml(t('tickets.settings.team_counts.check_title'))}">${escapeHtml(t('tickets.settings.team_counts.check'))}</span>` : ''}</td>
+                    <td>${escapeHtml(t('tickets.settings.team_counts.analysts', { count: team.analystCount }))}</td>
                     <td>${team.display_order}</td>
                     <td><span class="status-badge status-${team.is_active ? 'active' : 'inactive'}">${team.is_active ? 'Active' : 'Inactive'}</span></td>
                     <td>
@@ -346,6 +392,21 @@ $translationNamespaces = ['common', 'tickets'];
             `).join('');
         }
 
+        // The team's sign-in method, and a warning when members who follow their
+        // team are stuck because this team and another of theirs disagree.
+        function signinChip(team) {
+            let chip = '';
+            if (team.auth_method === 'local') {
+                chip = `<span class="status-badge" style="background:#eceff1;color:#455a64;margin-left:8px;">${escapeHtml(t('tickets.settings.team_signin.local'))}</span>`;
+            } else if (team.auth_method === 'provider') {
+                chip = `<span class="status-badge" style="background:#e3f2fd;color:#1565c0;margin-left:8px;">${escapeHtml(team.auth_provider_name || '')}</span>`;
+            }
+            if (team.signin_conflicts > 0) {
+                chip += `<span class="status-badge" style="background:var(--warning-bg,#fff3e0);color:var(--warning-text,#e65100);margin-left:8px;" title="${escapeHtml(t('tickets.settings.team_signin.summary_conflict', { count: team.signin_conflicts }))}">${escapeHtml(team.signin_conflicts === 1 ? t('tickets.settings.team_signin.badge_team_conflict_one') : t('tickets.settings.team_signin.badge_team_conflicts', { count: team.signin_conflicts }))}</span>`;
+            }
+            return chip;
+        }
+
         function openTeamModal(team = null) {
             document.getElementById('teamModalTitle').textContent = team
                 ? t('tickets.settings.modals.lookup.edit.team')
@@ -356,6 +417,8 @@ $translationNamespaces = ['common', 'tickets'];
             document.getElementById('teamOrder').value = team ? (team.display_order || 0) : 0;
             document.getElementById('teamActive').checked = team ? !!Number(team.is_active) : true;
             document.getElementById('teamAllModules').checked = team ? !!Number(team.can_access_all_modules) : false;
+            document.getElementById('teamAuthMethod').value = !team || !team.auth_method ? ''
+                : (team.auth_method === 'local' ? 'local' : String(team.auth_provider_id));
             document.getElementById('teamModal').classList.add('active');
         }
 
@@ -393,8 +456,11 @@ $translationNamespaces = ['common', 'tickets'];
                 currentIds = cur.map(x => x.id);
             } catch (e) { }
 
-            if (items.length === 0) {
-                list.innerHTML = `<div style="padding:15px;text-align:center;color:var(--text-faint,#999);">No ${isDept ? 'departments' : 'analysts'} available.</div>`;
+            if (items.length === 0 && isDept) {
+                list.innerHTML = '<div style="padding:15px;text-align:center;color:var(--text-muted,#666);line-height:1.5;">There are no departments yet. '
+                    + 'Create them in <a href="../../tickets/settings/#departments" style="font-weight:600;">Tickets → Settings → Departments</a>, then come back here to link them to this team.</div>';
+            } else if (items.length === 0) {
+                list.innerHTML = `<div style="padding:15px;text-align:center;color:var(--text-faint,#999);">No analysts available.</div>`;
             } else {
                 // Render ALL items (not just active) so an existing link to an
                 // inactive department/analyst isn't silently dropped on save.
@@ -434,6 +500,7 @@ $translationNamespaces = ['common', 'tickets'];
                 if (d.success) {
                     closeTeamAssign();
                     showToast('Saved', 'success');
+                    showSigninOutcome(d.signin);
                     loadTeams(); // refresh the counts
                 } else {
                     showToast('Error saving: ' + d.error, 'error');
@@ -526,6 +593,7 @@ $translationNamespaces = ['common', 'tickets'];
                 const data = await response.json();
                 if (data.success) {
                     showToast('Team deleted', 'success');
+                    showSigninOutcome(data.signin);
                     loadTeams();
                 } else {
                     showToast('Error deleting team: ' + data.error, 'error');
@@ -544,7 +612,8 @@ $translationNamespaces = ['common', 'tickets'];
                 description: document.getElementById('teamDescription').value,
                 display_order: parseInt(document.getElementById('teamOrder').value) || 0,
                 is_active: document.getElementById('teamActive').checked ? 1 : 0,
-                can_access_all_modules: document.getElementById('teamAllModules').checked ? 1 : 0
+                can_access_all_modules: document.getElementById('teamAllModules').checked ? 1 : 0,
+                auth_method: document.getElementById('teamAuthMethod').value
             };
             try {
                 const response = await fetch(API_BASE + 'save_team.php', {
@@ -556,6 +625,7 @@ $translationNamespaces = ['common', 'tickets'];
                 if (data.success) {
                     closeTeamModal();
                     showToast('Saved', 'success');
+                    showSigninOutcome(data.signin);
                     loadTeams();
                 } else {
                     showToast('Error saving: ' + data.error, 'error');
@@ -571,6 +641,6 @@ $translationNamespaces = ['common', 'tickets'];
             loadTeams();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=65"></script>
+    <script src="../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

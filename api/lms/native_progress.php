@@ -38,19 +38,33 @@ $conn = connectToDatabase();
 // Find-or-create now lives in includes/lms_access.php — this file and
 // scorm_data.php each had their own copy, keyed on analyst_id.
 
-/** HH:MM:SS — the format lms.js formatTime() understands. */
+/**
+ * HH:MM:SS — the format lms.js formatTime() understands.
+ *
+ * @param int $seconds  a duration in seconds; below 0 counts as 0
+ */
 function lmsFormatTime(int $seconds): string {
     $seconds = max(0, $seconds);
     return sprintf('%02d:%02d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60), $seconds % 60);
 }
 
-/** Parse HH:MM:SS back to seconds, so session time can be accumulated. */
+/**
+ * Parse HH:MM:SS back to seconds, so session time can be accumulated.
+ *
+ * @param ?string $t  a duration as HH:MM:SS; null or anything else gives 0
+ */
 function lmsParseTime(?string $t): int {
     if (!$t || !preg_match('/^(\d+):(\d{2}):(\d{2})$/', $t, $m)) return 0;
     return ((int)$m[1] * 3600) + ((int)$m[2] * 60) + (int)$m[3];
 }
 
-/** Upsert one CMI element. The unique key on (progress_id, element) does the work. */
+/**
+ * Upsert one CMI element. The unique key on (progress_id, element) does the work.
+ *
+ * @param int $progressId  the lms_progress row the value belongs to
+ * @param string $element  the SCORM element name, e.g. cmi.interactions.0.id
+ * @param string $value  the value to store
+ */
 function lmsWriteCmi(PDO $conn, int $progressId, string $element, string $value): void {
     $stmt = $conn->prepare("INSERT INTO lms_cmi_data (progress_id, element, value, created_datetime, updated_datetime)
                             VALUES (?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())

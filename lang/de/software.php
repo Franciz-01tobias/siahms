@@ -36,6 +36,7 @@ return [
         'col_seats' => 'Anzahl',
         'col_actions' => '',
         'add_app' => 'Anwendung hinzufügen',
+        'new_app' => 'Neue Anwendung',
         'edit_app' => 'Anwendung bearbeiten',
         'added_by_hand' => 'Manuell hinzugefügt',
         'f_name' => 'Name',
@@ -116,7 +117,7 @@ return [
         'widget_removed' => 'Widget entfernt',
     ],
     'library' => [
-        'page_title' => 'Service Desk - Software-Widget-Bibliothek',
+        'page_title' => 'Software-Widget-Bibliothek',
         'back' => 'Dashboard',
         'heading' => 'Widget-Bibliothek',
         'search' => 'Widgets suchen...',

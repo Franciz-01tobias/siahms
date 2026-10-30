@@ -27,7 +27,11 @@ class MorningChecksService
     //  Checks
     // ======================================================================
 
-    /** Create (no id) or update (id present) a check. Returns the id. */
+    /**
+     * Create (no id) or update (id present) a check. Returns the id.
+     *
+     * @param array $in  id (absent = new), name, description, sort_order, is_active, group_id, assigned_analyst_id - null or '' clears
+     */
     public static function saveCheck(PDO $conn, ActorContext $ctx, array $in): int
     {
         if (!empty($in['id'])) {
@@ -92,6 +96,8 @@ class MorningChecksService
      * A `<select>` with a blank option posts "", and casting that to int gives 0,
      * which would be stored as a foreign key to analyst zero. Every assignment
      * field goes through here so there is one answer rather than five.
+     *
+     * @param mixed $value  an id from the request; null, '', 0 or '0' means none
      */
     private static function nullableId($value): ?int
     {
@@ -110,6 +116,11 @@ class MorningChecksService
      * usual for GroupID: the dashboard only shows a grouped check when its group
      * is active, so a check pointing at a group that does not exist disappears
      * from the round entirely — silently, and with nothing on screen to explain it.
+     *
+     * @param ?int $id  the id to check; null passes straight through
+     * @param string $table  the table it should be in, written in code - never user input
+     * @param string $idCol  that table's id column, written in code
+     * @param string $field  the request field name, used in the error message
      */
     private static function assertExists(PDO $conn, ?int $id, string $table, string $idCol, string $field): ?int
     {
@@ -136,7 +147,11 @@ class MorningChecksService
     //  The same shape as collision detection, which warns and never blocks.
     // ======================================================================
 
-    /** Groups with their routing, plus how many active checks each holds. */
+    /**
+     * Groups with their routing, plus how many active checks each holds.
+     *
+     * @param bool $activeOnly  true to leave out groups that are switched off
+     */
     public static function listGroups(PDO $conn, bool $activeOnly = false): array
     {
         $sql = "SELECT g.GroupID, g.GroupName, g.GroupDescription, g.IsActive, g.SortOrder,
@@ -155,6 +170,12 @@ class MorningChecksService
         return $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Adds or updates a morning check group, including the team or analyst it routes to,
+     * and returns its id.
+     *
+     * @param array $in  id (absent = new), name, description, assigned_team_id, assigned_analyst_id, is_active, sort_order
+     */
     public static function saveGroup(PDO $conn, ActorContext $ctx, array $in): int
     {
         $name = trim((string)($in['name'] ?? ''));
@@ -213,6 +234,8 @@ class MorningChecksService
      * ⚠️ Deleting a grouping should never delete the work. The FK is
      * ON DELETE SET NULL and this is stated here as well because "delete group"
      * is exactly the button somebody presses expecting only the grouping to go.
+     *
+     * @param int $id  the morningChecks_Groups row to delete; its checks become ungrouped
      */
     public static function deleteGroup(PDO $conn, ActorContext $ctx, int $id): int
     {
@@ -237,6 +260,9 @@ class MorningChecksService
      * A team is a label rather than a single person, so `analystId` stays null
      * for it — "is this mine?" then means "am I in that team?", which the
      * dashboard answers from the analyst's own team membership.
+     *
+     * @param array $checkRow  a check row joined to its group, with AssignedAnalystID, CheckAnalystName, GroupAnalystID,
+     *     GroupAnalystName, GroupTeamID and GroupTeamName
      */
     public static function resolveAssignment(array $checkRow): array
     {
@@ -252,7 +278,11 @@ class MorningChecksService
         return [null, null, null];
     }
 
-    /** Delete a check + its results, atomically. */
+    /**
+     * Delete a check + its results, atomically.
+     *
+     * @param int $id  the check to delete, with its results
+     */
     public static function deleteCheck(PDO $conn, ActorContext $ctx, int $id): void
     {
         $row = self::loadCheckRow($conn, $id);                     // 404 if gone
@@ -268,6 +298,11 @@ class MorningChecksService
         WorkflowEngine::emitCrud('morning_check', 'deleted', $id, $row['CheckName'] ?? null);
     }
 
+    /**
+     * Loads one morning check; throws not found when it does not exist.
+     *
+     * @param int $id  the check to load
+     */
     private static function loadCheckRow(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare("SELECT * FROM morningChecks_Checks WHERE CheckID = ?");
@@ -284,6 +319,8 @@ class MorningChecksService
     /**
      * Record (upsert) a result. Returns ['id' => int, 'created' => bool]
      * (created = a new row for that check+date; false = overwrite).
+     *
+     * @param array $in  check_id (required), status_id or status (a label), notes, date (Y-m-d, default today)
      */
     public static function recordResult(PDO $conn, ActorContext $ctx, array $in): array
     {
@@ -370,6 +407,9 @@ class MorningChecksService
      * Any tickets or tasks raised from that result go too, via ON DELETE CASCADE
      * on morningChecks_ResultLinks — but the tickets themselves are untouched,
      * because raising a ticket is not undone by correcting a click.
+     *
+     * @param int $checkId  the check to put back to 'not checked'
+     * @param ?string $date  the day, Y-m-d; null means today
      */
     public static function clearResult(PDO $conn, ActorContext $ctx, int $checkId, ?string $date = null): bool
     {
@@ -380,7 +420,15 @@ class MorningChecksService
         return $stmt->rowCount() > 0;
     }
 
-    /** Fire morning_check.recorded (best-effort). */
+    /**
+     * Fire morning_check.recorded (best-effort).
+     *
+     * @param int $checkId  the check
+     * @param ?string $checkName  the check's name
+     * @param int $statusId  the status recorded
+     * @param ?string $statusName  that status's label
+     * @param string $date  the day the result is for, Y-m-d
+     */
     private static function recordedDispatch(int $checkId, ?string $checkName, int $statusId, ?string $statusName, string $date): void
     {
         WorkflowEngine::dispatch('morning_check.recorded', [
@@ -389,7 +437,12 @@ class MorningChecksService
         ]);
     }
 
-    /** Strict YYYY-MM-DD — 422 on garbage (the old UI silently substituted today). */
+    /**
+     * Strict YYYY-MM-DD — 422 on garbage (the old UI silently substituted today).
+     *
+     * @param string $value  the date from the request, Y-m-d
+     * @param string $field  the request field name, used in the error message
+     */
     private static function validateDate(string $value, string $field): string
     {
         $v = trim($value);
@@ -404,7 +457,11 @@ class MorningChecksService
     //  Statuses (UI-only — the API only lists them)
     // ======================================================================
 
-    /** Create (id null) or update (id present) a status. Returns the id. */
+    /**
+     * Create (id null) or update (id present) a status. Returns the id.
+     *
+     * @param array $in  id (null or absent = new), label (up to 50), colour (#rrggbb), requires_notes, is_active, sort_order
+     */
     public static function saveStatus(PDO $conn, ActorContext $ctx, array $in): int
     {
         $id            = isset($in['id']) && $in['id'] !== null ? (int)$in['id'] : null;
@@ -450,6 +507,8 @@ class MorningChecksService
     /**
      * Delete a status; snapshot its label onto affected results (turning them
      * into orphans) first. Returns ['deleted' => int, 'orphaned' => int].
+     *
+     * @param int $id  the morningChecks_Statuses row to delete
      */
     public static function deleteStatus(PDO $conn, ActorContext $ctx, int $id): array
     {
@@ -485,7 +544,11 @@ class MorningChecksService
     //  Reorder + normalise (UI-only)
     // ======================================================================
 
-    /** Reorder checks: SortOrder becomes the array index (matches reorder_checks.php). */
+    /**
+     * Reorder checks: SortOrder becomes the array index (matches reorder_checks.php).
+     *
+     * @param array $order  every check id, top first; each check's SortOrder becomes its position
+     */
     public static function reorderChecks(PDO $conn, ActorContext $ctx, array $order): void
     {
         $stmt = $conn->prepare("UPDATE morningChecks_Checks SET SortOrder = ?, ModifiedDate = UTC_TIMESTAMP() WHERE CheckID = ?");
@@ -494,7 +557,11 @@ class MorningChecksService
         }
     }
 
-    /** Reorder statuses: positions become 10, 20, 30, … (matches reorder_statuses.php), transactional. */
+    /**
+     * Reorder statuses: positions become 10, 20, 30, … (matches reorder_statuses.php), transactional.
+     *
+     * @param array $order  every status id, top first; SortOrder becomes 10, 20, 30...
+     */
     public static function reorderStatuses(PDO $conn, ActorContext $ctx, array $order): void
     {
         $conn->beginTransaction();
@@ -513,6 +580,8 @@ class MorningChecksService
     /**
      * Map orphan label strings to target StatusIDs. $mappings = [{label, statusId}, …].
      * Returns the total rows updated. Transactional; every target must be active.
+     *
+     * @param array $mappings  [{label, statusId}] - each old label and the active status its results should now use
      */
     public static function normaliseStatuses(PDO $conn, ActorContext $ctx, array $mappings): int
     {

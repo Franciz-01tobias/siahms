@@ -60,7 +60,7 @@ return [
 
     // Diagram editor shell (diagram.php)
     'editor' => [
-        'browser_title'    => 'FreeITSM — Network Diagram',
+        'browser_title'    => 'Network Diagram',
         'browser_title_named' => 'FreeITSM — {title}',
         'back'             => '← All diagrams',
         'loading'          => 'Loading…',
@@ -447,7 +447,7 @@ return [
 
         // 2. Creating
         'creating_title'   => 'Creating a diagram',
-        'creating_body'    => 'From the Diagrams landing page, hit <strong>+ New diagram</strong>. Give it a title (e.g. <em>Production stack — web tier</em>), an optional description, and a starting version label (default <code>v1</code>). You\'ll land straight in the editor.',
+        'creating_body'    => 'From the Diagrams landing page, hit <strong>New</strong> at the top right. Give it a title (e.g. <em>Production stack — web tier</em>), an optional description, and a starting version label (default <code>v1</code>). You\'ll land straight in the editor.',
         'creating_tip'     => '<strong>Tip:</strong> Diagrams are intended to be focussed views, not exhaustive maps. One diagram per system, environment, or change is usually the right grain. You can always pull in extra related objects later.',
 
         // 3. Placing nodes

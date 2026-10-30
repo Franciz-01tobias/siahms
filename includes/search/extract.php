@@ -85,13 +85,21 @@ const ATT_TEXT_OOXML = [
     'pptx' => ['ppt/slides/'],                    // prefix: every slide
 ];
 
-/** The extension, lowercased, or '' if there isn't one. */
+/**
+ * The extension, lowercased, or '' if there isn't one.
+ *
+ * @param string $filename  the file name
+ */
 function attTextExtension(string $filename): string {
     $dot = strrpos($filename, '.');
     return $dot === false ? '' : strtolower(substr($filename, $dot + 1));
 }
 
-/** Could this tier read the file at all? Used to answer before opening anything. */
+/**
+ * Could this tier read the file at all? Used to answer before opening anything.
+ *
+ * @param string $filename  the file name - only its extension is judged
+ */
 function attTextSupports(string $filename): bool {
     $ext = attTextExtension($filename);
     return in_array($ext, ATT_TEXT_PLAIN_EXT, true) || isset(ATT_TEXT_OOXML[$ext]);
@@ -103,6 +111,8 @@ function attTextSupports(string $filename): bool {
  * OOXML puts every run of text in its own element, so stripping tags without
  * putting a space in their place welds words together — "Please" + "reboot"
  * becomes "Pleasereboot" and is then unfindable by either.
+ *
+ * @param string $raw  the text or XML read from the file
  */
 function attTextNormalise(string $raw): string {
     $s = preg_replace('/<[^>]*>/', ' ', $raw);
@@ -119,6 +129,9 @@ function attTextNormalise(string $raw): string {
  * Never throws: an attachment that cannot be read is a status, not an error, and
  * must not take down the indexing of the ticket it belongs to.
  *
+ * @param string $path  the file's path on disk, already checked to be inside the uploads directory
+ * @param string $filename  the file's original name - its extension picks the reader
+ * @param int $maxChars  the most characters to keep; longer text is cut and marked truncated
  * @return array{status:string,text:string}
  */
 function attTextExtractFile(string $path, string $filename, int $maxChars = ATT_TEXT_MAX_CHARS): array {
@@ -171,6 +184,11 @@ function attTextExtractFile(string $path, string $filename, int $maxChars = ATT_
  * ⚠️ Every guard here is because the file came from a stranger. The limits are
  * checked against the archive's DECLARED sizes before a single entry is read, so
  * a bomb is refused rather than survived.
+ *
+ * @param string $path  the .docx, .xlsx or .pptx file's path on disk
+ * @param string $ext  its extension, lower case: 'docx', 'xlsx' or 'pptx'
+ * @param int $maxUnzipped  the most bytes the archive may declare once unzipped; more is refused
+ * @param int $maxEntries  the most entries the archive may hold; more is refused
  */
 function attTextExtractOoxml(
     string $path,

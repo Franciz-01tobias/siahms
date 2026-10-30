@@ -67,6 +67,11 @@ try {
     $stmt->execute([$formId]);
     $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    /* GH #190: a submission made inside a task carries that task's company; it is
+       listed only to people who can see the task. Everything else is install-wide. */
+    require_once __DIR__ . '/../../includes/services/task_forms.php';
+    [$taskScopeSql, $taskScopeArgs] = TaskForms::submissionScopeSql($conn, ActorContext::fromSession($conn)->companyScope, 's');
+
     // Get submissions with data
     // A submission comes from EITHER an analyst or a portal requester, and they
     // are different id spaces — so both are joined and whichever is set wins.
@@ -89,9 +94,9 @@ try {
                             /* The analyst who actually decided, which is not always the
                                form's configured approver - an admin can step in. */
                             LEFT JOIN analysts decider ON decider.id = s.approval_decided_by_id
-                            WHERE s.form_id = ?
+                            WHERE s.form_id = ? AND $taskScopeSql
                             ORDER BY s.submitted_date DESC");
-    $stmt->execute([$formId]);
+    $stmt->execute(array_merge([$formId], $taskScopeArgs));
     $submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Get all submission data in one query

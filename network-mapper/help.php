@@ -31,10 +31,10 @@ $translationNamespaces = ['common', 'network-mapper'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('network-mapper.help.browser_title')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
-    <link rel="stylesheet" href="../assets/css/help.css?v=3">
+    <title><?php echo htmlspecialchars(pageTitle('network-mapper', t('network-mapper.nav.help'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/help.css?v=6">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
         body {
@@ -49,7 +49,7 @@ $translationNamespaces = ['common', 'network-mapper'];
          help.css's own @media block hands the scroll to the document, and
          inbox.css clips <body>, so nothing scrolled. LAYER 16h gives
          `.help-container` the scroller role back (§28). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
 </head>
@@ -370,6 +370,6 @@ $translationNamespaces = ['common', 'network-mapper'];
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

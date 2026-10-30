@@ -15,6 +15,8 @@
  *
  * Depends on: jspdf (vendored), window.t (i18n), window.fmtDate (timezones),
  * FormLogic (lookup labels + naive date values).
+ *
+ * @wiki Submission-PDF-Export-Developer-Guide
  */
 (function () {
     'use strict';
@@ -65,6 +67,12 @@
         return v;
     }
 
+    /**
+     * Turns one stored answer into the pieces the PDF draws - a yes/no, a list, a table or plain text - with an empty flag.
+     *
+     * @param f    the field definition
+     * @param raw  the stored value for that field
+     */
     function fieldValueParts(f, raw) {
         var val = (raw === null || raw === undefined) ? '' : raw;
 
@@ -191,19 +199,25 @@
        made. Resolves to null if it cannot be loaded — a missing logo must never
        cost somebody their record. */
     var logoPromise = null;
+    /**
+     * Loads the branding image once per page and caches the promise; resolves to null when there is no URL or it fails to load.
+     */
     function loadBrandLogo(url) {
         if (logoPromise) return logoPromise;
         logoPromise = new Promise(function (resolve) {
             if (!url) { resolve(null); return; }
             var img = new Image();
             img.crossOrigin = 'anonymous';
+            /** The image loaded - hand it back. */
             img.onload = function () { resolve(img); };
+            /** The image failed - carry on without a logo. */
             img.onerror = function () { resolve(null); };
             img.src = url;
         });
         return logoPromise;
     }
 
+    /** A new blank A4 portrait jsPDF document measured in millimetres. */
     function newDoc() {
         var jsPDF = window.jspdf.jsPDF;
         return new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });

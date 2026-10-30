@@ -25,6 +25,7 @@
  */
 
 require_once __DIR__ . '/../service_context.php';
+require_once __DIR__ . '/../money.php';   // GH #189: currencies are checked against the registry
 require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 require_once __DIR__ . '/../software_licence_calendar.php';   // renewals -> the calendar (#1551)
 
@@ -33,6 +34,9 @@ class SoftwareService
     /**
      * Create (no id) or update (id present) a licence.
      * Returns ['id' => int, 'created' => bool].
+     *
+     * @param array $in  id (a licence to change; absent creates one), app_id, licence_type, licence_key, quantity, renewal_date,
+     *     notice_period_days, portal_url, cost, currency, purchase_date, vendor_contact, notes, status
      */
     public static function saveLicence(PDO $conn, ActorContext $ctx, array $in): array
     {
@@ -77,7 +81,11 @@ class SoftwareService
         return ['id' => $newId, 'created' => true];
     }
 
-    /** Delete a licence (leaf table). Returns the id. 404 if it does not exist. */
+    /**
+     * Delete a licence (leaf table). Returns the id. 404 if it does not exist.
+     *
+     * @param int $id  the licence (software_licences.id) to delete
+     */
     public static function deleteLicence(PDO $conn, ActorContext $ctx, int $id): int
     {
         $row = self::loadLicenceRow($conn, $id);
@@ -115,7 +123,11 @@ class SoftwareService
         }
     }
 
-    /** Load a licence row for update/delete, or throw 404. */
+    /**
+     * Load a licence row for update/delete, or throw 404.
+     *
+     * @param int $id  the licence (software_licences.id) to load
+     */
     private static function loadLicenceRow(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare("SELECT * FROM software_licences WHERE id = ?");
@@ -131,6 +143,9 @@ class SoftwareService
      * Collect + validate the writable licence fields (mirrors the API resource's
      * apiSoftwareLicenceFields coercions). On update, absent keys fall back to
      * the current row; on create they fall back to the column default.
+     *
+     * @param array $in  the licence fields as sent (see saveLicence())
+     * @param array $current  the stored row when updating, so absent keys keep their value; empty when creating
      */
     private static function collectFields(PDO $conn, array $in, array $current = []): array
     {
@@ -175,10 +190,8 @@ class SoftwareService
             }
             $f['cost'] = (string)round((float)$get('cost'), 2);
         }
-        $f['currency'] = trim((string)($get('currency') ?? '')) ?: 'GBP';
-        if (mb_strlen($f['currency']) > 10) {
-            throw new ServiceError('validation', 'invalid_field', "'currency' must be at most 10 characters.");
-        }
+        // A recognised currency (GH #189); blank means the install's default (System -> Currencies).
+        $f['currency'] = moneyServiceCurrency($get('currency')) ?? Money::defaultCurrency();
         $f['vendor_contact'] = ($v = trim((string)($get('vendor_contact') ?? ''))) !== '' ? $v : null;
         $f['notes']  = ($v = trim((string)($get('notes') ?? ''))) !== '' ? $v : null;
         $f['status'] = trim((string)($get('status') ?? '')) ?: 'Active';
@@ -186,7 +199,12 @@ class SoftwareService
         return $f;
     }
 
-    /** Validate an optional YYYY-MM-DD date (throwing version of apiParseDateOnly). */
+    /**
+     * Validate an optional YYYY-MM-DD date (throwing version of apiParseDateOnly).
+     *
+     * @param mixed $value  the date as sent (YYYY-MM-DD); null or '' gives null
+     * @param string $field  the field name, used in the error message
+     */
     private static function parseDateOnly($value, string $field): ?string
     {
         if ($value === null || $value === '') {

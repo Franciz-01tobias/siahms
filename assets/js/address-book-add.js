@@ -13,8 +13,13 @@
     'use strict';
     if (window.AddressBookAdd) return;
 
+    /** Translates a key under common.address_book_add. */
     const t = (k, p) => window.t('common.address_book_add.' + k, p);
 
+    /**
+     * The confirmation message for adding a person to an address book - what will be
+     * written, any category or group it is filed under, and the checks the server makes.
+     */
     function confirmText(book, person) {
         const parts = [t('intro', { person: person, name: book.name })];
         const fields = Object.keys(book.fields || {}).map(f => t('field_' + f));
@@ -25,6 +30,11 @@
         return parts.join(' ');
     }
 
+    /**
+     * Asks for confirmation, then adds the person to the address book through
+     * address_book_add.php and calls onDone when it worked. The button is disabled while
+     * the request runs.
+     */
     async function add(book, userId, person, apiBase, onDone, btn) {
         const ok = await window.showConfirm({
             title: t('title', { name: book.name }),

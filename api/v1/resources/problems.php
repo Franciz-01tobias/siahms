@@ -33,6 +33,10 @@ require_once dirname(__DIR__, 3) . '/includes/services/problems.php';
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The SELECT for problems, with status, priority, analyst, creator and company names and
+ * how many tickets are linked.
+ */
 function apiProblemSelect(): string {
     return "SELECT p.*,
                    ps.name AS status_name, ps.is_closed AS status_is_closed,
@@ -49,6 +53,12 @@ function apiProblemSelect(): string {
             LEFT JOIN tenants            tn ON tn.id = p.tenant_id";
 }
 
+/**
+ * Shapes a problem row for the API - number, title, status (with is_closed), priority,
+ * analyst, known-error flag, root cause, workaround, company and the rest of the record.
+ *
+ * @param array $r  the problems row as apiProblemSelect() loads it, with the lookup and people names and ticket_count
+ */
 function apiSerializeProblem(array $r): array {
     $rel = function ($id, $name, array $extra = []) {
         return $id === null ? null : array_merge(['id' => (int)$id, 'name' => $name], $extra);
@@ -73,7 +83,11 @@ function apiSerializeProblem(array $r): array {
     ];
 }
 
-/** Load one problem (with joins) enforcing the key's company scope; 404 if not visible. */
+/**
+ * Load one problem (with joins) enforcing the key's company scope; 404 if not visible.
+ *
+ * @param int $problemId  the problems id
+ */
 function apiLoadProblem(PDO $conn, array $apiKey, int $problemId): array {
     if (!apiKeyCanAccessProblem($conn, $apiKey, $problemId)) {
         apiError(404, 'not_found', 'Problem not found.');
@@ -317,6 +331,7 @@ function apiProblemNotesList(PDO $conn, array $apiKey, array $params, array $bod
     }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
 }
 
+/** POST /problems/{id}/notes - adds a note to the problem through ProblemsService. */
 function apiProblemNotesCreate(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         $noteId = ProblemsService::addNote($conn, ActorContext::fromApiKey($apiKey), (int)$params[0], $body);
@@ -363,6 +378,10 @@ function apiProblemTicketsLink(PDO $conn, array $apiKey, array $params, array $b
     apiRespond($res, 201);
 }
 
+/**
+ * DELETE /problems/{id}/tickets/{ticketId} - unlinks a ticket from the problem through
+ * ProblemsService.
+ */
 function apiProblemTicketsUnlink(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         ProblemsService::unlinkTicket($conn, ActorContext::fromApiKey($apiKey), (int)$params[0], (int)$params[1]);
@@ -381,6 +400,10 @@ function apiProblemChangesLink(PDO $conn, array $apiKey, array $params, array $b
     apiRespond($res, 201);
 }
 
+/**
+ * DELETE /problems/{id}/changes/{changeId} - unlinks a change from the problem through
+ * ProblemsService.
+ */
 function apiProblemChangesUnlink(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         ProblemsService::unlinkChange($conn, ActorContext::fromApiKey($apiKey), (int)$params[0], (int)$params[1]);
@@ -407,6 +430,7 @@ function apiProblemStatusesList(PDO $conn, array $apiKey, array $params, array $
     }, $rows));
 }
 
+/** GET /problem-priorities - the problem priorities, in display order. */
 function apiProblemPrioritiesList(PDO $conn, array $apiKey, array $params, array $body): void {
     $rows = $conn->query(
         "SELECT id, name, is_default, colour, is_active FROM problem_priorities ORDER BY display_order, name"

@@ -32,8 +32,11 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/encryption.php';   // decryptValue() for the cron token
 require_once __DIR__ . '/../includes/integrations/integrations.php';
+require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $isCli = (PHP_SAPI === 'cli');
+$trigger = JobRun::scheduledTrigger();
+$runId = null;
 
 try {
     $conn = connectToDatabase();
@@ -42,6 +45,7 @@ try {
     // Verification, or never configured a tracker, must get a calm answer here
     // rather than a stack trace in a cron mailbox every minute.
     if (!integrationsSchemaReady($conn)) {
+        JobRun::skipped($conn, 'integration_poll', $trigger, 'Integration tables not present.');
         echo "Integration tables not present — nothing to poll.\n";
         exit;
     }
@@ -62,11 +66,13 @@ try {
         $expected = decryptValue($settings['integration_cron_token'] ?? null);
         if (empty($expected)) {
             http_response_code(503);
+            JobRun::refused($conn, 'integration_poll', 'token not set');
             echo "Cron token not set. Run Database Verification to seed integration_cron_token.\n";
             exit;
         }
         if (!hash_equals((string)$expected, (string)($_GET['token'] ?? ''))) {
             http_response_code(403);
+            JobRun::refused($conn, 'integration_poll', 'wrong token');
             echo "Forbidden\n";
             exit;
         }
@@ -79,6 +85,7 @@ try {
         $age = (int)$ageStmt->fetchColumn();
         if ($age >= 0 && $age < $minInterval) {
             http_response_code(429);
+            JobRun::skipped($conn, 'integration_poll', $trigger, "Minimum interval: last run {$age}s ago, minimum {$minInterval}s.");
             echo "Rate limited. Last run {$age}s ago; minimum interval is {$minInterval}s.\n";
             exit;
         }
@@ -101,7 +108,10 @@ try {
          ORDER BY last_poll_datetime IS NOT NULL, last_poll_datetime"
     )->fetchAll(PDO::FETCH_ASSOC);
 
+    // #182: a run that finds no connection due is a SUCCESS - the schedule is alive.
+    $runId = JobRun::start($conn, 'integration_poll', $trigger);
     if (!$due) {
+        JobRun::finish($conn, $runId, 'ok', ['connections' => 0], 'No connections due.');
         echo "No connections due.\n";
         exit;
     }
@@ -119,6 +129,7 @@ try {
             $totalChanged += $res['changed'];
 
             printf("%-28s checked %3d, changed %2d\n", mb_substr($name, 0, 28), $res['checked'], $res['changed']);
+            $sourceOk = true; $sourceMsg = "checked {$res['checked']}, changed {$res['changed']}";
 
             // Category moves are the ones worth reporting — "In Progress" to
             // "In progress" is not news. V2 turns these into tracker.* workflow
@@ -146,6 +157,7 @@ try {
         } catch (Exception $e) {
             // One unreachable tracker must not stop the others being polled.
             $failed++;
+            $sourceOk = false; $sourceMsg = $e->getMessage();
             printf("%-28s FAILED: %s\n", mb_substr($name, 0, 28), $e->getMessage());
             $conn->prepare("UPDATE integration_links SET last_error = ? WHERE connection_id = ?")
                  ->execute([mb_substr($e->getMessage(), 0, 500), (int)$row['id']]);
@@ -156,12 +168,21 @@ try {
         // tracker that is already unhappy.
         $conn->prepare("UPDATE integration_connections SET last_poll_datetime = UTC_TIMESTAMP() WHERE id = ?")
              ->execute([(int)$row['id']]);
+        // #182: the connection is the source, so a failing tracker is named on the
+        // health page - not only written onto every ticket linked to it.
+        JobRun::source($conn, $runId, 'integration_poll', 'connection:' . (int)$row['id'], (string)$name, $sourceOk, $sourceMsg);
     }
 
     printf("\n%d connection(s) polled, %d issue(s) checked, %d updated, %d comment(s) imported, %d failed.\n",
         count($due), $totalChecked, $totalChanged, $totalComments, $failed);
+    JobRun::finish($conn, $runId, null, ['connections' => count($due), 'checked' => $totalChecked, 'changed' => $totalChanged,
+        'comments' => $totalComments, 'failed' => $failed],
+        count($due) . " connection(s) polled, {$failed} failed.");
+    if ($failed > 0) exit(1);   // non-zero, so a scheduler can tell (#182)
 } catch (Exception $e) {
+    if (isset($conn)) JobRun::fail($conn, $runId, $e);
     if (!$isCli) http_response_code(500);
     echo "Integration poll failed: " . $e->getMessage() . "\n";
     error_log('integration_poll: ' . $e->getMessage());
+    exit(1);
 }

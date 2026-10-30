@@ -193,6 +193,8 @@ function integrationsTrackerProviders(): array
  * copies of "how is this install addressed" is exactly the pair that drifts.
  * This name is kept: it is what every provider calls, and it reads correctly at
  * those call sites.
+ *
+ * @param string $path  a path inside this install, e.g. 'tickets/?id=409' - a leading slash is optional
  */
 function integrationsAbsoluteUrl(PDO $conn, string $path): string
 {
@@ -207,6 +209,7 @@ function integrationsAbsoluteUrl(PDO $conn, string $path): string
  * them out for display MUST filter by this list rather than emitting what it
  * finds — see integrationsListConnections().
  *
+ * @param string $providerKey  the provider key from integrationsAvailableProviders(), e.g. 'jira' or 'azuredevops'
  * @return array key => default value
  */
 function integrationsSettingKeys(string $providerKey): array
@@ -219,7 +222,11 @@ function integrationsSettingKeys(string $providerKey): array
     return $out;
 }
 
-/** One registry entry, or null if the key is not a provider we ship. */
+/**
+ * One registry entry, or null if the key is not a provider we ship.
+ *
+ * @param string $key  the provider key, e.g. 'jira' or 'azuredevops'
+ */
 function integrationsProviderMeta(string $key): ?array
 {
     $all = integrationsAvailableProviders();
@@ -242,6 +249,10 @@ function integrationsProviderMeta(string $key): ?array
  * $maxChars is a sanity cap, not a policy — a 200KB newsletter helps nobody, and
  * a dev reading the issue wants the request, not the footer. The link back to
  * the ticket is always there for the full thread.
+ *
+ * @param ?string $raw  the email body as stored; null or '' gives ''
+ * @param string $bodyType  'html' or 'text'; a body containing <html or <div is treated as HTML whatever this says
+ * @param int $maxChars  the most characters kept before a "truncated" note is appended
  */
 function integrationsBodyToText(?string $raw, string $bodyType = 'text', int $maxChars = 8000): string
 {
@@ -270,7 +281,11 @@ function integrationsBodyToText(?string $raw, string $bodyType = 'text', int $ma
     return $s;
 }
 
-/** provider string → concrete connector. */
+/**
+ * provider string → concrete connector.
+ *
+ * @param array $connection  a connection row as loaded by integrationsLoadConnection(); its 'provider' picks the class
+ */
 function integrationsProviderFor(array $connection): IssueTrackerProvider
 {
     switch ($connection['provider'] ?? '') {
@@ -283,7 +298,11 @@ function integrationsProviderFor(array $connection): IssueTrackerProvider
     }
 }
 
-/** Decrypt + JSON-decode a stored credentials blob (never throws). */
+/**
+ * Decrypt + JSON-decode a stored credentials blob (never throws).
+ *
+ * @param mixed $stored  the encrypted credentials column as stored; null or '' gives []
+ */
 function integrationsDecodeCredentials($stored): array
 {
     if ($stored === null || $stored === '') return [];
@@ -299,6 +318,8 @@ function integrationsDecodeCredentials($stored): array
 /**
  * Load a connection with its secrets decrypted. Returns null if missing or if
  * the schema is not there yet.
+ *
+ * @param mixed $connectionId  the integration_connections id (cast to int)
  */
 function integrationsLoadConnection(PDO $conn, $connectionId): ?array
 {
@@ -336,6 +357,8 @@ function integrationsLoadConnection(PDO $conn, $connectionId): ?array
  * the UI gets. A read that hands back credentials needs the same care as a
  * write, and an unfiltered list that leaked tokens would be a cross-company
  * credential leak rather than a convenience.
+ *
+ * @param bool $activeOnly  true to leave out connections switched off (is_active = 0)
  */
 function integrationsListConnections(PDO $conn, bool $activeOnly = false): array
 {
@@ -403,6 +426,10 @@ function integrationsListConnections(PDO $conn, bool $activeOnly = false): array
  *
  * On a single-company install every call is trivially true, which is correct
  * rather than a bypass — there is only one company for anything to leak to.
+ *
+ * @param ?int $entityTenantId  the work item's company; null means the Default company
+ * @param ?int $connectionTenantId  the connection's company; null means shared by every company
+ * @param ?int $defaultTenantId  the Default company's id, used in place of a null $entityTenantId
  */
 function integrationsCompaniesCompatible(?int $entityTenantId, ?int $connectionTenantId, ?int $defaultTenantId = null): bool
 {
@@ -416,7 +443,12 @@ function integrationsCompaniesCompatible(?int $entityTenantId, ?int $connectionT
     return $effective === $connectionTenantId;
 }
 
-/** The tenant_id of a ticket / problem / change, or null. */
+/**
+ * The tenant_id of a ticket / problem / change, or null.
+ *
+ * @param string $entityType  'ticket', 'problem' or 'change'; anything else gives null
+ * @param int $entityId  the id of that work item
+ */
 function integrationsEntityTenantId(PDO $conn, string $entityType, int $entityId): ?int
 {
     $table = [
@@ -435,7 +467,12 @@ function integrationsEntityTenantId(PDO $conn, string $entityType, int $entityId
     return ($v === false || $v === null) ? null : (int) $v;
 }
 
-/** Links for one work item, newest first. Empty when the schema is not ready. */
+/**
+ * Links for one work item, newest first. Empty when the schema is not ready.
+ *
+ * @param string $entityType  'ticket', 'problem' or 'change'
+ * @param int $entityId  the id of that work item
+ */
 function integrationsLinksFor(PDO $conn, string $entityType, int $entityId): array
 {
     if (!integrationsSchemaReady($conn)) return [];
@@ -454,7 +491,13 @@ function integrationsLinksFor(PDO $conn, string $entityType, int $entityId): arr
     }
 }
 
-/** Is this work item already linked to this connection? (drives skip_if_linked) */
+/**
+ * Is this work item already linked to this connection? (drives skip_if_linked)
+ *
+ * @param int $connectionId  the integration_connections id
+ * @param string $entityType  'ticket', 'problem' or 'change'
+ * @param int $entityId  the id of that work item
+ */
 function integrationsAlreadyLinked(PDO $conn, int $connectionId, string $entityType, int $entityId): bool
 {
     if (!integrationsSchemaReady($conn)) return false;
@@ -682,6 +725,7 @@ function integrationsAttachmentRoot(): string
  * ⚠️ Internal notes have no attachments at all in this schema, so the rule that
  * internal content never crosses holds here for free rather than by a check.
  *
+ * @param int $maxFiles  how many files may be sent; the rest are returned with skip_reason 'over_limit'
  * @return array [['id','filename','content_type','size','path','skip_reason'], …]
  *               `skip_reason` set means: show it, do not send it.
  */
@@ -732,7 +776,11 @@ function integrationsTicketAttachments(PDO $conn, int $ticketId, int $maxFiles =
     return $out;
 }
 
-/** "1.4 MB" / "812 KB" — for the preview and the log line. */
+/**
+ * "1.4 MB" / "812 KB" — for the preview and the log line.
+ *
+ * @param int $bytes  a size in bytes
+ */
 function integrationsFormatBytes(int $bytes): string
 {
     if ($bytes >= 1048576) return round($bytes / 1048576, 1) . ' MB';
@@ -748,6 +796,9 @@ function integrationsFormatBytes(int $bytes): string
  * "escalation failed" and an analyst would raise a second one. Same rule as the
  * rejected priority in §7e — the expensive thing is already done.
  *
+ * @param array $connection  the connection row as loaded by integrationsLoadConnection()
+ * @param array $link  the integration_links row for the issue just created (needs external_id)
+ * @param array $attachments  the list from integrationsTicketAttachments(); entries with a skip_reason are counted, not sent
  * @return array ['sent'=>int, 'failed'=>int, 'skipped'=>int, 'notes'=>string[]]
  */
 function integrationsSendAttachments(PDO $conn, array $connection, array $link, array $attachments): array
@@ -864,6 +915,11 @@ function integrationsTicketPayload(PDO $conn, int $ticketId): array
  *
  * Never throws: a workflow problem must not break a poll, exactly as a workflow
  * problem must not break a ticket save.
+ *
+ * @param string $event  the workflow event name, e.g. 'tracker.issue_status_changed'
+ * @param array $connection  the connection row (provider, name, id are copied into the payload)
+ * @param array $link  the integration_links row; only entity_type 'ticket' fires anything
+ * @param array $extra  more fields merged into the payload's 'tracker' block
  */
 function integrationsEmitTrackerEvent(PDO $conn, string $event, array $connection, array $link, array $extra = []): void
 {
@@ -926,6 +982,8 @@ function integrationsMapSchemaReady(PDO $conn): bool
  * Every mapping for one connection, as [map_type][local_key] => external_key.
  * Empty array when nothing is configured or the table is missing — mapping is
  * always optional, and an unmapped install must keep working exactly as before.
+ *
+ * @param int $connectionId  the integration_connections id
  */
 function integrationsLoadMaps(PDO $conn, int $connectionId): array
 {
@@ -952,6 +1010,7 @@ function integrationsLoadMaps(PDO $conn, int $connectionId): array
  * set: a mapping the admin deleted has to disappear, and diffing individual rows
  * to work that out is more code and more ways to be wrong.
  *
+ * @param int $connectionId  the integration_connections id whose mappings are replaced
  * @param array $maps [map_type => [local_key => external_key]]
  */
 function integrationsSaveMaps(PDO $conn, int $connectionId, array $maps): void
@@ -1007,6 +1066,9 @@ function integrationsSaveMaps(PDO $conn, int $connectionId, array $maps): void
  * quietly filed in whatever project happened to be first.
  *
  * Pure: no database, so the precedence is provable without fixtures.
+ *
+ * @param array $maps  the connection's mappings as returned by integrationsLoadMaps()
+ * @param ?int $departmentId  the work item's department; null skips the department rule
  */
 function integrationsResolveProject(array $maps, ?int $tenantId, ?int $departmentId): ?string
 {
@@ -1022,6 +1084,9 @@ function integrationsResolveProject(array $maps, ?int $tenantId, ?int $departmen
 /**
  * Our ticket type → the tracker's issue type. Falls back to the `*` row, so an
  * install can say "everything is a Task" without listing every type.
+ *
+ * @param array $maps  the connection's mappings as returned by integrationsLoadMaps()
+ * @param ?int $ticketTypeId  the ticket's ticket_type_id; null falls straight to the '*' row
  */
 function integrationsResolveIssueType(array $maps, ?int $ticketTypeId): ?string
 {
@@ -1038,6 +1103,9 @@ function integrationsResolveIssueType(array $maps, ?int $ticketTypeId): ?string
  * Task" is a reasonable thing to mean; "every priority is Highest" is not — it
  * would silently mark a dev team's whole backlog urgent. An unmapped priority
  * simply travels as text in the description, exactly as it did before mapping.
+ *
+ * @param array $maps  the connection's mappings as returned by integrationsLoadMaps()
+ * @param ?int $priorityId  the ticket's priority_id; null gives null
  */
 function integrationsResolvePriority(array $maps, ?int $priorityId): ?string
 {
@@ -1052,6 +1120,8 @@ function integrationsResolvePriority(array $maps, ?int $priorityId): ?string
  * Used to decide whether to retry the create without one. Deliberately narrow:
  * retrying blindly on any failure could turn a genuine error into an issue we
  * did not mean to raise.
+ *
+ * @param string $message  the error message the tracker's create call threw
  */
 function integrationsLooksLikePriorityRejection(string $message): bool
 {
@@ -1067,6 +1137,9 @@ function integrationsLooksLikePriorityRejection(string $message): bool
  *
  * Only tickets route today; problems and changes return an empty routing set, so
  * they fall through to whatever the caller supplied.
+ *
+ * @param string $entityType  'ticket', 'problem' or 'change'; only 'ticket' returns anything but nulls
+ * @param int $entityId  the id of that work item
  */
 function integrationsEntityRouting(PDO $conn, string $entityType, int $entityId): array
 {
@@ -1138,6 +1211,9 @@ function integrationsCommentSchemaReady(PDO $conn): bool
  * and be noisy, because the failure is then visible instead of invisible.
  *
  * Pure on purpose: the whole decision is provable without a database.
+ *
+ * @param array $event  a canonical comment event from the provider's pollChanges() (reads author_identity)
+ * @param ?string $accountIdentity  the connection's account_identity - the account the token signs in as; null if unknown
  */
 function integrationsCommentIsEcho(array $event, ?string $accountIdentity): bool
 {
@@ -1154,7 +1230,10 @@ function integrationsCommentIsEcho(array $event, ?string $accountIdentity): bool
  * we push is recorded, so our own writes are recognised coming back. That is the
  * whole guard, and it is exact.
  *
+ * @param array $event  a canonical comment event from the provider's pollChanges() (type, comment_id, comment_body, author_*)
+ * @param ?string $accountIdentity  the connection's account_identity; null if unknown
  * @param string[] $knownCommentIds  ids already imported for this link (guard 1)
+ * @param string $entityType  the linked work item's type; only 'ticket' is imported
  * @param bool     $suppressByAuthor also drop anything authored by our own
  *                 account. **Off**, and deliberately so — see
  *                 integrationsCommentIsEcho(). This is the seam a future
@@ -1176,7 +1255,11 @@ function integrationsCommentSkipReason(array $event, ?string $accountIdentity, a
     return '';
 }
 
-/** Comment ids already mapped for one link, in either direction. */
+/**
+ * Comment ids already mapped for one link, in either direction.
+ *
+ * @param int $linkId  the integration_links id
+ */
 function integrationsKnownCommentIds(PDO $conn, int $linkId): array
 {
     if (!integrationsCommentSchemaReady($conn)) return [];
@@ -1195,6 +1278,10 @@ function integrationsKnownCommentIds(PDO $conn, int $linkId): array
  * Guard 1 of echo suppression. Called by send_note_to_tracker straight after the
  * provider returns the new comment's id. Never throws: failing to record an echo
  * marker must not fail the workflow run that successfully posted the comment.
+ *
+ * @param int $linkId  the integration_links id the comment was posted on
+ * @param string $externalCommentId  the tracker's id for the new comment; '' records nothing
+ * @param ?int $localNoteId  the ticket_notes id that was pushed, or null
  */
 function integrationsRecordOutboundComment(PDO $conn, int $linkId, string $externalCommentId, ?int $localNoteId = null): void
 {
@@ -1217,6 +1304,9 @@ function integrationsRecordOutboundComment(PDO $conn, int $linkId, string $exter
  * plenty of things read note_text directly — the REST API, the portal, the AI
  * write-up. A note that says only "any update?" with no hint it came from a dev
  * in Jira is worse than no note.
+ *
+ * @param array $event  a canonical comment event (author_name, comment_body)
+ * @param array $link  the integration_links row (external_key, or external_id when there is no key)
  */
 function integrationsCommentNoteText(array $event, array $link): string
 {
@@ -1240,6 +1330,9 @@ function integrationsCommentNoteText(array $event, array $link): string
  * who do not know a customer can see it, and it must never reach the requester
  * except by an analyst deciding so.
  *
+ * @param array $connection  the connection row as loaded by integrationsLoadConnection()
+ * @param array $link  the integration_links row the comment belongs to
+ * @param array $event  a canonical comment event from the provider's pollChanges()
  * @return string '' if imported, otherwise the reason it was skipped
  */
 function integrationsApplyCommentEvent(PDO $conn, array $connection, array $link, array $event): string
@@ -1315,6 +1408,7 @@ function integrationsApplyCommentEvent(PDO $conn, array $connection, array $link
  * the gap between them. It is only advanced on success: a failed pull must be
  * retried against the same window, not skipped past.
  *
+ * @param array $connection  the connection row as loaded by integrationsLoadConnection(); inbound_enabled must be set
  * @return array ['pulled'=>int, 'imported'=>int, 'skipped'=>['echo'=>n, …]]
  */
 function integrationsPullComments(PDO $conn, array $connection): array
@@ -1367,6 +1461,7 @@ function integrationsPullComments(PDO $conn, array $connection): array
  * only rows whose status actually moved are written, so a quiet day costs one
  * read and no writes.
  *
+ * @param array $connection  the connection row as loaded by integrationsLoadConnection()
  * @return array ['checked'=>int, 'changed'=>int, 'changes'=>[ ['link'=>row,
  *                'from'=>?string, 'to'=>?string], … ]]
  */

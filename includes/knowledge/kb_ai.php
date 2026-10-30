@@ -19,7 +19,12 @@ require_once __DIR__ . '/audience.php';
 require_once __DIR__ . '/../tenancy.php';
 require_once __DIR__ . '/visibility.php';
 
-/** Cosine similarity of two equal-ish length vectors (0 if either is a zero vector). */
+/**
+ * Cosine similarity of two equal-ish length vectors (0 if either is a zero vector).
+ *
+ * @param array $a  an embedding vector (list of floats)
+ * @param array $b  another embedding vector; only the shorter length of the two is compared
+ */
 function kbCosineSimilarity(array $a, array $b): float
 {
     $dot = 0.0; $na = 0.0; $nb = 0.0;
@@ -35,7 +40,12 @@ function kbCosineSimilarity(array $a, array $b): float
     return $dot / (sqrt($na) * sqrt($nb));
 }
 
-/** Embed a query with OpenAI's small embedding model. Returns the vector or null. */
+/**
+ * Embed a query with OpenAI's small embedding model. Returns the vector or null.
+ *
+ * @param string $text  the text to embed; cut to 30,000 bytes first
+ * @param string $apiKey  the OpenAI API key, decrypted
+ */
 function kbGenerateEmbedding(string $text, string $apiKey): ?array
 {
     if (strlen($text) > 30000) {
@@ -99,6 +109,10 @@ const KB_VISIBLE_SQL = "is_published = 1 AND (is_archived = 0 OR is_archived IS 
  * Filtering happens in SQL, before scoring: it is both the security boundary and
  * strictly less work than decoding vectors we would discard. Filtering the
  * ANSWER afterwards would not work at all — by then the model has read the text.
+ *
+ * @param string $question  the reader's question, embedded and compared with each article
+ * @param int $limit  the most articles returned on the vector path (the fallback returns at least 10)
+ * @param mixed $viewer  a KnowledgeViewer (preferred, authoritative), or an Audience:: level string such as 'public'
  */
 function kbRetrieveArticles(PDO $conn, string $question, int $limit = 5, ?int $tenantId = null, $viewer = Audience::PUBLIC): array
 {
@@ -156,7 +170,11 @@ function kbRetrieveArticles(PDO $conn, string $question, int $limit = 5, ?int $t
     return ['articles' => array_slice($all, 0, max($limit, 10)), 'method' => 'all'];
 }
 
-/** Turn retrieved articles into a plain-text context block for the AI system prompt. */
+/**
+ * Turn retrieved articles into a plain-text context block for the AI system prompt.
+ *
+ * @param array $articles  the 'articles' list from kbRetrieveArticles() - rows with title and HTML body
+ */
 function kbBuildContext(array $articles): string
 {
     $ctx = '';

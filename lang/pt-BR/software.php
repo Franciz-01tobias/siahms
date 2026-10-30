@@ -36,6 +36,7 @@ return [
         'col_seats' => 'Assentos',
         'col_actions' => '',
         'add_app' => 'Adicionar aplicativo',
+        'new_app' => 'Novo aplicativo',
         'edit_app' => 'Editar aplicativo',
         'added_by_hand' => 'Adicionado manualmente',
         'f_name' => 'Nome',
@@ -116,7 +117,7 @@ return [
         'widget_removed' => 'Widget removido',
     ],
     'library' => [
-        'page_title' => 'Central de Serviços - Biblioteca de widgets de software',
+        'page_title' => 'Biblioteca de widgets de software',
         'back' => 'Painel',
         'heading' => 'Biblioteca de widgets',
         'search' => 'Pesquisar widgets...',

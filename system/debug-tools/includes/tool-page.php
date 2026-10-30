@@ -54,9 +54,9 @@ $toolMethod = strtoupper($tool['method'] ?? 'GET');
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Desk - <?php echo htmlspecialchars($tool['id'] . ' · ' . $tool['title']); ?></title>
-    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('system', t('system.debug.heading'), $tool['id'] . ' · ' . $tool['title'])); ?></title>
+    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="<?php echo $path_prefix; ?>assets/css/inbox.css?v=79">
     <style>
         body {
             /* System is the FIRST module whose DARK accent is a LIGHT colour (#90a4ae).
@@ -115,7 +115,7 @@ $toolMethod = strtoupper($tool['method'] ?? 'GET');
         [data-theme-mode="dark"] .spinner-inline { border-color: rgba(0,0,0,0.25); border-top-color: var(--sys-on-accent, #263238); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../../../assets/css/mobile.css?v=195">
 </head>
 <body data-mobile-module="system" data-mobile-page="debug-tool">
     <?php include __DIR__ . '/../../includes/header.php'; ?>
@@ -161,14 +161,15 @@ $toolMethod = strtoupper($tool['method'] ?? 'GET');
                                 <?php if ($ftype === 'select'): ?>
                                     <select class="diag-input" id="<?php echo $fid; ?>" data-input-name="<?php echo htmlspecialchars($f['name']); ?>"<?php echo $optAttr; ?>>
                                         <?php foreach (($f['options'] ?? []) as $opt): ?>
-                                            <option value="<?php echo htmlspecialchars($opt['value']); ?>"><?php echo htmlspecialchars($opt['label']); ?></option>
+                                            <option value="<?php echo htmlspecialchars($opt['value']); ?>"<?php echo (isset($_GET[$f['name']]) && (string)$_GET[$f['name']] === (string)$opt['value']) ? ' selected' : ''; ?>><?php echo htmlspecialchars($opt['label']); ?></option>
                                         <?php endforeach; ?>
                                     </select>
                                 <?php else: ?>
                                     <input type="<?php echo $ftype === 'password' ? 'password' : 'text'; ?>" class="diag-input" id="<?php echo $fid; ?>"
                                            data-input-name="<?php echo htmlspecialchars($f['name']); ?>"<?php echo $optAttr; ?>
                                            autocomplete="<?php echo $ftype === 'password' ? 'new-password' : 'off'; ?>"
-                                           placeholder="<?php echo htmlspecialchars($f['placeholder'] ?? ''); ?>">
+                                           placeholder="<?php echo htmlspecialchars($f['placeholder'] ?? ''); ?>"
+                                           <?php if ($ftype !== 'password' && isset($_GET[$f['name']])): ?>value="<?php echo htmlspecialchars((string)$_GET[$f['name']]); ?>"<?php endif; ?>>
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
@@ -268,6 +269,6 @@ $toolMethod = strtoupper($tool['method'] ?? 'GET');
         });
     })();
     </script>
-    <script src="../../../assets/js/mobile.js?v=65"></script>
+    <script src="../../../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

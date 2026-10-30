@@ -171,6 +171,7 @@ return [
         'categories_heading' => 'Kategori acara',
         'categories_intro' => 'Kategori adalah tulang belakang penyusunan kalendar. Setiap kategori mempunyai nama dan warna, supaya acara dapat dikenal pasti serta-merta hanya dengan sepintas lalu. Bar sisi menunjukkan semua kategori yang tersedia dengan kotak semak &mdash; nyahtanda kategori untuk menyembunyikan acara tersebut daripada kalendar.',
         'categories_certificates' => '<strong>Sijil</strong> &mdash; jejak tarikh tamat tempoh sijil SSL/TLS, sijil penandatanganan kod, dan bukti kelayakan lain yang memerlukan pembaharuan berkala',
+        'categories_projects' => '<strong>Projek</strong> &mdash; diisi oleh modul Projek: tarikh tamat sasaran setiap projek yang aktif dan penghujung setiap peringkat, fasa atau sprint yang terbuka, dikekalkan seiring dengan pelan',
         'categories_contracts' => '<strong>Kontrak</strong> &mdash; catat tarikh pembaharuan kontrak vendor, tamat tempoh lesen, dan pencapaian semakan SLA supaya tiada apa yang luput secara tidak dijangka',
         'categories_maintenance' => '<strong>Penyelenggaraan</strong> &mdash; jadualkan tempoh penyelenggaraan terancang untuk server, peralatan rangkaian, dan infrastruktur. Pasukan dan pihak berkepentingan anda dapat melihat dengan tepat bila waktu henti dijangkakan',
         'categories_meetings' => '<strong>Mesyuarat</strong> &mdash; rekod stand-up pasukan, mesyuarat CAB, panggilan vendor, dan janji temu berulang lain yang berkaitan dengan operasi IT',

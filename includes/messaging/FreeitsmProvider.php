@@ -19,13 +19,25 @@ require_once __DIR__ . '/MessagingProvider.php';
 
 class FreeitsmProvider extends MessagingProvider
 {
-    /** Webchat has its own public endpoints, so the shared webhook never routes here. */
+    /**
+     * Webchat has its own public endpoints, so the shared webhook never routes here.
+     *
+     * @param string $rawBody  the raw request body (ignored)
+     * @param array $headers  the request headers (ignored)
+     * @param array $params  the parsed POST parameters (ignored)
+     * @param string $url  the public URL that was hit (ignored)
+     */
     public function verifyWebhook(string $rawBody, array $headers, array $params, string $url): bool
     {
         return false;
     }
 
-    /** Not used — inbound is handled by api/webchat/send.php, not parseInbound. */
+    /**
+     * Not used — inbound is handled by api/webchat/send.php, not parseInbound.
+     *
+     * @param string $rawBody  the raw request body (ignored)
+     * @param array $params  the parsed POST parameters (ignored)
+     */
     public function parseInbound(string $rawBody, array $params): array
     {
         return [];
@@ -35,6 +47,9 @@ class FreeitsmProvider extends MessagingProvider
      * "Send" an outbound reply. There is nothing to transmit — the message row is
      * stored by the caller and delivered when the visitor next polls — so we only
      * mint a stable id. Prefixed 'wc_out_' so it's recognisable in the emails table.
+     *
+     * @param string $to  the web chat visitor's address (ignored - the caller stores the message)
+     * @param string $body  the reply text (ignored - the caller stores the message)
      */
     public function sendMessage(string $to, string $body): string
     {

@@ -20,9 +20,11 @@ function pmPreviewBadge(type, id) {
     return window.FreeITSMPreview ? window.FreeITSMPreview.badge(type, id) : '';
 }
 
+/** Escapes a value for safe use in HTML. */
 function pmEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+/** Shows a short message through the shared toaster, or a minimal fallback toast when toast.js is not loaded. */
 function pmToast(msg, type) {
     // Use the shared toaster (assets/js/toast.js); fall back to a minimal toast.
     if (window.showToast) { window.showToast(msg, type || 'info'); return; }
@@ -59,6 +61,7 @@ window.addEventListener('popstate', () => {
     else { pmShowListView(); pmLoadList(); }
 });
 
+/** Loads the problem statuses, priorities and analysts used by the filters and the editor's drop-downs. */
 async function pmLoadLookups() {
     try {
         const [s, p, a] = await Promise.all([
@@ -72,6 +75,7 @@ async function pmLoadLookups() {
     } catch (e) { /* leave empty */ }
 }
 
+/** Loads the problem list for the current status filter and redraws the filters, the list and the count. */
 async function pmLoadList() {
     const params = new URLSearchParams();
     if (pmFilterStatus !== 'all') params.set('status_id', pmFilterStatus);
@@ -85,6 +89,7 @@ async function pmLoadList() {
     } catch (e) { pmToast(pmT('list.load_failed_list', 'Failed to load problems'), 'error'); }
 }
 
+/** Draws the status filter list in the sidebar, with a count per status and an All total. */
 function pmRenderFilters(counts) {
     const wrap = document.getElementById('pmStatusFilters');
     const total = (counts || []).reduce((n, s) => n + (s.cnt || 0), 0);
@@ -104,6 +109,7 @@ function pmT(key, english, params) {
     return window.tf ? window.tf('problem-management.' + key, english, params) : english;
 }
 
+/** Draws the problem cards - number, title, status, priority, assignee, incident count and the known-error flag. */
 function pmRenderList(problems) {
     const el = document.getElementById('pmList');
     if (!problems.length) { el.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('list.empty', 'No problems. Click “New problem” to create one.')) + '</div>'; return; }
@@ -137,6 +143,7 @@ function pmFilter(statusId) {
 // ============ Search modal (draggable) — mirrors the Change Management search ============
 let pmSearchOffsetX = 0, pmSearchOffsetY = 0;
 
+/** Opens the search panel just under the Search button and focuses the number field. */
 function pmOpenSearchModal() {
     const modal = document.getElementById('pmSearchModal');
     modal.classList.add('active');
@@ -154,6 +161,7 @@ function pmOpenSearchModal() {
     document.getElementById('pmSearchNumber').focus();
 }
 
+/** Closes the search panel. */
 function pmCloseSearchModal() { document.getElementById('pmSearchModal').classList.remove('active'); }
 
 // Escape always closes the panel; clicking away closes it only if the analyst
@@ -165,22 +173,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+/** Lets the search panel be dragged by its header. */
 function pmInitSearchDrag() {
     const header = document.getElementById('pmSearchModalHeader');
     const modal = document.getElementById('pmSearchModal');
+    /** Starts dragging the search panel, ignoring presses on its buttons. */
     header.onmousedown = function(e) {
         if (e.target.tagName === 'BUTTON') return;
         e.preventDefault();
         const rect = modal.getBoundingClientRect();
         pmSearchOffsetX = e.clientX - rect.left;
         pmSearchOffsetY = e.clientY - rect.top;
+        /** Moves the search panel with the mouse while dragging. */
         function mm(e) { modal.style.left = (e.clientX - pmSearchOffsetX) + 'px'; modal.style.top = (e.clientY - pmSearchOffsetY) + 'px'; modal.style.transform = 'none'; }
+        /** Ends the drag by removing the move and release listeners. */
         function mu() { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); }
         document.addEventListener('mousemove', mm);
         document.addEventListener('mouseup', mu);
     };
 }
 
+/** Searches problems by number or title (list.php?q= matches either) and shows the results. */
 async function pmPerformSearch() {
     const num = document.getElementById('pmSearchNumber').value.trim();
     const title = document.getElementById('pmSearchTitle').value.trim();
@@ -198,6 +211,7 @@ async function pmPerformSearch() {
     } catch (e) { results.innerHTML = '<div class="search-results-empty">' + pmEsc(pmT('search.failed_retry', 'Search failed. Please try again.')) + '</div>'; }
 }
 
+/** Draws the search results in the search panel, each one opening that problem when clicked. */
 function pmRenderSearchResults(results) {
     const c = document.getElementById('pmSearchResults');
     if (!results.length) { c.innerHTML = '<div class="search-results-empty">' + pmEsc(pmT('search.no_matches', 'No matching problems.')) + '</div>'; return; }
@@ -218,14 +232,17 @@ function pmRenderSearchResults(results) {
     c.innerHTML = html;
 }
 
+/** Closes the search panel and opens the chosen problem. */
 function pmSelectSearchResult(id) { pmCloseSearchModal(); pmOpenDetail(id); }
 
+/** Empties the search fields and the results. */
 function pmClearSearch() {
     document.getElementById('pmSearchNumber').value = '';
     document.getElementById('pmSearchTitle').value = '';
     document.getElementById('pmSearchResults').innerHTML = '<div class="search-results-empty">' + pmEsc(pmT('search.prompt', 'Enter a problem number or title above and press Search.')) + '</div>';
 }
 
+/** Hides the detail view and shows the list, forgetting which problem was open. */
 function pmShowListView() {
     pmCurrentId = null;
     document.getElementById('pmDetailView').style.display = 'none';
@@ -236,12 +253,14 @@ function pmShowListView() {
 function pmSetListUrl() {
     if (location.search) history.pushState({ pmView: 'list' }, '', location.pathname);
 }
+/** Returns to the list, reloads it and drops the problem from the URL. */
 function pmBackToList() {
     pmShowListView();
     pmLoadList();
     pmSetListUrl();
 }
 
+/** Loads one problem and shows its detail view, recording the visit in the recent trail and pushing ?problem_id= unless restoring from history. */
 async function pmOpenDetail(id, fromHistory) {
     try {
         const res = await fetch(PM_API + 'get.php?id=' + id);
@@ -259,6 +278,7 @@ async function pmOpenDetail(id, fromHistory) {
     } catch (e) { pmToast(pmT('detail.open_failed', 'Failed to open problem'), 'error'); }
 }
 
+/** Draws the whole detail view - details, linked incidents and changes, projects, notes, history and documents. */
 function pmRenderDetail(data) {
     const p = data.problem;
     const statusBadge = p.status_name ? `<span class="pm-badge" style="background:#6a1b9a">${pmEsc(p.status_name)}</span>` : '';
@@ -347,6 +367,7 @@ function pmRenderDetail(data) {
                 <h3>${pmEsc(pmT('detail.fix', 'Fix (linked change)'))}</h3>
                 ${changes}
             </div>
+            ${window.PM_SHOW_PROJECTS ? '<div class="pm-section"><h3>' + pmEsc(pmT('detail.projects', 'Projects')) + '</h3><div id="pmProjects"></div></div>' : ''}
             <div class="pm-section">
                 <h3>${pmEsc(pmT('detail.notes', 'Notes'))}</h3>
                 <div class="pm-note-add">
@@ -365,6 +386,9 @@ function pmRenderDetail(data) {
             </div>
         </div>`;
 
+    // The projects this problem is part of (3.3.0) - the same panel changes show.
+    if (window.PM_SHOW_PROJECTS && window.ProjectLinks) ProjectLinks.mount(document.getElementById('pmProjects'), { kind: 'problem', id: p.id, base: window.PM_BASE, bare: true });
+
     // Attached documents (discussion #76). Mounted, not re-pointed: this view is
     // rebuilt for every problem, so the previous element is already gone.
     if (window.FreeITSMDocuments) {
@@ -377,11 +401,13 @@ function pmRenderDetail(data) {
 }
 
 // ----- Editor -----
+/** Fills a drop-down with id/name items, selecting one and optionally adding a blank first option. */
 function pmFillSelect(sel, items, selected, blank) {
     sel.innerHTML = (blank ? '<option value=""></option>' : '') + items.map(i =>
         `<option value="${i.id}" ${String(selected) === String(i.id) ? 'selected' : ''}>${pmEsc(i.name || i.full_name)}</option>`).join('');
 }
 
+/** Opens the editor modal, filled from the given problem or empty for a new one. */
 function pmOpenEditor(problem) {
     const p = problem || {};
     document.getElementById('pmId').value = p.id || '';
@@ -400,9 +426,12 @@ function pmOpenEditor(problem) {
     pmFillSelect(document.getElementById('pmAssignee'), pmAnalysts, p.assigned_analyst_id, true);
     document.getElementById('pmModal').classList.add('active');
 }
+/** Opens the editor on the problem currently shown. */
 function pmEditCurrent() { if (pmDetailCache) pmOpenEditor(pmDetailCache.problem); }
+/** Closes the editor modal. */
 function pmCloseEditor() { document.getElementById('pmModal').classList.remove('active'); }
 
+/** Saves the editor's problem through save.php and opens the saved problem (the new id for a new one). */
 async function pmSave() {
     const payload = {
         id: document.getElementById('pmId').value || 0,
@@ -429,6 +458,7 @@ async function pmSave() {
     } catch (e) { pmToast(pmT('editor.save_failed', 'Save failed'), 'error'); }
 }
 
+/** Asks, then deletes the open problem; linked incidents are kept and only lose the link. */
 async function pmDelete() {
     if (!pmCurrentId) return;
     const ok = window.showConfirm
@@ -450,6 +480,7 @@ async function pmDelete() {
 
 // ----- Linking (endpoints added in phases B/C) -----
 let pmLinkSearchTimer = null;
+/** Opens the link-incident modal with an empty search and loads the incidents that can be linked. */
 function pmLinkIncident() {
     if (!pmCurrentId) return;
     const search = document.getElementById('pmLinkSearch'); if (search) search.value = '';
@@ -457,10 +488,12 @@ function pmLinkIncident() {
     document.getElementById('pmLinkModal').classList.add('active');
     pmLoadLinkable();
 }
+/** Reloads the linkable incidents 250ms after the last keystroke in the search box. */
 function pmLinkSearchDebounced() {
     clearTimeout(pmLinkSearchTimer);
     pmLinkSearchTimer = setTimeout(pmLoadLinkable, 250);
 }
+/** Loads the open incidents that can be linked to this problem, filtered by the search text, as tick-box rows. */
 async function pmLoadLinkable() {
     const list = document.getElementById('pmLinkList');
     const q = (document.getElementById('pmLinkSearch') || {}).value || '';
@@ -480,9 +513,11 @@ async function pmLoadLinkable() {
             </label>`).join('');
     } catch (e) { list.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('link.incidents_failed', 'Failed to load incidents')) + '</div>'; }
 }
+/** Ticks or unticks every incident in the link list. */
 function pmToggleAllLinkable(checked) {
     document.querySelectorAll('#pmLinkList .pm-pick-cb').forEach(cb => cb.checked = checked);
 }
+/** Links each ticked incident to the open problem one request at a time, reports how many worked and failed, then reloads the problem. */
 async function pmLinkSelected() {
     const ids = Array.from(document.querySelectorAll('#pmLinkList .pm-pick-cb:checked')).map(cb => cb.value);
     if (!ids.length) { pmToast(pmT('link.need_incident', 'Select at least one incident'), 'warning'); return; }
@@ -507,6 +542,7 @@ async function pmLinkSelected() {
     else pmToast(pmT('link.failed', 'Link failed'), 'error');
     pmOpenDetail(pmCurrentId);
 }
+/** Asks, then removes an incident's link to the open problem; the incident itself is kept. */
 async function pmUnlinkIncident(ticketId) {
     const ok = await showConfirm({
         title: pmT('link.unlink_incident_title', 'Unlink incident?'),
@@ -521,6 +557,7 @@ async function pmUnlinkIncident(ticketId) {
     } catch (e) { pmToast(pmT('link.unlink_failed', 'Failed'), 'error'); }
 }
 let pmLinkChangeSearchTimer = null;
+/** Opens the link-change modal with an empty search and loads the changes that can be linked. */
 function pmLinkChange() {
     if (!pmCurrentId) return;
     const search = document.getElementById('pmLinkChangeSearch'); if (search) search.value = '';
@@ -528,10 +565,12 @@ function pmLinkChange() {
     document.getElementById('pmLinkChangeModal').classList.add('active');
     pmLoadLinkableChanges();
 }
+/** Reloads the linkable changes 250ms after the last keystroke in the search box. */
 function pmLinkChangeSearchDebounced() {
     clearTimeout(pmLinkChangeSearchTimer);
     pmLinkChangeSearchTimer = setTimeout(pmLoadLinkableChanges, 250);
 }
+/** Loads the changes that can be linked to this problem, filtered by the search text, as tick-box rows. */
 async function pmLoadLinkableChanges() {
     const list = document.getElementById('pmLinkChangeList');
     const q = (document.getElementById('pmLinkChangeSearch') || {}).value || '';
@@ -551,9 +590,11 @@ async function pmLoadLinkableChanges() {
             </label>`).join('');
     } catch (e) { list.innerHTML = '<div class="pm-empty">' + pmEsc(pmT('link.changes_failed', 'Failed to load changes')) + '</div>'; }
 }
+/** Ticks or unticks every change in the link list. */
 function pmToggleAllLinkableChanges(checked) {
     document.querySelectorAll('#pmLinkChangeList .pm-pick-cb').forEach(cb => cb.checked = checked);
 }
+/** Links each ticked change to the open problem one request at a time, reports how many worked and failed, then reloads the problem. */
 async function pmLinkChangeSelected() {
     const ids = Array.from(document.querySelectorAll('#pmLinkChangeList .pm-pick-cb:checked')).map(cb => cb.value);
     if (!ids.length) { pmToast(pmT('link.need_change', 'Select at least one change'), 'warning'); return; }
@@ -578,6 +619,7 @@ async function pmLinkChangeSelected() {
     else pmToast(pmT('link.failed', 'Link failed'), 'error');
     pmOpenDetail(pmCurrentId);
 }
+/** Asks, then removes a change's link to the open problem; the change itself is kept. */
 async function pmUnlinkChange(changeId) {
     const ok = await showConfirm({
         title: pmT('link.unlink_change_title', 'Unlink change?'),
@@ -592,6 +634,7 @@ async function pmUnlinkChange(changeId) {
     } catch (e) { pmToast(pmT('link.unlink_failed', 'Failed'), 'error'); }
 }
 
+/** Adds the typed note to the open problem and reloads it. */
 async function pmAddNote() {
     const ta = document.getElementById('pmNoteInput');
     const note = ((ta && ta.value) || '').trim();
@@ -605,6 +648,7 @@ async function pmAddNote() {
 }
 
 // ----- AI (endpoint added in phase D) -----
+/** Asks the AI for a root cause and workaround drafted from the linked incidents and shows it with an "Open in editor" button. */
 async function pmAiRootCause() {
     const out = document.getElementById('pmAiOut');
     out.style.display = 'block'; out.textContent = pmT('ai.analysing', 'Analysing the linked incidents…');
@@ -618,6 +662,7 @@ async function pmAiRootCause() {
 }
 // ----- AI: detect recurring-incident problems -----
 let pmSuggestions = [];
+/** Asks the AI to scan recent open incidents for recurring patterns and lists each suggested problem with a create button. */
 async function pmSuggest() {
     const modal = document.getElementById('pmSuggestModal');
     const body = document.getElementById('pmSuggestBody');
@@ -638,6 +683,7 @@ async function pmSuggest() {
             </div>`).join('');
     } catch (e) { body.innerHTML = '<div style="color:#c62828;">' + pmEsc(pmT('ai.request_error', 'Request failed')) + '</div>'; }
 }
+/** Creates a problem from an AI suggestion, links the incidents it named and opens it. */
 async function pmCreateFromSuggestion(i) {
     const s = pmSuggestions[i];
     if (!s) return;
@@ -653,6 +699,7 @@ async function pmCreateFromSuggestion(i) {
     } catch (e) { pmToast(pmT('ai.failed', 'Failed'), 'error'); }
 }
 
+/** Opens the editor on the current problem with the AI's root cause and workaround filled in, for review before saving. */
 function pmApplyAiDraft() {
     const out = document.getElementById('pmAiOut');
     if (!pmDetailCache) return;

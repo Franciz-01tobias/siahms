@@ -34,6 +34,11 @@ require_once dirname(__DIR__, 3) . '/includes/services/morning_checks.php';
 // Serializers + loaders
 // ---------------------------------------------------------------------------
 
+/**
+ * Shapes a morning check row for the API - name, description, active flag, order and dates.
+ *
+ * @param array $r  a morningChecks_Checks row (PascalCase columns)
+ */
 function apiSerializeMorningCheck(array $r): array {
     return [
         'id'          => (int)$r['CheckID'],
@@ -46,6 +51,11 @@ function apiSerializeMorningCheck(array $r): array {
     ];
 }
 
+/**
+ * Loads one morning check row, or answers 404 and stops.
+ *
+ * @param int $checkId  the morningChecks_Checks CheckID
+ */
 function apiLoadMorningCheck(PDO $conn, int $checkId): array {
     $stmt = $conn->prepare("SELECT * FROM morningChecks_Checks WHERE CheckID = ?");
     $stmt->execute([$checkId]);
@@ -65,6 +75,12 @@ function apiMorningResultSelect(): string {
             LEFT JOIN morningChecks_Statuses s ON s.StatusID = r.StatusID";
 }
 
+/**
+ * Shapes a morning check result for the API. A result whose status has since been
+ * deleted is marked is_orphan, with the label it was saved under.
+ *
+ * @param array $r  the morningChecks_Results row as apiMorningResultSelect() loads it, with CheckName and status label/colour
+ */
 function apiSerializeMorningResult(array $r): array {
     $statusId = $r['StatusID'] !== null ? (int)$r['StatusID'] : null;
     // Orphan = the status this result was saved against has since been
@@ -88,6 +104,11 @@ function apiSerializeMorningResult(array $r): array {
     ];
 }
 
+/**
+ * Loads one morning check result row, or answers 404 and stops.
+ *
+ * @param int $resultId  the morningChecks_Results ResultID
+ */
 function apiLoadMorningResult(PDO $conn, int $resultId): array {
     $stmt = $conn->prepare(apiMorningResultSelect() . " WHERE r.ResultID = ?");
     $stmt->execute([$resultId]);
@@ -98,7 +119,12 @@ function apiLoadMorningResult(PDO $conn, int $resultId): array {
     return $row;
 }
 
-/** Strict YYYY-MM-DD — 422 on garbage (the UI silently substitutes today). */
+/**
+ * Strict YYYY-MM-DD — 422 on garbage (the UI silently substitutes today).
+ *
+ * @param string $value  the caller-supplied date (untrusted), expected as YYYY-MM-DD
+ * @param string $field  the field or query parameter name, quoted in the 422 message
+ */
 function apiMorningCheckDate(string $value, string $field): string {
     $v = trim($value);
     $dt = DateTime::createFromFormat('Y-m-d', $v);
@@ -132,6 +158,7 @@ function apiMorningChecksList(PDO $conn, array $apiKey, array $params, array $bo
     apiRespond(array_map('apiSerializeMorningCheck', $stmt->fetchAll(PDO::FETCH_ASSOC)));
 }
 
+/** GET /morning-checks/checks/{id} - one morning check. */
 function apiMorningChecksGet(PDO $conn, array $apiKey, array $params, array $body): void {
     apiRespond(apiSerializeMorningCheck(apiLoadMorningCheck($conn, $params[0])));
 }
@@ -267,6 +294,7 @@ function apiMorningCheckResultsList(PDO $conn, array $apiKey, array $params, arr
     ]);
 }
 
+/** GET /morning-checks/results/{id} - one morning check result. */
 function apiMorningCheckResultsGet(PDO $conn, array $apiKey, array $params, array $body): void {
     apiRespond(apiSerializeMorningResult(apiLoadMorningResult($conn, $params[0])));
 }

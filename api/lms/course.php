@@ -35,6 +35,9 @@ $id = (int)($input['id'] ?? 0);
  * marked complete on reaching the end rather than passed/failed. Anything
  * outside 0-100 is a bad request rather than something to silently clamp: a
  * course whose pass mark isn't what the author typed is worse than an error.
+ *
+ * @param array $input  the decoded request; pass_mark is read if present
+ * @param mixed $error  set by reference to a message when pass_mark is not a whole number from 0 to 100
  */
 function lmsReadPassMark(array $input, &$error) {
     if (!array_key_exists('pass_mark', $input)) return null;

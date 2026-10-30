@@ -75,7 +75,13 @@ try {
             }
         }
 
-        $rows[] = ['key' => $key, 'name' => $name, 'allowed' => $allowed, 'reason' => $reason];
+        // The level (#180): Full, or Read only - with the level stated in the reason, so
+        // "why can't they edit?" is answered on this screen.
+        $level = $allowed ? analystModuleLevel($conn, $analystId, $key) : null;
+        if ($level === 'read') {
+            $reason .= ' - Read only';
+        }
+        $rows[] = ['key' => $key, 'name' => $name, 'allowed' => $allowed, 'level' => $level, 'reason' => $reason];
     }
 
     echo json_encode([

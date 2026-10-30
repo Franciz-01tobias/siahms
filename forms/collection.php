@@ -34,7 +34,7 @@ $translationNamespaces = ['common', 'forms'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('forms.collections.page_title')); ?></title>
+    <title><?php echo htmlspecialchars(pageTitle('forms', t('forms.collections.page_title'))); ?></title>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <script src="../assets/js/i18n.js?v=3"></script>
     <?php echo Tz::scriptTag(); ?>
@@ -49,8 +49,8 @@ $translationNamespaces = ['common', 'forms'];
     <!-- The shared document builder. Same code as the single-form page, so a
          record exported from here is identical to one exported from there. -->
     <script src="../assets/js/form-pdf.js?v=2"></script>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <!-- The detail panel draws a table QUESTION as a real table, and .form-table
          lives in the shared sheet. Without this the markup is right and the
          table renders unstyled - borderless rows running into each other. -->
@@ -165,7 +165,7 @@ $translationNamespaces = ['common', 'forms'];
             .coll-card { box-shadow: none; }
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -235,7 +235,7 @@ $translationNamespaces = ['common', 'forms'];
         </div>
     </div>
 
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
     <script>
         const API_BASE = '<?php echo defined('BASE_URL') ? BASE_URL : '../'; ?>api/forms/';
         const LOGO_URL = <?php echo json_encode(brandingLogoUrl()); ?>;

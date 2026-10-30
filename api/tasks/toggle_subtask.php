@@ -7,6 +7,8 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
+require_once '../../includes/services/checklists.php';   // completion gate (discussion #138)
+require_once '../../includes/services/task_history.php'; // THE status hook (#181)
 
 header('Content-Type: application/json');
 
@@ -15,6 +17,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tasks');
+requireModuleWriteJson('tasks');
 
 $input = json_decode(file_get_contents('php://input'), true);
 $id = isset($input['id']) ? (int)$input['id'] : 0;
@@ -94,12 +97,42 @@ try {
     // column with UTC_TIMESTAMP(), so the value depended on which route closed it.
     $completedSql = $newStatusRow['is_closed'] ? 'UTC_TIMESTAMP()' : 'NULL';
 
-    $stmt = $conn->prepare(
-        "UPDATE tasks SET status_id = ?, completed_datetime = {$completedSql},
-                          updated_datetime = UTC_TIMESTAMP()
-         WHERE id = ?"
-    );
-    $stmt->execute([$newStatusId, $id]);
+    // 🔴 Checklist gate (discussion #138), before the write: ticking a subtask
+    // done is completing it, and a subtask can carry its own checklist.
+    $completing = !empty($newStatusRow['is_closed']) && empty($task['status_is_closed']);
+    if ($completing) {
+        try {
+            ChecklistsService::assertTaskCompletionAllowed($conn, $id);
+        } catch (ServiceError $se) {
+            echo json_encode(['success' => false, 'error' => $se->getMessage(), 'code' => $se->errorCode]);
+            exit;
+        }
+    }
+
+    $before = TaskHistory::before($conn, $id);   // #181
+    $ctx = ActorContext::fromSession($conn);
+    // The tick and its record, together (#181, Dr4inder's review): if the history
+    // cannot be saved, the subtask stays as it was.
+    $conn->beginTransaction();
+    try {
+        $stmt = $conn->prepare(
+            "UPDATE tasks SET status_id = ?, completed_datetime = {$completedSql},
+                              updated_datetime = UTC_TIMESTAMP()
+             WHERE id = ?"
+        );
+        $stmt->execute([$newStatusId, $id]);
+        if ($completing) {
+            ChecklistsService::recordTaskCompletionOverride($conn, $ctx, $id, true);
+        }
+        // THE status hook's evidence half. A subtask never repeats on its own, so
+        // there is no successor to make afterwards.
+        $statusResult = TaskHistory::recordStatusChange($conn, $ctx, $id, $before, $newStatusId);
+        $conn->commit();
+    } catch (Throwable $e) {
+        if ($conn->inTransaction()) $conn->rollBack();
+        throw $e;
+    }
+    TaskHistory::afterCommit($conn, $ctx, $statusResult);
     $newStatus = $newStatusRow['name'];
 
     // Update parent's updated_datetime
@@ -110,6 +143,6 @@ try {
 
     echo json_encode(['success' => true, 'new_status' => $newStatus]);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }

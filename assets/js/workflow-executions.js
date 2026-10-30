@@ -9,6 +9,7 @@
 (() => {
     const API = '../api/workflow/';
 
+    /** Escapes text for safe use in HTML. */
     const esc = (s) => {
         const d = document.createElement('div');
         d.textContent = s == null ? '' : String(s);
@@ -45,6 +46,7 @@
         } catch (e) { return ''; }
     }
 
+    /** Returns the coloured status badge for a run, plus the dry-run pill when it was one. */
     function statusPill(status, dry) {
         const map = {
             success: '<span class="status-badge status-active">' + esc(window.t('workflow.status.success')) + '</span>',
@@ -59,6 +61,7 @@
 
     // ---- URL <-> filter controls ------------------------------------------
 
+    /** Copies the filter values and page number from the URL query string into the filter controls. */
     function readUrlIntoControls() {
         const p = new URLSearchParams(location.search);
         Object.entries(FIELDS).forEach(([elId, param]) => {
@@ -68,6 +71,7 @@
         page = Math.max(1, parseInt(p.get('page') || '1', 10));
     }
 
+    /** Builds the query string from the filled filter controls and the current page. */
     function currentParams() {
         const p = new URLSearchParams();
         Object.entries(FIELDS).forEach(([elId, param]) => {
@@ -78,6 +82,7 @@
         return p;
     }
 
+    /** Replaces the page URL with the current filters, so the view can be bookmarked or shared. */
     function pushUrl() {
         const qs = currentParams().toString();
         history.replaceState({}, '', qs ? ('?' + qs) : location.pathname);
@@ -85,6 +90,9 @@
 
     // ---- Load --------------------------------------------------------------
 
+    /**
+     * Fetches the filtered page of runs from executions.php and draws the rows, the status tallies and the pager (filling the drop-downs on the first load).
+     */
     async function load() {
         const tb = document.getElementById('wfxRows');
         pushUrl();
@@ -128,6 +136,9 @@
         }
     }
 
+    /**
+     * Fills the workflow and trigger drop-downs from the log's facets, then re-applies the URL's filters now the options exist.
+     */
     function fillFacets(f) {
         const wf = document.getElementById('fWorkflow');
         f.workflows.forEach(w => {
@@ -158,6 +169,7 @@
         `).join('');
     }
 
+    /** Draws the pager - just a count on a single page, otherwise previous/next with the range shown. */
     function renderPager(d) {
         const host = document.getElementById('wfxPager');
         if (d.pages <= 1) {
@@ -176,6 +188,7 @@
 
     // ---- Run detail --------------------------------------------------------
 
+    /** Opens the run detail modal and loads one run from execution_detail.php. */
     async function open(id) {
         const body = document.getElementById('wfxModalBody');
         document.getElementById('wfxModalTitle').textContent = window.t('workflow.executions.run') + ' #' + id;
@@ -191,6 +204,9 @@
         }
     }
 
+    /**
+     * Returns the run detail HTML - header, error, each step, the webhook deliveries it queued, and the payload snapshot.
+     */
     function renderDetail(d) {
         const e = d.execution;
         let h = '';
@@ -237,6 +253,9 @@
         return h;
     }
 
+    /**
+     * Returns the HTML for one logged step - a condition with what it compared and the actual value, an action with its status and result, or an engine error.
+     */
     function renderStep(s) {
         const kind = s.kind || '';
         if (kind === 'condition') {

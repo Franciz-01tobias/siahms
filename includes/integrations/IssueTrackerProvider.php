@@ -64,11 +64,17 @@ abstract class IssueTrackerProvider
     /** @var array decrypted integration_connections row */
     protected $connection;
 
+    /**
+     * Keeps the decrypted integration_connections row the connector works with.
+     *
+     * @param array $connection  the integration_connections row, with its credentials already decrypted to an array
+     */
     public function __construct(array $connection)
     {
         $this->connection = $connection;
     }
 
+    /** The provider key from the connection row ('jira' or 'azuredevops'). */
     public function getProvider(): string
     {
         return $this->connection['provider'] ?? '';
@@ -84,7 +90,7 @@ abstract class IssueTrackerProvider
      *                          DevOps: ['project'=>…,'area_path'=>…,'work_item_type'=>…].
      *                          Opaque to core on purpose: the arity genuinely differs.
      * @param string   $summary plain text
-     * @param IssueDoc $body
+     * @param IssueDoc $body    the description, rendered for the provider by renderDoc()
      * @param array    $fields  extra mapped fields (V3+); [] in V1
      * @return array ['external_id'=>…, 'external_key'=>…, 'external_url'=>…,
      *                'status_name'=>…, 'status_category'=>…]
@@ -94,6 +100,8 @@ abstract class IssueTrackerProvider
     /**
      * Read one issue's current state. Same return shape as createIssue().
      * Throws if the issue is gone — the caller decides whether that orphans the link.
+      *
+      * @param string $externalId  the tracker's own id for the issue, as stored in integration_links.external_id
      */
     abstract public function fetchIssue(string $externalId): array;
 
@@ -105,7 +113,7 @@ abstract class IssueTrackerProvider
      * A single issue failing must not lose the rest — its id is simply absent
      * from the result, and the caller decides what a missing issue means.
      *
-     * @param  string[] $externalIds
+     * @param  string[] $externalIds  tracker ids of the issues to read (integration_links.external_id values)
      * @return array    external_id => issue array (same shape as fetchIssue)
      */
     public function fetchIssues(array $externalIds): array
@@ -121,18 +129,35 @@ abstract class IssueTrackerProvider
         return $out;
     }
 
-    /** Post a comment. Returns the provider's comment id (recorded for echo suppression). */
+    /**
+     * Post a comment. Returns the provider's comment id (recorded for echo suppression).
+     *
+     * @param string $externalId  the tracker id of the issue to comment on
+     * @param IssueDoc $body  the comment, rendered for the provider by renderDoc()
+     */
     public function addComment(string $externalId, IssueDoc $body): string
     {
         throw new Exception('Comments are not supported for this provider.');
     }
 
-    /** @param array $file ['data'=>binary, 'filename'=>string, 'content_type'=>string] */
+    /**
+     * Attaches a file to an external issue. The default throws; connectors that declare
+     * CAP_ATTACHMENTS override it.
+     *
+      * @param string $externalId  the tracker id of the issue to attach the file to
+     * @param array $file ['data'=>binary, 'filename'=>string, 'content_type'=>string]
+     */
     public function addAttachment(string $externalId, array $file): void
     {
         throw new Exception('Attachments are not supported for this provider.');
     }
 
+    /**
+     * Updates fields on an external issue. The default throws; a connector that supports it overrides it.
+     *
+     * @param string $externalId  the tracker id of the issue to update
+     * @param array $fields  provider field name => new value, in the provider's own field naming
+     */
     public function updateFields(string $externalId, array $fields): void
     {
         throw new Exception('Field updates are not supported for this provider.');
@@ -146,13 +171,20 @@ abstract class IssueTrackerProvider
      *
      * ⚠️ Verify against the RAW body, before json_decode: the provider signs
      * bytes, and a re-encoded array is not the same bytes.
+      *
+      * @param string $rawBody  the request body exactly as received, before any JSON decoding
+      * @param array $headers  the inbound request's HTTP headers
      */
     public function verifyWebhook(string $rawBody, array $headers): bool
     {
         throw new Exception('Webhooks are not supported for this provider.');
     }
 
-    /** Raw webhook payload → zero or more canonical events (see the file header). */
+    /**
+     * Raw webhook payload → zero or more canonical events (see the file header).
+     *
+     * @param array $raw  the webhook payload, JSON-decoded
+     */
     public function normaliseEvent(array $raw): array
     {
         throw new Exception('Webhooks are not supported for this provider.');
@@ -198,13 +230,24 @@ abstract class IssueTrackerProvider
      */
     abstract public function testConnection(): array;
 
-    /** @return array [['key'=>'OPS','name'=>'Operations'], …] */
+    /**
+     * Lists the tracker's projects for the mapping dropdowns. The default throws;
+     * connectors override it.
+     *
+     * @return array [['key'=>'OPS','name'=>'Operations'], …]
+     */
     public function listProjects(): array
     {
         throw new Exception('Project discovery is not supported for this provider.');
     }
 
-    /** @return array [['id'=>'10001','name'=>'Bug'], …] */
+    /**
+     * Lists the issue types available in a project. The default throws; connectors that
+     * declare CAP_ISSUE_TYPES override it.
+     *
+      * @param string $project  the project's key, as listProjects() returns it
+     * @return array [['id'=>'10001','name'=>'Bug'], …]
+     */
     public function listIssueTypes(string $project): array
     {
         throw new Exception('Issue types are not supported for this provider.');
@@ -218,19 +261,28 @@ abstract class IssueTrackerProvider
      * ->toWikiMarkup() — which is why adding a provider rarely means writing a
      * renderer.
      *
+      * @param IssueDoc $doc  the description or comment to render
      * @return mixed array (ADF) or string (Markdown / HTML / wiki markup)
      */
     abstract public function renderDoc(IssueDoc $doc);
 
     // ---------------------------------------------------------- capabilities
 
-    /** Does this provider have $capability? Default: no. */
+    /**
+     * Does this provider have $capability? Default: no.
+     *
+     * @param string $capability  one of the CAP_* constants
+     */
     public function supports(string $capability): bool
     {
         return in_array($capability, $this->capabilities(), true);
     }
 
-    /** @return string[] the CAP_* keys this provider offers */
+    /**
+     * The optional features this connector supports. The base class declares none.
+     *
+     * @return string[] the CAP_* keys this provider offers
+     */
     protected function capabilities(): array
     {
         return [];
@@ -252,6 +304,7 @@ abstract class IssueTrackerProvider
      * handing cURL an array keeps it deterministic, avoids a temp file per
      * upload, and means the exact bytes are assertable without a network.
      *
+      * @param string $url  the full request URL, query string included
      * @param array $opts ['method'=>'POST','headers'=>[],'body'=>string|array,'auth'=>'user:pass','timeout'=>int]
      */
     protected function httpRequest(string $url, array $opts = []): array

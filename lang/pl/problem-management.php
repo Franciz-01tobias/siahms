@@ -45,6 +45,7 @@ return [
     ],
     'detail' => [
         'back' => '← Wstecz',
+        'projects' => 'Projekty',
         'not_found' => 'Nie znaleziono',
         'open_failed' => 'Nie udało się otworzyć problemu',
         'edit' => 'Edytuj',

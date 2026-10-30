@@ -48,7 +48,7 @@ foreach (['url', 'secret'] as $k) {
 // to realistic values in the test send. We prefer the most recent REAL ticket
 // (so the Full-record format has an actual object to send and template vars look
 // true-to-life); if the install has no tickets yet, we fall back to synthetic.
-$scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme  = requestScheme();
 $appBase = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL;
 $conn = connectToDatabase();
 
@@ -80,7 +80,11 @@ $sample = [
 ];
 
 try {
-    $realId = (int)($conn->query("SELECT id FROM tickets WHERE deleted_datetime IS NULL ORDER BY id DESC LIMIT 1")->fetchColumn() ?: 0);
+    // Never a confidential ticket as the sample: the test sends it for real, to
+    // whatever channel is being set up (discussion #62).
+    require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
+    $notConf = ticketSensitivityReady($conn) ? " AND sensitivity <> 'confidential'" : '';
+    $realId = (int)($conn->query("SELECT id FROM tickets WHERE deleted_datetime IS NULL$notConf ORDER BY id DESC LIMIT 1")->fetchColumn() ?: 0);
     if ($realId) {
         $stmt = $conn->prepare(apiTicketSelect() . ' WHERE t.id = ? LIMIT 1');
         $stmt->execute([$realId]);

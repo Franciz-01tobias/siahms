@@ -47,6 +47,12 @@ require_once dirname(__DIR__, 3) . '/includes/cmdb_impact.php';
 // Classes (read-only in v1 — class design stays an admin activity in the UI)
 // ---------------------------------------------------------------------------
 
+/**
+ * GET /cmdb/classes - every CMDB class with its icon and how many objects it holds.
+ *
+ * Classes are install-wide, but object_count is scoped to the key's companies so it
+ * neither contradicts the object list nor reveals how many objects other companies hold.
+ */
 function apiCmdbClassesList(PDO $conn, array $apiKey, array $params, array $body): void {
     // Classes are install-wide config, but object_count is a count of DATA — so
     // it scopes to the key's companies. Unscoped it both contradicts the CI list
@@ -75,6 +81,7 @@ function apiCmdbClassesList(PDO $conn, array $apiKey, array $params, array $body
     }, $rows));
 }
 
+/** GET /cmdb/classes/{id} - one CMDB class with its property definitions and their options. */
 function apiCmdbClassesGet(PDO $conn, array $apiKey, array $params, array $body): void {
     $stmt = $conn->prepare(
         "SELECT c.id, c.class_key, c.name, c.description, c.is_active, i.icon_key
@@ -138,6 +145,9 @@ function apiCmdbClassesGet(PDO $conn, array $apiKey, array $params, array $body)
  * Load one CI; 404 if unknown OR outside the key's companies (multi-tenancy —
  * the key's company scope gates every by-id read/write; a NULL tenant_id
  * normalises to the Default company; no-op at N=1 / all-access key).
+ *
+ * @param int $objectId  the cmdb_objects id
+ * @param ?array $apiKey  the calling API key; null skips the company check (every current caller passes one)
  */
 function apiCmdbLoadObject(PDO $conn, int $objectId, ?array $apiKey = null): array {
     $stmt = $conn->prepare(
@@ -158,6 +168,11 @@ function apiCmdbLoadObject(PDO $conn, int $objectId, ?array $apiKey = null): arr
     return $row;
 }
 
+/**
+ * Shapes a CMDB object row for the API - name, company, class, parent, planned flag and dates.
+ *
+ * @param array $r  the cmdb_objects row as apiCmdbLoadObject() loads it, with class name, class_key and company name
+ */
 function apiCmdbSerializeObject(array $r): array {
     return [
         'id'         => (int)$r['id'],
@@ -172,7 +187,11 @@ function apiCmdbSerializeObject(array $r): array {
     ];
 }
 
-/** Property definitions for a class, keyed by property_key. */
+/**
+ * Property definitions for a class, keyed by property_key.
+ *
+ * @param int $classId  the cmdb_classes id whose property definitions to load
+ */
 function apiCmdbClassDefs(PDO $conn, int $classId): array {
     $stmt = $conn->prepare(
         "SELECT id, property_key, label, property_type, target_class_id, is_required
@@ -477,6 +496,7 @@ function apiCmdbRelationshipsCreate(PDO $conn, array $apiKey, array $params, arr
     } catch (ServiceError $e) { apiFailFromService($e); }
 }
 
+/** DELETE /cmdb/objects/{id}/relationships/{relId} - deletes a relationship through CmdbService. */
 function apiCmdbRelationshipsDelete(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         CmdbService::deleteRelationship($conn, ActorContext::fromApiKey($apiKey), (int)$params[1], (int)$params[0]);
@@ -515,6 +535,12 @@ function apiCmdbObjectTicketsList(PDO $conn, array $apiKey, array $params, array
     }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
 }
 
+/**
+ * POST /cmdb/objects/{id}/tickets - links a ticket to the object. Both must be in the
+ * key's companies; a link that already exists answers 409.
+ *
+ * @writes ticket_cmdb_objects - the link, with the key's analyst as creator
+ */
 function apiCmdbObjectTicketsLink(PDO $conn, array $apiKey, array $params, array $body): void {
     apiCmdbLoadObject($conn, (int)$params[0], $apiKey);
     $ticketId = isset($body['ticket_id']) ? (int)$body['ticket_id'] : 0;
@@ -540,6 +566,10 @@ function apiCmdbObjectTicketsLink(PDO $conn, array $apiKey, array $params, array
     apiRespond(['object_id' => $params[0], 'ticket_id' => $ticketId, 'linked' => true], 201);
 }
 
+/**
+ * DELETE /cmdb/objects/{id}/tickets/{ticketId} - removes the link between the object and
+ * a ticket, or answers 404 when there is none.
+ */
 function apiCmdbObjectTicketsUnlink(PDO $conn, array $apiKey, array $params, array $body): void {
     [$objectId, $ticketId] = $params;
     apiCmdbLoadObject($conn, (int)$objectId, $apiKey);

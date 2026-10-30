@@ -42,6 +42,7 @@ class JiraProvider extends IssueTrackerProvider
     const FLAVOUR_CLOUD  = 'cloud';
     const FLAVOUR_SERVER = 'server';
 
+    /** The optional features the Jira connector supports, priorities included. */
     protected function capabilities(): array
     {
         return [
@@ -71,6 +72,7 @@ class JiraProvider extends IssueTrackerProvider
             : self::FLAVOUR_SERVER;
     }
 
+    /** True when the connection is Jira Cloud rather than Server / Data Center. */
     protected function isCloud(): bool
     {
         return $this->flavour() === self::FLAVOUR_CLOUD;
@@ -82,17 +84,27 @@ class JiraProvider extends IssueTrackerProvider
         return $this->isCloud() ? 3 : 2;
     }
 
+    /** The connection's Jira address without a trailing slash. */
     protected function baseUrl(): string
     {
         return rtrim((string)($this->connection['base_url'] ?? ''), '/');
     }
 
+    /**
+     * A REST API address for $path, on API version 3 (Cloud) or 2 (Server / Data Center).
+     *
+     * @param string $path  the route under the REST base, e.g. 'issue/10042'; a leading slash is dropped
+     */
     protected function apiUrl(string $path): string
     {
         return $this->baseUrl() . '/rest/api/' . $this->apiVersion() . '/' . ltrim($path, '/');
     }
 
-    /** The human-facing link we store on the link row and show in the panel. */
+    /**
+     * The human-facing link we store on the link row and show in the panel.
+     *
+     * @param string $key  the issue key, e.g. 'OPS-123'
+     */
     public function browseUrl(string $key): string
     {
         return $this->baseUrl() . '/browse/' . rawurlencode($key);
@@ -103,6 +115,10 @@ class JiraProvider extends IssueTrackerProvider
     /**
      * Auth differs by flavour: Cloud uses HTTP Basic with the user's email and
      * an API token; Data Center uses a Bearer Personal Access Token.
+      *
+      * @param string $method  the HTTP method - 'GET' or 'POST'
+      * @param string $url  the full URL from apiUrl(), query string included
+      * @param ?array $json  the body to JSON-encode; null sends no body
      */
     protected function jiraRequest(string $method, string $url, ?array $json = null): array
     {
@@ -137,6 +153,9 @@ class JiraProvider extends IssueTrackerProvider
      * "Epic Link is required"}) and general ones in `errorMessages`. Surfacing
      * only "HTTP 400" would make the most common failure — a project whose screen
      * scheme demands a field we did not send — completely undiagnosable.
+      *
+      * @param int $code  the HTTP status code
+      * @param string $rawBody  the response body as received
      */
     protected function extractError(int $code, string $rawBody): string
     {
@@ -167,7 +186,11 @@ class JiraProvider extends IssueTrackerProvider
 
     // ----------------------------------------------------------- rendering
 
-    /** ADF (an array) on Cloud; wiki markup (a string) on Data Center. */
+    /**
+     * ADF (an array) on Cloud; wiki markup (a string) on Data Center.
+     *
+     * @param IssueDoc $doc  the description or comment to render
+     */
     public function renderDoc(IssueDoc $doc)
     {
         return $this->isCloud() ? $doc->toAdf() : $doc->toWikiMarkup();
@@ -176,7 +199,15 @@ class JiraProvider extends IssueTrackerProvider
     // -------------------------------------------------------------- create
 
     /**
+     * Builds the JSON body for creating an issue - project, issue type, a one-line summary
+     * of up to 255 characters, the rendered description and any mapped fields.
+     *
+     * Throws when no project or issue type was given or mapped.
+     *
      * @param array $target ['project' => 'OPS', 'issue_type' => 'Bug']
+      * @param string $summary  the ticket subject; whitespace collapsed, blank becomes '(no subject)'
+      * @param IssueDoc $body  the description
+      * @param array $fields  mapped Jira fields keyed by field id (e.g. 'priority' => ['name' => 'High']), merged last
      */
     protected function buildCreatePayload(array $target, string $summary, IssueDoc $body, array $fields = []): array
     {
@@ -210,6 +241,17 @@ class JiraProvider extends IssueTrackerProvider
         return $payload;
     }
 
+    /**
+     * Creates an issue and returns it as the escalation panel needs it.
+     *
+     * Reads the new issue back to get its status; if that read fails the creation still
+     * stands and the status is left empty.
+      *
+      * @param array $target  ['project' => 'OPS', 'issue_type' => 'Bug'] - both required
+      * @param string $summary  the ticket subject
+      * @param IssueDoc $body  the description
+      * @param array $fields  mapped Jira fields, as for buildCreatePayload()
+     */
     public function createIssue(array $target, string $summary, IssueDoc $body, array $fields = []): array
     {
         $created = $this->jiraRequest('POST', $this->apiUrl('issue'), $this->buildCreatePayload($target, $summary, $body, $fields));
@@ -240,7 +282,11 @@ class JiraProvider extends IssueTrackerProvider
 
     // --------------------------------------------------------------- read
 
-    /** Jira's issue JSON → our normalised shape. */
+    /**
+     * Jira's issue JSON → our normalised shape.
+     *
+     * @param array $issue  one issue as the Jira REST API returns it - id, key and fields
+     */
     protected function parseIssue(array $issue): array
     {
         $key    = (string)($issue['key'] ?? '');
@@ -267,6 +313,8 @@ class JiraProvider extends IssueTrackerProvider
      * Jira has no "cancelled" category — a Won't Do lands in `done` — so
      * STATUS_CANCELLED is simply unreachable here, and that is correct rather
      * than a gap.
+      *
+      * @param string $categoryKey  Jira's statusCategory key - 'new', 'indeterminate' or 'done'
      */
     protected function mapStatusCategory(string $categoryKey): ?string
     {
@@ -278,6 +326,11 @@ class JiraProvider extends IssueTrackerProvider
         }
     }
 
+    /**
+     * Reads one issue's summary, status and assignee and returns it parsed.
+     *
+     * @param string $externalId  the numeric Jira issue id (a key such as OPS-123 also works)
+     */
     public function fetchIssue(string $externalId): array
     {
         $url = $this->apiUrl('issue/' . rawurlencode($externalId))
@@ -291,6 +344,8 @@ class JiraProvider extends IssueTrackerProvider
      *
      * Chunked at 100: JQL has a practical length limit, and a site with hundreds
      * of linked issues would otherwise build a URL nothing will accept.
+      *
+      * @param array $externalIds  numeric Jira issue ids; anything else is dropped
      */
     public function fetchIssues(array $externalIds): array
     {
@@ -366,6 +421,12 @@ class JiraProvider extends IssueTrackerProvider
      */
     const COMMENT_LOOKBACK_CAP_MINUTES = 1440;   // 24 hours
 
+    /**
+     * Posts a comment on an issue, rendered for this Jira flavour, and returns the new comment's id.
+     *
+     * @param string $externalId  the numeric Jira issue id
+     * @param IssueDoc $body  the comment, rendered for this flavour
+     */
     public function addComment(string $externalId, IssueDoc $body): string
     {
         $res = $this->jiraRequest(
@@ -379,6 +440,7 @@ class JiraProvider extends IssueTrackerProvider
     /**
      * Comments on one issue, newest first, normalised.
      *
+      * @param string $externalId  the numeric Jira issue id
      * @return array [['comment_id'=>…, 'comment_body'=>plain text,
      *                 'author_identity'=>…, 'author_name'=>…, 'created_ts'=>?int], …]
      */
@@ -402,6 +464,8 @@ class JiraProvider extends IssueTrackerProvider
      * because echo suppression compares the two. Cloud identifies a user by
      * accountId and Data Center by username, so this is flavour-aware for exactly
      * the reason testConnection() is.
+      *
+      * @param array $c  one comment as the Jira REST API returns it - id, body, author, created
      */
     protected function parseComment(array $c): array
     {
@@ -424,6 +488,8 @@ class JiraProvider extends IssueTrackerProvider
      *
      * Cloud sends ADF (nested JSON); Data Center sends wiki markup (a string).
      * Same split as renderDoc(), in the other direction.
+      *
+      * @param mixed $body  the comment body - an ADF array on Cloud, a wiki markup string on Data Center
      */
     protected function commentBodyToText($body): string
     {
@@ -443,6 +509,8 @@ class JiraProvider extends IssueTrackerProvider
      * Deliberately lossy. The job is "an analyst can read what the dev said",
      * not a faithful round-trip — a note is plain text, and the issue itself is
      * one click away on the pill.
+      *
+      * @param mixed $node  an ADF node (array); anything else gives ''
      */
     protected function adfToText($node): string
     {
@@ -492,7 +560,11 @@ class JiraProvider extends IssueTrackerProvider
         }
     }
 
-    /** Shared tidy-up for text pulled out of a tracker. */
+    /**
+     * Shared tidy-up for text pulled out of a tracker.
+     *
+     * @param string $s  text pulled out of a comment
+     */
     protected function tidyText(string $s): string
     {
         $s = str_replace(["\r\n", "\r", "\xC2\xA0"], ["\n", "\n", ' '], $s);
@@ -522,6 +594,9 @@ class JiraProvider extends IssueTrackerProvider
      * Two calls, not one per issue: a JQL search narrows the watch list to the
      * issues that actually changed, and only those are read for comments. On a
      * quiet day that is one search and no comment reads at all.
+      *
+      * @param ?string $since  UTC 'Y-m-d H:i:s' watermark (last_poll_watermark); null on the first run returns nothing
+      * @param array $externalIds  numeric ids of the issues this connection holds links to; anything else is dropped
      */
     public function pollChanges(?string $since, array $externalIds = []): array
     {
@@ -570,6 +645,9 @@ class JiraProvider extends IssueTrackerProvider
     /**
      * How many minutes back to ask Jira about. Pure, so the capping rule is
      * provable without a clock or a network.
+      *
+      * @param int $sinceTs  the watermark as a Unix timestamp
+      * @param ?int $nowTs  the current time as a Unix timestamp; null means time()
      */
     protected function lookbackMinutes(int $sinceTs, ?int $nowTs = null): int
     {
@@ -586,6 +664,9 @@ class JiraProvider extends IssueTrackerProvider
      * user's* timezone, not UTC, so a server in one timezone and a Jira account
      * in another would silently miss or re-read a window's worth of comments.
      * Relative minutes have no timezone at all.
+      *
+      * @param array $ids  numeric Jira issue ids to check
+      * @param int $minutes  how far back to look, from lookbackMinutes()
      */
     protected function searchUpdatedSince(array $ids, int $minutes): array
     {
@@ -629,6 +710,7 @@ class JiraProvider extends IssueTrackerProvider
      *     boundary, which is why the body is built here rather than handed to
      *     cURL as an array.
      *
+      * @param string $externalId  the numeric id of the issue to attach the file to
      * @param array $file ['data'=>binary, 'filename'=>string, 'content_type'=>string]
      */
     public function addAttachment(string $externalId, array $file): void
@@ -671,6 +753,11 @@ class JiraProvider extends IssueTrackerProvider
      *
      * ⚠️ The boundary must not occur inside the file's bytes or the body is
      * truncated at that point — hence a random one, not a fixed string.
+      *
+      * @param string $filename  the file's original name; path parts, quotes and line breaks are stripped
+      * @param string $contentType  the file's MIME type
+      * @param string $data  the file's bytes
+      * @param ?string &$boundary  set to the random boundary used - the caller puts it in the Content-Type header
      */
     protected function buildMultipart(string $filename, string $contentType, string $data, ?string &$boundary): string
     {
@@ -738,7 +825,12 @@ class JiraProvider extends IssueTrackerProvider
         throw ($lastError ?: new Exception('Could not reach Jira.'));
     }
 
-    /** @return array [['key'=>'OPS','name'=>'Operations'], …] */
+    /**
+     * Lists the Jira projects for the mapping dropdowns - paged on Cloud (up to 1,000), one
+     * call on Server / Data Center.
+     *
+     * @return array [['key'=>'OPS','name'=>'Operations'], …]
+     */
     public function listProjects(): array
     {
         $out = [];
@@ -807,6 +899,8 @@ class JiraProvider extends IssueTrackerProvider
      * ⚠️ Which types a project offers depends on its issue-type scheme, so this
      * cannot be a hardcoded Bug/Task/Story list — that is exactly how you end up
      * 400ing on the one project that renamed everything.
+      *
+      * @param string $project  the project key, e.g. 'OPS'
      */
     public function listIssueTypes(string $project): array
     {

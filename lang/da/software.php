@@ -36,6 +36,7 @@ return [
         'col_seats' => 'Pladser',
         'col_actions' => '',
         'add_app' => 'Tilføj program',
+        'new_app' => 'Nyt program',
         'edit_app' => 'Redigér program',
         'added_by_hand' => 'Tilføjet manuelt',
         'f_name' => 'Navn',
@@ -116,7 +117,7 @@ return [
         'widget_removed' => 'Widget fjernet',
     ],
     'library' => [
-        'page_title' => 'Service Desk - Software-widgetbibliotek',
+        'page_title' => 'Softwarewidgetbibliotek',
         'back' => 'Dashboard',
         'heading' => 'Widgetbibliotek',
         'search' => 'Søg widgets...',

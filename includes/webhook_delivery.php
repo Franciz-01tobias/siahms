@@ -42,7 +42,11 @@ function webhookEncryptionAvailable(): bool {
     return $ok;
 }
 
-/** Encrypt if we can; fall back to plaintext rather than breaking the webhook. */
+/**
+ * Encrypt if we can; fall back to plaintext rather than breaking the webhook.
+ *
+ * @param ?string $v  the value to store, e.g. a webhook URL; null and '' come back unchanged
+ */
 function webhookEncrypt(?string $v): ?string {
     if ($v === null || $v === '') return $v;
     try { return encryptValue($v); }
@@ -52,7 +56,11 @@ function webhookEncrypt(?string $v): ?string {
     }
 }
 
-/** Decrypt; plaintext passes straight through (pre-encryption rows still work). */
+/**
+ * Decrypt; plaintext passes straight through (pre-encryption rows still work).
+ *
+ * @param ?string $v  a stored value, encrypted or (on older rows) plain; null and '' come back unchanged
+ */
 function webhookDecrypt(?string $v): ?string {
     if ($v === null || $v === '') return $v;
     try { return decryptValue($v); }
@@ -68,6 +76,8 @@ function webhookDecrypt(?string $v): ?string {
  * in a token; printing it in a log everyone can read defeats encrypting it.
  *
  *   https://discord.com/api/webhooks/142.../aBcD-secret  →  https://discord.com/api/webhooks/…/••••
+ *
+ * @param ?string $url  the decrypted webhook URL
  */
 function webhookRedactUrl(?string $url): string {
     $u = (string)$url;
@@ -154,7 +164,11 @@ function webhookPurgePayloads(PDO $conn): int {
     return $stmt->rowCount();
 }
 
-/** Seconds to wait before the next retry, keyed by the attempt that just failed. */
+/**
+ * Seconds to wait before the next retry, keyed by the attempt that just failed.
+ *
+ * @param int $failedAttempt  the attempt number that just failed, from 1; beyond 5 waits 6 hours
+ */
 function webhookBackoffSeconds(int $failedAttempt): int {
     static $schedule = [1 => 60, 2 => 300, 3 => 900, 4 => 3600, 5 => 21600]; // 1m, 5m, 15m, 1h, 6h
     return $schedule[$failedAttempt] ?? 21600;
@@ -176,6 +190,8 @@ function webhookBackoffSeconds(int $failedAttempt): int {
  *
  * Called at RENDER time against the stored last_error, so old rows get the
  * benefit too — no schema column, nothing to backfill.
+ *
+ * @param ?string $err  the stored last_error (a cURL error or 'HTTP nnn'); null or '' gives null
  */
 function webhookDiagnoseError(?string $err): ?array {
     $e = trim((string)$err);
@@ -241,6 +257,8 @@ function webhookDiagnoseError(?string $err): ?array {
  * Queue a webhook for asynchronous delivery. $d keys: workflow_id, execution_id,
  * preset, url, method, headers (array of header lines), body (string), max_attempts.
  * Returns the new delivery id.
+ *
+ * @param array $d  the delivery: workflow_id, execution_id, preset, url, method, headers, body, max_attempts (default 6)
  */
 function webhookEnqueue(PDO $conn, array $d): int {
     $stmt = $conn->prepare(
@@ -272,6 +290,10 @@ function webhookEnqueue(PDO $conn, array $d): int {
  * use identical transport (method, timeouts, TLS verification) — the test can
  * never behave differently from a real delivery.
  *
+ * @param string $url  the full endpoint URL, decrypted
+ * @param array $headers  header lines, e.g. 'Content-Type: application/json'
+ * @param string $body  the request body as sent
+ * @param string $method  the HTTP method; '' means POST
  * @return array{body:string|false,status:int,error:string,ms:int}
  */
 function webhookHttpSend(string $url, array $headers, string $body, string $method = 'POST'): array {
@@ -298,6 +320,8 @@ function webhookHttpSend(string $url, array $headers, string $body, string $meth
 /**
  * Attempt to deliver one already-claimed row (status must be 'delivering').
  * Updates the row with the outcome and returns 'delivered' | 'failed' | 'dead'.
+ *
+ * @param array $row  the webhook_deliveries row, already claimed (status 'delivering')
  */
 function webhookAttemptDelivery(PDO $conn, array $row): string {
     $headers = json_decode($row['request_headers'] ?: '[]', true) ?: [];
@@ -353,6 +377,8 @@ function webhookAttemptDelivery(PDO $conn, array $row): string {
  * Retention "don't store": the payload had to exist long enough for the worker
  * to send it, so we scrub it the instant the delivery settles rather than
  * waiting for the next purge sweep. A no-op on every other retention setting.
+ *
+ * @param int $id  the webhook_deliveries id
  */
 function webhookScrubIfNoRetention(PDO $conn, int $id): void {
     if (webhookPayloadRetentionDays($conn) !== WEBHOOK_RETENTION_NEVER) return;
@@ -370,6 +396,8 @@ function webhookScrubIfNoRetention(PDO $conn, int $id): void {
 /**
  * Deliver up to $limit due rows. Claims each atomically (so overlapping worker
  * runs never double-send). Returns counts.
+ *
+ * @param int $limit  the most due deliveries to attempt in this run
  */
 function webhookRunQueue(PDO $conn, int $limit = 50): array {
     $counts = ['attempted' => 0, 'delivered' => 0, 'failed' => 0, 'dead' => 0];
@@ -396,7 +424,11 @@ function webhookRunQueue(PDO $conn, int $limit = 50): array {
     return $counts;
 }
 
-/** Reset a delivery so the worker sends it again (the "Replay" button). */
+/**
+ * Reset a delivery so the worker sends it again (the "Replay" button).
+ *
+ * @param int $id  the webhook_deliveries id to send again
+ */
 function webhookReplay(PDO $conn, int $id): bool {
     $stmt = $conn->prepare(
         "UPDATE webhook_deliveries
@@ -412,6 +444,8 @@ function webhookReplay(PDO $conn, int $id): bool {
  * retention setting" rather than a generic failure. Replay re-sends the STORED
  * body, so a purged row has nothing to send and must not be re-queued (that
  * would POST an empty payload to a live endpoint).
+ *
+ * @param int $id  the webhook_deliveries id the replay was refused for
  */
 function webhookReplayBlockedReason(PDO $conn, int $id): ?string {
     $stmt = $conn->prepare("SELECT status, payload_purged FROM webhook_deliveries WHERE id = ? LIMIT 1");

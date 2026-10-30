@@ -28,10 +28,45 @@
  * Newest first.
  */
 
-/** @return array<int,array{name:string,github:?string,date:string,what:string}> */
+/**
+ * Returns the people credited for substantial contributions, newest first.
+ *
+ * @return array<int,array{name:string,github:?string,date:string,what:string}>
+ */
 function getContributors(): array
 {
     return [
+        [
+            // Public GitHub handle only; asked in the #194 reply how they would like
+            // to be credited - change this if they say otherwise.
+            'name'   => 'Dr4inder',
+            'github' => 'Dr4inder',
+            'date'   => '2026-10-19',
+            'what'   => 'Three pull requests for the REST API, built against an agreed design and each with '
+                      . 'its own tests: custom asset fields on create and update (PR #195), evidence '
+                      . 'attachments on a change with a key that can do nothing else (PR #196), and inventory '
+                      . 'reports from other tools that never touch another source\'s rows (PR #197, 3.12.0), '
+                      . 'and a fix for long forms cut off inside a task\'s Work view, with a browser test '
+                      . 'that fails on the old code (PR #198, 3.13.0). '
+                      . 'Before that, careful reviews of approvals and evidence, repeating tasks, task '
+                      . 'evidence and background job health (#180-#182, #190) that each found a real '
+                      . 'problem - and wrote a reproduction for it.',
+        ],
+        [
+            // Public GitHub name; asked in the PR #159 reply how they would like
+            // to be credited - change this if they say otherwise.
+            'name'   => 'Andrew Turbay',
+            'github' => 'turbay-a',
+            'date'   => '2026-09-30',
+            'what'   => 'Brought Telegram to FreeITSM as a full messaging channel (PR #159): the bot '
+                      . 'connection, matching a chat to the right person by the phone number they share, '
+                      . 'bot replies in each customer\'s own language, and sending pictures and documents '
+                      . 'over Telegram and WhatsApp alike - with every new string translated into thirteen '
+                      . 'languages. Then Microsoft Teams and Mattermost channels, and asking chat customers '
+                      . 'for their rating with buttons in the chat itself (PR #166, 3.1.0). Then the '
+                      . 'Servers list from Proxmox VE and VMware Cloud Director, several servers of each, '
+                      . 'read-only and careful never to delete what a failed read could not see (PR #167, 3.1.0).',
+        ],
         [
             'name'   => 'Santhosh Srinivasan (Sandy)',
             'github' => 'srinivasansanthosh',
@@ -40,7 +75,10 @@ function getContributors(): array
                       . 'templates, mandatory-step gating, analyst input capture and workflow '
                       . 'integration — and offered it to the project unprompted. It is the first '
                       . 'whole module FreeITSM has received from the community, and it started with '
-                      . 'a careful argument about why neither Knowledge nor Tasks solved the problem.',
+                      . 'a careful argument about why neither Knowledge nor Tasks solved the problem. '
+                      . 'Since then: separate auto-create and profile-sync settings for single '
+                      . 'sign-on (2.10.0), and asset reconciliation by serial number, automatic '
+                      . 'asset tags and configurable physical labels (3.1.0).',
         ],
         [
             'name'   => 'Abdul Aziz',

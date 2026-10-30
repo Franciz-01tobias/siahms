@@ -19,6 +19,33 @@ require __DIR__ . '/_top.php';
     <div class="help-note"><strong>Where it lives:</strong> System &rarr; Branding. The settings are organisation-wide, so a change here affects every diagram and export across the install.</div>
 </div>
 
+<!-- System name -->
+<div class="help-section" id="name">
+    <div class="help-section-header"><?php echo helpSectionNum('name'); ?>
+        <div>
+            <h3>System name</h3>
+            <p>The first part of every page title - the name in the browser tab and in bookmarks, on every page of every module: <strong>Acme IT - Contracts - Edit contract</strong>. Leave it blank to use <strong>Service Desk</strong>.</p>
+        </div>
+    </div>
+    <p>Type the name in the <strong>System name</strong> card at the top of this page and press <strong>Save</strong>. Titles change the next time each page loads, in every language - only the name itself is yours to set, the rest of each title is translated.</p>
+    <div class="help-note"><strong>Moved in 3.5.0:</strong> it used to be under Tickets &rarr; Settings &rarr; General, which now points here. A name you had already set there is kept.</div>
+</div>
+
+<!-- Link back to your site (3.5.0) -->
+<div class="help-section" id="back-link">
+    <div class="help-section-header"><?php echo helpSectionNum('back-link'); ?>
+        <div>
+            <h3>Link back to your site</h3>
+            <p>A small link at the top of the screen back to your own site - the intranet or website people reach FreeITSM from.</p>
+        </div>
+    </div>
+    <p>Fill in the <strong>Link text</strong> (for example <em>Back to the intranet</em>) and the <strong>Address</strong>, choose whether it shows on the <strong>self-service portal</strong>, the <strong>analyst screens</strong> or <strong>both</strong>, and press <strong>Save</strong>. Leave both boxes blank for no link.</p>
+    <ul>
+        <li>The address must start with <code>https://</code> or <code>http://</code>.</li>
+        <li>On the analyst screens, where the navigation bar is already full, it shows as just an arrow on screens narrower than about 1700 pixels - the words appear when you point at it. On a phone the portal shows just the arrow too.</li>
+    </ul>
+</div>
+
 <!-- 2. Logo -->
 <div class="help-section" id="logo">
     <div class="help-section-header"><?php echo helpSectionNum('logo'); ?>
@@ -91,6 +118,20 @@ require __DIR__ . '/_top.php';
     <p>For each you can set a <strong>background</strong> (a colour, a gradient, or an uploaded image), where the sign-in form sits, and how its panel is styled. The Home tab has no form on it, so it offers neither of those last two, and it keeps the theme's own background unless you tell it otherwise.</p>
     <div class="help-note"><strong>Each tab keeps its own settings, including its own background image.</strong> Uploading a picture on the Self-Service Portal tab changes the portal and nothing else. Until 2.0.0 that was not true &mdash; every upload was written to the analyst login screen whichever tab you were on, so the portal's image replaced the analyst one and the portal showed nothing (<a href="https://github.com/edmozley/freeitsm/issues/137" target="_blank" rel="noopener">#137</a>, fixed by Santhosh Srinivasan).</div>
     <p>Press <strong>Save</strong> before switching tabs. Each tab has its own file picker, so a picture chosen on one and left unsaved is not carried over to another.</p>
+</div>
+
+<div class="help-section" id="files">
+    <div class="help-section-header"><?php echo helpSectionNum('files'); ?>
+        <div>
+            <h3>Files desktop logo</h3>
+            <p>The <strong>Files desktop</strong> card decides the logo shown in the corner of the Files module's desktop - for everybody. People can change their own desktop colour in Files, but not this.</p>
+        </div>
+    </div>
+    <ul class="help-list">
+        <li><strong>Logo</strong> - either the logo of the company the person is working in (set per company in <strong>System &rarr; Companies</strong>), falling back to the organisation logo above when that company has none; or <strong>No logo</strong>.</li>
+        <li><strong>Position</strong> - top right or bottom right of the desktop.</li>
+    </ul>
+    <p>It is saved with the rest of the page by <strong>Save</strong>.</p>
 </div>
 
 <div class="help-section" id="save">

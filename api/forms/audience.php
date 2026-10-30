@@ -41,6 +41,10 @@ try {
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        // Who may request a form is part of designing it (#180).
+        require_once '../../includes/rbac.php';
+        requireModuleWriteJson('forms');
+        requireActionJson(Cap::FORMS_DESIGN);
         $body   = json_decode(file_get_contents('php://input'), true);
         $formId = (int)($body['form_id'] ?? 0);
         $ids    = $body['group_ids'] ?? [];

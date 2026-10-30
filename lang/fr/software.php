@@ -36,6 +36,7 @@ return [
         'col_seats' => 'Sièges',
         'col_actions' => '',
         'add_app' => 'Ajouter une application',
+        'new_app' => 'Nouvelle application',
         'edit_app' => 'Modifier l\'application',
         'added_by_hand' => 'Ajouté manuellement',
         'f_name' => 'Nom',
@@ -116,7 +117,7 @@ return [
         'widget_removed' => 'Widget supprimé',
     ],
     'library' => [
-        'page_title' => 'Service Desk - Bibliothèque de widgets logiciels',
+        'page_title' => 'Bibliothèque de widgets logiciels',
         'back' => 'Tableau de bord',
         'heading' => 'Bibliothèque de widgets',
         'search' => 'Rechercher des widgets...',

@@ -184,6 +184,10 @@ try {
 
 /**
  * Authenticate with vCenter REST API
+ *
+ * @param mixed $baseUrl  the vCenter address with scheme and no trailing slash, e.g. https://vc.example.com
+ * @param mixed $user  the vCenter user name, sent as HTTP Basic auth
+ * @param mixed $pass  that user's password, in plain text
  */
 function vcenterAuth($baseUrl, $user, $pass) {
     $ch = curl_init($baseUrl . '/api/session');
@@ -218,6 +222,10 @@ function vcenterAuth($baseUrl, $user, $pass) {
 /**
  * Raw GET request - returns decoded JSON without unwrapping 'value' key
  * so we can see the exact API response structure
+ *
+ * @param mixed $baseUrl  the vCenter address with scheme and no trailing slash
+ * @param mixed $path  the API path to fetch, starting with a slash, e.g. /api/vcenter/vm
+ * @param mixed $sessionToken  the session id returned by vcenterAuth()
  */
 function vcenterGetRaw($baseUrl, $path, $sessionToken) {
     $ch = curl_init($baseUrl . $path);
@@ -248,6 +256,9 @@ function vcenterGetRaw($baseUrl, $path, $sessionToken) {
 
 /**
  * Logout from vCenter session
+ *
+ * @param mixed $baseUrl  the vCenter address with scheme and no trailing slash
+ * @param mixed $sessionToken  the session id returned by vcenterAuth(), ended by this call
  */
 function vcenterLogout($baseUrl, $sessionToken) {
     $ch = curl_init($baseUrl . '/api/session');

@@ -25,6 +25,10 @@
 
     // --- Network helpers (synchronous — SCORM requires sync returns) ---
 
+    /**
+     * Loads the learner's stored CMI values for the course from the API endpoint, synchronously
+     * because SCORM calls must return a value at once.
+     */
     function loadCmiData() {
         try {
             const xhr = new XMLHttpRequest();
@@ -41,6 +45,10 @@
         }
     }
 
+    /**
+     * Posts the CMI elements changed since the last save to the API endpoint, synchronously; returns
+     * true when nothing needed saving or the server answered 200.
+     */
     function saveCmiData() {
         if (dirtyElements.length === 0) return true;
 
@@ -64,6 +72,7 @@
 
     // --- Shared implementation ---
 
+    /** Starts a SCORM session - loads the stored CMI data; error 101 when already initialised. */
     function doInitialize() {
         if (initialized) {
             lastError = '101'; // Already initialized
@@ -76,6 +85,10 @@
         return 'true';
     }
 
+    /**
+     * Ends the SCORM session, saving any changed values; errors 301 when not initialised and 111 when
+     * already finished.
+     */
     function doFinish() {
         if (!initialized) {
             lastError = '301'; // Not initialized
@@ -92,6 +105,10 @@
         return 'true';
     }
 
+    /**
+     * Returns a CMI element's value as a string, working out ._count from the stored array keys and
+     * answering ._children from a fixed list.
+     */
     function doGetValue(element) {
         if (!initialized) {
             lastError = '301';
@@ -120,6 +137,12 @@
         return cmiData[element] !== undefined ? String(cmiData[element]) : '';
     }
 
+    /**
+     * Stores a CMI element value and marks it for the next save.
+     *
+     * A read-only element is refused with error 404 - which doGetErrorString labels "Element Is Write
+     * Only"; 403 is the read-only code.
+     */
     function doSetValue(element, value) {
         if (!initialized) {
             lastError = '301';
@@ -144,6 +167,7 @@
         return 'true';
     }
 
+    /** Saves the changed CMI values now (LMSCommit / Commit). */
     function doCommit() {
         if (!initialized) {
             lastError = '301';
@@ -154,6 +178,7 @@
         return 'true';
     }
 
+    /** Returns the error code of the last API call, "0" for none. */
     function doGetLastError() {
         return lastError;
     }
@@ -182,12 +207,17 @@
         return errors[String(code)] || 'Unknown Error';
     }
 
+    /** Returns the diagnostic text for an error code - the same as its error string. */
     function doGetDiagnostic(code) {
         return doGetErrorString(code);
     }
 
     // --- Helper: read-only elements ---
 
+    /**
+     * Whether a CMI element is read-only in SCORM 1.2 or 2004, including every ._count and ._children
+     * element.
+     */
     function isReadOnly(element) {
         const readOnly12 = [
             'cmi.core._children', 'cmi.core.student_id', 'cmi.core.student_name',
@@ -206,6 +236,7 @@
 
     // --- Helper: _children responses ---
 
+    /** Returns the comma-separated child list for a ._children element, or empty for one it does not know. */
     function getChildrenFor(element) {
         const childrenMap = {
             'cmi.core._children': 'student_id,student_name,lesson_location,credit,lesson_status,entry,score,total_time,lesson_mode,exit,session_time',
@@ -218,26 +249,42 @@
     // --- SCORM 1.1 / 1.2 API ---
 
     window.API = {
+        /** SCORM 1.2: starts the session. */
         LMSInitialize:    function(p) { return doInitialize(); },
+        /** SCORM 1.2: ends the session and saves. */
         LMSFinish:        function(p) { return doFinish(); },
+        /** SCORM 1.2: reads a CMI element. */
         LMSGetValue:      function(el) { return doGetValue(el); },
+        /** SCORM 1.2: writes a CMI element. */
         LMSSetValue:      function(el, val) { return doSetValue(el, val); },
+        /** SCORM 1.2: saves changed values now. */
         LMSCommit:        function(p) { return doCommit(); },
+        /** SCORM 1.2: the last error code. */
         LMSGetLastError:  function() { return doGetLastError(); },
+        /** SCORM 1.2: the text for an error code. */
         LMSGetErrorString: function(c) { return doGetErrorString(c); },
+        /** SCORM 1.2: the diagnostic for an error code. */
         LMSGetDiagnostic: function(c) { return doGetDiagnostic(c); }
     };
 
     // --- SCORM 2004 API ---
 
     window.API_1484_11 = {
+        /** SCORM 2004: starts the session. */
         Initialize:      function(p) { return doInitialize(); },
+        /** SCORM 2004: ends the session and saves. */
         Terminate:        function(p) { return doFinish(); },
+        /** SCORM 2004: reads a CMI element. */
         GetValue:         function(el) { return doGetValue(el); },
+        /** SCORM 2004: writes a CMI element. */
         SetValue:         function(el, val) { return doSetValue(el, val); },
+        /** SCORM 2004: saves changed values now. */
         Commit:           function(p) { return doCommit(); },
+        /** SCORM 2004: the last error code. */
         GetLastError:     function() { return doGetLastError(); },
+        /** SCORM 2004: the text for an error code. */
         GetErrorString:   function(c) { return doGetErrorString(c); },
+        /** SCORM 2004: the diagnostic for an error code. */
         GetDiagnostic:    function(c) { return doGetDiagnostic(c); }
     };
 

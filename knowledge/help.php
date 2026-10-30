@@ -28,14 +28,14 @@ $translationNamespaces = ['common', 'knowledge'];
     <link rel="icon" type="image/svg+xml" href="<?php echo defined('BASE_URL') ? BASE_URL : '/'; ?>favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars(t('knowledge.browser_title.help')); ?></title>
-    <link rel="stylesheet" href="../assets/css/theme.css?v=24">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=72">
+    <title><?php echo htmlspecialchars(pageTitle('knowledge', t('knowledge.nav.help'))); ?></title>
+    <link rel="stylesheet" href="../assets/css/theme.css?v=27">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../assets/css/help.css?v=3">
+    <link rel="stylesheet" href="../assets/css/help.css?v=6">
     <style>
         /* The only thing a help page should need to say for itself: its colour. */
         body {
@@ -82,7 +82,7 @@ $translationNamespaces = ['common', 'knowledge'];
         .kb-help-ai-bubble.ai { background: var(--surface-2, #fafafa); }
     </style>
     <!-- Mobile: the guide body is already responsive (help-page house style); LAYER 16h adds the app shell and the scroll container. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=152">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -138,6 +138,28 @@ $translationNamespaces = ['common', 'knowledge'];
             </div>
 
             <div class="help-content">
+
+                <?php /* In-depth topics, each on its own page - the same arrangement
+                     as the Forms guide. The cards come from knowledge/help/_registry.php,
+                     so the guide cannot offer a topic that does not exist. */ ?>
+                <?php require_once __DIR__ . '/help/_registry.php'; ?>
+                <div class="help-section" id="topics">
+                    <div class="help-section-header">
+                        <span class="help-section-num"></span>
+                        <div>
+                            <h3><?php echo htmlspecialchars(t('knowledge.help.topics_title')); ?></h3>
+                            <p><?php echo htmlspecialchars(t('knowledge.help.topics_body')); ?></p>
+                        </div>
+                    </div>
+                    <div class="help-cards">
+                        <?php foreach (knowledgeHelpTopics() as $slug => $topicCard): ?>
+                            <a class="help-card" href="help/<?php echo htmlspecialchars($slug); ?>.php">
+                                <strong><?php echo htmlspecialchars($topicCard['title']); ?></strong>
+                                <span><?php echo htmlspecialchars($topicCard['blurb']); ?></span>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
 
                 <!-- Section 1: Overview -->
                 <div class="help-section" id="overview">
@@ -238,6 +260,7 @@ $translationNamespaces = ['common', 'knowledge'];
                         </div>
                     </div>
                     <p class="help-note"><?php echo htmlspecialchars(t('knowledge.help.writing_tip')); ?></p>
+                    <p class="help-note"><?php echo t('knowledge.help.writing_fullscreen'); ?></p>
                     <p class="help-note"><?php echo t('knowledge.help.writing_visibility_callout'); ?></p>
                 </div>
 
@@ -660,6 +683,6 @@ $translationNamespaces = ['common', 'knowledge'];
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=65"></script>
+    <script src="../assets/js/mobile.js?v=82"></script>
 </body>
 </html>

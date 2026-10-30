@@ -8,6 +8,12 @@
  * - description
  */
 (function(root) {
+    /**
+     * Matches a template against a search (every word must appear somewhere) and scores it, title hits highest, then keywords, category and description.
+     * @param {object} item  a template with title/label, category, keywords and description
+     * @param {string} query  the search text
+     * @return {{matched: boolean, score: number}}  an empty query matches everything with score 0
+     */
     function scoreChecklistTemplate(item, query) {
         if (!query) return { matched: true, score: 0 };
         const q = String(query).toLowerCase().trim();

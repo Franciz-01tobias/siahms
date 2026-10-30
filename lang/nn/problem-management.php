@@ -45,6 +45,7 @@ return [
     ],
     'detail' => [
         'back' => '← Tilbake',
+        'projects' => 'Prosjekt',
         'not_found' => 'Ikkje funne',
         'open_failed' => 'Klarte ikkje å opne problemet',
         'edit' => 'Rediger',
