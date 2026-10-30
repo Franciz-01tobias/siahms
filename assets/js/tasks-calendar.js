@@ -554,5 +554,5 @@ function esc(text) {
     if (text == null) return '';
     const div = document.createElement('div');
     div.textContent = String(text);
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }

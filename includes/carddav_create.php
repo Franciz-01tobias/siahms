@@ -75,7 +75,7 @@ function cardDavCreateTargets(PDO $conn, array $user): array
             if ($p['tenant_id'] !== null && (int)$p['tenant_id'] !== (int)($user['tenant_id'] ?? 0)) continue;
             $out['books'][] = $p;
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Before Database Verification there is no allow-create column: nothing to offer.
     }
     if (!$out['books']) $out['reason'] = 'no_books';

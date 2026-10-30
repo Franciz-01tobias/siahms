@@ -46,7 +46,9 @@
  * trusting the reading pane gets worked around.
  *
  * @param {string} html
- * @param {{attachmentBase?: string}} [options]
+ * @param {{attachmentBase?: string, allowEmbeds?: boolean}} [options]
+ *        allowEmbeds — Knowledge articles only: keep a video embed as a rebuilt,
+ *        sandboxed https iframe from another site (see below). Off everywhere else.
  *        attachmentBase — rewrite inline-image (cid:) URLs that the importer
  *        pointed at get_attachment.php onto this base, so they resolve wherever
  *        the app is mounted rather than at the web root.
@@ -60,9 +62,43 @@ function safeHtmlFragment(html, options) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
         if (!doc.body) return '';
 
+        // allowEmbeds (Knowledge articles only): an embedded video - the editor's
+        // Media button writes an <iframe> - survives, rebuilt from scratch with only
+        // an https src, its size and a sandbox. Nothing else of the original iframe
+        // is kept, so it cannot carry a handler, a srcdoc or a javascript: URL; and
+        // the sandbox withholds top-level navigation and forms, so a framed page
+        // cannot take over the one around it.
+        // TRAP: remember the rebuilt iframes by REFERENCE, never by an attribute.
+        //   A marker attribute is something the untrusted HTML can simply include.
+        var embeds = [];
+        if (opts.allowEmbeds) {
+            doc.querySelectorAll('iframe').forEach(function (el) {
+                var src = (el.getAttribute('src') || '').trim();
+                if (!/^https:\/\//i.test(src)) { el.remove(); return; }
+                // TRAP: never an embed of THIS site. With allow-scripts and
+                //   allow-same-origin, a same-origin frame can remove its own sandbox
+                //   and reach the page around it - so the sandbox only holds for
+                //   somebody else's origin, which is all a video embed ever is.
+                try {
+                    if (new URL(src).origin === window.location.origin) { el.remove(); return; }
+                } catch (e) { el.remove(); return; }
+                var safe = doc.createElement('iframe');
+                safe.setAttribute('src', src);
+                ['width', 'height', 'title'].forEach(function (a) {
+                    var v = el.getAttribute(a);
+                    if (v !== null && /^[\w .%-]{0,80}$/.test(v)) safe.setAttribute(a, v);
+                });
+                safe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+                safe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+                safe.setAttribute('allowfullscreen', '');
+                el.replaceWith(safe);
+                embeds.push(safe);
+            });
+        }
+
         // Executes, navigates, or leaks styling into the host page.
         doc.querySelectorAll('script, style, link, base, meta, iframe, frame, frameset, object, embed, form')
-           .forEach(function (el) { el.remove(); });
+           .forEach(function (el) { if (embeds.indexOf(el) === -1) el.remove(); });
 
         doc.body.querySelectorAll('*').forEach(function (el) {
             // Copy the list: removing attributes mutates it as we iterate.
@@ -108,7 +144,7 @@ function safeHtmlFragment(html, options) {
 function escapeHtmlText(text) {
     var div = document.createElement('div');
     div.textContent = text == null ? '' : String(text);
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**

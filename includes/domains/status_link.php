@@ -48,7 +48,7 @@ if (!defined('DOMAIN_STATUS_LINK_LOADED')) {
                 $conn->query("SELECT 1 FROM domain_status_incidents LIMIT 0");
                 $conn->query("SELECT 1 FROM domain_status_services LIMIT 0");
                 $ready = true;
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 $ready = false;
             }
         }
@@ -224,7 +224,7 @@ if (!defined('DOMAIN_STATUS_LINK_LOADED')) {
             try {
                 $id = (int)$conn->query("SELECT id FROM service_impact_levels WHERE $where ORDER BY severity_order, display_order, id LIMIT 1")->fetchColumn();
                 if ($id > 0) return $id;
-            } catch (Throwable $e) { /* counts_as_downtime before Database Verification: try without */ }
+            } catch (Throwable) { /* counts_as_downtime before Database Verification: try without */ }
         }
         return 0;
     }

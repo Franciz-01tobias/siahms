@@ -26,14 +26,14 @@ $translationNamespaces = ['common', 'change-management'];
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/theme.css?v=27">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/change-management.css?v=11">
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo BASE_URL; ?>assets/js/tz.js?v=5"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/record-preview.css?v=1">
     <script src="<?php echo BASE_URL; ?>assets/js/record-preview.js?v=1"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/tinymce/tinymce.min.js"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/tinymce/tinymce.min.js?v=8.10.0"></script>
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/project-links.css?v=1">
 </head>
 <?php $cmLevel = analystModuleLevel(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'changes'); /* #180: 'full' or 'read' */ ?>
@@ -566,8 +566,11 @@ $translationNamespaces = ['common', 'change-management'];
         </div>
     </div>
 
-    <!-- html2pdf for PDF generation -->
-    <script src="../assets/js/vendor/html2pdf.bundle.min.js"></script>
+    <!-- PDF of a change: html2canvas draws it, jsPDF pages it (changePdfDocument() in
+         change-management.js). html2pdf did this until 4.1.0, carrying its own older
+         copy of jsPDF; now there is one jsPDF on the install, and it is current. -->
+    <script src="../assets/js/vendor/html2canvas.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
     <script>
         window.API_BASE = '<?php echo BASE_URL; ?>api/change-management/';
         <?php if (!empty($openCreateOnLoad)): ?>
@@ -582,9 +585,9 @@ $translationNamespaces = ['common', 'change-management'];
         window.MODULE_LEVEL = <?php echo json_encode($cmLevel ?: 'full'); ?>;
         window.CHG_CAN_CHOOSE_APPROVERS = <?php require_once __DIR__ . '/../includes/rbac.php'; echo analystMayAct(connectToDatabase(), (int)$_SESSION['analyst_id'], Cap::CHANGES_CHOOSE_APPROVERS) ? 'true' : 'false'; ?>;</script>
     <script src="<?php echo BASE_URL; ?>assets/js/project-links.js?v=1"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/safe-html.js?v=2"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/safe-html.js?v=4"></script>
     <script src="<?php echo BASE_URL; ?>assets/js/change-revisions.js?v=3"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/change-management.js?v=31"></script>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/change-management.js?v=34"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=83"></script>
 </body>
 </html>

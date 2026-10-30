@@ -187,7 +187,8 @@ try {
     // has never been a check — without this, any asset id posted by hand would
     // be accepted, letting a portal user attach (and then read back the details
     // of) equipment belonging to somebody else.
-    if (!empty($input['asset_ids']) && is_array($input['asset_ids'])) {
+    // GH #217: and not at all while Assets is switched off for the install.
+    if (!empty($input['asset_ids']) && is_array($input['asset_ids']) && moduleIsEnabled($conn, 'assets')) {
         $assetIds = array_values(array_unique(array_filter(array_map('intval', $input['asset_ids']))));
         if ($assetIds) {
             $owns = $conn->prepare("SELECT 1 FROM users_assets WHERE user_id = ? AND asset_id = ?");

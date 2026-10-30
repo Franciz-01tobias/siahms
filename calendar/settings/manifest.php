@@ -11,13 +11,13 @@ return [
     'module' => 'calendar',
     'label'  => 'Calendar',
     'umbrella' => [
-        'cap'   => Cap::CALENDAR_MANAGE,
+        'cap'   => capKey(Cap::CALENDAR_MANAGE),
         'grant' => 'Manage everything in Calendar settings',
     ],
     'tabs' => [
         [
             'id'        => 'categories',
-            'cap'       => Cap::CALENDAR_CATEGORIES,
+            'cap'       => capKey(Cap::CALENDAR_CATEGORIES),
             'label_key' => 'calendar.settings.tab_categories',
             'grant'     => 'Manage event categories',
         ],

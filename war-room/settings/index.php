@@ -76,7 +76,7 @@ $choices = [0, 7, 30, 90, 180, 365];
         .wr-set-actions { margin-top: 18px; }
     </style>
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
     <script src="../../assets/js/i18n.js?v=3"></script>
 </head>
 <body data-mobile-module="war-room" data-mobile-page="settings">
@@ -86,7 +86,7 @@ $choices = [0, 7, 30, 90, 180, 365];
         <?php renderSettingsTabBar($visibleTabs, $activeTabId); ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'retention')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'retention' ? ' active' : ''; ?>" id="retention-tab" data-capability="<?php echo Cap::WAR_ROOM_MANAGE; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'retention' ? ' active' : ''; ?>" id="retention-tab" data-capability="<?php echo capKey(Cap::WAR_ROOM_MANAGE); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('war-room.settings.heading')); ?></h2>
             </div>
@@ -112,7 +112,7 @@ $choices = [0, 7, 30, 90, 180, 365];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'ai')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo Cap::WAR_ROOM_MANAGE; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo capKey(Cap::WAR_ROOM_MANAGE); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('war-room.settings.ai_heading')); ?></h2>
             </div>
@@ -131,7 +131,7 @@ $choices = [0, 7, 30, 90, 180, 365];
     <script src="../../assets/js/ai-settings.js?v=4"></script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
     <script>
         // ⚠️ The tab bar is rendered by the shared helper but SWITCHING is each
         // page's own job — renderSettingsTabBar() only emits the buttons. This

@@ -20,7 +20,7 @@ return [
     'label'  => 'Domains',
 
     'umbrella' => [
-        'cap'       => Cap::DOMAINS_MANAGE,
+        'cap'       => capKey(Cap::DOMAINS_MANAGE),
         'grant'     => 'Manage everything in Domains settings',
         'sensitive' => true,   // implies the auth codes
     ],
@@ -28,33 +28,39 @@ return [
     'tabs' => [
         [
             'id'        => 'statuses',
-            'cap'       => Cap::DOMAINS_STATUSES,
+            'cap'       => capKey(Cap::DOMAINS_STATUSES),
             'label_key' => 'domains.settings.tab_statuses',
             'grant'     => 'Maintain the list of domain statuses',
         ],
         [
+            'id'        => 'cert-types',
+            'cap'       => capKey(Cap::DOMAINS_CERT_TYPES),
+            'label_key' => 'domains.settings.tab_cert_types',
+            'grant'     => 'Maintain the list of certificate types a recorded certificate can be',
+        ],
+        [
             'id'        => 'alerts',
-            'cap'       => Cap::DOMAINS_ALERTS,
+            'cap'       => capKey(Cap::DOMAINS_ALERTS),
             'label_key' => 'domains.settings.tab_alerts',
             'grant'     => 'Configure expiry, certificate and change alerts, and where renewals are shown',
             'sensitive' => true,   // decides who is emailed, and can raise tickets and tasks
         ],
         [
             'id'        => 'monitoring',
-            'cap'       => Cap::DOMAINS_MONITORING,
+            'cap'       => capKey(Cap::DOMAINS_MONITORING),
             'label_key' => 'domains.settings.tab_monitoring',
             'grant'     => 'Configure registry lookups, DNS and certificate checks, and look-alike scanning',
         ],
         [
             'id'        => 'service-status',
-            'cap'       => Cap::DOMAINS_SERVICE_STATUS,
+            'cap'       => capKey(Cap::DOMAINS_SERVICE_STATUS),
             'label_key' => 'domains.settings.tab_service_status',
             'grant'     => 'Decide whether a domain\'s problems are suggested or raised as incidents on the Service Status page',
             'sensitive' => true,   // can publish to a page customers read
         ],
         [
             'id'        => 'auth-codes',
-            'cap'       => Cap::DOMAINS_AUTH_CODES,
+            'cap'       => capKey(Cap::DOMAINS_AUTH_CODES),
             'label_key' => 'domains.settings.tab_auth_codes',
             'grant'     => 'See and change registrar auth codes (the secret that lets a domain be transferred away)',
             'sensitive' => true,

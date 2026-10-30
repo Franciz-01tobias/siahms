@@ -31,6 +31,8 @@ if (!$formId) {
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'forms');
 
     /* 🔴 The AUDIENCE gate too (GH #145). The catalogue list already hides a
        restricted form, and a list hiding a card has never been a check — this

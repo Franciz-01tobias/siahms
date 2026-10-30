@@ -127,6 +127,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     Promise.all([loadObject(), loadImpact(), loadActivity(), loadClasses(), loadRelationshipTypes()]).then(() => {
         if (obj) render();
+        // GH #201: the asset card's "Show" links here at #o2Blast, which only exists after render().
+        if (obj && location.hash === '#o2Blast') { const b = document.getElementById('o2Blast'); if (b) b.scrollIntoView({ block: 'start' }); }
     });
     initPropDefModalDrag();
 });
@@ -252,6 +254,10 @@ function render() {
             '<div class="o2-sec">' + blastHtml() + '</div>' +
             '<div class="o2-sec">' + connectionsHtml() + '</div>' +
             '<div class="o2-sec">' + propsHtml() + '</div>' +
+            // GH #201: the asset this CI is the same equipment as, read live from the asset.
+            '<div class="o2-sec"><div id="cmdbAssetLink"></div></div>' +
+            // GH #199 Part B: the discovered object this CI is bound to - drawn only when it has one.
+            '<div class="o2-sec"><div id="cmdbDiscovery"></div></div>' +
             // Attached documents (discussion #76) — the diagram, the licence, the
             // rack photo. Before activity and danger, which both read as endings.
             '<div class="o2-sec"><div id="cmdbDocuments"></div></div>' +
@@ -271,6 +277,15 @@ function render() {
             showHeading: true      // every other section here carries its own title
         });
     }
+
+    if (window.CiAssetLink && obj && obj.id) {
+        CiAssetLink.mount(document.getElementById('cmdbAssetLink'), {
+            side: 'cmdb', id: obj.id, base: window.APP_BASE,
+            cardClass: 'o2-card', headClass: 'o2-card-head', titleClass: 'o2-card-title'
+        });
+    }
+
+    if (obj && obj.id) loadDiscovery(obj.id);
 
     if (window.SHOW_DOMAINS && window.DomainLinks && obj && obj.id) {
         DomainLinks.mount(document.getElementById('cmdbDomains'), {
@@ -293,6 +308,39 @@ function render() {
     wireProps();
     animateStats();
     animateMeter();
+}
+
+/* GH #199 Part B: "From discovery" - what a source-bound CI is, read live from the virtual
+   estate and never copied into its properties, in the same way the Asset card reads the
+   asset (GH #201). Nothing is drawn for a CI that was never discovered. */
+async function loadDiscovery(id) {
+    const host = document.getElementById('cmdbDiscovery');
+    if (!host) return;
+    let d;
+    try { d = await (await fetch(API + 'discovery_source.php?cmdb_object_id=' + id)).json(); } catch (e) { return; }
+    if (!d || !d.success || (!d.current && !(d.history || []).length)) { host.closest('.o2-sec').style.display = 'none'; return; }
+    const T = (k, p) => window.t('cmdb.discovery.' + k, p);
+    const c = d.current;
+    let body;
+    if (!c) {
+        body = '<div class="o2-empty">' + esc(T('ended')) + '</div>';
+    } else if (c.restricted) {
+        body = '<div class="o2-empty">' + esc(T('restricted')) + '</div>';
+    } else {
+        const facts = [
+            [T('kind'), T('kind_' + c.kind)], [T('source'), c.connection], [T('state'), c.state],
+            [T('host'), c.host], [T('cluster'), c.cluster],
+            [T('ha'), c.highly_available === null || c.highly_available === undefined ? null : (c.highly_available ? T('yes') : T('no'))],
+            [T('cpu'), c.cpu_count], [T('memory'), c.memory_bytes ? Math.round(c.memory_bytes / 1073741824) + ' GB' : null],
+            [T('last_seen'), c.last_seen ? fmtWhen(c.last_seen) : null],
+        ].filter(f => f[1] !== null && f[1] !== undefined && f[1] !== '');
+        body = (c.not_seen_since ? '<div class="o2-grade g-affected">' + esc(T('not_seen', { when: fmtWhen(c.not_seen_since) })) + '</div>' : '')
+            + (c.not_confirmed_since ? '<div class="o2-grade g-unknown">' + esc(T('not_confirmed', { when: fmtWhen(c.not_confirmed_since) })) + '</div>' : '')
+            + '<div class="o2-disc">' + facts.map(f => '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>').join('') + '</div>'
+            + '<div class="o2-via">' + esc(T('from_discovery')) + '</div>';
+    }
+    host.innerHTML = '<div class="o2-card"><div class="o2-card-head"><span class="o2-card-title">' + esc(T('title')) + '</span></div>' +
+        '<div style="padding: 4px 18px 16px;">' + body + '</div></div>';
 }
 
 /** Returns the breadcrumb - Browse, the class, the parent if any, then this object. */
@@ -357,7 +405,10 @@ function heroHtml(signal) {
  * Returns the four stat tiles - what breaks, open tickets, connections and days since last touched - each jumping to its section.
  */
 function statsHtml() {
-    const blast = (blastRadius && blastRadius.nodes) ? blastRadius.nodes.length : 0;
+    // Graded (GH #199 Part C): only what is AFFECTED breaks - the rest may be interrupted,
+    // has less redundancy, or is unknown, and the panel below says which.
+    const blast = (blastRadius && blastRadius.nodes)
+        ? (blastRadius.grades_used ? ((blastRadius.grade_counts || {}).affected || 0) : blastRadius.nodes.length) : 0;
     const open = (activity && activity.open) ? activity.open.length : 0;
     const conns = connectionTally().total;
     const days = daysSince(obj.updated_datetime);
@@ -444,19 +495,55 @@ function blastHtml() {
                     '<span class="o2-node-sub">' + esc(n.class_name) + '</span></span>' +
                 '</a>' +
                 '<div class="o2-via">' + esc(viaText(n)) + '</div>' +
+                gradeHtml(n) +
                 '</div>'
             ).join('') +
         '</div></div>';
     }
 
+    // Graded (GH #199 Part C): "affected" is now one of the grades, so the headline must not claim it for all.
+    const graded = blastRadius.grades_used ? '_graded' : '';
     const lede = nodes.length === 1
-        ? window.t('cmdb.impact.blast_headline_one')
-        : window.t('cmdb.impact.blast_headline_other', { count: nodes.length, depth: maxDepth });
+        ? window.t('cmdb.impact.blast_headline_one' + graded)
+        : window.t('cmdb.impact.blast_headline_other' + graded, { count: nodes.length, depth: maxDepth });
 
     return '<div class="o2-card" id="o2Blast">' + head +
-        '<div class="o2-lede">' + esc(lede) + '</div>' +
+        '<div class="o2-lede">' + esc(lede) + gradeCountsHtml() + '</div>' +
         '<div class="o2-chain">' + chain + '</div>' +
+        limitsHtml() +
     '</div>';
+}
+
+/* GH #199 Part C: each item's grade, when a relationship type in the path is marked as
+   redundant membership or placement with failover. Without one every item is simply
+   affected, and nothing extra is drawn - the panel reads exactly as it always did. */
+function gradeHtml(n) {
+    if (!blastRadius || !blastRadius.grades_used || !n.grade) return '';
+    let h = '<div class="o2-grade g-' + esc(n.grade) + '">' + esc(window.t('cmdb.impact.grade_' + n.grade)) + '</div>';
+    if (n.unknown_via && n.unknown_via.length && n.grade !== 'unknown') {
+        h += '<div class="o2-via">' + esc(window.t('cmdb.impact.unknown_via', { names: n.unknown_via.join(', ') })) + '</div>';
+    }
+    return h;
+}
+
+/** "3 affected, 2 may be interrupted, 1 redundancy reduced" beside the headline. */
+function gradeCountsHtml() {
+    if (!blastRadius || !blastRadius.grades_used) return '';
+    const c = blastRadius.grade_counts || {};
+    const bits = ['affected', 'may_be_interrupted', 'redundancy_reduced', 'unknown']
+        .filter(g => c[g]).map(g => c[g] + ' ' + window.t('cmdb.impact.grade_' + g).toLowerCase());
+    return bits.length ? ' <span class="o2-grade-counts">' + esc(bits.join(' · ')) + '</span>' : '';
+}
+
+/* What the model does not know - always shown when a redundancy rule was used, never
+   dismissible (agreed on #199): "redundancy reduced" is not a promise it keeps working. */
+function limitsHtml() {
+    if (!blastRadius || !blastRadius.grades_used || !(blastRadius.limits || []).length) return '';
+    const items = blastRadius.limits.map(l => typeof l === 'string'
+        ? window.t('cmdb.impact.limit_' + l)
+        : window.t('cmdb.impact.limit_' + l.code, { names: (l.names || []).join(', ') }));
+    return '<div class="o2-limits"><strong>' + esc(window.t('cmdb.impact.limits_title')) + '</strong><ul>' +
+        items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul></div>';
 }
 
 /* Every row says how it was reached, so a surprising entry can be traced

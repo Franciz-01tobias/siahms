@@ -1,4 +1,7 @@
 <?php
+// FIRST: this page loads an includes/ file before config.php, so the version guard
+// must run before that file is read - see includes/php_version_guard.php.
+require_once __DIR__ . '/../includes/php_version_guard.php';
 /**
  * Self-Service Portal — My equipment.
  *
@@ -94,7 +97,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 <?php
 $pageScripts = <<<'JS'
-const eqEsc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+const eqEsc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
 
 async function eqLoad() {
     try {

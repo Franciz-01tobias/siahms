@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Слідкуйте за цією сторінкою.</strong> Щойно обробник запуститься, статус вище стане зеленим, а доставки з\'являться нижче. Повні нотатки з налаштування (Windows &amp; Linux, перевірка підпису) є у <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">вікі Workflows</a>.',
         'fact_worker' => 'Скрипт обробника',
         'fact_retry' => 'Розклад повторних спроб',
-        'fact_retry_val' => '1 хв &middot; 5 хв &middot; 15 хв &middot; 1 год &middot; 6 год, потім збій',
         'fact_retention' => 'Зберігання журналу',
         'fact_queued' => 'Зараз у черзі',
         'days' => '{n} дн.',

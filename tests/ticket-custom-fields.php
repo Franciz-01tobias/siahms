@@ -58,7 +58,7 @@ try {
     $fLaptop = $mk(['label' => 'ZZTF Laptop', 'field_type' => 'dropdown', 'options' => ['Small', 'Large', 'Small'], 'all_types' => 1]);
     $fRemote = $mk(['label' => 'ZZTF Remote', 'field_type' => 'boolean', 'all_types' => 0, 'type_ids' => [$types['starter']]]);
     $fMail   = $mk(['label' => 'ZZTF Manager email', 'field_type' => 'email', 'all_types' => 1]);
-    $keys = fn(array $defs) => array_values(array_filter(array_keys($defs), fn($k) => strpos($k, 'zztf_') === 0));
+    $keys = fn(array $defs) => array_values(array_filter(array_keys($defs), fn($k) => str_starts_with($k, 'zztf_')));
 
     echo "\nWhich fields a ticket has:\n";
     is_('a New starter has all five, in order', $keys(TicketFieldsService::fieldsFor($conn, $tenant, $types['starter'])),
@@ -104,7 +104,7 @@ try {
     echo "\nChanging the type hides, never deletes:\n";
     TicketsService::updateTicket($conn, $ctx, $ticket, ['ticket_type_id' => $types['other']], false);
     $row = TicketsService::loadTicket($conn, $ctx, $ticket);
-    is_('the new type shows only its own fields', array_values(array_filter(array_column(TicketFieldsService::forTicket($conn, $row), 'key'), fn($k) => strpos($k, 'zztf_') === 0)),
+    is_('the new type shows only its own fields', array_values(array_filter(array_column(TicketFieldsService::forTicket($conn, $row), 'key'), fn($k) => str_starts_with($k, 'zztf_'))),
         ['zztf_laptop', 'zztf_manager_email']);
     is_('...while the start date is still in the database', (int)$conn->query("SELECT COUNT(*) FROM ticket_field_values WHERE ticket_id = $ticket AND field_id = $fStart")->fetchColumn(), 1);
     TicketsService::updateTicket($conn, $ctx, $ticket, ['ticket_type_id' => $types['starter']], false);

@@ -238,9 +238,15 @@ function cmdbBlastRadius(PDO $conn, int $rootId, ?int $tenantScope = null, int $
         return [$a['depth'], $a['class_name'], $a['name']] <=> [$b['depth'], $b['class_name'], $b['name']];
     });
 
+    $graded = cmdbImpactGrade($conn, $rootId, $out, $tenantScope, $truncated);
+
     return [
         'nodes'             => $out,
         'truncated'         => $truncated,
+        // GH #199 Part C. Additive: every node also carries grade, grade_via, unknown_via.
+        'grades_used'       => $graded['used'],
+        'grade_counts'      => $graded['counts'],
+        'limits'            => $graded['limits'],
         'max_depth_reached' => $out ? max(array_column($out, 'depth')) : 0,
         // Only worth asking when the answer was empty, and it changes what the
         // empty state should say.
@@ -284,7 +290,7 @@ function cmdbImpactEdgesFrom(PDO $conn, array $fromIds, ?int $tenantScope = null
 
     // 1. Containment: parent fails, children go with it.
     $sql = "SELECT o.id, o.name, c.name AS class_name, o.parent_id AS via_from,
-                   'child' AS via_kind, NULL AS via_label, NULL AS via_rel_id
+                   'child' AS via_kind, NULL AS via_label, NULL AS via_rel_id, NULL AS via_type_id
               FROM cmdb_objects o
               JOIN cmdb_classes c ON c.id = o.class_id
              WHERE o.parent_id IN ($ph) $tenantSql";
@@ -295,7 +301,7 @@ function cmdbImpactEdgesFrom(PDO $conn, array $fromIds, ?int $tenantScope = null
     // 2a. Relationships where the TO side failing affects the FROM side
     //     ("A depends on B" — B is in $fromIds, A is affected).
     $sql = "SELECT o.id, o.name, c.name AS class_name, r.to_object_id AS via_from,
-                   'relationship' AS via_kind, rt.verb AS via_label, r.id AS via_rel_id
+                   'relationship' AS via_kind, rt.verb AS via_label, r.id AS via_rel_id, r.relationship_type_id AS via_type_id
               FROM cmdb_object_relationships r
               JOIN cmdb_objects o ON o.id = r.from_object_id
               JOIN cmdb_classes c ON c.id = o.class_id
@@ -311,7 +317,7 @@ function cmdbImpactEdgesFrom(PDO $conn, array $fromIds, ?int $tenantScope = null
     //     ("A hosts B" — A is in $fromIds, B is affected). Labelled with the
     //     inverse verb, because it reads from the affected object's side.
     $sql = "SELECT o.id, o.name, c.name AS class_name, r.from_object_id AS via_from,
-                   'relationship' AS via_kind, rt.inverse_verb AS via_label, r.id AS via_rel_id
+                   'relationship' AS via_kind, rt.inverse_verb AS via_label, r.id AS via_rel_id, r.relationship_type_id AS via_type_id
               FROM cmdb_object_relationships r
               JOIN cmdb_objects o ON o.id = r.to_object_id
               JOIN cmdb_classes c ON c.id = o.class_id
@@ -326,7 +332,7 @@ function cmdbImpactEdgesFrom(PDO $conn, array $fromIds, ?int $tenantScope = null
     // 3. object_ref properties flagged as dependencies: the referenced object
     //    failing affects whoever points at it.
     $sql = "SELECT o.id, o.name, c.name AS class_name, op.value_object_id AS via_from,
-                   'property' AS via_kind, p.label AS via_label, NULL AS via_rel_id
+                   'property' AS via_kind, p.label AS via_label, NULL AS via_rel_id, NULL AS via_type_id
               FROM cmdb_object_properties op
               JOIN cmdb_class_properties p ON p.id = op.property_id
               JOIN cmdb_objects o ON o.id = op.object_id
@@ -355,8 +361,240 @@ function cmdbImpactEdgesFrom(PDO $conn, array $fromIds, ?int $tenantScope = null
         $r['via_from']   = (int) $r['via_from'];
         $r['via_name']   = $names[$r['via_from']] ?? null;
         $r['via_rel_id'] = isset($r['via_rel_id']) && $r['via_rel_id'] !== null ? (int) $r['via_rel_id'] : null;
+        $r['via_type_id'] = isset($r['via_type_id']) && $r['via_type_id'] !== null ? (int) $r['via_type_id'] : null;
     }
     unset($r);
 
     return $rows;
+}
+
+// ===========================================================================
+//  Redundancy-aware grades (GH #199 Part C)
+// ===========================================================================
+//
+// The walk above answers "what is reachable from this failure". This answers "how
+// badly", for installs that mark relationship types as redundant membership (a node
+// "is a member of" a cluster) or placement with failover (a highly available VM "runs
+// on" a node). Without such a type every node is simply "affected", exactly as before.
+//
+// THE GRADES, most severe first:
+//   affected            nothing in the model suggests it survives
+//   may_be_interrupted  it may stop; the model shows another member it may restart on,
+//                       and says nothing about whether that will work
+//   redundancy_reduced  one or more members of a redundant group are lost. NOT a
+//                       statement that it keeps working: quorum, witness, storage,
+//                       capacity and current data are not modelled (agreed on #199)
+//   unknown             the model lacks the facts to say
+//
+// THE PATH RULE (agreed on #199):
+//   1. Each path gives a grade; along an ordinary dependency a node takes the grade of
+//      what it depends on.
+//   2. A node's grade is the MOST SEVERE established grade among its paths. A possible
+//      failover on one path never softens a hard dependency on another.
+//   3. Unknown is never hidden: a path that depends on a missing fact is listed in
+//      unknown_via beside the grade; a node reached only through such paths is unknown.
+//
+// Grades only ever rise as more members turn out to be lost, so a fixpoint loop over
+// the reached subgraph settles them.
+//
+// TRAP: a placement type is for HIGHLY AVAILABLE roles only. A VM that merely runs on a
+//   cluster node is an ordinary dependency (affected when the node fails) - Part B maps
+//   the two to different relationship types for exactly this reason.
+
+/** The setting: what a member with no recorded state counts as - 'assume' (available, and say so) or 'unknown'. */
+const CMDB_IMPACT_UNKNOWN_SETTING = 'cmdb_impact_unknown_members';
+
+/** The grade names, from least to most severe ('unknown' is not on the ladder). */
+function cmdbImpactGradeRank(): array {
+    return ['redundancy_reduced' => 1, 'may_be_interrupted' => 2, 'affected' => 3];
+}
+
+/**
+ * The state FreeITSM knows a CI to be in: 'up', 'down', 'unknown', or null when nothing
+ * records it (a CI drawn by hand). Part B fills this from discovery for source-bound CIs.
+ */
+function cmdbMemberState(PDO $conn, int $ciId): ?string {
+    require_once __DIR__ . '/services/virtual_estate_cmdb.php';
+    return VirtualEstateCmdbService::memberState($conn, $ciId);
+}
+
+/**
+ * The CIs a highly available CI may run on, when discovery knows (its possible owners), or
+ * null - then every other member of its host's group counts.
+ *
+ * @return ?int[]
+ */
+function cmdbPossibleOwners(PDO $conn, int $ciId): ?array {
+    require_once __DIR__ . '/services/virtual_estate_cmdb.php';
+    return VirtualEstateCmdbService::possibleOwnerCis($conn, $ciId);
+}
+
+/**
+ * Grade the blast radius in place: each node gains grade, grade_via (who gave it) and
+ * unknown_via (names), and the result says whether redundancy rules were used, counts per
+ * grade, and the limits the panel must always show when they were.
+ *
+ * @param array $nodes  cmdbBlastRadius()'s node list, modified in place
+ * @return array{used: bool, counts: array, limits: array}
+ */
+function cmdbImpactGrade(PDO $conn, int $rootId, array &$nodes, ?int $tenantScope, bool $truncated): array {
+    $types = [];
+    try {
+        foreach ($conn->query("SELECT id, redundancy, impact_direction FROM cmdb_relationship_types
+                                WHERE redundancy IN ('membership', 'placement') AND COALESCE(is_active, 1) = 1")->fetchAll(PDO::FETCH_ASSOC) as $t) {
+            $types[(int) $t['id']] = ['kind' => $t['redundancy'], 'direction' => $t['impact_direction']];
+        }
+    } catch (PDOException $e) {
+        $types = [];   // before Database Verification adds the column: no redundancy rules
+    }
+    $counts = ['affected' => 0, 'may_be_interrupted' => 0, 'redundancy_reduced' => 0, 'unknown' => 0];
+    if (!$types || !$nodes) {
+        foreach ($nodes as &$n) { $n['grade'] = 'affected'; $n['grade_via'] = null; $n['unknown_via'] = []; }
+        unset($n);
+        $counts['affected'] = count($nodes);
+        return ['used' => false, 'counts' => $counts, 'limits' => []];
+    }
+
+    $assume = true;
+    try {
+        $st = $conn->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ?');
+        $st->execute([CMDB_IMPACT_UNKNOWN_SETTING]);
+        $assume = $st->fetchColumn() !== 'unknown';
+    } catch (Throwable $e) { /* default: assume, and say so */ }
+
+    // Every impact edge inside the reached subgraph, labelled ordinary / membership / placement.
+    $reached = [$rootId => true];
+    $name = [$rootId => null];
+    foreach ($nodes as $n) { $reached[$n['id']] = true; $name[$n['id']] = $n['name']; }
+    $incoming = [];
+    $used = false;
+    foreach (cmdbImpactEdgesFrom($conn, array_keys($reached), $tenantScope) as $e) {
+        if (!isset($reached[$e['id']]) || $e['id'] === $rootId) { continue; }
+        $kind = ($e['via_type_id'] !== null && isset($types[$e['via_type_id']])) ? $types[$e['via_type_id']]['kind'] : 'ordinary';
+        if ($kind !== 'ordinary') { $used = true; }
+        $incoming[$e['id']][] = ['from' => $e['via_from'], 'kind' => $kind, 'label' => $e['via_label'], 'from_name' => $e['via_name']];
+    }
+    if ($name[$rootId] === null) {
+        $st = $conn->prepare('SELECT name FROM cmdb_objects WHERE id = ?');
+        $st->execute([$rootId]);
+        $name[$rootId] = (string) $st->fetchColumn();
+    }
+
+    // Who is a member of which redundant group - from ALL membership relationships, not only
+    // the reached ones: a group's other members are exactly the ones the failure did not reach.
+    $memberTypes = array_keys(array_filter($types, fn($t) => $t['kind'] === 'membership'));
+    $membersOf = []; $groupsOf = [];
+    if ($memberTypes) {
+        $in = implode(',', $memberTypes);
+        $tenantSql = $tenantScope !== null ? ' AND COALESCE(a.tenant_id, ' . (int) $tenantScope . ') = ' . (int) $tenantScope : '';
+        foreach ($conn->query("SELECT r.from_object_id, r.to_object_id, rt.impact_direction FROM cmdb_object_relationships r
+                JOIN cmdb_relationship_types rt ON rt.id = r.relationship_type_id
+                JOIN cmdb_objects a ON a.id = r.from_object_id
+                WHERE r.relationship_type_id IN ($in)$tenantSql")->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            // "member of" points member -> group when the member failing affects the group.
+            [$member, $group] = $m['impact_direction'] === CMDB_IMPACT_TO_FROM
+                ? [(int) $m['to_object_id'], (int) $m['from_object_id']] : [(int) $m['from_object_id'], (int) $m['to_object_id']];
+            $membersOf[$group][$member] = true;
+            $groupsOf[$member][$group] = true;
+        }
+    }
+    $memberNames = [];
+    $nameOf = function (int $id) use ($conn, &$name, &$memberNames): string {
+        if (isset($name[$id])) { return (string) $name[$id]; }
+        if (!isset($memberNames[$id])) {
+            $st = $conn->prepare('SELECT name FROM cmdb_objects WHERE id = ?');
+            $st->execute([$id]);
+            $memberNames[$id] = (string) $st->fetchColumn();
+        }
+        return $memberNames[$id];
+    };
+
+    $rank = cmdbImpactGradeRank();
+    $grade = [$rootId => 'affected'];
+    $assumed = [];
+    // Of these members, which may still be up? 'up', 'assumed' (no recorded state, and the
+    // setting assumes) or 'unknown'. A member graded affected is down.
+    $alternatives = function (array $members) use ($conn, &$grade, $assume, &$assumed, $nameOf): array {
+        $out = ['up' => [], 'assumed' => [], 'unknown' => []];
+        foreach ($members as $m) {
+            if (($grade[$m] ?? null) === 'affected') { continue; }
+            $state = cmdbMemberState($conn, $m);
+            if ($state === 'down') { continue; }
+            if ($state === 'up') { $out['up'][] = $m; }
+            elseif ($state === null && $assume) { $out['assumed'][] = $m; }
+            else { $out['unknown'][] = $m; }
+        }
+        return $out;
+    };
+
+    $result = [];
+    for ($round = 0; $round < 50; $round++) {
+        $changed = false;
+        foreach ($incoming as $target => $edges) {
+            $best = null; $bestVia = null; $unknownVia = [];
+            foreach ($edges as $e) {
+                $g = $grade[$e['from']] ?? null;
+                if ($g === null) { continue; }
+                if ($g === 'unknown') { $unknownVia[$e['from']] = true; continue; }
+                $via = ['from' => $e['from'], 'name' => $e['from_name'], 'label' => $e['label'], 'kind' => $e['kind']];
+                $got = $g;
+                if ($e['kind'] === 'placement' && $g === 'affected') {
+                    // The host failed: is there another member of its group(s) to restart on?
+                    $others = [];
+                    foreach (array_keys($groupsOf[$e['from']] ?? []) as $grp) {
+                        foreach (array_keys($membersOf[$grp] ?? []) as $m) { if ($m !== $e['from']) { $others[$m] = true; } }
+                    }
+                    // Narrowed to the nodes the cluster may run it on, when discovery knows them.
+                    $owners = cmdbPossibleOwners($conn, $target);
+                    if ($owners !== null) { $others = array_intersect_key($others, array_flip($owners)); }
+                    $alt = $alternatives(array_keys($others));
+                    if ($alt['up'] || $alt['assumed']) {
+                        $got = 'may_be_interrupted';
+                        foreach ($alt['assumed'] as $m) { if (!$alt['up']) { $assumed[$m] = $nameOf($m); } }
+                    } elseif ($alt['unknown']) { $got = 'unknown'; }
+                    else { $got = 'affected'; }
+                } elseif ($e['kind'] === 'membership') {
+                    if ($g === 'redundancy_reduced') { continue; }   // a member with less spare capacity does not reduce the group
+                    $alt = $alternatives(array_values(array_diff(array_keys($membersOf[$target] ?? []), [$e['from']])));
+                    $lost = $g === 'affected' ? 'affected' : 'may_be_interrupted';   // the whole group, if this was its last member
+                    if (!$alt['up'] && !$alt['assumed'] && !$alt['unknown']) { $got = $lost; }
+                    elseif (!$alt['up'] && !$alt['assumed']) { $got = 'unknown'; }
+                    else {
+                        $got = 'redundancy_reduced';
+                        foreach ($alt['assumed'] as $m) { if (!$alt['up']) { $assumed[$m] = $nameOf($m); } }
+                    }
+                }
+                if ($got === 'unknown') { $unknownVia[$e['from']] = true; continue; }
+                if ($best === null || $rank[$got] > $rank[$best]) { $best = $got; $bestVia = $via; }
+            }
+            $new = $best ?? ($unknownVia ? 'unknown' : null);
+            if ($new !== null && ($grade[$target] ?? null) !== $new) {
+                $grade[$target] = $new;
+                $changed = true;
+            }
+            $result[$target] = ['grade' => $new ?? 'unknown', 'via' => $bestVia,
+                'unknown_via' => array_values(array_map(fn($id) => $nameOf((int) $id), array_keys($unknownVia)))];
+        }
+        if (!$changed) { break; }
+    }
+
+    foreach ($nodes as &$n) {
+        $r = $result[$n['id']] ?? ['grade' => 'affected', 'via' => null, 'unknown_via' => []];
+        $n['grade'] = $r['grade'];
+        $n['grade_via'] = $r['via'];
+        $n['unknown_via'] = $r['unknown_via'];
+        $counts[$r['grade']]++;
+    }
+    unset($n);
+
+    $limits = [];
+    if ($used) {
+        // What the model does not know - always shown when a redundancy rule was used.
+        // placement_rules: possible owners ARE applied to discovered VMs (cmdbPossibleOwners);
+        // preferred owners, anti-affinity and drawn-by-hand CIs are not.
+        $limits = ['quorum', 'storage', 'capacity', 'placement_rules'];
+        if ($assumed) { $limits[] = ['code' => 'assumed_available', 'names' => array_values($assumed)]; }
+    }
+    if ($used && $truncated) { $limits[] = 'truncated'; }
+    return ['used' => $used, 'counts' => $counts, 'limits' => $limits];
 }

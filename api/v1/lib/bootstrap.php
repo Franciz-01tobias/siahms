@@ -16,6 +16,7 @@ require_once dirname(__DIR__, 3) . '/includes/tenancy.php';
 require_once __DIR__ . '/response.php';
 require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/modules.php';   // module availability, GH #217
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');

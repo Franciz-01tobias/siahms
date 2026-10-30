@@ -114,9 +114,9 @@ function selfServicePortalLogoUrl(PDO $conn): string
     }
 
     // Only ever a file we put in the portal's own upload directory.
-    if (strpos($rel, 'system/uploads/branding/portal/') !== 0
-        || strpos($rel, '..') !== false
-        || strpos($rel, "\0") !== false
+    if (!str_starts_with($rel, 'system/uploads/branding/portal/')
+        || str_contains($rel, '..')
+        || str_contains($rel, "\0")
         || !preg_match('#^[A-Za-z0-9._/-]+$#', $rel)) {
         return '';
     }

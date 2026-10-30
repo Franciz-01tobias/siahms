@@ -1,4 +1,7 @@
 <?php
+// FIRST: this page loads an includes/ file before config.php, so the version guard
+// must run before that file is read - see includes/php_version_guard.php.
+require_once __DIR__ . '/../includes/php_version_guard.php';
 /**
  * LMS — the player for an authored (native) course.
  *
@@ -37,7 +40,7 @@ $translationNamespaces = ['common', 'lms'];
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/lms.css?v=11">
     <!-- Mobile layer: linked AFTER this page's own CSS so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -80,7 +83,7 @@ $translationNamespaces = ['common', 'lms'];
         window.API_BASE  = '../api/lms/';
         window.COURSE_ID = <?php echo (int)$courseId; ?>;
     </script>
-    <script src="../assets/js/lms-native-player.js?v=3"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/lms-native-player.js?v=4"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

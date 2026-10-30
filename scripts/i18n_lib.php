@@ -107,7 +107,7 @@ function i18nReadTsv(string $path, array &$problems = []): array
         $n++;
         $line = rtrim($line, "\r\n");
         if ($line === '') continue;
-        if (strpos($line, "\t") === false) {
+        if (!str_contains($line, "\t")) {
             /* ⚠️ THE FAILURE MODE THAT ACTUALLY HAPPENS. A key whose English is
                an empty string looks like it needs nothing after the tab, so the
                tab gets dropped — and a merge tool that split on tab would bin

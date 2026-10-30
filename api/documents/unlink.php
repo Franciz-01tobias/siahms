@@ -18,6 +18,9 @@ require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/documents.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -26,7 +29,7 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 $analystId = (int) $_SESSION['analyst_id'];
-$allowed   = $_SESSION['allowed_modules'] ?? null;
+$allowed   = analystAllowedModulesNow();   // the grants now, not at sign-in
 
 $in = json_decode(file_get_contents('php://input'), true) ?: $_POST;
 $documentId = (int) ($in['document_id'] ?? 0);

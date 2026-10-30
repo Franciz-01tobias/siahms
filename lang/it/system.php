@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Tieni d\'occhio questa pagina.</strong> Quando il processo è in esecuzione, lo stato qui sopra diventa verde e le consegne compaiono sotto. Le note complete di configurazione (Windows e Linux, verifica della firma) sono nella <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">wiki dei Workflow</a>.',
         'fact_worker' => 'Script del processo',
         'fact_retry' => 'Pianificazione dei tentativi',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1h &middot; 6h, poi fallito',
         'fact_retention' => 'Conservazione del registro',
         'fact_queued' => 'In coda ora',
         'days' => '{n} giorni',

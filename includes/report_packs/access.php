@@ -38,7 +38,7 @@ function rpViewer(PDO $conn, int $analystId): array
         $s = $conn->prepare("SELECT team_id FROM analyst_teams WHERE analyst_id = ?");
         $s->execute([$analystId]);
         $teams = array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
-    } catch (Exception $e) { /* no teams table yet: no team shares match */ }
+    } catch (Exception) { /* no teams table yet: no team shares match */ }
 
     $s = $conn->prepare("SELECT department, is_admin FROM analysts WHERE id = ?");
     $s->execute([$analystId]);

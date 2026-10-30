@@ -89,7 +89,7 @@ function documentTextQueueDepth(PDO $conn): int
         $st = $conn->prepare("SELECT COUNT(*) FROM document_text WHERE status = ?");
         $st->execute([ATT_TEXT_PENDING]);
         return (int) $st->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return 0;
     }
 }

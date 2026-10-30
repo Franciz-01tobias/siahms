@@ -59,7 +59,7 @@ function projectBudgetReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT 1 FROM project_budget_lines LIMIT 0"); $conn->query("SELECT 1 FROM project_labour_rates LIMIT 0"); $conn->query("SELECT currency FROM projects LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -85,7 +85,7 @@ function projectStampCurrency(PDO $conn, int $projectId): void
 {
     try {
         $conn->prepare("UPDATE projects SET currency = ? WHERE id = ? AND (currency IS NULL OR currency = '')")->execute([projectInstallCurrency($conn), $projectId]);
-    } catch (Throwable $e) { /* before Database Verification */ }
+    } catch (Throwable) { /* before Database Verification */ }
 }
 
 /** Every rate, [scope][ref] => [[from, rate], ...] newest first. Cached per request. */
@@ -97,7 +97,7 @@ function projectLabourRates(PDO $conn): array
         foreach ($conn->query("SELECT scope, ref_id, hourly_rate, effective_from FROM project_labour_rates ORDER BY effective_from DESC, id DESC")->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $out[$r['scope']][(int)($r['ref_id'] ?? 0)][] = [(string)$r['effective_from'], (float)$r['hourly_rate']];
         }
-    } catch (Throwable $e) { /* before Database Verification */ }
+    } catch (Throwable) { /* before Database Verification */ }
     return $GLOBALS['__prj_labour_rates'] = $out;
 }
 
@@ -144,7 +144,7 @@ function projectLabour(PDO $conn, array $projects, bool $byDay = false): array
                                WHERE t.project_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ") AND e.is_active = 1");
         $st->execute($ids);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return $out;
     }
     foreach ($rows as $r) {
@@ -288,7 +288,7 @@ function projectLabourToCome(PDO $conn, array $projects): array
                                  WHERE t.project_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ") AND COALESCE(ts.is_closed, 0) = 0");
         $st->execute($ids);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return $out;   // before estimates existed
     }
     foreach ($rows as $r) {
@@ -386,7 +386,7 @@ function projectEarnedValue(PDO $conn, int $projectId, array $timeline, float $b
                                WHERE t.project_id = ? AND t.parent_task_id IS NULL");
         $st->execute([$projectId]);
         $tasks = $st->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return null;   // before estimates existed
     }
     if (!$tasks) return null;
@@ -517,7 +517,7 @@ function projectBudgetCostCentres(PDO $conn, array $project): array
         $st = $conn->prepare("SELECT id, code, name FROM cost_centres WHERE tenant_id = ? AND is_active = 1 ORDER BY code");
         $st->execute([$tenant]);
         return array_map(fn($r) => ['id' => (int)$r['id'], 'code' => $r['code'], 'name' => $r['name']], $st->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { return []; }
+    } catch (Throwable) { return []; }
 }
 
 /** The contracts linked to the project on Connections - what a line may name. */
@@ -530,7 +530,7 @@ function projectBudgetContracts(PDO $conn, int $projectId): array
         $st->execute([$projectId]);
         return array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title'], 'number' => $r['contract_number'],
             'value' => $r['contract_value'] !== null ? (float)$r['contract_value'] : null, 'currency' => $r['currency']], $st->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { return []; }
+    } catch (Throwable) { return []; }
 }
 
 /**

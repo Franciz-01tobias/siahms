@@ -39,7 +39,7 @@ function ewSafePath(string $p): ?string
     $p = preg_replace('/\.md$/', '', $p);
     if ($p === '' || strlen($p) > 300) return null;
     if (!preg_match('#^[A-Za-z0-9_][A-Za-z0-9_./-]*$#', $p)) return null;
-    if (strpos($p, '..') !== false || strpos($p, '//') !== false) return null;
+    if (str_contains($p, '..') || str_contains($p, '//')) return null;
     $section = explode('/', $p)[0];
     if (!in_array($section, EW_SECTIONS, true)) return null;
     return $p;
@@ -214,7 +214,7 @@ function ewSearch(string $q, int $limit = 60): array
         $pos = mb_strpos($low, $words[0]);
         $snip = $pos === false ? '' : mb_substr($text, max(0, $pos - 60), 180);
         $snip = trim(preg_replace('/[#*`>|_\[\]]+|\s+/', ' ', $snip));
-        $hits[] = ['page' => $rel, 'title' => $title, 'snippet' => $snip, 'score' => $score + (strpos($rel, 'handbook/') === 0 ? 3 : 0)];
+        $hits[] = ['page' => $rel, 'title' => $title, 'snippet' => $snip, 'score' => $score + (str_starts_with($rel, 'handbook/') ? 3 : 0)];
     }
     usort($hits, fn($a, $b) => $b['score'] <=> $a['score'] ?: strnatcasecmp($a['title'], $b['title']));
     return array_map(fn($h) => ['page' => $h['page'], 'title' => $h['title'], 'snippet' => $h['snippet']], array_slice($hits, 0, $limit));

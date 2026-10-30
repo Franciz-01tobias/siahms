@@ -49,7 +49,7 @@ function projectGateKindReady(PDO $conn): bool
 {
     static $ready = null;
     if ($ready === null) {
-        try { $conn->query("SELECT gate_kind FROM project_stages LIMIT 0"); $ready = true; } catch (Throwable $e) { $ready = false; }
+        try { $conn->query("SELECT gate_kind FROM project_stages LIMIT 0"); $ready = true; } catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -59,7 +59,7 @@ function projectTemplatesReady(PDO $conn): bool
 {
     static $ready = null;
     if ($ready === null) {
-        try { $conn->query("SELECT 1 FROM project_templates LIMIT 0"); $ready = true; } catch (Throwable $e) { $ready = false; }
+        try { $conn->query("SELECT 1 FROM project_templates LIMIT 0"); $ready = true; } catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -384,14 +384,14 @@ function projectTemplateList(PDO $conn, bool $all = false): array
  */
 function projectTemplateLoad(PDO $conn, string $key, bool $evenHidden = false): ?array
 {
-    if (strpos($key, 'builtin:') === 0) {
+    if (str_starts_with($key, 'builtin:')) {
         $k = substr($key, 8);
         $all = projectBuiltinTemplates();
         if (!isset($all[$k])) return null;
         if (!$evenHidden && in_array($k, array_filter(explode(',', projectSetting($conn, 'project_hidden_templates'))), true)) return null;
         return [$all[$k]['name'], projectTemplateNormalise($all[$k])];
     }
-    if (strpos($key, 'saved:') === 0 && projectTemplatesReady($conn)) {
+    if (str_starts_with($key, 'saved:') && projectTemplatesReady($conn)) {
         $st = $conn->prepare("SELECT name, content, is_active FROM project_templates WHERE id = ?");
         $st->execute([(int)substr($key, 6)]);
         $r = $st->fetch(PDO::FETCH_ASSOC);

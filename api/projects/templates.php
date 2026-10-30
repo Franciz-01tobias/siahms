@@ -39,7 +39,7 @@ projectApiRun(function () use ($conn, $ctx, $analystId) {
             break;
         case 'builtin_hidden':
             $key = (string)($in['key'] ?? '');
-            if (strpos($key, 'builtin:') === 0) $key = substr($key, 8);
+            if (str_starts_with($key, 'builtin:')) $key = substr($key, 8);
             ProjectTemplatesService::setBuiltinHidden($conn, $ctx, $key, !empty($in['hidden']));
             break;
         default:

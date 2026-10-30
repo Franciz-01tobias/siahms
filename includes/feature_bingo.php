@@ -79,6 +79,7 @@ function featureBingoModules(): array
         'self-service'   => 'Self-service portal',
         'assets'         => 'Asset Management',
         'people'         => 'People',
+        'starters'       => 'Starters & leavers',
         'knowledge'      => 'Knowledge',
         'changes'        => 'Change Management',
         'problems'       => 'Problem Management',
@@ -218,7 +219,7 @@ function featureBingoAssertReadOnly(string $sql): void
     // Judge the SQL, not the text inside it: `rejected_action <> 'delete'` is a
     // read, and the word inside the quotes must not trip the keyword test.
     $s = preg_replace("/'(?:[^'\\\\]|\\\\.|'')*'/", "''", $s);
-    if (strpos($s, ';') !== false) throw new Exception('a check must be a single statement');
+    if (str_contains($s, ';')) throw new Exception('a check must be a single statement');
     if (!preg_match('/^SELECT\s/i', $s)) throw new Exception('a check must be a SELECT');
     if (preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/i', $s)) throw new Exception('a check may only read');
 }
@@ -228,7 +229,7 @@ function featureBingoDismissed(PDO $conn): array
 {
     try {
         return array_fill_keys($conn->query("SELECT card_id FROM feature_bingo_dismissed")->fetchAll(PDO::FETCH_COLUMN), true);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return [];   // before Database Verification: nothing dismissed
     }
 }
@@ -258,7 +259,7 @@ function featureBingoEvaluate(PDO $conn): array
 function featureBingoReady(PDO $conn): bool
 {
     try { $conn->query("SELECT card_id FROM feature_bingo_dismissed LIMIT 0"); return true; }
-    catch (Throwable $e) { return false; }
+    catch (Throwable) { return false; }
 }
 
 /**

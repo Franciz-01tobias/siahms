@@ -13,14 +13,14 @@ return [
     'module' => 'forms',
     'label'  => 'Forms',
     'umbrella' => [
-        'cap'       => Cap::FORMS_MANAGE,
+        'cap'       => capKey(Cap::FORMS_MANAGE),
         'grant'     => 'Manage everything in Forms settings',
         'sensitive' => true,   // implies the AI credentials
     ],
     'tabs' => [
         [
             'id'           => 'layout',
-            'cap'          => Cap::FORMS_LAYOUT,
+            'cap'          => capKey(Cap::FORMS_LAYOUT),
             'label_key'    => 'forms.settings.tab_layout',
             'grant'        => 'Configure the form layout',
             'setting_keys' => ['forms_logo_alignment'],
@@ -30,14 +30,14 @@ return [
             // collection can stop several forms accepting submissions, which is
             // a different order of thing from choosing where the logo sits.
             'id'           => 'collections',
-            'cap'          => Cap::FORMS_COLLECTIONS,
+            'cap'          => capKey(Cap::FORMS_COLLECTIONS),
             'label_key'    => 'forms.settings.tab_collections',
             'grant'        => 'Create, close and delete form collections',
             'setting_keys' => ['forms_collection_close_effect'],
         ],
         [
             'id'           => 'ai',
-            'cap'          => Cap::FORMS_AI,
+            'cap'          => capKey(Cap::FORMS_AI),
             'label_key'    => 'forms.settings.tab_ai',
             'grant'        => 'Configure the Forms AI provider, including its API key',
             'sensitive'    => true,
@@ -46,7 +46,7 @@ return [
         [
             // Who may design forms (#180). The switch that makes "Design forms" bite.
             'id'           => 'access',
-            'cap'          => Cap::FORMS_ACCESS,
+            'cap'          => capKey(Cap::FORMS_ACCESS),
             'label_key'    => 'forms.settings.tab_access',
             'grant'        => 'Choose who can design forms',
             'setting_keys' => ['forms_design_restricted'],
@@ -58,7 +58,7 @@ return [
     // Bites only once Forms → Settings → Access says so.
     'actions' => [
         [
-            'cap'      => Cap::FORMS_DESIGN,
+            'cap'      => capKey(Cap::FORMS_DESIGN),
             'grant'    => 'Create, edit, publish and delete forms, including who approves them and what happens next',
             'restrict' => ['setting' => 'forms_design_restricted', 'value' => '1'],
         ],

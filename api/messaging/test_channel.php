@@ -19,6 +19,9 @@ require_once '../../includes/tenancy.php';
 require_once '../../includes/messaging/messaging.php';
 require_once '../../includes/messaging/ingest.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -146,7 +149,7 @@ function testReachability(PDO $conn, int $channelId): array
     if ($code === 200 && is_array($json) && ($json['pong'] ?? '') === $nonce) {
         return ['ok' => true, 'detail' => "Reachable — the public webhook URL responded correctly ($host)."];
     }
-    if (strpos($host, 'ngrok') !== false && stripos((string) $body, 'ngrok') !== false) {
+    if (str_contains($host, 'ngrok') && stripos((string) $body, 'ngrok') !== false) {
         return ['ok' => false, 'detail' => "Reached $host, but ngrok's own interstitial page answered instead of FreeITSM. A free ngrok tunnel shows this once per visitor/browser — it normally does NOT affect real webhook calls from Telegram/Meta/Twilio (they aren't browsers), only manual clicks and some automated health checks. If it keeps happening, open the URL once in a browser and click through, or use a paid ngrok plan / your own domain instead."];
     }
     return ['ok' => false, 'detail' => "Reached $host but got HTTP $code with an unexpected response — a proxy, firewall or login page may be intercepting the URL before it reaches FreeITSM."];

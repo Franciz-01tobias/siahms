@@ -459,7 +459,7 @@ $translationNamespaces = ['common', 'service-status'];
         [data-theme-mode="dark"] .affected-row .remove-svc:hover { background: #3a1a1a; }
     </style>
     <!-- Mobile: LAYER 18 — board grid two-up, incidents as a card feed. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -1077,7 +1077,8 @@ $translationNamespaces = ['common', 'service-status'];
                 const live = p.state === 'started';
                 const chips = (p.services || []).map(s => '<span class="planned-chip" style="--pc:' + escapeHtml(s.colour || '#64748b') + '">' + escapeHtml(s.name)
                     + (s.impact ? ' <small>' + escapeHtml(s.impact) + '</small>' : '') + '</span>').join('');
-                const from = p.project_id ? '<a class="planned-from" href="../projects/view.php?id=' + encodeURIComponent(p.project_id) + '">'
+                // GH #217: no link into Projects while it is switched off (or not granted).
+                const from = p.project_id && <?php echo analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects') ? 'true' : 'false'; ?> ? '<a class="planned-from" href="../projects/view.php?id=' + encodeURIComponent(p.project_id) + '">'
                     + escapeHtml(window.t('service-status.planned.from_project', { name: p.project_name || ('#' + p.project_id) })) + '</a>' : '';
                 const action = live
                     ? (p.incident_id ? '<button type="button" class="btn btn-secondary planned-btn" onclick="editIncident(' + p.incident_id + ')">' + escapeHtml(window.t('service-status.planned.open')) + '</button>' : '')
@@ -1582,7 +1583,7 @@ $translationNamespaces = ['common', 'service-status'];
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text || '';
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Close modal on outside click
@@ -1590,6 +1591,6 @@ $translationNamespaces = ['common', 'service-status'];
             if (e.target === this) closeIncidentModal();
         });
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

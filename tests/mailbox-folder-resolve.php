@@ -42,8 +42,8 @@ $CHILD_OF_INBOX = [['id' => 'BBB_free', 'displayName' => 'freeitsm']];
 $calls = [];
 $get = function ($url) use (&$calls, $TOP, $CHILD_OF_INBOX) {
     $calls[] = $url;
-    if (strpos($url, '/childFolders') !== false) {
-        return ['code' => 200, 'body' => ['value' => strpos($url, 'inbox') !== false ? $CHILD_OF_INBOX : []]];
+    if (str_contains($url, '/childFolders')) {
+        return ['code' => 200, 'body' => ['value' => str_contains($url, 'inbox') ? $CHILD_OF_INBOX : []]];
     }
     return ['code' => 200, 'body' => ['value' => $TOP]];
 };

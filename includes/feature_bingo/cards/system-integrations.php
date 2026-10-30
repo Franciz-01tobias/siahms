@@ -100,6 +100,18 @@ return [
         'link'     => 'system/webhooks/',
         'check'    => ['setting', 'webhook_payload_retention_days', 'nonempty'],
     ],
+    [
+        'id'       => 'system.webhook_delivery_settings',
+        'module'   => 'system',
+        'tier'     => 'extra',
+        'category' => 'integrations',
+        'title'    => 'Webhook tries and timeout',
+        'what'     => 'How many times a webhook is tried before it is given up, how long each try waits for the endpoint, and whether a send cut off part-way is retried or left for Replay.',
+        'why'      => 'A slow endpoint needs a longer wait; a chat channel that must never see a message twice wants interrupted sends left for a person to check.',
+        'done'     => 'An administrator has saved one of the Delivery settings on System > Webhooks (6 tries, 15 seconds and retry until then).',
+        'link'     => 'system/webhooks/#delivery',
+        'check'    => ['sql', "SELECT COUNT(*) FROM system_settings WHERE setting_key IN ('webhook_max_attempts', 'webhook_timeout_seconds', 'webhook_interrupted_action') AND setting_value <> ''"],
+    ],
 
     // ── Calendar sync ───────────────────────────────────────────────────────
     [
@@ -260,6 +272,60 @@ return [
         'done'     => 'At least one AI feature is set to the OpenAI-compatible (custom endpoint) provider.',
         'link'     => 'system/ai/',
         'check'    => ['sql', "SELECT COUNT(*) FROM system_settings WHERE setting_key IN (" . $aiKeys('provider') . ") AND setting_value = 'openai_compatible'"],
+    ],
+
+    // ── Integrations: monitoring ─────────────────────────────────────────────
+    [
+        'id'       => 'system.zabbix_incidents',
+        'module'   => 'system',
+        'tier'     => 'extra',
+        'category' => 'integrations',
+        'title'    => 'Zabbix alerts raise incidents',
+        'what'     => 'Zabbix sends its problems to FreeITSM: each opens an incident at the priority its severity maps to, linked to the server in the CMDB, and the recovery resolves it.',
+        'why'      => 'Nobody has to watch the monitoring screen and log a ticket by hand - the outage is on the board, with its server, the moment Zabbix sees it.',
+        'done'     => 'Zabbix has raised at least one incident.',
+        'link'     => 'system/integrations/zabbix.php',
+        'check'    => ['rows', 'zabbix_events', "action = 'created'"],
+    ],
+
+    // ── Integrations: alerts ─────────────────────────────────────────────────
+    [
+        'id'       => 'system.msteams_alerts',
+        'module'   => 'system',
+        'tier'     => 'extra',
+        'category' => 'integrations',
+        'title'    => 'Alerts in Teams channels',
+        'what'     => 'Tick what each Teams channel hears about - urgent tickets, SLA breaches, the tickets for its teams - and FreeITSM posts each as a card with a button straight to the ticket.',
+        'why'      => 'An L2 channel sees its own tickets arrive, and the major-incident channel sees the urgent ones, without anyone building a workflow by hand.',
+        'done'     => 'A Teams channel has its address saved on System -> Integrations -> Microsoft Teams.',
+        'link'     => 'system/integrations/msteams.php',
+        'check'    => ['rows', 'msteams_channels', "webhook_url IS NOT NULL AND webhook_url <> ''"],
+    ],
+
+    // ── Integrations: telephony ──────────────────────────────────────────────
+    [
+        'id'       => 'system.threecx_calls',
+        'module'   => 'system',
+        'tier'     => 'extra',
+        'category' => 'integrations',
+        'title'    => 'Phone calls land on the ticket',
+        'what'     => '3CX asks FreeITSM who is calling and opens their ticket; when the call ends it is noted there, written by the analyst who took it.',
+        'why'      => 'Nobody types up a call afterwards, or forgets to - every conversation with a requester is on their ticket, with how long it took and the recording.',
+        'done'     => '3CX has noted a call on a ticket (or opened one).',
+        'link'     => 'system/integrations/threecx.php',
+        'check'    => ['rows', 'threecx_calls', "action IN ('noted', 'created')"],
+    ],
+    [
+        'id'       => 'system.click_to_call',
+        'module'   => 'system',
+        'tier'     => 'extra',
+        'category' => 'integrations',
+        'title'    => 'Click to call',
+        'what'     => 'Phone numbers on tickets and people have a Call button that dials through the analyst\'s own phone - the 3CX web client, its desktop app or any softphone.',
+        'why'      => 'No more reading a number off the screen and typing it into a handset, digit by digit.',
+        'done'     => 'A dial address is set on System -> Integrations -> 3CX.',
+        'link'     => 'system/integrations/threecx.php',
+        'check'    => ['sql', "SELECT COUNT(*) FROM system_settings WHERE setting_key = 'phone_dial_url' AND setting_value LIKE '%{number}%'"],
     ],
 
     // ── Integrations: issue trackers────────────────────────────────────────

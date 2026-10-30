@@ -14,6 +14,9 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once __DIR__ . '/../../workflow/includes/engine.php';
+
+// Runs real actions: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -32,6 +35,19 @@ if (!$id) {
 }
 
 try {
+    // GH #209. Firing runs the actions, so it needs the same right as changing
+    // the workflow: a shared one runs for every company's records.
+    $conn = connectToDatabase();
+    $analystId = (int)$_SESSION['analyst_id'];
+    $wf = workflowRowTenant($conn, $id);
+    if (!$wf || !analystCanReadWorkflow($conn, $analystId, $wf)) {
+        echo json_encode(['success' => false, 'error' => 'Workflow not found']);
+        exit;
+    }
+    if (!analystCanWriteWorkflowFor($conn, $analystId, $wf['tenant_id'])) {
+        echo json_encode(['success' => false, 'error' => 'This workflow runs for every company, so only someone who can see every company can test it.']);
+        exit;
+    }
     $result = WorkflowEngine::manualFire($id, $payload, $dryRun);
     echo json_encode(['success' => true, 'result' => $result]);
 } catch (Exception $e) {

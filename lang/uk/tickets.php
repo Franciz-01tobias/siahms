@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'Постачальник',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'Базовий IMAP / SMTP (ім\'я користувача &amp; пароль)',
+                'provider_imap' => 'Базовий IMAP / SMTP (ім\'я користувача & пароль)',
                 'display_name' => 'Відображувана назва',
                 'display_name_placeholder' => 'напр., Служба підтримки',
                 'target_mailbox' => 'Цільова поштова скринька',

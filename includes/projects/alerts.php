@@ -152,7 +152,7 @@ function projectAlertsScan(PDO $conn, ?int $projectId = null): array
     $out = ['health' => 0, 'breaches' => 0, 'stages_due' => 0, 'milestones' => 0];
     try {
         $conn->query("SELECT alert_health FROM projects LIMIT 0");   // before Database Verification: nothing to compare with
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return $out;
     }
 
@@ -259,7 +259,7 @@ function projectAlertsStagesDue(PDO $conn, ?int $projectId = null): int
         if ($window === null) continue;
         try {
             $claim->execute(['project_stage:' . (int)$r['stage_id'] . ':' . $window, (string)$r['end_date']]);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $fired;   // no ledger yet: firing without one would repeat every run
         }
         if ($claim->rowCount() !== 1) continue;
@@ -373,7 +373,7 @@ function projectAlertsMilestones(PDO $conn, ?int $projectId = null): int
         }
         try {
             $claim->execute([$event, $key, (string)$r['due_date']]);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $fired;   // no ledger yet: firing without one would repeat every run
         }
         if ($claim->rowCount() !== 1) continue;

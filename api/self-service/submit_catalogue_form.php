@@ -47,14 +47,20 @@ if (!$formId) {
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'forms');
 
     // No analyst is acting. The service re-checks is_portal_visible itself, so
     // a hidden form is refused here even though this adapter never looked.
+    // TRAP: positional, not named arguments. A file the web server runs directly
+    // must parse on old PHP, or includes/php_version_guard.php never gets to say
+    // "this needs PHP 8.1" - PHP reads the whole file before running any of it.
     $ctx = new ActorContext(
-        actorId:   0,
-        source:    'ui',
-        locale:    class_exists('I18n') ? I18n::getLocale() : 'en',
-        actorName: ''
+        0,                                                   // actorId: nobody
+        null,                                                // companyScope
+        'ui',                                                // source
+        class_exists('I18n') ? I18n::getLocale() : 'en',     // locale
+        ''                                                   // actorName
     );
 
     $submissionId = FormsService::submitForm($conn, $ctx, $formId, $data, $userId);

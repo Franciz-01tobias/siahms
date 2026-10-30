@@ -104,6 +104,7 @@ function warbotTools(): array
                 'required' => [],
             ],
             'capability' => null,
+            'feature'    => 'rota',   // GH #217: not offered while the duty rota is switched off
             'handler'    => 'warbotToolOnCall',
         ],
 
@@ -339,8 +340,10 @@ function warbotTools(): array
  */
 function warbotToolAllowed(PDO $conn, int $analystId, array $t): bool
 {
-    if ($t['capability'] !== null && !analystHasCapability($conn, $analystId, $t['capability'])) return false;
+    if ($t['capability'] !== null && !analystHasCapability($conn, $analystId, Cap::from($t['capability']))) return false;
     if (!empty($t['module']) && !analystCanAccessModule($conn, $analystId, $t['module'])) return false;
+    // GH #217: a Tickets feature switched off for the install (availability only, not who).
+    if (!empty($t['feature']) && !moduleIsEnabled($conn, $t['feature'])) return false;
     return true;
 }
 
@@ -373,6 +376,8 @@ function warbotRunTool(PDO $conn, int $analystId, string $name, array $args): st
     $tools = warbotTools();
     if (!isset($tools[$name])) return 'No such tool.';
     $t = $tools[$name];
+    // GH #217: backstop for a typed /oncall - say it is switched off, not "no permission".
+    if (!empty($t['feature']) && !moduleIsEnabled($conn, $t['feature'])) return moduleDisabledMessage($t['feature']);
     if (!warbotToolAllowed($conn, $analystId, $t)) {
         return 'You do not have permission to use that.';
     }

@@ -15,6 +15,9 @@ require_once '../../includes/cost_centre_assign.php';   // GH #160
 
 header('Content-Type: application/json');
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
@@ -56,6 +59,11 @@ if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
 // person saved without an address would be refused as a duplicate.
 $emailOrNull = $email !== '' ? $email : null;
 
+require_once __DIR__ . '/../../includes/password_policy.php';   // the one rule for a new password
+if ($password !== '' && ($why = passwordPolicyError($password))) {
+    echo json_encode(['success' => false, 'error' => $why]);
+    exit;
+}
 if ($password !== '' && strlen($password) < 8) {
     echo json_encode(['success' => false, 'error' => 'Password must be at least 8 characters']);
     exit;
@@ -281,9 +289,8 @@ try {
         // Active/inactive. Stamps deactivated_datetime in the same statement so
         // "who left this month" is answerable without a second write to miss.
         if (array_key_exists('is_active', $data)) {
-            $active = !empty($data['is_active']) ? 1 : 0;
-            $sets[] = 'is_active = ?';            $args[] = $active;
-            $sets[] = 'deactivated_datetime = ' . ($active ? 'NULL' : 'UTC_TIMESTAMP()');
+            // Shared with Starters & leavers' "Mark as left" (includes/users.php).
+            array_push($sets, ...userActiveSets(!empty($data['is_active'])));
         }
 
         if ($sets) {

@@ -66,7 +66,7 @@ file_put_contents(SESS_DIR . "/sess_$sid",
 echo "=== article list ===\n";
 $d = hit('api/knowledge/knowledge_articles.php', $sid);
 $titles = array_column($d['articles'] ?? [], 'title');
-$zz = array_values(array_filter($titles, function ($t) { return strpos($t, 'ZZ-R-') === 0; }));
+$zz = array_values(array_filter($titles, function ($t) { return str_starts_with($t, 'ZZ-R-'); }));
 check('sees its own company + shared', in_array('ZZ-R-DREAM', $zz) && in_array('ZZ-R-SHARED', $zz), implode(',', $zz));
 check('does NOT see the other company', !in_array('ZZ-R-EDMOZLEY', $zz), 'LEAK: ' . implode(',', $zz));
 
@@ -81,7 +81,7 @@ check('a shared article opens', !empty($d['success']), json_encode($d));
 echo "\n=== review list (was un-gated) ===\n";
 $d = hit('api/knowledge/get_review_list.php', $sid);
 $titles = array_column($d['articles'] ?? [], 'title');
-$zz = array_values(array_filter($titles, function ($t) { return strpos($t, 'ZZ-R-') === 0; }));
+$zz = array_values(array_filter($titles, function ($t) { return str_starts_with($t, 'ZZ-R-'); }));
 check('review list is scoped', !in_array('ZZ-R-EDMOZLEY', $zz), 'LEAK: ' . implode(',', $zz));
 
 echo "\n=== embedding stats / backfill list ===\n";
@@ -89,7 +89,7 @@ $d = hit('api/knowledge/get_embedding_stats.php', $sid);
 check('stats respond', isset($d['total']) || isset($d['success']), json_encode($d));
 $d = hit('api/knowledge/get_articles_for_embedding.php', $sid);
 $titles = array_column($d['articles'] ?? [], 'title');
-$zz = array_values(array_filter($titles, function ($t) { return strpos($t, 'ZZ-R-') === 0; }));
+$zz = array_values(array_filter($titles, function ($t) { return str_starts_with($t, 'ZZ-R-'); }));
 check('backfill list is scoped', !in_array('ZZ-R-EDMOZLEY', $zz), 'LEAK: ' . implode(',', $zz));
 
 echo "\n=== watchtower knowledge card ===\n";

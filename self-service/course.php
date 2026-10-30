@@ -195,7 +195,7 @@ require_once __DIR__ . '/includes/header.php';
     window.LMS_AS = 'portal';
 </script>
 <?php if ($isNative): ?>
-<script src="../assets/js/lms-native-player.js?v=3"></script>
+<script src="../assets/js/lms-native-player.js?v=4"></script>
 <?php elseif ($launchUrl !== null): ?>
 <script>
 window.SCORM_CONFIG = {

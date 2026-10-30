@@ -37,6 +37,19 @@ function getContributors(): array
 {
     return [
         [
+            // Name and company as Ed was given them (October 2026). The package
+            // he sent also held six modules, not taken yet - add them here if
+            // they are.
+            'name'   => 'Carl Steynvaard (Open Resilience)',
+            'github' => null,
+            'date'   => '2026-10-24',
+            'what'   => 'The Zabbix, 3CX and Microsoft Teams alert integrations: monitoring problems open incidents '
+                      . 'by themselves, linked to the server in the CMDB; the phone system shows who is calling and '
+                      . 'keeps every call on the caller\'s ticket; and service desk alerts reach Teams channels as '
+                      . 'cards - all built and run in production, and offered to the project along with six '
+                      . 'modules of his own.',
+        ],
+        [
             // Public GitHub handle only; asked in the #194 reply how they would like
             // to be credited - change this if they say otherwise.
             'name'   => 'Dr4inder',

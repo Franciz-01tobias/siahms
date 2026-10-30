@@ -46,7 +46,7 @@ try {
            application's brand colour, which help.css already reads from
            --accent. So there is nothing for this page to say. */
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="tickets-help">
     <?php include 'includes/header.php'; ?>
@@ -116,6 +116,14 @@ try {
             <a href="#confidential" class="help-nav-link" data-section="confidential">
                 <span class="help-nav-num"><?php echo $showTenancyHelp ? 15 : 14; ?></span>
                 Confidential tickets
+            </a>
+            <a href="#case-reports" class="help-nav-link" data-section="case-reports">
+                <span class="help-nav-num"><?php echo $showTenancyHelp ? 16 : 15; ?></span>
+                <?php echo htmlspecialchars(t('tickets.help.case.nav')); ?>
+            </a>
+            <a href="#workspace" class="help-nav-link" data-section="workspace">
+                <span class="help-nav-num"><?php echo $showTenancyHelp ? 17 : 16; ?></span>
+                <?php echo htmlspecialchars(t('tickets.help.workspace.nav')); ?>
             </a>
         </div>
 
@@ -294,6 +302,26 @@ try {
                         <div><?php echo t('tickets.help.working.fullscreen_max'); ?></div>
                         <div><?php echo t('tickets.help.working.fullscreen_dbl'); ?></div>
                         <div><?php echo t('tickets.help.working.fullscreen_sticks'); ?></div>
+                        <div><?php echo t('tickets.help.working.fullscreen_back'); ?></div>
+                        <div><?php echo t('tickets.help.working.fullscreen_keys'); ?></div>
+                    </div>
+
+                    <?php /* GH #226: pictures and PDFs open in the Files viewer, in a window over the ticket. */ ?>
+                    <p style="margin-top: 20px;"><?php echo t('tickets.help.working.viewer_heading'); ?></p>
+                    <p><?php echo t('tickets.help.working.viewer_body'); ?></p>
+                    <div class="help-list">
+                        <div><?php echo t('tickets.help.working.viewer_window'); ?></div>
+                        <div><?php echo t('tickets.help.working.viewer_close'); ?></div>
+                        <div><?php echo t('tickets.help.working.viewer_other'); ?></div>
+                    </div>
+
+                    <?php /* GH #224: screenshots pasted into a note, in place. */ ?>
+                    <p style="margin-top: 20px;"><?php echo t('tickets.help.working.paste_heading'); ?></p>
+                    <p><?php echo t('tickets.help.working.paste_body'); ?></p>
+                    <div class="help-list">
+                        <div><?php echo t('tickets.help.working.paste_shared'); ?></div>
+                        <div><?php echo t('tickets.help.working.paste_save'); ?></div>
+                        <div><?php echo t('tickets.help.working.paste_text'); ?></div>
                     </div>
 
                     <p style="margin-top: 20px;"><?php echo t('tickets.help.working.rightclick_heading'); ?></p>
@@ -454,6 +482,8 @@ try {
 
                     <p><?php echo t('tickets.help.comments.audit_heading'); ?></p>
                     <p><?php echo t('tickets.help.comments.audit_body'); ?></p>
+                    <p><?php echo t('tickets.help.comments.export_heading'); ?></p>
+                    <p><?php echo t('tickets.help.comments.export_body'); ?></p>
 
                     <p class="help-note"><?php echo t('tickets.help.comments.tip'); ?></p>
                 </div>
@@ -496,6 +526,8 @@ try {
                             <p><?php echo t('tickets.help.csat.intro'); ?></p>
                         </div>
                     </div>
+
+                    <p class="help-note"><?php echo t('tickets.help.csat.switch_note'); ?></p>
 
                     <p><?php echo t('tickets.help.csat.modes_heading'); ?></p>
                     <div class="help-list">
@@ -648,6 +680,7 @@ try {
                         <h3><?php echo t('tickets.help.cal_rota.heading'); ?></h3>
                     </div>
                     <p><?php echo t('tickets.help.cal_rota.intro'); ?></p>
+                    <p class="help-note"><?php echo t('tickets.help.cal_rota.switch_note'); ?></p>
 
                     <p><?php echo t('tickets.help.cal_rota.cal_heading'); ?></p>
                     <p><?php echo t('tickets.help.cal_rota.cal_body'); ?></p>
@@ -1227,6 +1260,46 @@ try {
                         <a href="#user-management">User management</a>.
                     </p>
                 </div>
+
+                <!-- Case reports (GH #204) -->
+                <div class="help-section" id="case-reports">
+                    <div class="help-section-header">
+                        <span class="help-section-num"><?php echo $showTenancyHelp ? 16 : 15; ?></span>
+                        <div>
+                            <h3><?php echo htmlspecialchars(t('tickets.help.case.heading')); ?></h3>
+                            <p><?php echo t('tickets.help.case.intro'); ?></p>
+                        </div>
+                    </div>
+                    <div class="help-steps">
+                        <?php foreach (['step1', 'step2', 'step3', 'step4'] as $i => $k): ?>
+                        <div class="help-step"><div class="help-step-num"><?php echo $i + 1; ?></div><div><?php echo t('tickets.help.case.' . $k); ?></div></div>
+                        <?php endforeach; ?>
+                    </div>
+                    <p><?php echo t('tickets.help.case.contents'); ?></p>
+                    <p><?php echo t('tickets.help.case.layout'); ?></p>
+                    <p><?php echo t('tickets.help.case.who'); ?></p>
+                    <p><?php echo t('tickets.help.case.recorded'); ?></p>
+                    <p class="help-note"><?php echo t('tickets.help.case.note'); ?></p>
+                </div>
+
+                <!-- The ticket workspace and the ticket table (PR #211, #212, #213) -->
+                <div class="help-section" id="workspace">
+                    <div class="help-section-header">
+                        <span class="help-section-num"><?php echo $showTenancyHelp ? 17 : 16; ?></span>
+                        <div>
+                            <h3><?php echo htmlspecialchars(t('tickets.help.workspace.heading')); ?></h3>
+                            <p><?php echo t('tickets.help.workspace.intro'); ?></p>
+                        </div>
+                    </div>
+                    <h4><?php echo htmlspecialchars(t('tickets.help.workspace.ws_title')); ?></h4>
+                    <?php foreach (['ws_what', 'ws_admin', 'ws_make', 'ws_own', 'ws_checklist', 'ws_tasks', 'ws_safe'] as $k): ?>
+                    <p><?php echo t('tickets.help.workspace.' . $k); ?></p>
+                    <?php endforeach; ?>
+                    <h4><?php echo htmlspecialchars(t('tickets.help.workspace.tb_title')); ?></h4>
+                    <?php foreach (['tb_what', 'tb_same', 'tb_export'] as $k): ?>
+                    <p><?php echo t('tickets.help.workspace.' . $k); ?></p>
+                    <?php endforeach; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -1275,6 +1348,6 @@ try {
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

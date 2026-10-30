@@ -867,6 +867,7 @@ return [
         // 'normal' or 'confidential' (discussion #62). Confidential keeps a ticket
         // from the requester's managers; see includes/ticket_sensitivity.php.
         'sensitivity'           => "VARCHAR(20) NOT NULL DEFAULT 'normal'",
+        'is_workspace'          => 'TINYINT NOT NULL DEFAULT 0',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
     ],
 
@@ -1162,6 +1163,58 @@ return [
         'author_identity'     => 'VARCHAR(255) NULL',
         'author_name'         => 'VARCHAR(255) NULL',
         'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    // Zabbix integration: every event received and what was done with it - see
+    // freeitsm.sql and includes/integrations/zabbix.php.
+    'zabbix_events' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'problem_id'        => 'VARCHAR(64) NOT NULL',
+        'event_value'       => 'TINYINT NOT NULL DEFAULT 1',
+        'host'              => 'VARCHAR(255) NOT NULL',
+        'trigger_name'      => 'VARCHAR(500) NULL',
+        'severity'          => 'TINYINT NOT NULL DEFAULT 3',
+        'ticket_id'         => 'INT NULL',
+        'action'            => 'VARCHAR(30) NOT NULL',
+        'detail'            => 'VARCHAR(255) NULL',
+        'received_datetime' => 'DATETIME NOT NULL',
+    ],
+
+    // Microsoft Teams channel alerts - see freeitsm.sql and includes/integrations/msteams.php.
+    'msteams_channels' => [
+        'id'                    => 'INT NOT NULL AUTO_INCREMENT',
+        'name'                  => 'VARCHAR(100) NOT NULL',
+        'webhook_url'           => 'VARCHAR(2000) NULL',
+        'alerts'                => 'TEXT NULL',
+        'priority_threshold_id' => 'INT NULL',
+        'team_ids'              => 'TEXT NULL',
+        'display_order'         => 'INT NOT NULL DEFAULT 0',
+        'created_datetime'      => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime'      => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    ],
+    'msteams_channel_workflows' => [
+        'channel_id'  => 'INT NOT NULL',
+        'alert_key'   => 'VARCHAR(40) NOT NULL',
+        'workflow_id' => 'INT NOT NULL',
+    ],
+
+    // 3CX integration: every call reported and what was done with it - see
+    // freeitsm.sql and includes/integrations/threecx.php.
+    'threecx_calls' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'call_key'          => 'VARCHAR(80) NOT NULL',
+        'call_type'         => 'VARCHAR(20) NOT NULL',
+        'number'            => 'VARCHAR(50) NOT NULL',
+        'agent'             => 'VARCHAR(50) NULL',
+        'agent_email'       => 'VARCHAR(255) NULL',
+        'analyst_id'        => 'INT NULL',
+        'user_id'           => 'INT NULL',
+        'ticket_id'         => 'INT NULL',
+        'duration_seconds'  => 'INT NULL',
+        'started_datetime'  => 'DATETIME NULL',
+        'action'            => 'VARCHAR(30) NOT NULL',
+        'detail'            => 'VARCHAR(255) NULL',
+        'received_datetime' => 'DATETIME NOT NULL',
     ],
 
     // Pre-ticket chat transcript (AI 'deflect' mode) — see freeitsm.sql. sender is
@@ -1845,6 +1898,8 @@ return [
         'warranty_expiry'   => 'DATE NULL',
         'lease_start'       => 'DATE NULL',   // when a leased asset's lease began (3.5.0)
         'lease_expiry'      => 'DATE NULL',
+        'retired_datetime'  => 'DATETIME NULL',      // when it moved into a retired status - see freeitsm.sql
+        'retired_reason'    => 'VARCHAR(255) NULL',
         // Multi-tenancy: the company this asset belongs to (NULL = Default).
         'tenant_id'         => 'INT NULL',
         // QR labels (#935). asset_tag is the printed human number, unique per
@@ -1862,6 +1917,7 @@ return [
         'is_active'         => 'TINYINT(1) NOT NULL DEFAULT 1',
         'display_order'     => 'INT NOT NULL DEFAULT 0',
         'icon_id'           => 'INT NULL',
+        'cmdb_class_id'     => 'INT NULL',   // GH #201: the class "Create linked CI" makes; NULL = not mapped
         // Multi-tenancy config: NULL = global default type, set = a company's own.
         'tenant_id'         => 'INT NULL',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
@@ -1873,6 +1929,7 @@ return [
         'name'              => 'VARCHAR(100) NOT NULL',
         'description'       => 'VARCHAR(255) NULL',
         'is_active'         => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'is_retired'        => 'TINYINT(1) NOT NULL DEFAULT 0',   // assets in it have left the estate - see freeitsm.sql
         'display_order'     => 'INT NOT NULL DEFAULT 0',
         // Multi-tenancy config: NULL = global default status, set = a company's own.
         'tenant_id'         => 'INT NULL',
@@ -1962,8 +2019,10 @@ return [
     ],
     'asset_inventory_sections' => [
         'id'=>'INT NOT NULL AUTO_INCREMENT', 'inventory_source_id'=>'INT NOT NULL',
-        'section_name'=>'VARCHAR(32) NOT NULL', 'observed_at'=>'DATETIME NOT NULL', 'imported_at'=>'DATETIME NOT NULL',
-        'imported_by_id'=>'INT NOT NULL', 'fingerprint'=>'CHAR(64) NOT NULL',
+        'section_name'=>'VARCHAR(32) NOT NULL', 'observed_at'=>'DATETIME NULL', 'imported_at'=>'DATETIME NULL',
+        'imported_by_id'=>'INT NULL', 'fingerprint'=>'CHAR(64) NULL',
+        // GH #200 Part B: what the last attempt at this section came to.
+        'last_outcome'=>'VARCHAR(16) NULL', 'last_error'=>'VARCHAR(500) NULL', 'last_attempt_at'=>'DATETIME NULL',
     ],
 
     'asset_disks' => [
@@ -2109,6 +2168,103 @@ return [
         'id'                => 'INT NOT NULL AUTO_INCREMENT',
         'asset_type_id'     => 'INT NOT NULL',
         'set_id'            => 'INT NOT NULL',
+        'sort_order'        => 'INT NOT NULL DEFAULT 0',
+    ],
+
+    // GH #200 part C: physical connections between assets, one row per source.
+    'asset_connections' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'asset_id'            => 'INT NOT NULL',
+        'connected_asset_id'  => 'INT NOT NULL',
+        'source'              => 'VARCHAR(64) NOT NULL',
+        'connected_at'        => 'DATETIME NOT NULL',
+        'first_observed_at'   => 'DATETIME NULL',
+        'last_observed_at'    => 'DATETIME NULL',
+        'disconnected_at'     => 'DATETIME NULL',
+        'confirmed_by_id'     => 'INT NULL',
+        'disconnected_by_id'  => 'INT NULL',
+    ],
+
+    // GH #201: the asset <-> CI link, one row per period of being linked (never deleted).
+    'asset_ci_links' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'asset_id'          => 'INT NOT NULL',
+        'original_asset_id' => 'INT NOT NULL',
+        'asset_name'        => 'VARCHAR(255) NULL',
+        'cmdb_object_id'    => 'INT NOT NULL',
+        'linked_at'         => 'DATETIME NOT NULL',
+        'linked_by_id'      => 'INT NULL',
+        'link_source'       => "VARCHAR(80) NOT NULL DEFAULT 'ui'",
+        'unlinked_at'       => 'DATETIME NULL',
+        'unlinked_by_id'    => 'INT NULL',
+        'unlink_source'     => 'VARCHAR(80) NULL',
+        'unlink_reason'     => 'VARCHAR(20) NULL',
+        'ci_name'           => 'VARCHAR(255) NULL',
+        'ci_class_name'     => 'VARCHAR(150) NULL',
+        'is_demo'                    => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the Virtualisation demo (System -> Demo Data)
+    ],
+
+    // GH #200 part D: matching cases kept for a person to decide.
+    'asset_review_items' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'        => 'INT NOT NULL',
+        'kind'             => 'VARCHAR(32) NOT NULL',
+        'match_key'        => 'VARCHAR(191) NOT NULL',
+        'asset_id'         => 'INT NULL',
+        'other_asset_id'   => 'INT NULL',
+        'source'           => 'VARCHAR(64) NULL',
+        'detail'           => 'VARCHAR(1000) NULL',
+        'first_seen_at'    => 'DATETIME NOT NULL',
+        'last_seen_at'     => 'DATETIME NOT NULL',
+        'status'           => "VARCHAR(16) NOT NULL DEFAULT 'open'",
+        'resolved_by_id'   => 'INT NULL',
+        'resolved_at'      => 'DATETIME NULL',
+    ],
+
+    // GH #200 part D: manufacturer and model names shown one way ("HP").
+    'asset_name_mappings' => [
+        'id'             => 'INT NOT NULL AUTO_INCREMENT',
+        'field'          => 'VARCHAR(16) NOT NULL',
+        'from_value'     => 'VARCHAR(100) NOT NULL',
+        'to_value'       => 'VARCHAR(100) NOT NULL',
+        'created_by_id'  => 'INT NULL',
+        'created_at'     => 'DATETIME NOT NULL',
+    ],
+
+    // GH #200 part D: values a person set that no reporting tool may overwrite.
+    'asset_protected_fields' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'asset_id'         => 'INT NOT NULL',
+        'field_name'       => 'VARCHAR(32) NOT NULL',
+        'protected_by_id'  => 'INT NULL',
+        'protected_at'     => 'DATETIME NOT NULL',
+        'reported_value'   => 'VARCHAR(255) NULL',
+        'reported_source'  => 'VARCHAR(64) NULL',
+        'reported_at'      => 'DATETIME NULL',
+    ],
+
+    // GH #200 part D: what a merged-away asset's label and REST id still find.
+    'asset_merges' => [
+        'id'                 => 'INT NOT NULL AUTO_INCREMENT',
+        'merged_asset_id'    => 'INT NOT NULL',
+        'into_asset_id'      => 'INT NOT NULL',
+        'tenant_id'          => 'INT NULL',
+        'merged_hostname'    => 'VARCHAR(50) NULL',
+        'merged_service_tag' => 'VARCHAR(50) NULL',
+        'merged_asset_tag'   => 'VARCHAR(64) NULL',
+        'merged_qr_token'    => 'VARCHAR(64) NULL',
+        'merged_by_id'       => 'INT NULL',
+        'merged_at'          => 'DATETIME NOT NULL',
+        'summary'            => 'TEXT NULL',
+    ],
+
+    // GH #200: built-in sections and tabs per asset type. No row = shown.
+    'asset_type_layout' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'asset_type_id'     => 'INT NOT NULL',
+        'item_kind'         => 'VARCHAR(10) NOT NULL',
+        'item_key'          => 'VARCHAR(32) NOT NULL',
+        'is_shown'          => 'TINYINT(1) NOT NULL DEFAULT 1',
         'sort_order'        => 'INT NOT NULL DEFAULT 0',
     ],
 
@@ -2282,6 +2438,7 @@ return [
         'guest_os'              => 'VARCHAR(255) NULL',
         'last_synced'           => 'DATETIME NULL',
         'raw_data'              => 'LONGTEXT NULL',
+        'is_demo'                    => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the Virtualisation demo (System -> Demo Data)
     ],
 
     // Proxmox VE servers (several per install). Passwords are encrypted at rest.
@@ -2298,6 +2455,7 @@ return [
         'last_sync_status'      => 'VARCHAR(20) NULL',
         'last_sync_message'     => 'TEXT NULL',
         'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'                    => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the Virtualisation demo (System -> Demo Data)
     ],
 
     'proxmox_nodes' => [
@@ -2328,6 +2486,7 @@ return [
         'mac_addresses'     => 'TEXT NULL',
         'details_json'      => 'LONGTEXT NULL',
         'last_seen_datetime'=> 'DATETIME NULL',
+        'is_demo'                    => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the Virtualisation demo (System -> Demo Data)
     ],
 
     // VMware Cloud Director servers (several per install). Passwords are encrypted at rest.
@@ -2346,6 +2505,7 @@ return [
         'last_sync_status'      => 'VARCHAR(20) NULL',
         'last_sync_message'     => 'TEXT NULL',
         'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'                    => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the Virtualisation demo (System -> Demo Data)
     ],
 
     'vcloud_vms' => [
@@ -2363,6 +2523,7 @@ return [
         'mac_addresses'     => 'TEXT NULL',
         'details_json'      => 'LONGTEXT NULL',
         'last_seen_datetime'=> 'DATETIME NULL',
+        'is_demo'                    => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the Virtualisation demo (System -> Demo Data)
     ],
 
     'vcloud_edge_gateways' => [
@@ -2375,6 +2536,211 @@ return [
         'uplink_ips'        => 'TEXT NULL',
         'details_json'      => 'LONGTEXT NULL',
         'last_seen_datetime'=> 'DATETIME NULL',
+    ],
+
+    // GH #199 Part A: the virtual estate (see database/freeitsm.sql).
+    'virt_connections' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'name'                       => 'VARCHAR(150) NOT NULL',
+        'source_kind'                => "VARCHAR(20) NOT NULL DEFAULT 'hyperv'",
+        'tenant_id'                  => 'INT NULL',
+        'expected_interval_minutes'  => 'INT NOT NULL DEFAULT 15',
+        'grace_minutes'              => 'INT NOT NULL DEFAULT 15',
+        'retention_days'             => 'INT NULL',
+        'api_key_id'                 => 'INT NULL',
+        'is_active'                  => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'last_report_at'             => 'DATETIME NULL',
+        'last_observed_at'           => 'DATETIME NULL',
+        'last_outcome'               => 'VARCHAR(20) NULL',
+        'last_summary'               => 'VARCHAR(1000) NULL',
+        'collector_json'             => 'TEXT NULL',
+        'created_by_id'              => 'INT NULL',
+        'created_datetime'           => 'DATETIME NULL',
+        'is_demo'                    => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the Virtualisation demo (System -> Demo Data)
+    ],
+
+    'virt_clusters' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'              => 'INT NOT NULL',
+        'tenant_id'                  => 'INT NULL',
+        'external_id'                => 'VARCHAR(100) NOT NULL',
+        'name'                       => 'VARCHAR(255) NULL',
+        'quorum_type'                => 'VARCHAR(100) NULL',
+        'witness'                    => 'VARCHAR(255) NULL',
+        'first_seen_at'              => 'DATETIME NULL',
+        'last_seen_observed_at'      => 'DATETIME NULL',
+        'not_seen_since'             => 'DATETIME NULL',
+        'not_confirmed_since'        => 'DATETIME NULL',
+    ],
+
+    'virt_hosts' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'              => 'INT NOT NULL',
+        'tenant_id'                  => 'INT NULL',
+        'external_id'                => 'VARCHAR(100) NOT NULL',
+        'identity_kind'              => "VARCHAR(10) NOT NULL DEFAULT 'source'",
+        'name'                       => 'VARCHAR(255) NULL',
+        'cluster_id'                 => 'INT NULL',
+        'node_state'                 => 'VARCHAR(30) NULL',
+        'os_version'                 => 'VARCHAR(100) NULL',
+        'cpu_count'                  => 'INT NULL',
+        'memory_bytes'               => 'BIGINT NULL',
+        'first_seen_at'              => 'DATETIME NULL',
+        'last_seen_observed_at'      => 'DATETIME NULL',
+        'not_seen_since'             => 'DATETIME NULL',
+        'not_confirmed_since'        => 'DATETIME NULL',
+    ],
+
+    'virt_cluster_roles' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'              => 'INT NOT NULL',
+        'tenant_id'                  => 'INT NULL',
+        'external_id'                => 'VARCHAR(100) NOT NULL',
+        'name'                       => 'VARCHAR(255) NULL',
+        'cluster_id'                 => 'INT NULL',
+        'role_type'                  => 'VARCHAR(60) NULL',
+        'owner_host_id'              => 'INT NULL',
+        'state'                      => 'VARCHAR(30) NULL',
+        'preferred_owners_json'      => 'TEXT NULL',
+        'first_seen_at'              => 'DATETIME NULL',
+        'last_seen_observed_at'      => 'DATETIME NULL',
+        'not_seen_since'             => 'DATETIME NULL',
+        'not_confirmed_since'        => 'DATETIME NULL',
+    ],
+
+    'virt_vms' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'              => 'INT NOT NULL',
+        'tenant_id'                  => 'INT NULL',
+        'external_id'                => 'VARCHAR(100) NOT NULL',
+        'name'                       => 'VARCHAR(255) NULL',
+        'host_id'                    => 'INT NULL',
+        'cluster_id'                 => 'INT NULL',
+        'state'                      => 'VARCHAR(30) NULL',
+        'is_clustered'               => 'TINYINT(1) NULL',
+        'cluster_role_id'            => 'INT NULL',
+        'possible_owners_json'       => 'TEXT NULL',
+        'generation'                 => 'INT NULL',
+        'cpu_count'                  => 'INT NULL',
+        'memory_bytes'               => 'BIGINT NULL',
+        'guest_addresses'            => 'VARCHAR(1000) NULL',
+        'os_name'                    => 'VARCHAR(255) NULL',
+        'first_seen_at'              => 'DATETIME NULL',
+        'last_seen_observed_at'      => 'DATETIME NULL',
+        'not_seen_since'             => 'DATETIME NULL',
+        'not_confirmed_since'        => 'DATETIME NULL',
+    ],
+
+    'virt_vm_disks' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'vm_id'                      => 'INT NOT NULL',
+        'external_id'                => 'VARCHAR(191) NOT NULL',
+        'path'                       => 'VARCHAR(500) NULL',
+        'size_bytes'                 => 'BIGINT NULL',
+        'used_bytes'                 => 'BIGINT NULL',
+        'controller'                 => 'VARCHAR(60) NULL',
+        'observed_at'                => 'DATETIME NULL',
+    ],
+
+    'virt_vm_networks' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'vm_id'                      => 'INT NOT NULL',
+        'external_id'                => 'VARCHAR(191) NOT NULL',
+        'name'                       => 'VARCHAR(255) NULL',
+        'switch_name'                => 'VARCHAR(255) NULL',
+        'mac_address'                => 'VARCHAR(20) NULL',
+        'ip_addresses'               => 'VARCHAR(1000) NULL',
+        'vlan_id'                    => 'INT NULL',
+        'observed_at'                => 'DATETIME NULL',
+    ],
+
+    'virt_placements' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'vm_id'                      => 'INT NOT NULL',
+        'host_id'                    => 'INT NULL',
+        'cluster_id'                 => 'INT NULL',
+        'from_observed_at'           => 'DATETIME NOT NULL',
+        'to_observed_at'             => 'DATETIME NULL',
+    ],
+
+    'virt_reports' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'              => 'INT NOT NULL',
+        'scope_key'                  => 'VARCHAR(191) NOT NULL',
+        'observed_at'                => 'DATETIME NOT NULL',
+        'received_at'                => 'DATETIME NOT NULL',
+        'fingerprint'                => 'CHAR(64) NOT NULL',
+        'outcome'                    => 'VARCHAR(20) NOT NULL',
+        'sections_json'              => 'TEXT NULL',
+        'unreadable_json'            => 'TEXT NULL',
+        'collector_json'             => 'TEXT NULL',
+        'api_key_id'                 => 'INT NULL',
+    ],
+
+    'virt_identity_reviews' => [
+        'id'                         => 'INT NOT NULL AUTO_INCREMENT',
+        'connection_id'              => 'INT NOT NULL',
+        'tenant_id'                  => 'INT NULL',
+        'object_kind'                => 'VARCHAR(10) NOT NULL',
+        'old_object_id'              => 'INT NOT NULL',
+        'new_object_id'              => 'INT NOT NULL',
+        'name'                       => 'VARCHAR(255) NULL',
+        'old_external_id'            => 'VARCHAR(100) NULL',
+        'new_external_id'            => 'VARCHAR(100) NULL',
+        'status'                     => "VARCHAR(16) NOT NULL DEFAULT 'open'",
+        'raised_at'                  => 'DATETIME NOT NULL',
+        'decided_by_id'              => 'INT NULL',
+        'decided_at'                 => 'DATETIME NULL',
+    ],
+
+    // GH #199 Part B: discovered objects as CIs (see database/freeitsm.sql).
+    'virt_cmdb_mappings' => [
+        'connection_id'        => 'INT NOT NULL',
+        'enabled'              => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'cluster_class_id'     => 'INT NULL',
+        'host_class_id'        => 'INT NULL',
+        'vm_class_id'          => 'INT NULL',
+        'role_class_id'        => 'INT NULL',
+        'member_type_id'       => 'INT NULL',
+        'runs_on_ha_type_id'   => 'INT NULL',
+        'runs_on_type_id'      => 'INT NULL',
+        'role_in_type_id'      => 'INT NULL',
+        'sync_names'           => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'last_sync_at'         => 'DATETIME NULL',
+        'last_sync_summary'    => 'VARCHAR(500) NULL',
+        'updated_by_id'        => 'INT NULL',
+        'updated_at'           => 'DATETIME NULL',
+    ],
+
+    'cmdb_object_sources' => [
+        'id'                   => 'INT NOT NULL AUTO_INCREMENT',
+        'cmdb_object_id'       => 'INT NOT NULL',
+        'connection_id'        => 'INT NOT NULL',
+        'object_kind'          => 'VARCHAR(10) NOT NULL',
+        'virt_object_id'       => 'INT NOT NULL',
+        'started_at'           => 'DATETIME NOT NULL',
+        'started_by_id'        => 'INT NULL',
+        'start_source'         => 'VARCHAR(80) NOT NULL',
+        'ended_at'             => 'DATETIME NULL',
+        'ended_by_id'          => 'INT NULL',
+        'end_source'           => 'VARCHAR(80) NULL',
+        'end_reason'           => 'VARCHAR(20) NULL',
+        'ci_name'              => 'VARCHAR(255) NULL',
+    ],
+
+    'cmdb_relationship_sources' => [
+        'relationship_id'      => 'INT NOT NULL',
+        'connection_id'        => 'INT NOT NULL',
+        'created_at'           => 'DATETIME NOT NULL',
+    ],
+
+    'virt_cmdb_decisions' => [
+        'object_kind'          => 'VARCHAR(10) NOT NULL',
+        'virt_object_id'       => 'INT NOT NULL',
+        'connection_id'        => 'INT NOT NULL',
+        'decision'             => 'VARCHAR(20) NOT NULL',
+        'decided_by_id'        => 'INT NULL',
+        'decided_at'           => 'DATETIME NOT NULL',
     ],
 
     'intune_devices' => [
@@ -3441,6 +3807,7 @@ return [
         'last_run_status'   => 'VARCHAR(20) NULL',
         'run_count'         => 'INT NOT NULL DEFAULT 0',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+        'tenant_id'         => 'INT NULL',   // GH #209: NULL = shared (every company); set = that company only
     ],
 
     'webhook_deliveries' => [
@@ -3499,6 +3866,7 @@ return [
         'finished_datetime' => 'DATETIME NULL',
         'step_log'          => 'TEXT NULL',
         'error_message'     => 'TEXT NULL',
+        'tenant_id'         => 'INT NULL',   // GH #209: the EVENT's company; NULL = unknown, every-company viewers only
     ],
 
     'knowledge_articles' => [
@@ -4189,6 +4557,16 @@ return [
         'requires_approval' => 'TINYINT(1) NOT NULL DEFAULT 0',
         'approver_id'       => 'INT NULL',
         'approver_ids'      => 'TEXT NULL',
+        // Group approval (GH #220): approval_team_id set = a TEAM decides instead of
+        // approver_id - approvals_required different members approve, and
+        // rejections_required different members reject (1 = the first "no"
+        // declines). NULL = the named-person approval above, exactly as before.
+        // approval_exclude_requester: in named-person mode, refuse the requester
+        // approving their own request (team mode always does). FK in freeitsm.sql.
+        'approval_team_id'           => 'INT NULL',
+        'approvals_required'         => 'INT NOT NULL DEFAULT 1',
+        'rejections_required'        => 'INT NOT NULL DEFAULT 1',
+        'approval_exclude_requester' => 'TINYINT(1) NOT NULL DEFAULT 0',
         // What happens when this form is submitted, approved or rejected
         // (discussion #95). JSON: {"submitted":[…],"approved":[…],"rejected":[…]},
         // each a list of {type, args} in the same shape the workflow engine's
@@ -4274,6 +4652,15 @@ return [
         'approval_decided_by_id'     => 'INT NULL',
         'approval_decided_datetime'  => 'DATETIME NULL',
         'approval_comment'           => 'TEXT NULL',
+        // Group approval (GH #220), SNAPSHOTTED from the form at submit time like
+        // approver_id, so editing the form never reroutes or lowers the bar for a
+        // request already waiting. approval_round goes up each time an
+        // administrator moves the request; only votes from the current round count.
+        'approval_team_id'           => 'INT NULL',
+        'approvals_required'         => 'INT NULL',
+        'rejections_required'        => 'INT NULL',
+        'approval_exclude_requester' => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'approval_round'             => 'INT NOT NULL DEFAULT 1',
         // Which collection this submission WAS part of, stamped at submit
         // time from forms.collection_id. 🔑 The two are allowed to disagree:
         // re-pairing a form must never rewrite what last year's responses
@@ -4286,6 +4673,32 @@ return [
         'client_reference'  => 'VARCHAR(64) NULL',
         'superseded_by_id'  => 'INT NULL',
         'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',   // set by the demo data importer (#1297)
+    ],
+
+    // Group approval votes (GH #220): one row per person per request per round -
+    // the UNIQUE key is what makes a second click from the same person count once,
+    // even when two clicks race. was_member: they were in the team when they voted.
+    'form_submission_votes' => [
+        'id'             => 'INT NOT NULL AUTO_INCREMENT',
+        'submission_id'  => 'INT NOT NULL',
+        'approval_round' => 'INT NOT NULL DEFAULT 1',
+        'analyst_id'     => 'INT NULL',
+        'decision'       => 'VARCHAR(20) NOT NULL',
+        'comment'        => 'TEXT NULL',
+        'was_member'     => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'voted_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ],
+
+    // The administrator's actions on a request (GH #220): an override decision or
+    // a move to another team or person, each with its reason. Never a vote.
+    'form_submission_approval_events' => [
+        'id'              => 'INT NOT NULL AUTO_INCREMENT',
+        'submission_id'   => 'INT NOT NULL',
+        'analyst_id'      => 'INT NULL',
+        'action'          => 'VARCHAR(30) NOT NULL',
+        'detail'          => 'TEXT NULL',
+        'reason'          => 'TEXT NULL',
+        'event_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
     'form_submission_data' => [
@@ -4871,6 +5284,8 @@ return [
         // relationship and which way. Defaults to 'none' so an upgraded
         // install spreads nothing until someone says it should.
         'impact_direction'  => "VARCHAR(10) NOT NULL DEFAULT 'none'",
+        // GH #199 Part C: none | membership | placement - see database/freeitsm.sql.
+        'redundancy'        => "VARCHAR(20) NOT NULL DEFAULT 'none'",
         'display_order'     => 'INT NULL DEFAULT 0',
         'is_active'         => 'TINYINT(1) NULL DEFAULT 1',
         'created_datetime'  => 'DATETIME NULL DEFAULT CURRENT_TIMESTAMP',
@@ -5453,6 +5868,12 @@ return [
         'security_grade'        => 'VARCHAR(2) NULL',
         'check_results'         => 'LONGTEXT NULL',
         'watch_baseline'        => 'LONGTEXT NULL',
+        'parent_domain_id'      => 'INT NULL',      // a subdomain's parent - see freeitsm.sql
+        'scope'                 => "VARCHAR(10) NOT NULL DEFAULT 'public'",   // GH #203 - see freeitsm.sql
+        'health_status'             => 'VARCHAR(10) NULL',
+        'health_completed_datetime' => 'DATETIME NULL',
+        'health_healthy_datetime'   => 'DATETIME NULL',
+        'health_incomplete'         => 'TINYINT(1) NOT NULL DEFAULT 0',
         'created_by'            => 'INT NULL',
         'created_datetime'      => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'updated_datetime'      => 'DATETIME NULL',
@@ -5537,6 +5958,29 @@ return [
         'not_after'           => 'DATETIME NULL',
         'first_seen_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'acknowledged'        => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+
+    // Certificates recorded by hand, and their types - see freeitsm.sql.
+    'domain_manual_certificates' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'domain_id'        => 'INT NOT NULL',
+        'purpose'          => 'VARCHAR(255) NOT NULL',
+        'cert_type_id'     => 'INT NULL',
+        'supplier_id'      => 'INT NULL',
+        'provider_name'    => 'VARCHAR(255) NULL',
+        'expiry_date'      => 'DATE NOT NULL',
+        'url'              => 'VARCHAR(500) NULL',
+        'notes'            => 'TEXT NULL',
+        'created_by'       => 'INT NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_datetime' => 'DATETIME NULL',
+    ],
+    'domain_certificate_types' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'name'             => 'VARCHAR(100) NOT NULL',
+        'is_active'        => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'display_order'    => 'INT NOT NULL DEFAULT 0',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 
     // Cost centres (GH #160, stage 1). Always one company's (tenant_id NOT NULL);
@@ -6214,5 +6658,62 @@ return [
         'received_bytes'      => 'BIGINT NOT NULL DEFAULT 0',
         'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'updated_datetime'    => 'DATETIME NULL',
+    ],
+    // Starters & leavers (4.6.0) - see freeitsm.sql.
+    'jml_templates' => [
+        'id'                => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'         => 'INT NULL',
+        'kind'              => 'VARCHAR(10) NOT NULL',
+        'name'              => 'VARCHAR(150) NOT NULL',
+        'description'       => 'VARCHAR(500) NULL',
+        'is_active'         => 'TINYINT(1) NOT NULL DEFAULT 1',
+        'display_order'     => 'INT NOT NULL DEFAULT 0',
+        'form_id'           => 'INT NULL',
+        'match_rule'        => 'TEXT NULL',
+        'created_datetime'  => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'is_demo'           => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'jml_template_steps' => [
+        'id'                     => 'INT NOT NULL AUTO_INCREMENT',
+        'template_id'            => 'INT NOT NULL',
+        'title'                  => 'VARCHAR(255) NOT NULL',
+        'description'            => 'TEXT NULL',
+        'assigned_team_id'       => 'INT NULL',
+        'assigned_analyst_id'    => 'INT NULL',
+        'due_offset_days'        => 'INT NOT NULL DEFAULT 0',
+        'checklist_template_id'  => 'INT NULL',
+        'condition_rule'         => 'TEXT NULL',
+        'display_order'          => 'INT NOT NULL DEFAULT 0',
+    ],
+    'jml_cases' => [
+        'id'                  => 'INT NOT NULL AUTO_INCREMENT',
+        'tenant_id'           => 'INT NULL',
+        'kind'                => 'VARCHAR(10) NOT NULL',
+        'user_id'             => 'INT NULL',
+        'person_name'         => 'VARCHAR(255) NOT NULL',
+        'person_email'        => 'VARCHAR(255) NULL',
+        'job_title'           => 'VARCHAR(150) NULL',
+        'manager_user_id'     => 'INT NULL',
+        'effective_date'      => 'DATE NOT NULL',
+        'status'              => "VARCHAR(12) NOT NULL DEFAULT 'open'",
+        'template_id'         => 'INT NULL',
+        'parent_task_id'      => 'INT NULL',
+        'form_submission_id'  => 'INT NULL',
+        'steps_pending'       => 'TINYINT(1) NOT NULL DEFAULT 0',
+        'notes'               => 'TEXT NULL',
+        'owner_analyst_id'    => 'INT NULL',
+        'created_by'          => 'INT NULL',
+        'created_datetime'    => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'completed_datetime'  => 'DATETIME NULL',
+        'is_demo'             => 'TINYINT(1) NOT NULL DEFAULT 0',
+    ],
+    'jml_audit' => [
+        'id'               => 'INT NOT NULL AUTO_INCREMENT',
+        'case_id'          => 'INT NOT NULL',
+        'analyst_id'       => 'INT NULL',
+        'field_name'       => 'VARCHAR(100) NOT NULL',
+        'old_value'        => 'VARCHAR(1000) NULL',
+        'new_value'        => 'VARCHAR(1000) NULL',
+        'created_datetime' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
     ],
 ];

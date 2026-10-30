@@ -124,7 +124,7 @@ foreach (glob($dir . "*.$loc.tsv") as $t) {
     $touched = false;
 
     foreach ($lines as $n => $l) {
-        if ($l !== '' && strpos($l, "\t") === false) {
+        if ($l !== '' && !str_contains($l, "\t")) {
             $key = $l;
 
             /* 🔑 SCAFFOLDING, NOT A LOST TRANSLATION.

@@ -31,14 +31,19 @@ class TaskFormConflict extends ServiceError
 
 class TaskForms
 {
-    /** Tasks -> Settings -> Checklists -> "Forms on tasks". Off by default. */
+    /**
+     * Tasks -> Settings -> Checklists -> "Forms on tasks". Off by default.
+     * GH #217: also off while the Forms module is switched off - no section, no picker,
+     * and (outstanding() asks this) no form holding a task open that nobody can fill.
+     */
     public static function enabled(PDO $conn): bool
     {
+        if (!moduleIsEnabled($conn, 'forms')) return false;
         try {
             $s = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'tasks_forms_enabled'");
             $s->execute();
             return (string)$s->fetchColumn() === '1';
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;
         }
     }
@@ -58,7 +63,7 @@ class TaskForms
             $conn->query("SELECT task_id, tenant_id, client_reference, superseded_by_id FROM form_submissions LIMIT 0");
             $conn->query("SELECT id FROM task_forms LIMIT 0");
             return $ready = true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $ready = false;
         }
     }
@@ -373,6 +378,11 @@ class TaskForms
             $previous ? (string)$previous : null, (string)$r['title'],
             ['task_form_id' => $taskFormId, 'form_id' => (int)$r['form_id'], 'submission_id' => $submissionId,
              'replaced_submission_id' => $previous]);
+        // Starters & leavers (4.6.0): a case's questions are answered on its task -
+        // the case keeps the answers and adds the steps that waited for them.
+        require_once __DIR__ . '/../starters/service.php';
+        try { StartersService::taskFormSubmitted($conn, $ctx, $taskId, $submissionId); }
+        catch (Throwable $e) { error_log('starters: answers arrived for task ' . $taskId . ': ' . $e->getMessage()); }
         return ['submission_id' => $submissionId, 'revision' => $revision + 1, 'replayed' => false];
     }
 
@@ -416,7 +426,7 @@ class TaskForms
             $st->execute([$taskId]);
             return array_map(function ($r) { return ['title' => (string)$r['title'], 'mode' => (string)$r['requirement_mode']]; },
                              $st->fetchAll(PDO::FETCH_ASSOC));
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return [];   // completing a task must not start failing on a part-upgraded install
         }
     }
@@ -453,7 +463,7 @@ class TaskForms
         try {
             $place = implode(',', array_fill(0, count($taskIds), '?'));
             $conn->prepare("DELETE FROM task_forms WHERE task_id IN ($place)")->execute(array_values($taskIds));
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // the table does not exist yet on a part-upgraded install: nothing to remove
         }
     }

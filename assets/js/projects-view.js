@@ -161,9 +161,11 @@
         if (upcoming.length) {
             html += '<ul class="prj-next">' + upcoming.map(t => {
                 const late = t.due_date < today;
-                return '<li><a href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '"><span class="prj-next-title">' + esc(t.title) + '</span>'
+                // GH #217: an <a> only while Tasks is on - nowhere to open it otherwise.
+                const tag = window.PRJ_TASKS ? 'a' : 'span';
+                return '<li><' + tag + (window.PRJ_TASKS ? ' href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '"' : '') + '><span class="prj-next-title">' + esc(t.title) + '</span>'
                     + '<span class="prj-next-meta">' + (t.assignee_name ? '<span class="prj-avatar sm" title="' + esc(t.assignee_name) + '">' + esc(P.initials(t.assignee_name)) + '</span>' : '')
-                    + '<span class="prj-due' + (late ? ' late' : '') + '">' + esc(P.fmtDate(t.due_date)) + '</span></span></a></li>';
+                    + '<span class="prj-due' + (late ? ' late' : '') + '">' + esc(P.fmtDate(t.due_date)) + '</span></span></' + tag + '></li>';
             }).join('') + '</ul>';
         } else {
             html += '<p class="prj-muted">' + esc(T('view.nothing_next')) + '</p>';
@@ -351,7 +353,9 @@
             // GH #184: also the keyboard handle - focus it and press the up or down arrow.
             + '<span class="prj-grip" tabindex="0" role="button" aria-keyshortcuts="ArrowUp ArrowDown" aria-label="' + esc(T('plan.move_task', { title: t.title })) + '" title="' + esc(T('plan.drag_tip')) + '">&#8942;&#8942;</span>'
             + '<span class="prj-task-status" style="background:' + esc(t.status_colour || '#94a3b8') + '" title="' + esc(t.status_name || '') + '"></span>'
-            + '<a class="prj-task-title" href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '" title="' + esc(T('plan.task_open')) + '">' + esc(t.title) + '</a>'
+            // GH #217: plain text while Tasks is off - the board it opens on is gone.
+            + (window.PRJ_TASKS ? '<a class="prj-task-title" href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '" title="' + esc(T('plan.task_open')) + '">' + esc(t.title) + '</a>'
+                : '<span class="prj-task-title">' + esc(t.title) + '</span>')
             + (Number(t.subtask_count) ? '<span class="prj-task-sub">' + esc(t.subtask_count) + '</span>' : '')
             + (t.priority_name && !isDefaultPriority(t.priority_id) ? '<span class="prj-task-prio" style="--c:' + esc(t.priority_colour || '#94a3b8') + '">' + esc(t.priority_name) + '</span>' : '')
             + estimateCell(t)

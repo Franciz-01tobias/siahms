@@ -369,7 +369,7 @@ $translationNamespaces = ['common', 'forms', 'tasks'];   // tasks: filling a tas
         .fill-task-banner { margin: -4px 0 14px; padding: 8px 12px; border-radius: 6px; font-size: 13px;
             background: var(--accent-soft, #eef4ff); color: var(--text, #333); border: 1px solid var(--border, #ddd); }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body<?php echo $embed ? ' class="fill-embed"' : ''; ?>>
     <?php if (!$embed) include 'includes/header.php'; ?>
@@ -1149,7 +1149,7 @@ $translationNamespaces = ['common', 'forms', 'tasks'];   // tasks: filling a tas
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         function escAttr(s) {
             return String(s == null ? '' : s)
@@ -1159,6 +1159,6 @@ $translationNamespaces = ['common', 'forms', 'tasks'];   // tasks: filling a tas
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

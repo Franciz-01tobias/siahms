@@ -25,6 +25,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+// GH #217: refused while the time-tracking feature is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'time-tracking');
 requireCapabilityJson(Cap::TICKETS_MANAGE);
 
 try {

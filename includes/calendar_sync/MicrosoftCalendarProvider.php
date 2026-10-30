@@ -104,7 +104,7 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
             try {
                 $this->conn->prepare("UPDATE calendar_connections SET token_data = ? WHERE id = ?")
                            ->execute([encryptValue($json), (int)$this->connection['id']]);
-            } catch (Exception $e) {
+            } catch (Exception) {
                 // A cache that cannot be written is a performance problem, not a
                 // failure — the token in hand is still good for this request.
             }
@@ -472,7 +472,7 @@ class MicrosoftCalendarProvider extends CalendarSyncProvider
     {
         try {
             [$http] = $this->call('GET', '/users/' . rawurlencode($calendarAddress) . '/calendar?$select=id');
-        } catch (Exception $e) {
+        } catch (Exception) {
             return false;
         }
         return $http >= 200 && $http < 300;

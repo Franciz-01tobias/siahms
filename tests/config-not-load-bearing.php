@@ -79,8 +79,8 @@ $o = dbConnectionOptions();
 echo isset($o[PDO::MYSQL_ATTR_INIT_COMMAND]) && strpos($o[PDO::MYSQL_ATTR_INIT_COMMAND], "+00:00") !== false ? "|UTC" : "|NOTUTC";
 ');
 $out = trim((string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($probe) . ' 2>&1'));
-ok('a values-only config.php still yields both functions', strpos($out, 'BOTH') !== false, $out);
-ok('and the connection options still pin UTC', strpos($out, '|UTC') !== false, $out);
+ok('a values-only config.php still yields both functions', str_contains($out, 'BOTH'), $out);
+ok('and the connection options still pin UTC', str_contains($out, '|UTC'), $out);
 
 echo "\n4. The definition is guarded, so a stale config.php cannot redeclare it\n";
 
@@ -95,7 +95,7 @@ echo "SURVIVED";
 ');
 $out2 = trim((string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($legacy) . ' 2>&1'));
 ok('loading includes/db.php over a legacy definition does not fatal',
-   strpos($out2, 'SURVIVED') !== false, $out2);
+   str_contains($out2, 'SURVIVED'), $out2);
 
 @unlink($stub); @unlink($probe); @unlink($legacy);
 
@@ -270,7 +270,7 @@ echo sslResolveCaBundle() !== "" || stripos(PHP_OS, "WIN") !== 0 ? "RESOLVED" : 
 ');
 $out3 = trim((string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($noBundle) . ' 2>&1'));
 ok('sslApplyCurl survives an undefined SSL_CA_BUNDLE and finds a bundle',
-   strpos($out3, 'RESOLVED') !== false, $out3);
+   str_contains($out3, 'RESOLVED'), $out3);
 
 // And the operator's own value must still win when they have one.
 $ownBundle = sys_get_temp_dir() . '/freeitsm_ownbundle_' . getmypid() . '.php';
@@ -281,7 +281,7 @@ require_once ' . var_export("$root/includes/ssl.php", true) . ';
 echo SSL_CA_BUNDLE === "Z:/operators/own/cacert.pem" ? "THEIRS" : "OVERRIDDEN";
 ');
 $out4 = trim((string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($ownBundle) . ' 2>&1'));
-ok("the operator's own SSL_CA_BUNDLE is not overridden", strpos($out4, 'THEIRS') !== false, $out4);
+ok("the operator's own SSL_CA_BUNDLE is not overridden", str_contains($out4, 'THEIRS'), $out4);
 
 @unlink($noBundle); @unlink($ownBundle);
 
@@ -385,8 +385,8 @@ ok('positive control: a function in config.php is reported', $fr['functions'] ==
 $baseRow = array_values(array_filter($fr['rows'], fn($r) => $r['name'] === 'BASE_URL'))[0];
 ok('a define() in the file counts; a commented-out one does not',
    $baseRow['inConfig'] === true && !in_array('COMMENTED_OUT', $fr['unknown'], true));
-ok('the report carries no planted value', strpos(json_encode($fr), 'PLANTED') === false
-   && strpos(json_encode($fr), 'planted') === false);
+ok('the report carries no planted value', !str_contains(json_encode($fr), 'PLANTED')
+   && !str_contains(json_encode($fr), 'planted'));
 @unlink($fake);
 
 // The real tool, over HTTP, as an administrator: it runs, and the real
@@ -408,10 +408,10 @@ $get = function (?string $cookie) use ($base) {
 if ($code === 0) {
     ok('D017 reachable over HTTP (set FREEITSM_URL if not on localhost)', false, 'no web server answered');
 } else {
-    ok('D017 runs for an administrator', $code === 200 && strpos($body, '=== VERDICT ===') !== false, "HTTP $code");
-    ok('D017 lists every setting by name', count(array_filter(array_keys($reqs), fn($n) => strpos($body, $n) !== false)) === count($reqs));
+    ok('D017 runs for an administrator', $code === 200 && str_contains($body, '=== VERDICT ==='), "HTTP $code");
+    ok('D017 lists every setting by name', count(array_filter(array_keys($reqs), fn($n) => str_contains($body, $n))) === count($reqs));
     $secret = defined('DB_PASSWORD') ? (string)DB_PASSWORD : '';
-    ok('D017 never prints the database password', strlen($secret) < 4 || strpos($body, $secret) === false,
+    ok('D017 never prints the database password', strlen($secret) < 4 || !str_contains($body, $secret),
        strlen($secret) < 4 ? 'password too short to test' : '');
     [$code2] = $get(null);
     ok('D017 refuses without a session', $code2 === 403, "HTTP $code2");

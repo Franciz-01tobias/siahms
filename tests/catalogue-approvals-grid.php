@@ -86,9 +86,9 @@ try {
 
     $before = error_get_last();
     $text = catalogueAnswerText($raw, 'grid', $field);
-    check('a table answer does not render as "Array"', strpos($text, 'Array') === false, $text);
-    check('…it names the columns', strpos($text, 'Item') !== false && strpos($text, 'Qty') !== false, $text);
-    check('…and carries the values', strpos($text, 'Pencil') !== false && strpos($text, 'Pen') !== false, $text);
+    check('a table answer does not render as "Array"', !str_contains($text, 'Array'), $text);
+    check('…it names the columns', str_contains($text, 'Item') && str_contains($text, 'Qty'), $text);
+    check('…and carries the values', str_contains($text, 'Pencil') && str_contains($text, 'Pen'), $text);
 
     /* ---- 2. Through the REAL endpoint, which is where it broke ----------- */
     $sid = 'zzappg' . random_int(1000, 9999);
@@ -118,7 +118,7 @@ try {
             foreach (($json['items'] ?? []) as $it) {
                 if ((int)($it['id'] ?? 0) !== $subId) continue;
                 foreach (($it['answers'] ?? []) as $a) {
-                    if (strpos((string)$a['value'], 'Pencil') !== false) $found = true;
+                    if (str_contains((string)$a['value'], 'Pencil')) $found = true;
                 }
             }
             check("filter=$filter: the table's answers reach the card", $found);

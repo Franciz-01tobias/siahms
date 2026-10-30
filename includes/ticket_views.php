@@ -37,7 +37,7 @@ function ticketViewsReady(PDO $conn): bool
         try {
             $conn->query("SELECT viewer_type FROM ticket_views LIMIT 0");
             $ready = true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $ready = false;
         }
     }

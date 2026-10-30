@@ -12,6 +12,9 @@ require_once '../../includes/mailbox_graph.php';
 require_once '../../includes/mailbox_imap.php';
 require_once '../../includes/gmail.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -47,7 +50,7 @@ try {
 
     $mailbox = decryptMailboxRow($mailbox);
 
-    $provider = $mailbox['provider'] ?? 'microsoft';
+    $provider = MailboxProvider::fromMailbox($mailbox);
     $authMode = $mailbox['auth_mode'] ?? 'delegated';
 
     // ⚠️ Everything below the provider branches is Microsoft Graph, and used to be
@@ -57,7 +60,7 @@ try {
     // Basic IMAP has no OAuth token and needs none: it connects with the stored
     // username + password. The Graph path answered "Mailbox is not authenticated"
     // for every IMAP mailbox on every install, without making a network call.
-    if ($provider === 'imap') {
+    if ($provider === MailboxProvider::Imap) {
         try {
             $folder = imapVerifyFolder($mailbox, $folderName);
         } catch (Exception $e) {
@@ -72,7 +75,7 @@ try {
     // the Microsoft flow with Google credentials: the access token was sent to
     // graph.microsoft.com, and an expired one refreshed against
     // login.microsoftonline.com with azure_* fields a Google mailbox never has.
-    if ($provider === 'google') {
+    if ($provider === MailboxProvider::Google) {
         if (empty($mailbox['token_data'])) {
             echo json_encode(['success' => false, 'error' => 'Mailbox is not authenticated. Please sign in to Google in Settings.']);
             exit;
@@ -99,7 +102,7 @@ try {
 
     mailboxResolveGraphBase($mailbox); // /me (delegated) or /users/<target> (app-only)
 
-    if ($provider === 'microsoft' && $authMode === 'app_only') {
+    if ($provider === MailboxProvider::Microsoft && $authMode === 'app_only') {
         // App-only: authenticate the app and verify the folder on the target mailbox.
         try {
             $accessToken = mailboxAppOnlyToken($conn, $mailbox);
@@ -123,7 +126,7 @@ try {
 
     // SAFETY (delegated Microsoft): verify folders against the configured mailbox only.
     // A target matching the signed-in mailbox's primary or any alias passes.
-    if ($provider === 'microsoft') {
+    if ($provider === MailboxProvider::Microsoft) {
         if ($mismatchError = mailboxIdentityMismatch($mailbox)) {
             echo json_encode(['success' => false, 'error' => $mismatchError]);
             exit;

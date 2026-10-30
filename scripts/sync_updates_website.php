@@ -126,7 +126,7 @@ function parse_updates_html(string $path, array &$unnumbered = []): array {
         foreach ($xp->query('.//*[' . sprintf($has, 'update-item') . ']', $entry) as $item) {
             $id = (int)$item->getAttribute('data-id');
             $badge = (string)$xp->evaluate("string(.//*[contains(@class,'update-badge')]/@class)", $item);
-            $type  = strpos($badge, 'feature') !== false ? 'feature' : (strpos($badge, 'fix') !== false ? 'fix' : 'improvement');
+            $type  = str_contains($badge, 'feature') ? 'feature' : (str_contains($badge, 'fix') ? 'fix' : 'improvement');
             $title = trim($xp->evaluate("string(.//h3)", $item));
             $pNode = $xp->query(".//p", $item)->item(0);
             $row = [

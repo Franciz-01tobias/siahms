@@ -109,7 +109,7 @@ function maskDn($s) {
     if ($s === '') return '(not set)';
     $parts = preg_split('/(?<!\\\\),/', $s);
     foreach ($parts as &$p) {
-        if (strpos($p, '=') === false) { $p = mask($p); continue; }
+        if (!str_contains($p, '=')) { $p = mask($p); continue; }
         list($k, $v) = explode('=', $p, 2);
         $p = trim($k) . '=' . mask(trim($v));
     }

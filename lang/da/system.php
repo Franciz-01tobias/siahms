@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Hold øje med denne side.</strong> Så snart processen kører, bliver statussen ovenfor grøn, og leverancer dukker op nedenfor. Fulde opsætningsnoter (Windows &amp; Linux, verifikation af signatur) findes i <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">Workflows-wikien</a>.',
         'fact_worker' => 'Processcript',
         'fact_retry' => 'Plan for gentagelsesforsøg',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1t &middot; 6t, derefter mislykket',
         'fact_retention' => 'Opbevaring af log',
         'fact_queued' => 'I kø nu',
         'days' => '{n} dage',

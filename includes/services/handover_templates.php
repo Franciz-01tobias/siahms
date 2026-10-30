@@ -117,7 +117,7 @@ class HandoverTemplates
                 foreach ($rows as $r) {
                     $cache['cf:' . $r['field_key']] = $r['label'];
                 }
-            } catch (Exception $e) {
+            } catch (Exception) {
                 // Schema not ready — no custom columns, and the document still prints.
                 $cache = [];
             }
@@ -241,7 +241,7 @@ class HandoverTemplates
                 "SELECT id, name, is_default, is_active, updated_datetime
                    FROM asset_handover_templates ORDER BY is_default DESC, name"
             )->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Exception $e) {
+        } catch (Exception) {
             return [];
         }
         foreach ($rows as &$r) {
@@ -304,7 +304,7 @@ class HandoverTemplates
                 $row['blocks'] = self::sanitiseBlocks($row['blocks']);
                 return $row;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // Table missing on a part-migrated install — fall through.
         }
         return ['id' => 0, 'name' => 'Default', 'blocks' => self::defaultBlocks()];

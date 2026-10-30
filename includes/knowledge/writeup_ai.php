@@ -77,7 +77,7 @@ function writeupSchemaReady(PDO $conn): bool
     try {
         $st = $conn->query("SHOW TABLES LIKE 'knowledge_gap_clusters'");
         $ready = $st && $st->fetchColumn() !== false;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $ready = false;
     }
     return $ready;
@@ -129,7 +129,7 @@ function writeupSettings(PDO $conn): array
             }
             $out[$r['setting_key']] = is_float($defaults[$r['setting_key']]) ? (float)$v : (int)$v;
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Settings table unreadable — defaults are all perfectly usable.
     }
 
@@ -269,7 +269,9 @@ function writeupTicketBundle(PDO $conn, int $ticketId): ?array
     $notes = $st->fetchAll(PDO::FETCH_ASSOC);
 
     $minutes = 0;
-    try {
+    // Not while Time tracking is switched off for the install (GH #217): logged
+    // minutes nobody can see should not shape a write-up.
+    if (moduleIsEnabled($conn, 'time-tracking')) try {
         $st = $conn->prepare(
             "SELECT COALESCE(SUM(time_spent_minutes), 0)
                FROM ticket_time_entries
@@ -277,14 +279,14 @@ function writeupTicketBundle(PDO $conn, int $ticketId): ?array
         );
         $st->execute([$ticketId]);
         $minutes = (int)$st->fetchColumn();
-    } catch (Throwable $e) { $minutes = 0; }
+    } catch (Throwable) { $minutes = 0; }
 
     $hasProblem = false;
     try {
         $st = $conn->prepare("SELECT 1 FROM problem_tickets WHERE ticket_id = ? LIMIT 1");
         $st->execute([$ticketId]);
         $hasProblem = (bool)$st->fetchColumn();
-    } catch (Throwable $e) { $hasProblem = false; }
+    } catch (Throwable) { $hasProblem = false; }
 
     // Build the narrative.
     $lines   = [];
@@ -457,7 +459,7 @@ function writeupStem(string $w): string
     // "jamming" → "jamm" → "jam", "stopped" → "stopp" → "stop". Never collapse
     // l/s/z: "call", "pass" and "buzz" are words, not doubled stems.
     $len = mb_strlen($w);
-    if ($len > 3 && $w[$len - 1] === $w[$len - 2] && strpos('lsz', $w[$len - 1]) === false) {
+    if ($len > 3 && $w[$len - 1] === $w[$len - 2] && !str_contains('lsz', $w[$len - 1])) {
         $w = substr($w, 0, -1);
     }
 
@@ -825,7 +827,7 @@ function writeupExtractQuestions(string $body): array
     $out = [];
     foreach (preg_split('/\r?\n/', $body) as $line) {
         $line = trim($line);
-        if ($line !== '' && (strpos($line, '- ') === 0 || strpos($line, '• ') === 0)) {
+        if ($line !== '' && (str_starts_with($line, '- ') || str_starts_with($line, '• '))) {
             $q = trim(mb_substr($line, 2));
             if ($q !== '') {
                 $out[] = $q;
@@ -845,7 +847,7 @@ function writeupExtractExplanation(string $body): string
     $keep = [];
     foreach (preg_split('/\r?\n/', $body) as $line) {
         $t = trim($line);
-        if ($t === '' || strpos($t, '- ') === 0 || strpos($t, '• ') === 0) {
+        if ($t === '' || str_starts_with($t, '- ') || str_starts_with($t, '• ')) {
             continue;
         }
         $keep[] = $t;

@@ -462,7 +462,7 @@ $translationNamespaces = ['common', 'software'];
             font-size: 14px;
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -926,9 +926,9 @@ $translationNamespaces = ['common', 'software'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

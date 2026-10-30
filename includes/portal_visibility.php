@@ -78,7 +78,7 @@ function portalThirdPartyPolicy(PDO $conn): string {
         $stmt->execute();
         $val = $stmt->fetchColumn();
         $cached = ($val !== false && in_array($val, $valid, true)) ? $val : PORTAL_THIRD_PARTY_HIDE;
-    } catch (Exception $e) {
+    } catch (Exception) {
         $cached = PORTAL_THIRD_PARTY_HIDE;   // unreadable settings → protect.
     }
     return $cached;
@@ -122,7 +122,7 @@ function portalEmailInvolvesRequester(array $email, ?string $requesterEmail): bo
     if ($requesterEmail === null) return false;
 
     $needle = strtolower(trim($requesterEmail));
-    if ($needle === '' || strpos($needle, '@') === false) return true;   // can't judge → visible
+    if ($needle === '' || !str_contains($needle, '@')) return true;   // can't judge → visible
 
     $to = trim((string)($email['to_recipients'] ?? ''));
     $cc = trim((string)($email['cc_recipients'] ?? ''));
@@ -131,8 +131,38 @@ function portalEmailInvolvesRequester(array $email, ?string $requesterEmail): bo
     // Nothing recorded to compare against → visible rather than wrongly hidden.
     if ($to === '' && $cc === '' && $from === '') return true;
 
-    $haystack = strtolower($from . ' ' . $to . ' ' . $cc);
-    return strpos($haystack, $needle) !== false;
+    // 🔴 The requester's address must BE one of the addresses, not appear inside
+    // one. A substring test made bob@acme.com part of every message to or from
+    // jimbob@acme.com or bob@acme.com.au - so with the privacy setting on, a
+    // requester saw exactly the third-party mail and attachments it exists to
+    // withhold. Reported privately, October 2026.
+    return in_array($needle, array_merge(portalAddressSet($from), portalAddressSet($to), portalAddressSet($cc)), true);
+}
+
+/**
+ * Every email address in a stored from / to / cc value, lower-cased.
+ *
+ * Copes with every shape the columns hold: one bare address; a list joined with
+ * "; " or "," (inbound mail, and replies as an analyst typed them); "Name <a@b>";
+ * and the JSON a few older rows carry ([{"emailAddress":{"address":...}}]).
+ *
+ * @param string $raw  the column's value
+ * @return string[]
+ */
+function portalAddressSet(string $raw): array {
+    $raw = trim($raw);
+    if ($raw === '') return [];
+    $found = [];
+    if ($raw[0] === '[' || $raw[0] === '{') {
+        $json = json_decode($raw, true);
+        if (is_array($json)) {
+            array_walk_recursive($json, function ($v, $k) use (&$found) {
+                if (is_string($v) && in_array($k, ['address', 'email'], true)) $found[] = $v;
+            });
+        }
+    }
+    if (!$found && preg_match_all("/[A-Z0-9._%+'-]+@[A-Z0-9.-]+/i", $raw, $m)) $found = $m[0];
+    return array_values(array_unique(array_map(fn($a) => strtolower(trim($a, " .<>	")), $found)));
 }
 
 /**
@@ -159,4 +189,45 @@ function portalEmailVisibility(array $email, ?string $requesterEmail, string $po
         default:
             return ['visible' => false, 'attachments' => false];
     }
+}
+
+/**
+ * The list-pane preview for each ticket: the first 160 characters of the newest
+ * message the requester is allowed to see, by the same rule as the ticket itself.
+ *
+ * 🔴 The portal lists (get_tickets.php, get_team_tickets.php) used to take the
+ * newest message whatever it was, straight from SQL. With the privacy setting on
+ * "hide", a supplier's reply was withheld from the ticket but its opening lines
+ * were still printed under the ticket's subject in the list. Reported privately,
+ * October 2026. The rule is applied against the TICKET'S requester, as the detail
+ * view does, so a manager's team list shows exactly what the requester would see.
+ *
+ * @param int[] $ticketIds  the tickets on this page of the list
+ * @return array<int, string>  ticket id => preview; a ticket with nothing visible is absent
+ */
+function portalVisiblePreviews(PDO $conn, array $ticketIds): array {
+    $ticketIds = array_values(array_unique(array_map('intval', $ticketIds)));
+    if (!$ticketIds) return [];
+    $policy = portalThirdPartyPolicy($conn);
+    $ph = implode(',', array_fill(0, count($ticketIds), '?'));
+    $stmt = $conn->prepare(
+        "SELECT e.ticket_id, LEFT(e.body_preview, 160) AS preview,
+                e.channel, e.direction, e.from_address, e.to_recipients, e.cc_recipients,
+                u.email AS requester_email
+           FROM emails e
+           JOIN tickets t     ON t.id = e.ticket_id
+      LEFT JOIN users u       ON u.id = t.user_id
+          WHERE e.ticket_id IN ($ph)
+       ORDER BY e.ticket_id, e.received_datetime DESC, e.id DESC"
+    );
+    $stmt->execute($ticketIds);
+    $out = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $m) {
+        $tid = (int)$m['ticket_id'];
+        if (array_key_exists($tid, $out)) continue;   // already have this ticket's newest visible one
+        // NULL (no user, or no address) and '' mean different things - see portalEmailInvolvesRequester().
+        $req = $m['requester_email'] === null ? null : (string)$m['requester_email'];
+        if (portalEmailVisibility($m, $req, $policy)['visible']) $out[$tid] = (string)$m['preview'];
+    }
+    return $out;
 }

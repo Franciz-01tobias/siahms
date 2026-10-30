@@ -78,12 +78,15 @@ return [
         'display_errors_enabled'   => 'Enabled — disable for production (set display_errors to 0 in config.php)',
         'display_errors_disabled'  => 'Disabled',
         'php_version_ok'           => '{version}',
-        'php_version_too_low'      => '{version} — PHP 7.4 or higher is required',
+        'php_version_too_low'      => '{version} — PHP 8.1 or higher is required',
         'php_version_eol'          => '{version} — still supported, but this release has had no security updates since it reached end of life. PHP 8.3 or 8.4 recommended.',
         'extension_loaded'         => 'Loaded',
         'extension_not_loaded'     => 'Not loaded — enable in php.ini',
         'pdo_mysql_not_loaded'     => 'Not loaded — enable pdo_mysql in php.ini',
         'imap_not_loaded'          => 'Not loaded — only needed for basic IMAP/SMTP mailboxes. PHP 8.4 no longer bundles this extension; install it via PECL if you use one.',
+        'ldap_not_loaded'          => 'Not loaded — only needed for LDAP / Active Directory sign-in and directory sync. Enable extension=ldap if you use them.',
+        'zip_not_loaded'           => 'Not loaded — needed to upload LMS courses (SCORM), read Word files in the RFP Builder, and search inside .docx and .xlsx attachments.',
+        'intl_not_loaded'          => 'Not loaded — only needed for international domain names (such as münchen.de) in Domains.',
 
         // Path-free twins, shown instead of the detail above when the page is being
         // viewed by neither a fresh install nor a signed-in administrator. Same
@@ -102,7 +105,7 @@ return [
         // version is fine, old, or too old; they do not learn which release to
         // look up.
         'php_version_ok_masked'          => 'Meets the requirement',
-        'php_version_too_low_masked'     => 'Too old — PHP 7.4 or higher is required',
+        'php_version_too_low_masked'     => 'Too old — PHP 8.1 or higher is required',
         'php_version_eol_masked'         => 'Supported, but this release has reached end of life and no longer receives security updates. Sign in as an administrator to see the version.',
     ],
 

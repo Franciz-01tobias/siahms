@@ -123,7 +123,7 @@ function replyTemplatesVisibleTo(PDO $conn, int $analystId, bool $activeOnly = t
         $stmt = $conn->prepare($sql);
         $stmt->execute([$analystId]);
         $mine = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         $mine = [];
     }
     foreach ($mine as &$row) { $row['scope'] = 'mine'; }
@@ -149,7 +149,7 @@ function replyTemplateWriteScope(PDO $conn, int $analystId, int $templateId): ?s
         $stmt = $conn->prepare("SELECT analyst_id FROM ticket_reply_templates WHERE id = ?");
         $stmt->execute([$templateId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
     if (!$row) return null;

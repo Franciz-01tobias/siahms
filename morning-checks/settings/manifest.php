@@ -14,19 +14,19 @@ return [
     'module' => 'morning-checks',
     'label'  => 'Morning checks',
     'umbrella' => [
-        'cap'   => Cap::MORNING_CHECKS_MANAGE,
+        'cap'   => capKey(Cap::MORNING_CHECKS_MANAGE),
         'grant' => 'Manage everything in Morning checks settings',
     ],
     'tabs' => [
         [
             'id'        => 'checks',
-            'cap'       => Cap::MORNING_CHECKS_CHECKS,
+            'cap'       => capKey(Cap::MORNING_CHECKS_CHECKS),
             'label_key' => 'morning-checks.settings.tab_checks',
             'grant'     => 'Manage the checks themselves, and their order',
         ],
         [
             'id'        => 'statuses',
-            'cap'       => Cap::MORNING_CHECKS_STATUSES,
+            'cap'       => capKey(Cap::MORNING_CHECKS_STATUSES),
             'label_key' => 'morning-checks.settings.tab_statuses',
             'grant'     => 'Manage check statuses',
         ],
@@ -37,7 +37,7 @@ return [
             // is plain module access, so the round still gets done when the
             // person it is routed to is away.
             'id'        => 'groups',
-            'cap'       => Cap::MORNING_CHECKS_GROUPS,
+            'cap'       => capKey(Cap::MORNING_CHECKS_GROUPS),
             'label_key' => 'morning-checks.settings.tab_groups',
             'grant'     => 'Group checks and route them to a team or an analyst',
         ],

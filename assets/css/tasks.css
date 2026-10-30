@@ -834,6 +834,20 @@ body {
 }
 
 .detail-panel.open { transform: translateX(0); }
+/* Raised off the page: a deeper shadow down the left edge. In dark mode a black
+   shadow on a dark page barely shows, so the edge also catches a faint light line. */
+.detail-panel.open { box-shadow: -14px 0 32px rgba(0, 0, 0, 0.22), -2px 0 6px rgba(0, 0, 0, 0.12); }
+[data-theme-mode="dark"] .detail-panel.open {
+    box-shadow: -18px 0 40px rgba(0, 0, 0, 0.65), -2px 0 8px rgba(0, 0, 0, 0.5), inset 1px 0 0 rgba(255, 255, 255, 0.09);
+}
+.tq-open-full-btn { margin-top: 10px; }
+/* The quick panel in full mode (GH #219): the real task editor in a frame, given
+   the width the board's own panel has room for. */
+/* Wide enough for the editor's tabs (Details, Work, Subtasks, Time, Comments,
+   Links, Documents, History) to sit side by side rather than bunch up. */
+.detail-panel.tq-full { width: min(1100px, calc(100vw - 60px)); }
+.detail-panel.tq-full .detail-panel-body { padding: 0; overflow: hidden; }
+.tq-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--surface, #fff); }
 
 .detail-panel-header {
     display: flex;
@@ -2704,7 +2718,13 @@ body.module-read-only .tp-remove { display: none !important; }
    what will be refused. */
 body.module-read-only #detailPanelBody input:not([type="search"]),
 body.module-read-only #detailPanelBody select,
-body.module-read-only #detailPanelBody textarea { pointer-events: none; opacity: .75; }
+body.module-read-only #detailPanelBody textarea,
+/* GH #219: the quick-look panel and the table's in-place editors were offered to a
+   read-only analyst too - every save was refused, but the page invited them. */
+body.module-read-only #tqBody input:not([type="search"]),
+body.module-read-only #tqBody select,
+body.module-read-only #tqBody textarea,
+body.module-read-only .dt-edit { pointer-events: none; opacity: .75; }
 body.module-read-only .column-add-btn,
 body.module-read-only .quick-add-container,
 body.module-read-only [onclick^="deleteCurrentTask"],

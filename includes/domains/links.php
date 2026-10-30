@@ -52,7 +52,7 @@ if (!defined('DOMAIN_LINKS_LOADED')) {
             try {
                 foreach (domainLinkKinds() as $k) $conn->query("SELECT 1 FROM {$k['table']} LIMIT 0");
                 $ready = true;
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 $ready = false;
             }
         }

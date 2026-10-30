@@ -267,7 +267,7 @@ function cardDavFoldLine(string $logical, string $eol = "\r\n"): string
  */
 function cardDavDetectEol(string $raw): string
 {
-    return strpos($raw, "\r\n") !== false ? "\r\n" : "\n";
+    return str_contains($raw, "\r\n") ? "\r\n" : "\n";
 }
 
 /**

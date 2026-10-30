@@ -121,7 +121,7 @@ $translationNamespaces = ['common', 'watchtower'];
         }
         .wt-opt-elsewhere a:hover { text-decoration: underline; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -130,7 +130,7 @@ $translationNamespaces = ['common', 'watchtower'];
         <?php renderSettingsTabBar($visibleTabs, $activeTabId); ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'cards')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'cards' ? ' active' : ''; ?>" id="cards-tab" data-capability="<?php echo Cap::WATCHTOWER_CARDS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'cards' ? ' active' : ''; ?>" id="cards-tab" data-capability="<?php echo capKey(Cap::WATCHTOWER_CARDS); ?>">
             <div class="section-header"><h2><?php echo htmlspecialchars(t('watchtower.settings.cards_heading')); ?></h2></div>
             <p class="intro"><?php echo htmlspecialchars(t('watchtower.settings.cards_intro')); ?></p>
             <p class="intro"><?php echo htmlspecialchars(t('watchtower.settings.order_intro')); ?></p>
@@ -143,7 +143,7 @@ $translationNamespaces = ['common', 'watchtower'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'counts')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'counts' ? ' active' : ''; ?>" id="counts-tab" data-capability="<?php echo Cap::WATCHTOWER_COUNTS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'counts' ? ' active' : ''; ?>" id="counts-tab" data-capability="<?php echo capKey(Cap::WATCHTOWER_COUNTS); ?>">
             <div class="section-header"><h2><?php echo htmlspecialchars(t('watchtower.settings.counts_heading')); ?></h2></div>
             <p class="intro"><?php echo htmlspecialchars(t('watchtower.settings.counts_intro')); ?></p>
             <div id="countsList"><?php echo htmlspecialchars(t('watchtower.settings.loading')); ?></div>
@@ -379,6 +379,6 @@ async function saveSettings() {
 
 load();
 </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

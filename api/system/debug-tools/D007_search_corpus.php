@@ -44,6 +44,9 @@ if (!$__dbgAdmin) {
     echo "Administrator access required.\n";
     exit;
 }
+// Writes (and removes) a probe row: never on a GET, which a link on another site
+// can send (csrf.php). The tool page runs it as a POST - see 'method' in tools.php.
+csrfRequireWriteMethod();
 
 $sections = [];
 /**

@@ -38,7 +38,7 @@ $translationNamespaces = ['common', 'contracts'];
     <script src="../../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
-    <script src="../../assets/js/tinymce/tinymce.min.js"></script>
+    <script src="../../assets/js/tinymce/tinymce.min.js?v=8.10.0"></script>
     <style>
         body { --accent: var(--con-accent, #f59e0b); }
         .page-wrap { padding: 30px 40px; background: var(--app-bg, #f5f5f5); height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; }
@@ -396,7 +396,7 @@ $translationNamespaces = ['common', 'contracts'];
         [data-theme-mode="dark"] .history-row.current .history-row-header { background: #102c20; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="contracts">
     <?php include '../includes/header.php'; ?>
@@ -1075,6 +1075,9 @@ $translationNamespaces = ['common', 'contracts'];
             const tinyDark = (document.documentElement.getAttribute('data-theme-mode') || 'light') === 'dark';
             return new Promise((resolve) => {
                 tinymce.init({
+                    // Plugins and skins load without the page's ?v=, so a browser could pair a new
+                    // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+                    cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
                     target: document.getElementById(textareaId),
                     license_key: 'gpl',
                     skin: tinyDark ? 'oxide-dark' : 'oxide',
@@ -1286,6 +1289,6 @@ $translationNamespaces = ['common', 'contracts'];
                 .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

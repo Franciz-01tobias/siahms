@@ -65,7 +65,7 @@ function ssoJitColumnsReady(PDO $conn): bool {
     if ($ready === null) {
         try {
             $ready = (bool)$conn->query("SHOW COLUMNS FROM auth_providers LIKE 'profile_sync_mode'")->fetch();
-        } catch (PDOException $e) {
+        } catch (PDOException) {
             $ready = false;
         }
     }
@@ -118,7 +118,7 @@ function ssoPortalRoutingColumnsReady(PDO $conn): bool {
     if ($ready === null) {
         try {
             $ready = (bool)$conn->query("SHOW COLUMNS FROM auth_providers LIKE 'portal_email_domains'")->fetch();
-        } catch (PDOException $e) {
+        } catch (PDOException) {
             $ready = false;
         }
     }
@@ -194,7 +194,7 @@ function ssoJitCompanyReady(PDO $conn): bool {
     static $ready = null;
     if ($ready === null) {
         try { $ready = (bool)$conn->query("SHOW COLUMNS FROM auth_providers LIKE 'jit_company_access'")->fetch(); }
-        catch (PDOException $e) { $ready = false; }
+        catch (PDOException) { $ready = false; }
     }
     return $ready;
 }
@@ -234,7 +234,7 @@ function ssoApplyJitCompanies(PDO $conn, int $providerId, int $analystId): void 
     } catch (Throwable $e) {
         // Fail CLOSED: an analyst whose companies could not be set sees none,
         // rather than all of them because a write failed halfway.
-        try { $conn->prepare("UPDATE analysts SET can_access_all_tenants = 0 WHERE id = ?")->execute([$analystId]); } catch (Throwable $e2) {}
+        try { $conn->prepare("UPDATE analysts SET can_access_all_tenants = 0 WHERE id = ?")->execute([$analystId]); } catch (Throwable) {}
         error_log('ssoApplyJitCompanies: ' . $e->getMessage());
     }
 }

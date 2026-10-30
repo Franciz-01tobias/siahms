@@ -36,7 +36,7 @@ try {
     /* A file cannot ride in a JSON body, so the logo arrives as multipart and
        the text settings arrive as JSON. Which one this is decides how the body
        is read; everything after this point works on the same $in array. */
-    $isMultipart = strpos($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data') === 0;
+    $isMultipart = str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data');
 
     if ($isMultipart) {
         $in = ['__multipart' => true];
@@ -58,7 +58,7 @@ try {
             $prev = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'self_service_logo_path'");
             $prev->execute();
             $prevPath = (string)($prev->fetchColumn() ?: '');
-            if ($prevPath !== '' && strpos($prevPath, 'system/uploads/branding/portal/') === 0) {
+            if ($prevPath !== '' && str_starts_with($prevPath, 'system/uploads/branding/portal/')) {
                 @unlink(__DIR__ . '/../../' . $prevPath);
             }
         }

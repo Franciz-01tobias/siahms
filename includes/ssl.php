@@ -1,4 +1,8 @@
 <?php
+// PHP 8.1 or newer, or a plain message instead of a parse error. FIRST, because
+// config.php loads this file before anything else of ours.
+require_once __DIR__ . '/php_version_guard.php';
+
 /**
  * Central SSL/TLS policy for outbound HTTPS.
  *

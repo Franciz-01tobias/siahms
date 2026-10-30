@@ -196,6 +196,13 @@ function apiUsersCreate(PDO $conn, array $apiKey, array $params, array $body): v
         // No address to infer a domain from → no company, which means triage.
         $tenantId = (array_key_exists('tenant_id', $body) || $emailOrNull === null)
             ? null : resolveTenantForNewUser($conn, $email);
+        // 🔴 The inferred company gets the same check as a named one. Without it a
+        // key limited to company A created a requester in company B just by leaving
+        // tenant_id out and using an address on B's domain. Reported privately,
+        // October 2026.
+        if ($tenantId !== null && !apiKeyCanAccessTenant($conn, $apiKey, (int)$tenantId)) {
+            apiError(403, 'forbidden', "This address belongs to a company this API key cannot reach. Pass a 'tenant_id' it can, or null for triage.");
+        }
     }
 
     [$ccSent, $ccId] = apiUserCostCentre($conn, $body, $tenantId, null);

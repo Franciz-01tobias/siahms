@@ -46,7 +46,7 @@ try {
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/calendar-grid.css?v=1">
     <link rel="stylesheet" href="../assets/css/calendar.css?v=11">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -148,7 +148,7 @@ try {
         window.CALENDAR_SCOPE = <?php echo json_encode($calendarScope); ?>;
     </script>
     <script src="../assets/js/schedule.js?v=1"></script>
-    <script src="../assets/js/calendar.js?v=10"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/calendar.js?v=11"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

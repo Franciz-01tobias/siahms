@@ -39,6 +39,9 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -46,6 +49,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+requireModuleOnJson(connectToDatabase(), 'rota');   // GH #217: not while the duty rota is switched off
 
 $input = json_decode(file_get_contents('php://input'), true);
 $kind  = ($input['kind'] ?? '') === 'row' ? 'row' : (($input['kind'] ?? '') === 'col' ? 'col' : '');

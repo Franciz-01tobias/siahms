@@ -165,6 +165,9 @@ try {
 require_once __DIR__ . '/../../../includes/functions.php';
 try { $__dbgAdmin = !empty($_SESSION['analyst_id']) && analystIsAdmin(connectToDatabase(), (int)$_SESSION['analyst_id']); } catch (Throwable $e) { $__dbgAdmin = false; }
 if (!$__dbgAdmin) { http_response_code(403); if (!headers_sent()) header('Content-Type: text/plain; charset=utf-8'); echo "Administrator access required.\n"; exit; }
+// Re-imports the demo data: never on a GET, which a link on another site can send
+// (csrf.php). The tool page runs it as a POST - see 'method' in tools.php.
+csrfRequireWriteMethod();
 
 $cfg[] = "config.php include      : " . ($includeOk ? 'OK' : 'NOT ATTEMPTED');
 $cfg[] = "DB_SERVER defined       : " . bool_str(defined('DB_SERVER'))   . (defined('DB_SERVER')   ? ' = ' . DB_SERVER : '');

@@ -94,7 +94,7 @@ function webchatLoadByChannel(PDO $conn, int $channelId): ?array
         );
         $stmt->execute([$channelId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
     return $row ?: null;
@@ -116,7 +116,7 @@ function webchatLoadByKey(PDO $conn, string $widgetKey): ?array
         );
         $stmt->execute([$widgetKey]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
     return $row ?: null;
@@ -191,7 +191,7 @@ function webchatGetOrCreateUser(PDO $conn, string $email, string $name): ?int
         $ins = $conn->prepare("INSERT INTO users (email, display_name, created_at) VALUES (?, ?, UTC_TIMESTAMP())");
         $ins->execute([$email, $name !== '' ? $name : $email]);
         return (int) $conn->lastInsertId();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
 }
@@ -299,7 +299,7 @@ function webchatInsertInbound(PDO $conn, int $ticketId, array $conversation, arr
     try {
         $conn->prepare("UPDATE messaging_channels SET last_inbound_datetime = UTC_TIMESTAMP() WHERE id = ?")
              ->execute([(int) $channel['id']]);
-    } catch (Exception $e) { /* non-fatal */ }
+    } catch (Exception) { /* non-fatal */ }
 
     return $emailId;
 }
@@ -397,7 +397,7 @@ function webchatIsOpenNow(PDO $conn, ?int $calendarId): bool
     require_once __DIR__ . '/../sla.php';
     try {
         $cal = sla_load_calendar($conn, (int) $calendarId);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return true;
     }
     if (!$cal || empty($cal['hours'])) {
@@ -405,7 +405,7 @@ function webchatIsOpenNow(PDO $conn, ?int $calendarId): bool
     }
     try {
         $tz = new DateTimeZone($cal['timezone'] ?: 'UTC');
-    } catch (Exception $e) {
+    } catch (Exception) {
         $tz = new DateTimeZone('UTC');
     }
     $now     = new DateTime('now', $tz);
@@ -558,7 +558,7 @@ function webchatPromoteToTicket(PDO $conn, array $conversation, array $channel, 
         try {
             saveChannelMediaAttachment($conn, $emailId, 'chat-transcript.txt', 'text/plain', $transcript . "\n");
             $conn->prepare("UPDATE emails SET has_attachments = 1 WHERE id = ?")->execute([$emailId]);
-        } catch (Exception $e) { /* transcript attach is best-effort */ }
+        } catch (Exception) { /* transcript attach is best-effort */ }
     }
 
     return $ticketId;

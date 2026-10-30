@@ -55,25 +55,27 @@ try {
     <title><?php echo htmlspecialchars(pageTitle('process-mapper')); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
-    <link rel="stylesheet" href="../assets/css/process-mapper.css?v=11">
+    <link rel="stylesheet" href="../assets/css/process-mapper.css?v=13">
+    <link rel="stylesheet" href="../assets/css/hover-preview.css?v=1">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
     <!-- Mobile layer: linked AFTER this page's own CSS so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="process-mapper">
     <?php include 'includes/header.php'; ?>
     <?php /* The action row (#185): New moved here from the top of the process list. */ ?>
     <?php require_once __DIR__ . '/../includes/action_row.php';
-          renderActionRow(t('process-mapper.nav.processes'), [actionRowNew('PM.createProcess()', t('process-mapper.sidebar.new_process_tip'))], ['accent' => 'pmap']); ?>
+          renderActionRow(t('process-mapper.nav.processes'), [actionRowNew('PM.createProcess()', t('process-mapper.sidebar.new_process_tip'))], ['accent' => 'pmap', 'title_id' => 'pmTitle']); ?>
 
     <div class="pm-layout">
         <!-- Sidebar: process list -->
         <div class="pm-sidebar" id="pmSidebar">
             <div class="pm-sidebar-search">
-                <input type="text" id="processSearch" placeholder="<?php echo htmlspecialchars(t('process-mapper.sidebar.search_placeholder')); ?>" oninput="PM.filterProcesses(this.value)">
+                <input type="text" id="processSearch" aria-keyshortcuts="/ Alt+Shift+O" placeholder="<?php echo htmlspecialchars(t('process-mapper.sidebar.search_placeholder')); ?>" oninput="PM.filterProcesses(this.value)">
+                <kbd class="pm-search-key" aria-hidden="true" title="<?php echo htmlspecialchars(t('process-mapper.sidebar.search_key_tip')); ?>">/</kbd>
             </div>
             <div class="pm-process-list" id="processList">
                 <div class="pm-empty"><?php echo htmlspecialchars(t('process-mapper.sidebar.no_processes_yet')); ?></div>
@@ -505,8 +507,9 @@ try {
     <!-- Vendored locally so PNG/PDF export works offline and doesn't depend on a
          CDN at print time. Same versions used by Network Mapper (#257). -->
     <script src="../assets/js/vendor/html2canvas.min.js"></script>
-    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
-    <script src="../assets/js/process-mapper.js?v=14"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
+    <script src="../assets/js/hover-preview.js?v=1"></script>
+    <script src="../assets/js/process-mapper.js?v=20"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

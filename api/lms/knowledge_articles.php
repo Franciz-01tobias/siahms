@@ -21,6 +21,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireCapabilityJson(Cap::LMS_MANAGE);
+// GH #217: switched off is off for everybody - not on Knowledge ACCESS, which an author may lack (above).
+requireModuleOnJson(connectToDatabase(), 'knowledge');
 
 try {
     $conn = connectToDatabase();

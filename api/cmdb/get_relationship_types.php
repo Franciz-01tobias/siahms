@@ -26,7 +26,13 @@ try {
        ORDER BY display_order, verb"
     );
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // GH #199 Part C: what a failure along this type means. Read on its own so the list
+    // still loads before Database Verification adds the column.
+    $redundancy = [];
+    try { $redundancy = $conn->query("SELECT id, redundancy FROM cmdb_relationship_types")->fetchAll(PDO::FETCH_KEY_PAIR); }
+    catch (PDOException $e) { $redundancy = []; }
     foreach ($rows as &$r) {
+        $r['redundancy'] = $redundancy[$r['id']] ?? 'none';
         $r['id'] = (int)$r['id'];
         $r['display_order'] = (int)$r['display_order'];
         $r['is_active'] = (int)$r['is_active'] === 1;

@@ -100,10 +100,10 @@ try {
     $u = ssPortalIncidentUpdates($conn, $id);
     ok('once an external update exists, exactly one is shown', count($u) === 1, count($u) . ' shown');
     ok('and it is the external one',
-       $u && strpos($u[0]['comment'], 'EXTERNAL') !== false,
+       $u && str_contains($u[0]['comment'], 'EXTERNAL'),
        $u ? $u[0]['comment'] : '(nothing)');
     ok('the internal one is NOT in the list',
-       strpos(json_encode($u), 'INTERNAL') === false,
+       !str_contains(json_encode($u), 'INTERNAL'),
        'internal text reached a portal-facing function');
     ok('now the incident appears on the portal', isset(portalById($conn)[$id]));
     ok('and it says how many external updates there are',

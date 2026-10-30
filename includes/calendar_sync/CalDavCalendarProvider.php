@@ -456,8 +456,8 @@ class CalDavCalendarProvider extends CalendarSyncProvider
 
         $syncToken = null;
         if (!$out['baseline']) {
-            if (strpos($token, 'sync:') === 0)       $syncToken = substr($token, 5);
-            elseif (strpos($token, 'etags:') !== 0)  return $this->pollChanges($calendarAddress, null);
+            if (str_starts_with($token, 'sync:'))       $syncToken = substr($token, 5);
+            elseif (!str_starts_with($token, 'etags:'))  return $this->pollChanges($calendarAddress, null);
         }
 
         // ── sync-collection ────────────────────────────────────────────────
@@ -475,7 +475,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
             // the result is a baseline, so the caller applies nothing. This is
             // the case that must never read as "every event was deleted".
             if ($syncToken !== null && (in_array($res['status'], [403, 409, 412], true)
-                    || strpos($res['body'], 'valid-sync-token') !== false)) {
+                    || str_contains($res['body'], 'valid-sync-token'))) {
                 return $this->pollChanges($calendarAddress, null);
             }
 
@@ -511,7 +511,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
                     $id   = self::idFromHref($href);
                     if ($id === null) continue;                       // not ours
                     $status = self::text($xp, './d:status', $resp);
-                    if (strpos($status, ' 404') !== false || strpos($status, ' 410') !== false) {
+                    if (str_contains($status, ' 404') || str_contains($status, ' 410')) {
                         $out['removed'][] = $id;
                     } else {
                         $changedHrefs[$id] = $href;
@@ -547,7 +547,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
             $hrefs[$id] = $href;
         }
         $out['token'] = 'etags:' . json_encode($now);
-        if ($out['baseline'] || strpos((string)$token, 'etags:') !== 0) {
+        if ($out['baseline'] || !str_starts_with((string)$token, 'etags:')) {
             $out['baseline'] = true;
             return $out;
         }
@@ -654,12 +654,12 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         if ($end === null && !empty($props['DURATION'])) {
             try {
                 $spec = trim((string)explode(':', $props['DURATION'], 2)[1]);
-                $neg  = strpos($spec, '-') === 0;
+                $neg  = str_starts_with($spec, '-');
                 $iv   = new DateInterval(ltrim($spec, '+-'));
                 $dt   = clone $start['dt'];
                 $neg ? $dt->sub($iv) : $dt->add($iv);
                 $end = ['dt' => $dt, 'date_only' => $allDay];
-            } catch (Exception $e) {
+            } catch (Exception) {
                 $end = null;
             }
         }
@@ -720,7 +720,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
         } elseif (!empty($params['TZID'])) {
             try {
                 $zone = new DateTimeZone(ltrim($params['TZID'], '/'));
-            } catch (Exception $e) {
+            } catch (Exception) {
                 $zone = $local;
             }
         }
@@ -762,7 +762,7 @@ class CalDavCalendarProvider extends CalendarSyncProvider
     {
         try {
             return $this->checkCalendar($calendarAddress)['ok'];
-        } catch (Exception $e) {
+        } catch (Exception) {
             return false;
         }
     }

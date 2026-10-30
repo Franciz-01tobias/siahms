@@ -17,6 +17,55 @@
 require_once __DIR__ . '/tenancy.php';
 
 /**
+ * The three stored relation types (4.0 - until then strings, with a switch whose
+ * `default:` showed ANY unknown value as "related", typos included).
+ *
+ * The value is what ticket_links.relation_type stores, so a case's value must never
+ * change. The four choices a person sees map onto these through fromChoice().
+ */
+enum LinkRelation: string
+{
+    case Related   = 'related';     // symmetric; reciprocal duplicates are blocked
+    case Duplicate = 'duplicate';   // source is a DUPLICATE OF target (target is the master)
+    case Parent    = 'parent';      // source is the PARENT OF target (target is the child)
+
+    /**
+     * What a person chose, from the acting ticket's point of view, as [relation, swap]:
+     * swap = true means the stored source and target are the other way round
+     * ('child_of' is stored as the inverse 'parent'). Null for a choice that isn't one.
+     *
+     * @param string $choice  'related', 'duplicate_of', 'parent_of' or 'child_of'
+     * @return array{0:LinkRelation,1:bool}|null
+     */
+    public static function fromChoice(string $choice): ?array
+    {
+        return match ($choice) {
+            'related'      => [self::Related,   false],
+            'duplicate_of' => [self::Duplicate, false],   // source is a dup of target
+            'parent_of'    => [self::Parent,    false],   // source is parent of target
+            'child_of'     => [self::Parent,    true],    // target is parent of source
+            default        => null,
+        };
+    }
+
+    /**
+     * The audit-trail lines for the two tickets, each from its own point of view.
+     *
+     * @param string $sourceNum  the stored source ticket's number
+     * @param string $targetNum  the stored target ticket's number
+     * @return array{0:string,1:string}  [what the source's history says, what the target's says]
+     */
+    public function auditLines(string $sourceNum, string $targetNum): array
+    {
+        return match ($this) {
+            self::Parent    => ['Parent of ' . $targetNum,    'Child of ' . $sourceNum],
+            self::Duplicate => ['Duplicate of ' . $targetNum, 'Duplicated by ' . $sourceNum],
+            self::Related   => ['Related to ' . $targetNum,   'Related to ' . $sourceNum],
+        };
+    }
+}
+
+/**
  * Load the minimal ticket row we need (or null if missing/deleted).
  *
  * @param int $id  the ticket to load; a deleted ticket gives null
@@ -74,20 +123,15 @@ function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetI
         return ['success' => false, 'error' => "A ticket can't be linked to itself."];
     }
 
-    // Map the UI relation to a stored (type, canonical source/target).
-    $map = [
-        'related'      => ['type' => 'related',   'swap' => false],
-        'duplicate_of' => ['type' => 'duplicate', 'swap' => false], // source is a dup of target
-        'parent_of'    => ['type' => 'parent',    'swap' => false], // source is parent of target
-        'child_of'     => ['type' => 'parent',    'swap' => true],  // target is parent of source
-    ];
-    if (!isset($map[$uiRelation])) {
+    // Map the person's choice to a stored relation and canonical source/target.
+    $choice = LinkRelation::fromChoice($uiRelation);
+    if ($choice === null) {
         return ['success' => false, 'error' => 'Invalid relation type.'];
     }
-    $type = $map[$uiRelation]['type'];
+    [$type, $swap] = $choice;
     $s = $sourceId;
     $t = $targetId;
-    if ($map[$uiRelation]['swap']) { $s = $targetId; $t = $sourceId; }
+    if ($swap) { $s = $targetId; $t = $sourceId; }
 
     // The actor must be able to see BOTH tickets.
     if (!analystCanAccessTicket($conn, $analystId, $sourceId) || !analystCanAccessTicket($conn, $analystId, $targetId)) {
@@ -110,7 +154,7 @@ function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetI
     }
 
     // Relationship-specific guards (operate on the canonical $s/$t).
-    if ($type === 'parent') {
+    if ($type === LinkRelation::Parent) {
         // The child ($t) may have at most one parent.
         $st = $conn->prepare("SELECT source_ticket_id FROM ticket_links WHERE target_ticket_id = ? AND relation_type = 'parent'");
         $st->execute([$t]);
@@ -126,7 +170,7 @@ function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetI
         if ($cy->fetchColumn()) {
             return ['success' => false, 'error' => 'That would create a parent/child loop.'];
         }
-    } elseif ($type === 'duplicate') {
+    } elseif ($type === LinkRelation::Duplicate) {
         // A ticket ($s) may be a duplicate of at most one master.
         $st = $conn->prepare("SELECT target_ticket_id FROM ticket_links WHERE source_ticket_id = ? AND relation_type = 'duplicate'");
         $st->execute([$s]);
@@ -136,7 +180,7 @@ function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetI
                 ? 'This ticket is already marked a duplicate of that ticket.'
                 : 'This ticket is already marked a duplicate of another ticket — remove that link first.'];
         }
-    } else { // related — block the reciprocal too
+    } else { // LinkRelation::Related — block the reciprocal too
         $rc = $conn->prepare(
             "SELECT id FROM ticket_links WHERE relation_type = 'related'
              AND ((source_ticket_id = ? AND target_ticket_id = ?) OR (source_ticket_id = ? AND target_ticket_id = ?))"
@@ -149,7 +193,7 @@ function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetI
 
     // Exact-duplicate guard (the unique key is the backstop).
     $dup = $conn->prepare("SELECT id FROM ticket_links WHERE source_ticket_id = ? AND target_ticket_id = ? AND relation_type = ?");
-    $dup->execute([$s, $t, $type]);
+    $dup->execute([$s, $t, $type->value]);
     if ($dup->fetchColumn()) {
         return ['success' => false, 'error' => 'These tickets are already linked.'];
     }
@@ -157,21 +201,14 @@ function ticketLinkCreate(PDO $conn, int $analystId, int $sourceId, int $targetI
     $conn->prepare(
         "INSERT INTO ticket_links (source_ticket_id, target_ticket_id, relation_type, created_by_id, created_datetime)
          VALUES (?, ?, ?, ?, UTC_TIMESTAMP())"
-    )->execute([$s, $t, $type, $analystId]);
+    )->execute([$s, $t, $type->value, $analystId]);
 
     // Audit both tickets, each from its own perspective.
     $sNum = ticketLinkNum($conn, $s);
     $tNum = ticketLinkNum($conn, $t);
-    if ($type === 'parent') {
-        ticketLinkAudit($conn, $s, $analystId, 'Linked ticket', 'Parent of ' . $tNum);
-        ticketLinkAudit($conn, $t, $analystId, 'Linked ticket', 'Child of ' . $sNum);
-    } elseif ($type === 'duplicate') {
-        ticketLinkAudit($conn, $s, $analystId, 'Linked ticket', 'Duplicate of ' . $tNum);
-        ticketLinkAudit($conn, $t, $analystId, 'Linked ticket', 'Duplicated by ' . $sNum);
-    } else {
-        ticketLinkAudit($conn, $s, $analystId, 'Linked ticket', 'Related to ' . $tNum);
-        ticketLinkAudit($conn, $t, $analystId, 'Linked ticket', 'Related to ' . $sNum);
-    }
+    [$sourceLine, $targetLine] = $type->auditLines($sNum, $tNum);
+    ticketLinkAudit($conn, $s, $analystId, 'Linked ticket', $sourceLine);
+    ticketLinkAudit($conn, $t, $analystId, 'Linked ticket', $targetLine);
 
     return ['success' => true];
 }
@@ -230,17 +267,25 @@ function ticketLinksFor(PDO $conn, int $ticketId): array
             'subject'       => $r['subject'],
             'status'        => $r['status'],
         ];
-        switch ($r['relation_type']) {
-            case 'parent':
+        // A stored type this code does not know is left out and logged - until 4.0 a
+        // switch default showed it as 'related', which would have hidden a bad write.
+        $relation = LinkRelation::tryFrom((string)$r['relation_type']);
+        if ($relation === null) {
+            error_log('ticket_links #' . (int)$r['link_id'] . ' has an unknown relation_type: ' . $r['relation_type']);
+            continue;
+        }
+        switch ($relation) {
+            case LinkRelation::Parent:
                 if ($isSource) { $out['children'][] = $item; } // this is the parent
                 else { $out['parent'] = $item; }               // this is the child
                 break;
-            case 'duplicate':
+            case LinkRelation::Duplicate:
                 if ($isSource) { $out['duplicate_of'] = $item; } // this is a dup of the master
                 else { $out['duplicates'][] = $item; }           // the other is a dup of this
                 break;
-            default:
+            case LinkRelation::Related:
                 $out['related'][] = $item;
+                break;
         }
     }
     return $out;

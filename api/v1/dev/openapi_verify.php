@@ -81,7 +81,7 @@ function oav_validate($data, $schema, $components, $path = 'data', $depth = 0) {
             if (isset($schema['items'])) foreach ($data as $i => $v) $errs = array_merge($errs, oav_validate($v, $schema['items'], $components, "$path/$i", $depth+1));
             break;
         case 'object':
-            if (!is_array($data) || ($data !== [] && array_keys($data) === range(0, count($data)-1))) { $errs[] = "$path: expected object, got ".(is_array($data)?'array':gettype($data)); break; }
+            if (!is_array($data) || ($data !== [] && array_is_list($data))) { $errs[] = "$path: expected object, got ".(is_array($data)?'array':gettype($data)); break; }
             $props = $schema['properties'] ?? [];
             foreach ($props as $k => $psub) {
                 if (array_key_exists($k, $data)) $errs = array_merge($errs, oav_validate($data[$k], $psub, $components, "$path.$k", $depth+1));

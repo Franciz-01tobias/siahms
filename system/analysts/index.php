@@ -39,6 +39,7 @@ $translationNamespaces = ['common', 'tickets'];
     <title><?php echo htmlspecialchars(pageTitle('system', t('tickets.settings.headings.analysts'))); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../../assets/css/grouped-list.css?v=1">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -73,6 +74,40 @@ $translationNamespaces = ['common', 'tickets'];
            read the same in both modes, so their colours stay hardcoded. */
         .status-badge.status-active { background: #e8f5e9; color: #2e7d32; }
         .status-badge.status-inactive { background: #f0f0f0; color: #999; }
+
+        /* List controls (GH #208). Labels sit above their dropdowns so the row
+           wraps cleanly however many controls the install shows. */
+        .av-toolbar, .av-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin-bottom: 12px; }
+        .av-filters { padding: 12px; border: 1px solid var(--border-soft, #eee); border-radius: 8px; background: var(--surface-2, #f7f9fa); }
+        .av-filters[hidden], .av-field[hidden] { display: none; }
+        .av-field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 600; color: var(--text-muted, #888); }
+        .av-field select, .av-search {
+            padding: 7px 8px; border: 1px solid var(--border, #ccc); border-radius: 5px; font: inherit; font-size: 13px; font-weight: 400;
+            background: var(--surface, #fff); color: var(--text, #333);
+        }
+        .av-search { min-width: 240px; flex: 0 1 280px; }
+        .av-search::placeholder { color: var(--text-faint, #999); }
+        .av-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text, #333); padding-bottom: 7px; }
+        .av-check input { accent-color: var(--accent, #546e7a); }
+        .av-btn { padding: 7px 14px; font-size: 13px; }
+        .av-badge { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; font-size: 11px; font-weight: 700;
+            background: var(--accent, #546e7a); color: var(--on-accent, #fff); text-align: center; }
+        .av-badge[hidden] { display: none; }
+        .av-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .av-menu-wrap { position: relative; }
+        .av-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 280px; padding: 4px;
+            background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+        .av-menu button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: none; border-radius: 5px; background: none;
+            font: inherit; font-size: 13px; color: var(--text, #333); cursor: pointer; }
+        .av-menu button:hover { background: var(--surface-hover, #f5f5f5); }
+        .av-shown { font-size: 12px; color: var(--text-muted, #888); margin: 0 0 10px; min-height: 16px; }
+        .av-loading, .av-empty { text-align: center; color: var(--text-muted, #888); padding: 20px; }
+        .av-via { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px; font-size: 11px;
+            background: var(--surface-2, #f0f2f4); color: var(--text-muted, #666); }
+        /* Every group's table gets the same column widths, so the columns line up
+           from one group to the next instead of each table sizing itself. */
+        .av-table { table-layout: fixed; }
+        .av-table td { overflow-wrap: anywhere; }
 
         /* Compact table action icons — canonical tickets/settings style
            (inbox.css's bare .action-btn is a big block button, so scope a
@@ -213,37 +248,83 @@ $translationNamespaces = ['common', 'tickets'];
                      border: 1px solid var(--danger-border, #f0c2c2); border-radius: 6px; padding: 9px 12px; margin-top: 10px; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
     <?php include '../includes/header.php'; ?>
 
     <div class="settings-scroll">
-        <h1 class="page-title"><?php echo htmlspecialchars(t('tickets.settings.headings.analysts')); ?></h1>
-        <p class="page-subtitle"><?php echo t('tickets.settings.intros.analysts'); ?></p>
-
-        <div class="section-header">
-            <div></div>
+        <div class="av-titlebar">
+            <h1 class="page-title"><?php echo htmlspecialchars(t('tickets.settings.headings.analysts')); ?></h1>
             <button class="add-btn" onclick="openAnalystModal()"><?php echo htmlspecialchars(t('common.add')); ?></button>
         </div>
-        <table>
-            <thead>
-                <tr>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.username')); ?></th>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.full_name')); ?></th>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.email')); ?></th>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.teams')); ?></th>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.status')); ?></th>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.is_admin')); ?></th>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.last_login')); ?></th>
-                    <th><?php echo htmlspecialchars(t('tickets.settings.columns.actions')); ?></th>
-                </tr>
-            </thead>
-            <tbody id="analysts-list">
-                <tr><td colspan="7" style="text-align: center;"><?php echo htmlspecialchars(t('tickets.settings.loading')); ?></td></tr>
-            </tbody>
-        </table>
+        <p class="page-subtitle"><?php echo t('tickets.settings.intros.analysts'); ?></p>
+
+        <?php $av = fn($k) => htmlspecialchars(t('tickets.settings.analyst_view.' . $k)); ?>
+        <!-- The list's controls (GH #208). Layout ones are remembered per analyst
+             (api/system/analysts_list_view.php); the search and filters start
+             empty each visit, apart from Status. -->
+        <div class="av-toolbar">
+            <input type="search" id="avSearch" class="av-search" placeholder="<?php echo $av('search_placeholder'); ?>" aria-label="<?php echo $av('search_placeholder'); ?>">
+            <label class="av-field"><span><?php echo $av('group_by'); ?></span>
+                <select id="avGroup1" data-view="group1"></select></label>
+            <label class="av-field" id="avGroup2Wrap"><span><?php echo $av('then_by'); ?></span>
+                <select id="avGroup2" data-view="group2"></select></label>
+            <label class="av-field" id="avLayoutWrap"><span><?php echo $av('layout'); ?></span>
+                <select id="avLayout" data-view="layout">
+                    <option value="tree"><?php echo $av('layout_tree'); ?></option>
+                    <option value="tabs"><?php echo $av('layout_tabs'); ?></option>
+                    <option value="jump"><?php echo $av('layout_jump'); ?></option>
+                </select></label>
+            <label class="av-field"><span><?php echo $av('sort'); ?></span>
+                <select id="avSort" data-view="sort">
+                    <option value="full_name"><?php echo $av('sort_full_name'); ?></option>
+                    <option value="username"><?php echo $av('sort_username'); ?></option>
+                    <option value="last_login"><?php echo $av('sort_last_login'); ?></option>
+                </select></label>
+            <label class="av-field"><span><?php echo $av('per_page'); ?></span>
+                <select id="avPageSize" data-view="page_size">
+                    <option value="0"><?php echo $av('all'); ?></option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select></label>
+            <button type="button" class="btn btn-secondary av-btn" id="avFiltersBtn" aria-expanded="false" onclick="toggleAnalystFilters()"><?php echo $av('filters'); ?><span class="av-badge" id="avFilterCount" hidden></span></button>
+            <div class="av-menu-wrap">
+                <button type="button" class="btn btn-secondary av-btn" id="avDefaultBtn" aria-haspopup="true" aria-expanded="false" onclick="toggleAnalystDefaultMenu(event)"><?php echo $av('default_btn'); ?></button>
+                <div class="av-menu" id="avDefaultMenu" hidden>
+                    <button type="button" onclick="saveAnalystViewAsDefault()"><?php echo $av('make_default'); ?></button>
+                    <button type="button" onclick="resetAnalystView()"><?php echo $av('use_default'); ?></button>
+                </div>
+            </div>
+        </div>
+        <div class="av-filters" id="avFilters" hidden>
+            <label class="av-field" id="avFCompanyWrap" hidden><span><?php echo $av('g_company'); ?></span>
+                <select id="avFCompany" data-filter="company"><option value=""><?php echo $av('any'); ?></option></select></label>
+            <label class="av-field"><span><?php echo $av('g_team'); ?></span>
+                <select id="avFTeam" data-filter="team"><option value=""><?php echo $av('any'); ?></option></select></label>
+            <label class="av-field"><span><?php echo $av('g_status'); ?></span>
+                <select id="avFStatus" data-view="status">
+                    <option value="all"><?php echo $av('all'); ?></option>
+                    <option value="active"><?php echo $av('status_active'); ?></option>
+                    <option value="inactive"><?php echo $av('status_inactive'); ?></option>
+                </select></label>
+            <label class="av-field"><span><?php echo $av('g_admin'); ?></span>
+                <select id="avFAdmin" data-filter="admin">
+                    <option value=""><?php echo $av('any'); ?></option>
+                    <option value="1"><?php echo $av('admin_yes'); ?></option>
+                    <option value="0"><?php echo $av('admin_no'); ?></option>
+                </select></label>
+            <label class="av-field"><span><?php echo $av('g_signin'); ?></span>
+                <select id="avFSignin" data-filter="signin"><option value=""><?php echo $av('any'); ?></option></select></label>
+            <label class="av-check"><input type="checkbox" id="avFNever" data-filter="never"> <?php echo $av('never'); ?></label>
+            <button type="button" class="btn btn-secondary av-btn" onclick="clearAnalystFilters()"><?php echo $av('clear'); ?></button>
+        </div>
+        <div class="av-shown" id="avShown" aria-live="polite"></div>
+        <div id="analysts-list">
+            <p class="av-loading"><?php echo htmlspecialchars(t('tickets.settings.loading')); ?></p>
+        </div>
     </div>
     </div><!-- /.settings-shell -->
 
@@ -364,12 +445,12 @@ $translationNamespaces = ['common', 'tickets'];
 
                 <div class="form-group">
                     <label for="newPassword"><?php echo htmlspecialchars(t('tickets.settings.modals.password_reset.new_password')); ?> *</label>
-                    <input type="password" id="newPassword" required minlength="6" placeholder="<?php echo htmlspecialchars(t('tickets.settings.modals.password_reset.new_password_placeholder')); ?>">
+                    <input type="password" id="newPassword" required minlength="8" placeholder="<?php echo htmlspecialchars(t('tickets.settings.modals.password_reset.new_password_placeholder')); ?>">
                 </div>
 
                 <div class="form-group">
                     <label for="confirmPassword"><?php echo htmlspecialchars(t('tickets.settings.modals.password_reset.confirm_password')); ?> *</label>
-                    <input type="password" id="confirmPassword" required minlength="6" placeholder="<?php echo htmlspecialchars(t('tickets.settings.modals.password_reset.confirm_password_placeholder')); ?>">
+                    <input type="password" id="confirmPassword" required minlength="8" placeholder="<?php echo htmlspecialchars(t('tickets.settings.modals.password_reset.confirm_password_placeholder')); ?>">
                 </div>
 
                 <div class="modal-actions">
@@ -465,6 +546,7 @@ $translationNamespaces = ['common', 'tickets'];
         </div>
     </div>
 
+    <script src="../../assets/js/grouped-list.js?v=2"></script>
     <script>
         const API_BASE = '../../api/tickets/';
         const t = (window.t) || ((k) => k);
@@ -472,12 +554,11 @@ $translationNamespaces = ['common', 'tickets'];
             if (text === null || text === undefined) return '';
             const d = document.createElement('div');
             d.textContent = String(text);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         let analysts = [];
         let teams = [];                 // for the team-assignment picker
-        let analystTeams = {};          // cache: analyst id -> teams
 
         // Map a company (tenant) id to its name for the effective-access chips.
         // Reads the companies cache populated by loadAnalystCompanies() on load.
@@ -497,110 +578,369 @@ $translationNamespaces = ['common', 'tickets'];
 
         async function loadAnalysts() {
             try {
-                const response = await fetch(API_BASE + 'get_analysts.php?signin=1');
+                // ?teams=1 brings every analyst's teams in this one request (GH #208).
+                const response = await fetch(API_BASE + 'get_analysts.php?signin=1&teams=1');
                 const data = await response.json();
                 if (data.success) {
                     analysts = data.analysts;
-                    renderAnalysts(analysts);
+                    fillAnalystFilterOptions();
+                    renderAnalysts();
                 } else {
                     document.getElementById('analysts-list').innerHTML =
-                        '<tr><td colspan="7" style="text-align: center; color: red;">Error: ' + data.error + '</td></tr>';
+                        '<p class="av-empty" style="color: red;">Error: ' + escapeHtml(data.error) + '</p>';
                 }
             } catch (error) {
                 console.error('Error loading analysts:', error);
                 document.getElementById('analysts-list').innerHTML =
-                    '<tr><td colspan="7" style="text-align: center; color: red;">Failed to load analysts.</td></tr>';
+                    '<p class="av-empty" style="color: red;">Failed to load analysts.</p>';
             }
         }
 
-        async function renderAnalysts(analystsList) {
-            const tbody = document.getElementById('analysts-list');
-            if (analystsList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No analysts found.</td></tr>';
-                return;
+        // ── The list: view, filters, grouping (GH #208) ─────────────────────
+        // The layout lives in assets/js/grouped-list.js; this part decides what
+        // each group is and which analysts survive the filters.
+        const av = (k, vars) => t('tickets.settings.analyst_view.' + k, vars);
+        const BUILTIN_VIEW = { group1: '', group2: '', layout: 'tree', sort: 'full_name', page_size: 0, status: 'all', open: null, tab: '' };
+        let analystView = Object.assign({}, BUILTIN_VIEW);
+        const analystFilters = { search: '', company: '', team: '', admin: '', signin: '', never: false };
+        let analystList = null;
+        let viewSaveTimer = null;
+
+        function isMultiCompany() { return (analystCompaniesCache || []).length > 1; }
+
+        // Sign-in methods by id, read from the edit modal's own list so the two
+        // can never disagree. Blank = local.
+        function signinProviders() {
+            return Array.from(document.querySelectorAll('#analystAuthProvider option'))
+                .filter(o => o.value !== '' && o.value !== 'team')
+                .map(o => ({ id: Number(o.value), name: o.textContent }));
+        }
+        function signinLabel(a) {
+            const p = a.auth_provider_id ? signinProviders().find(x => x.id === Number(a.auth_provider_id)) : null;
+            return p ? p.name : av('local');
+        }
+
+        // Companies an analyst can work in: their own grants plus their teams'.
+        // null = every company (their own flag, or an all-access team).
+        function effectiveCompanies(a) {
+            if (a.can_access_all_tenants || a.team_all_access) return null;
+            return Array.from(new Set([...(a.tenant_ids || []), ...(a.team_tenant_ids || [])].map(Number)));
+        }
+
+        // Each grouper returns EVERY group the analyst belongs to - grouped-list.js
+        // shows them under all of them. sort: 0 first, 1 normal, 2 last.
+        const analystGroupers = {
+            company: a => {
+                const eff = effectiveCompanies(a);
+                if (eff === null) return [{ key: 'all', label: av('all_companies'), sort: 0 }];
+                if (!eff.length) return [{ key: 'none', label: av('no_companies'), sort: 2 }];
+                return eff.map(id => ({ key: 'c' + id, label: companyName(id) }));
+            },
+            team: a => (a.teams && a.teams.length)
+                ? a.teams.map(tm => ({ key: 't' + tm.id, label: tm.name, sort: 1 + teamOrder(tm.id) / 100000 }))
+                : [{ key: 'none', label: av('no_team'), sort: 9 }],
+            department: a => textGroup(a.department),
+            job_title: a => textGroup(a.job_title),
+            status: a => [a.is_active ? { key: 'active', label: av('active'), sort: 0 } : { key: 'inactive', label: av('inactive'), sort: 1 }],
+            admin: a => [a.is_admin ? { key: 'admin', label: av('admin_yes'), sort: 0 } : { key: 'other', label: av('admin_no'), sort: 1 }],
+            signin: a => [a.auth_provider_id ? { key: 'p' + a.auth_provider_id, label: signinLabel(a) } : { key: 'local', label: av('local'), sort: 0 }],
+        };
+        // Teams keep the order set on System -> Teams rather than going alphabetical.
+        function teamOrder(id) { const i = teams.findIndex(x => Number(x.id) === Number(id)); return i < 0 ? 99999 : i; }
+        // Free text (department, job title): "IT" and "it " are the same group.
+        function textGroup(v) {
+            const s = (v || '').trim();
+            return s ? [{ key: 'x' + s.toLowerCase(), label: s }] : [{ key: 'none', label: av('not_set'), sort: 2 }];
+        }
+
+        function groupOptions(includeNone) {
+            const opts = [['', av('none')]];
+            if (isMultiCompany()) opts.push(['company', av('g_company')]);
+            opts.push(['team', av('g_team')], ['department', av('g_department')], ['job_title', av('g_job_title')],
+                      ['status', av('g_status')], ['admin', av('g_admin')], ['signin', av('g_signin')]);
+            return includeNone ? opts : opts.slice(1);
+        }
+
+        // Put the view into the controls, and hide the ones that do nothing in it.
+        function syncAnalystControls() {
+            const v = analystView;
+            const g1 = document.getElementById('avGroup1'), g2 = document.getElementById('avGroup2');
+            g1.innerHTML = groupOptions(true).map(([k, l]) => `<option value="${k}">${escapeHtml(l)}</option>`).join('');
+            g2.innerHTML = groupOptions(true).filter(([k]) => k !== v.group1).map(([k, l]) => `<option value="${k}">${escapeHtml(l)}</option>`).join('');
+            // A saved Company grouping on an install that is down to one company falls back to none.
+            if (!Array.from(g1.options).some(o => o.value === v.group1)) v.group1 = '';
+            if (!v.group1 || !Array.from(g2.options).some(o => o.value === v.group2)) v.group2 = '';
+            g1.value = v.group1;
+            g2.value = v.group2;
+            document.getElementById('avGroup2Wrap').hidden = !v.group1;
+            document.getElementById('avLayoutWrap').hidden = !v.group1;
+            document.getElementById('avLayout').value = v.layout;
+            document.getElementById('avSort').value = v.sort;
+            document.getElementById('avPageSize').value = String(v.page_size);
+            document.getElementById('avFStatus').value = v.status;
+            updateFilterBadge();
+        }
+
+        function fillAnalystFilterOptions() {
+            const keep = (id, html) => { const s = document.getElementById(id); const was = s.value; s.innerHTML = html; s.value = was; if (s.value !== was) s.value = ''; };
+            const any = `<option value="">${escapeHtml(av('any'))}</option>`;
+            document.getElementById('avFCompanyWrap').hidden = !isMultiCompany();
+            keep('avFCompany', any + (analystCompaniesCache || []).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join(''));
+            keep('avFTeam', any + `<option value="none">${escapeHtml(av('no_team'))}</option>`
+                + teams.filter(tm => tm.is_active).map(tm => `<option value="${tm.id}">${escapeHtml(tm.name)}</option>`).join(''));
+            keep('avFSignin', any + `<option value="local">${escapeHtml(av('local'))}</option>`
+                + signinProviders().map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join(''));
+        }
+
+        function activeFilterCount() {
+            const f = analystFilters;
+            return ['company', 'team', 'admin', 'signin'].filter(k => f[k] !== '').length + (f.never ? 1 : 0) + (analystView.status !== 'all' ? 1 : 0);
+        }
+        function updateFilterBadge() {
+            const n = activeFilterCount(), b = document.getElementById('avFilterCount');
+            b.textContent = n; b.hidden = !n;
+        }
+
+        function analystMatches(a) {
+            const f = analystFilters, v = analystView;
+            if (v.status === 'active' && !a.is_active) return false;
+            if (v.status === 'inactive' && a.is_active) return false;
+            if (f.search) {
+                const hay = [a.full_name, a.username, a.email].join(' ').toLowerCase();
+                if (!f.search.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w))) return false;
             }
-
-            for (const analyst of analystsList) {
-                if (!analystTeams[analyst.id]) {
-                    try {
-                        const response = await fetch(`${API_BASE}get_analyst_teams.php?analyst_id=${analyst.id}`);
-                        const data = await response.json();
-                        analystTeams[analyst.id] = data.success ? data.teams : [];
-                    } catch (e) {
-                        analystTeams[analyst.id] = [];
-                    }
-                }
+            if (f.company && isMultiCompany()) {
+                const eff = effectiveCompanies(a);
+                if (eff !== null && !eff.includes(Number(f.company))) return false;
             }
+            if (f.team === 'none' && a.teams && a.teams.length) return false;
+            if (f.team && f.team !== 'none' && !(a.teams || []).some(tm => Number(tm.id) === Number(f.team))) return false;
+            if (f.admin !== '' && Boolean(a.is_admin) !== (f.admin === '1')) return false;
+            if (f.signin === 'local' && a.auth_provider_id) return false;
+            if (f.signin && f.signin !== 'local' && Number(a.auth_provider_id) !== Number(f.signin)) return false;
+            if (f.never && a.last_login_datetime) return false;
+            return true;
+        }
 
-            tbody.innerHTML = analystsList.map(a => {
-                const statusBadge = a.is_active
-                    ? '<span class="status-badge status-active">Active</span>'
-                    : '<span class="status-badge status-inactive">Inactive</span>';
+        function sortAnalysts(list) {
+            const by = analystView.sort;
+            const cmp = (x, y) => String(x || '').localeCompare(String(y || ''), undefined, { sensitivity: 'base', numeric: true });
+            return list.slice().sort((a, b) => {
+                // Most recent first; never signed in goes to the bottom.
+                if (by === 'last_login') return cmp(b.last_login_datetime, a.last_login_datetime) || cmp(a.full_name, b.full_name);
+                if (by === 'username') return cmp(a.username, b.username);
+                return cmp(a.full_name, b.full_name) || cmp(a.username, b.username);
+            });
+        }
 
-                const adminBadge = a.is_admin
-                    ? '<span class="status-badge" style="background:#ede7f6; color:#5e35b1;" title="Can access the System module">Admin</span>'
-                    : '<span style="color: var(--text-faint, #999);">&mdash;</span>';
+        function renderAnalysts() {
+            if (!analystList) {
+                analystList = createGroupedList({
+                    mount: document.getElementById('analysts-list'),
+                    scrollEl: document.querySelector('.settings-scroll'),
+                    groupers: analystGroupers,
+                    renderTable: analystTable,
+                    emptyHtml: `<p class="av-empty">${escapeHtml(av('no_match'))}</p>`,
+                    labels: { expand: av('expand'), collapse: av('collapse'), prev: av('prev'), next: av('next'),
+                              range: av('range'), of: av('of'), jumpTo: av('jump_to') },
+                    onStateChange: s => { analystView.open = s.open; analystView.tab = s.tab; queueViewSave(); },
+                });
+            }
+            const all = sortAnalysts(analysts);
+            const shown = all.filter(analystMatches);
+            const filtered = shown.length !== all.length;
+            document.getElementById('avShown').textContent = filtered ? av('shown', { shown: shown.length, total: all.length }) : '';
+            analystList.render(shown, {
+                allRows: all, filtered, view: analystView,
+                filterSig: JSON.stringify([analystFilters, analystView.status]),
+            });
+        }
 
-                const lastLogin = a.last_login_datetime
-                    ? fmtDateTime(a.last_login_datetime)
-                    : 'Never';
+        // One group's analysts. Same column widths in every table so the columns
+        // line up down the page: the short columns are fixed, the four text
+        // columns share what is left (blank = share).
+        function analystTable(list, ctx) {
+            const cols = [
+                ['username', ''], ['full_name', ''], ['email', ''], ['teams', ''],
+                ['status', '90px'], ['is_admin', '80px'], ['last_login', '120px'], ['actions', '170px'],
+            ];
+            return `<table class="av-table">
+                <colgroup>${cols.map(([, w]) => w ? `<col style="width:${w}">` : '<col>').join('')}</colgroup>
+                <thead><tr>${cols.map(([k]) => `<th>${escapeHtml(t('tickets.settings.columns.' + k))}</th>`).join('')}</tr></thead>
+                <tbody>${list.map(a => analystRow(a, ctx)).join('')}</tbody>
+            </table>`;
+        }
 
-                const aTeams = analystTeams[a.id] || [];
-                const teamsText = aTeams.length > 0
-                    ? aTeams.map(t => `<span class="status-badge" style="background: #e8f5e9; color: #2e7d32; margin-right: 4px;">${escapeHtml(t.name)}</span>`).join('')
-                    : '<span style="color: var(--text-faint, #999);">None</span>';
+        // Under a company group: say so when they are only there because of a team.
+        function viaTeamChip(a, ctx) {
+            const level = [analystView.group1, analystView.group2].indexOf('company');
+            const key = level >= 0 && ctx && ctx.keys ? ctx.keys[level] : '';
+            if (!key || key[0] !== 'c' || a.can_access_all_tenants) return '';
+            const id = Number(key.slice(1));
+            if ((a.tenant_ids || []).map(Number).includes(id)) return '';
+            return `<span class="av-via" title="${escapeHtml(av('via_team_tip'))}">${escapeHtml(av('via_team'))}</span>`;
+        }
 
-                const safeName = escapeHtml(a.full_name).replace(/'/g, "\\'");
-                const safeUsername = escapeHtml(a.username).replace(/'/g, "\\'");
+        // ── Controls ─────────────────────────────────────────────────────────
+        function onAnalystViewChange(e) {
+            const key = e.target.dataset.view;
+            const val = e.target.value;
+            analystView[key] = key === 'page_size' ? Number(val) : val;
+            // A new grouping is a new set of groups: open the first one again.
+            if (key === 'group1' || key === 'group2') { analystView.open = null; analystView.tab = ''; }
+            syncAnalystControls();
+            renderAnalysts();
+            queueViewSave();
+        }
 
-                // Multi-tenancy: show EFFECTIVE company access — the analyst's own
-                // grants unioned with any they inherit from a team. All-access via
-                // their own flag shows nothing (unrestricted, as before).
-                let accessChip = '';
-                if (!a.can_access_all_tenants) {
-                    const direct = (a.tenant_ids || []).map(Number);
-                    const viaTeam = (a.team_tenant_ids || []).map(Number);
-                    if (a.team_all_access) {
-                        accessChip = `<span class="status-badge" style="background:#fff3e0; color:#e65100; margin-left:6px;" title="All companies — via team membership">All companies (via team)</span>`;
+        function onAnalystFilterChange(e) {
+            const key = e.target.dataset.filter;
+            analystFilters[key] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+            updateFilterBadge();
+            renderAnalysts();
+        }
+
+        function toggleAnalystFilters(force) {
+            const panel = document.getElementById('avFilters');
+            panel.hidden = force === undefined ? !panel.hidden : !force;
+            document.getElementById('avFiltersBtn').setAttribute('aria-expanded', String(!panel.hidden));
+        }
+
+        function clearAnalystFilters() {
+            Object.assign(analystFilters, { company: '', team: '', admin: '', signin: '', never: false });
+            ['avFCompany', 'avFTeam', 'avFAdmin', 'avFSignin'].forEach(id => { document.getElementById(id).value = ''; });
+            document.getElementById('avFNever').checked = false;
+            if (analystView.status !== 'all') { analystView.status = 'all'; queueViewSave(); }
+            syncAnalystControls();
+            renderAnalysts();
+        }
+
+        function toggleAnalystDefaultMenu(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('avDefaultMenu');
+            menu.hidden = !menu.hidden;
+            document.getElementById('avDefaultBtn').setAttribute('aria-expanded', String(!menu.hidden));
+        }
+        document.addEventListener('click', e => {
+            const menu = document.getElementById('avDefaultMenu');
+            if (!menu.hidden && !e.target.closest('.av-menu-wrap')) toggleAnalystDefaultMenu({ stopPropagation() {} });
+        });
+
+        // ── Remembering the view ─────────────────────────────────────────────
+        const VIEW_API = '../../api/system/analysts_list_view.php';
+
+        async function loadAnalystView() {
+            try {
+                const r = await fetch(VIEW_API + '?action=get');
+                const d = await r.json();
+                if (d.success) analystView = Object.assign({}, BUILTIN_VIEW, d.mine || d.default || {});
+            } catch (e) { /* the built-in flat list, as before #208 */ }
+            if (analystView.status !== 'all') toggleAnalystFilters(true);
+        }
+
+        // Typing in a dropdown fires several changes; one save once it settles.
+        function queueViewSave() {
+            clearTimeout(viewSaveTimer);
+            viewSaveTimer = setTimeout(() => postView('save_mine').catch(() => {}), 600);
+        }
+
+        async function postView(action) {
+            const r = await fetch(VIEW_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, view: analystView }),
+            });
+            const d = await r.json();
+            if (!d.success) throw new Error(d.error || 'Save failed');
+            return d;
+        }
+
+        async function saveAnalystViewAsDefault() {
+            document.getElementById('avDefaultMenu').hidden = true;
+            try { await postView('save_default'); showToast(av('saved_default'), 'success'); }
+            catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function resetAnalystView() {
+            document.getElementById('avDefaultMenu').hidden = true;
+            clearTimeout(viewSaveTimer);
+            try {
+                const d = await postView('reset_mine');
+                analystView = Object.assign({}, BUILTIN_VIEW, d.view || {});
+                syncAnalystControls();
+                renderAnalysts();
+                showToast(av('reset_done'), 'success');
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        function analystRow(a, ctx) {
+            const statusBadge = a.is_active
+                ? '<span class="status-badge status-active">Active</span>'
+                : '<span class="status-badge status-inactive">Inactive</span>';
+
+            const adminBadge = a.is_admin
+                ? '<span class="status-badge" style="background:#ede7f6; color:#5e35b1;" title="Can access the System module">Admin</span>'
+                : '<span style="color: var(--text-faint, #999);">&mdash;</span>';
+
+            const lastLogin = a.last_login_datetime
+                ? fmtDateTime(a.last_login_datetime)
+                : 'Never';
+
+            const aTeams = a.teams || [];
+            const teamsText = aTeams.length > 0
+                ? aTeams.map(t => `<span class="status-badge" style="background: #e8f5e9; color: #2e7d32; margin-right: 4px;">${escapeHtml(t.name)}</span>`).join('')
+                : '<span style="color: var(--text-faint, #999);">None</span>';
+
+            const safeName = escapeHtml(a.full_name).replace(/'/g, "\\'");
+            const safeUsername = escapeHtml(a.username).replace(/'/g, "\\'");
+
+            // Multi-tenancy: show EFFECTIVE company access — the analyst's own
+            // grants unioned with any they inherit from a team. All-access via
+            // their own flag shows nothing (unrestricted, as before).
+            let accessChip = '';
+            if (!a.can_access_all_tenants) {
+                const direct = (a.tenant_ids || []).map(Number);
+                const viaTeam = (a.team_tenant_ids || []).map(Number);
+                if (a.team_all_access) {
+                    accessChip = `<span class="status-badge" style="background:#fff3e0; color:#e65100; margin-left:6px;" title="All companies — via team membership">All companies (via team)</span>`;
+                } else {
+                    const eff = Array.from(new Set([...direct, ...viaTeam]));
+                    if (eff.length) {
+                        const names = eff.map(companyName).join(', ');
+                        const viaOnly = viaTeam.filter(id => !direct.includes(id)).length;
+                        const suffix = viaOnly ? ` (${viaOnly} via team)` : '';
+                        accessChip = `<span class="status-badge" style="background:#fff3e0; color:#e65100; margin-left:6px;" title="${escapeHtml(names)}">${eff.length} compan${eff.length === 1 ? 'y' : 'ies'}${suffix}</span>`;
                     } else {
-                        const eff = Array.from(new Set([...direct, ...viaTeam]));
-                        if (eff.length) {
-                            const names = eff.map(companyName).join(', ');
-                            const viaOnly = viaTeam.filter(id => !direct.includes(id)).length;
-                            const suffix = viaOnly ? ` (${viaOnly} via team)` : '';
-                            accessChip = `<span class="status-badge" style="background:#fff3e0; color:#e65100; margin-left:6px;" title="${escapeHtml(names)}">${eff.length} compan${eff.length === 1 ? 'y' : 'ies'}${suffix}</span>`;
-                        } else {
-                            accessChip = `<span class="status-badge" style="background:#ffebee; color:#c62828; margin-left:6px;" title="This analyst has no company access — they won't see any tickets on a multi-company install">no companies</span>`;
-                        }
+                        accessChip = `<span class="status-badge" style="background:#ffebee; color:#c62828; margin-left:6px;" title="This analyst has no company access — they won't see any tickets on a multi-company install">no companies</span>`;
                     }
                 }
+            }
 
-                return `
-                    <tr>
-                        <td><strong>${escapeHtml(a.username)}</strong></td>
-                        <td>${escapeHtml(a.full_name)}${accessChip}${signinConflictChip(a)}</td>
-                        <td>${escapeHtml(a.email || '')}</td>
-                        <td>${teamsText}</td>
-                        <td>${statusBadge}</td>
-                        <td>${adminBadge}</td>
-                        <td>${lastLogin}</td>
-                        <td>
-                            <button class="action-btn" onclick="editAnalyst(${a.id})" title="${t('common.edit')}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                            </button>
-                            <button class="action-btn" onclick="openTeamAssignment('analyst', ${a.id}, '${safeName}')" title="${t('tickets.settings.tooltips.assign_teams')}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                            </button>
-                            <button class="action-btn" onclick="openPasswordResetModal(${a.id}, '${safeName}')" title="${t('tickets.settings.tooltips.reset_password')}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
-                            </button>
-                            <button class="action-btn delete" onclick="deleteAnalyst(${a.id}, '${safeUsername}')" title="Remove">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
+            return `
+                <tr>
+                    <td><strong>${escapeHtml(a.username)}</strong></td>
+                    <td>${escapeHtml(a.full_name)}${accessChip}${signinConflictChip(a)}${viaTeamChip(a, ctx)}</td>
+                    <td>${escapeHtml(a.email || '')}</td>
+                    <td>${teamsText}</td>
+                    <td>${statusBadge}</td>
+                    <td>${adminBadge}</td>
+                    <td>${lastLogin}</td>
+                    <td>
+                        <button class="action-btn" onclick="editAnalyst(${a.id})" title="${t('common.edit')}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                        <button class="action-btn" onclick="openTeamAssignment('analyst', ${a.id}, '${safeName}')" title="${t('tickets.settings.tooltips.assign_teams')}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                        </button>
+                        <button class="action-btn" onclick="openPasswordResetModal(${a.id}, '${safeName}')" title="${t('tickets.settings.tooltips.reset_password')}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+                        </button>
+                        <button class="action-btn delete" onclick="deleteAnalyst(${a.id}, '${safeUsername}')" title="Remove">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
         }
 
         // Multi-tenancy: companies for the analyst access control (cached, active only).
@@ -1056,7 +1396,6 @@ $translationNamespaces = ['common', 'tickets'];
                     closeTeamAssignmentModal();
                     showToast('Saved', 'success');
                     showSigninOutcome(data.signin);
-                    delete analystTeams[entityId];
                     loadAnalysts();
                 } else {
                     showToast('Error saving team assignments: ' + data.error, 'error');
@@ -1127,8 +1466,8 @@ $translationNamespaces = ['common', 'tickets'];
                 showToast('Passwords do not match.', 'error');
                 return;
             }
-            if (newPassword.length < 6) {
-                showToast('Password must be at least 6 characters.', 'error');
+            if (newPassword.length < 8) {   // includes/password_policy.php has the full rule
+                showToast('Password must be at least 8 characters.', 'error');
                 return;
             }
 
@@ -1155,11 +1494,21 @@ $translationNamespaces = ['common', 'tickets'];
         });
 
         document.addEventListener('DOMContentLoaded', async function() {
-            loadTeams();                  // populate teams global for the assignment picker
-            await loadAnalystCompanies(); // company names for the effective-access chips
+            document.querySelectorAll('[data-view]').forEach(el => el.addEventListener('change', onAnalystViewChange));
+            document.querySelectorAll('[data-filter]').forEach(el => el.addEventListener('change', onAnalystFilterChange));
+            let searchTimer = null;
+            document.getElementById('avSearch').addEventListener('input', e => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => { analystFilters.search = e.target.value.trim(); renderAnalysts(); }, 150);
+            });
+
+            // Teams, companies and the saved view all shape the first draw, so
+            // they load together before it.
+            await Promise.all([loadTeams(), loadAnalystCompanies(), loadAnalystView()]);
+            syncAnalystControls();
             loadAnalysts();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

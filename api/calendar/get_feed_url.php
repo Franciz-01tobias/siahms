@@ -63,10 +63,10 @@ try {
     // Best-effort: suggest this machine's LAN IP (carry over any :port from the
     // current host) so a localhost install can be reached from a phone. Unreliable
     // on multi-NIC machines, so it's only a default the user can edit.
-    $port = (strpos($host, ':') !== false) ? substr($host, strpos($host, ':')) : '';
+    $port = (str_contains($host, ':')) ? substr($host, strpos($host, ':')) : '';
     $suggestedHost = '';
     $lanIp = @gethostbyname(@gethostname() ?: '');
-    if ($lanIp && filter_var($lanIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && strpos($lanIp, '127.') !== 0) {
+    if ($lanIp && filter_var($lanIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && !str_starts_with($lanIp, '127.')) {
         $suggestedHost = $lanIp . $port;
     }
 

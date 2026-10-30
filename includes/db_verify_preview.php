@@ -159,7 +159,7 @@ function dbPreviewRepairs(PDO $conn, string $dbName): array
                          . 'They currently look like machines that have stopped reporting. '
                          . 'No date is lost - first_seen holds the same value.',
             ];
-        } catch (Exception $e) {
+        } catch (Exception) {
             // A count that cannot run must not break the preview.
         }
     }

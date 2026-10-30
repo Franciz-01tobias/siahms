@@ -46,7 +46,7 @@ function customerReplyReopensTickets(PDO $conn): bool {
         $val = $stmt->fetchColumn();
         // Absent (never saved) → on. Present → honour it exactly.
         $cached = ($val === false || $val === null || $val === '') ? true : ((string)$val === '1');
-    } catch (Exception $e) {
+    } catch (Exception) {
         $cached = true;   // settings table unreadable → keep the promise.
     }
     return $cached;

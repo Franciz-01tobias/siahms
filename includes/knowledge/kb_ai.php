@@ -131,7 +131,7 @@ function kbRetrieveArticles(PDO $conn, string $question, int $limit = 5, ?int $t
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'knowledge_openai_api_key'");
         $st->execute();
         $openaiKey = decryptValue((string) ($st->fetchColumn() ?: ''));
-    } catch (Exception $e) { $openaiKey = ''; }
+    } catch (Exception) { $openaiKey = ''; }
 
     // "Are there embeddings?" must ask within the SAME scope. Counting the whole
     // install would take the vector path on the strength of articles this caller
@@ -141,7 +141,7 @@ function kbRetrieveArticles(PDO $conn, string $question, int $limit = 5, ?int $t
         $st = $conn->prepare("SELECT COUNT(*) FROM knowledge_articles WHERE 1=1" . $scopeSql . " AND embedding IS NOT NULL AND LENGTH(embedding) > 0");
         $st->execute($scopeParams);
         $haveEmbeddings = (int) $st->fetchColumn() > 0;
-    } catch (Exception $e) { $haveEmbeddings = false; }
+    } catch (Exception) { $haveEmbeddings = false; }
 
     if ($openaiKey !== '' && $haveEmbeddings) {
         $qvec = kbGenerateEmbedding($question, $openaiKey);

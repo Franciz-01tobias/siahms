@@ -36,7 +36,7 @@ function webhookHeaders(): array
         return $out;
     }
     foreach ($_SERVER as $k => $v) {
-        if (strpos($k, 'HTTP_') === 0) {
+        if (str_starts_with($k, 'HTTP_')) {
             $name = strtolower(str_replace('_', '-', substr($k, 5)));
             $out[$name] = $v;
         }

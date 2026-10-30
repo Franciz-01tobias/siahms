@@ -65,7 +65,7 @@ $countBefore = (int)$conn->query("SELECT COUNT(*) FROM tickets")->fetchColumn();
 // So the live counter is photographed before the run and compared after.
 $liveCountersBefore = [];
 foreach ($conn->query("SELECT counter_key, next_value FROM ticket_number_counters") as $row) {
-    if (strpos($row['counter_key'], '999999') === false) {
+    if (!str_contains($row['counter_key'], '999999')) {
         $liveCountersBefore[$row['counter_key']] = (int)$row['next_value'];
     }
 }
@@ -506,7 +506,7 @@ ok('no tickets were created or destroyed', $countAfter === $countBefore, "{$coun
 
 $liveCountersAfter = [];
 foreach ($conn->query("SELECT counter_key, next_value FROM ticket_number_counters") as $row) {
-    if (strpos($row['counter_key'], '999999') === false) {
+    if (!str_contains($row['counter_key'], '999999')) {
         $liveCountersAfter[$row['counter_key']] = (int)$row['next_value'];
     }
 }

@@ -20,6 +20,9 @@ require_once '../../includes/request_guard.php';     // origin + CSRF checks (S4
 
 try {
     $input = json_decode(file_get_contents('php://input'), true);
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
     $identifier = trim($input['identifier'] ?? '');
 
     if (empty($identifier)) {
@@ -90,10 +93,10 @@ try {
         . '<p style="font-size: 13px; color: #999;">This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>'
         . '</div>';
 
-    $provider  = $mailbox['provider'] ?? 'microsoft';
+    $provider  = MailboxProvider::fromMailbox($mailbox);
     $graphBase = '/me';
 
-    if ($provider === 'google') {
+    if ($provider === MailboxProvider::Google) {
         $cleanedTokenData = preg_replace('/[\x00-\x1F\x7F]/', '', (string)$mailbox['token_data']);
         $tokenData = json_decode($cleanedTokenData, true);
         if (!$tokenData || !isset($tokenData['access_token'])) {
@@ -114,7 +117,7 @@ try {
     }
 
     // Send email via appropriate provider
-    if ($provider === 'google') {
+    if ($provider === MailboxProvider::Google) {
         try {
             $fromAddress = $mailbox['target_mailbox'] ?? '';
             gmailSendEmail($accessToken, $analyst['email'], 'Password Reset', $htmlBody, $fromAddress);

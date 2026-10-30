@@ -132,25 +132,8 @@ function handleList(PDO $conn, int $analystId): void
     ]);
 }
 
-/**
- * May this viewer reach this folder? Delegates; never re-implements the rule.
- *
- * @param KnowledgeViewer $viewer  who is looking, as built by KnowledgeViewer::forAnalyst()
- * @param int $folderId  the knowledge_folders id to check
- */
-function knowledgeFolderIsReadable(PDO $conn, KnowledgeViewer $viewer, int $folderId): bool
-{
-    if ($viewer->isUnrestricted()) return true;
-    if (!knowledgeAclHasAnyRows($conn)) return true;
-    if (knowledgeViewerHasAdminFloor($conn, $viewer)) return true;
-    return knowledgeFolderReadable(
-        $folderId,
-        knowledgeFolderIndex($conn),
-        knowledgeAclIndex($conn),
-        knowledgeViewerPrincipals($conn, $viewer),
-        knowledgeFolderPermissionModel($conn)
-    );
-}
+// knowledgeFolderIsReadable() lives in includes/knowledge/visibility.php, so the
+// article service checks a target folder by the same rule as this file.
 
 /**
  * Refuse anything the caller may not reach, in the same words as "not found".

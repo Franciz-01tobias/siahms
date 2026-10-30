@@ -79,6 +79,7 @@ if ($showDomains) $translationNamespaces[] = 'domains';
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/domain-links.css?v=1">
     <link rel="stylesheet" href="../assets/css/project-links.css?v=1">
+    <link rel="stylesheet" href="../assets/css/ci-asset-link.css?v=3">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -777,6 +778,21 @@ if ($showDomains) $translationNamespaces[] = 'domains';
             .o2-hero-actions { flex-direction: row; width: 100%; }
         }
 
+        /* GH #199 Part B: the From discovery card. */
+        .o2-disc { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; margin-top: 6px; }
+        .o2-disc span { display: block; font-size: 11px; color: var(--text-dim, #9ca3af); }
+        .o2-disc b { font-weight: 600; font-size: 13px; color: var(--text, #111827); }
+
+        /* GH #199 Part C: impact grades and the limits of the analysis. */
+        .o2-grade { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 99px; font-size: 11px; font-weight: 650; }
+        .o2-grade.g-affected { background: var(--danger-bg, #fee2e2); color: var(--danger-text, #b91c1c); }
+        .o2-grade.g-may_be_interrupted { background: var(--warning-bg, #fef3c7); color: var(--warning-text, #a16207); }
+        .o2-grade.g-redundancy_reduced { background: var(--info-bg, #e0f2fe); color: var(--info-text, #0369a1); }
+        .o2-grade.g-unknown { background: var(--surface-hover, #f3f4f6); color: var(--text-muted, #6b7280); }
+        .o2-grade-counts { font-size: 12.5px; font-weight: 500; color: var(--text-muted, #6b7280); }
+        .o2-limits { margin: 12px 18px 16px; padding: 10px 12px; border-left: 3px solid var(--warning-text, #a16207); background: var(--surface-hover, #f9fafb); border-radius: 0 6px 6px 0; font-size: 12.5px; color: var(--text-muted, #4b5563); }
+        .o2-limits ul { margin: 4px 0 0; padding-left: 18px; }
+
         /* Reduced motion keeps the fades (they aid comprehension) and drops
            every positional transform. */
         @media (prefers-reduced-motion: reduce) {
@@ -789,7 +805,7 @@ if ($showDomains) $translationNamespaces[] = 'domains';
         }
     </style>
     <!-- Mobile layer: after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="cmdb" data-mobile-page="cmdb-object">
     <?php include 'includes/header.php'; ?>
@@ -935,7 +951,8 @@ if ($showDomains) $translationNamespaces[] = 'domains';
     <script src="options-editor.js?v=3"></script>
     <script src="../assets/js/domain-links.js?v=2"></script>
     <script src="../assets/js/project-links.js?v=1"></script>
-    <script src="object.js?v=12"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/ci-asset-link.js?v=5"></script>
+    <script src="object.js?v=18"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

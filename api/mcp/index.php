@@ -115,7 +115,7 @@ if (!in_array('read', $perms['mcp'] ?? [], true)) {
 $raw = file_get_contents('php://input');
 $msg = json_decode((string)$raw, true);
 if (!is_array($msg)) mcpRpcError(null, -32700, 'Parse error');
-if ($msg !== [] && array_keys($msg) === range(0, count($msg) - 1)) mcpRpcError(null, -32600, 'Batches are not supported (MCP 2025-06-18 removed them).');
+if ($msg !== [] && array_is_list($msg)) mcpRpcError(null, -32600, 'Batches are not supported (MCP 2025-06-18 removed them).');
 if (($msg['jsonrpc'] ?? '') !== '2.0' || !isset($msg['method']) || !is_string($msg['method'])) mcpRpcError($msg['id'] ?? null, -32600, 'Invalid Request');
 
 $isNotification = !array_key_exists('id', $msg);

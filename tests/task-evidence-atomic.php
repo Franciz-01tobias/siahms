@@ -172,7 +172,7 @@ TaskHistory::$failNextWrite = null;
 TasksService::deleteTask($conn, $ctx, $t6);
 $rec = $conn->query("SELECT snapshot_json FROM task_removed_records WHERE task_id = $t6")->fetchColumn();
 ok('control: deleted, with a complete retained record (its comment included)', state($conn, $t6)['exists'] === 0 && $rec
-   && strpos((string)$rec, 'ZZ evidence comment') !== false);
+   && str_contains((string)$rec, 'ZZ evidence comment'));
 
 if ($BASE) {
     section('7. Over HTTP, with the DATABASE refusing the history row (a trigger)');

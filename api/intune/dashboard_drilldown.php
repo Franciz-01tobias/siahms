@@ -36,6 +36,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('reporting');
+requireModuleOnJson(connectToDatabase(), 'assets');   // GH #217: device data - not while Assets is switched off
 
 $filter   = $_GET['filter']    ?? '';
 $value    = $_GET['value']     ?? '';

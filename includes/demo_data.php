@@ -38,7 +38,7 @@ const DEMO_MODULES = [
 function demoAfterImport(PDO $conn, string $module): void {
     if ($module !== 'tasks') return;
     try { $rows = $conn->query("SELECT id, project_id, snapshot FROM project_baselines WHERE is_demo = 1")->fetchAll(PDO::FETCH_ASSOC); }
-    catch (Throwable $e) { return; }   // before Database Verification
+    catch (Throwable) { return; }   // before Database Verification
     if (!$rows) return;
     require_once __DIR__ . '/projects/control.php';
     $shift = fn(?string $d, int $days) => $d ? gmdate('Y-m-d', strtotime($d . ' 00:00:00 UTC') + $days * 86400) : null;
@@ -121,7 +121,7 @@ function demoRowCount(PDO $conn, string $module): int {
     foreach (demoModuleTables($module) as $table) {
         try {
             $total += (int)$conn->query("SELECT COUNT(*) FROM `$table` WHERE is_demo = 1")->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             // table or column absent on this installation — nothing to count
         }
     }
@@ -153,7 +153,7 @@ function demoBlockingModules(PDO $conn, string $table, string $exceptModule): ar
         );
         $stmt->execute([$table]);
         $children = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
 
@@ -163,7 +163,7 @@ function demoBlockingModules(PDO $conn, string $table, string $exceptModule): ar
             if (!in_array($moduleTable, $children, true)) continue;
             try {
                 $n = (int)$conn->query("SELECT COUNT(*) FROM `$moduleTable` WHERE is_demo = 1")->fetchColumn();
-            } catch (Exception $e) {
+            } catch (Exception) {
                 continue;
             }
             if ($n > 0 && !in_array($module, $blocking, true)) $blocking[] = $module;
@@ -223,7 +223,7 @@ function demoHasUntaggedImport(PDO $conn): bool {
         $stmt = $conn->prepare("SELECT COUNT(*) FROM analysts WHERE username = 'jsmith' AND is_demo = 0");
         $stmt->execute();
         return (int)$stmt->fetchColumn() > 0;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return false;
     }
 }

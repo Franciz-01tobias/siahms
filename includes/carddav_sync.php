@@ -189,9 +189,9 @@ function cdsyncPhoneLines(array $lines): array
         $params = $semi === false ? '' : $left;
         if (trim(substr($line, $colon + 1)) === '') continue;
 
-        if (strpos($params, 'CELL') !== false || strpos($params, 'MOBILE') !== false) {
+        if (str_contains($params, 'CELL') || str_contains($params, 'MOBILE')) {
             if ($mobile === null) $mobile = $i;
-        } elseif (strpos($params, 'WORK') !== false) {
+        } elseif (str_contains($params, 'WORK')) {
             if ($work === null) $work = $i;
         } elseif ($other === null) {
             $other = $i;

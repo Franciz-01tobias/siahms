@@ -94,7 +94,7 @@ try {
     is_('...and not another company\'s', in_array('ZZRS theirs', $titles, true), false);
     $r = call($base, 'zzrs-limited', 'api/tasks/recurrence_preview.php', ['task_id' => $tasks['theirs']] + $rule);
     is_('preview of another company\'s task is refused', [$r['success'] ?? null, $r['error'] ?? null], [false, 'No such task']);
-    is_('...and does not reveal its title', strpos(json_encode($r), 'ZZRS theirs') === false, true);
+    is_('...and does not reveal its title', !str_contains(json_encode($r), 'ZZRS theirs'), true);
     $r = call($base, 'zzrs-limited', 'api/tasks/save_recurrence.php', ['task_id' => $tasks['theirs'], 'off' => 1]);
     is_('stopping another company\'s repeat is refused', [$r['success'] ?? null, $r['error'] ?? null], [false, 'No such task']);
     is_('...and it is still running', (int)$conn->query("SELECT is_active FROM task_recurrences WHERE id = " . $rules['theirs'])->fetchColumn(), 1);

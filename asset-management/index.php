@@ -17,6 +17,17 @@ requireModuleAccess('assets');
 // Company field (2.6.0). Single-company installs get multi=false and see
 // neither. Defensive: this page must render even if tenancy cannot be read.
 require_once '../includes/tenancy.php';
+require_once '../includes/services/asset_type_layout.php';
+
+// GH #200 part D: a link to an asset that has since been merged into another opens the kept one.
+if (!empty($_GET['asset_id']) && ctype_digit((string)$_GET['asset_id'])) {
+    require_once '../includes/services/asset_merge.php';
+    $assetNow = AssetMergeService::current(connectToDatabase(), (int)$_GET['asset_id']);
+    if ($assetNow !== null && $assetNow !== (int)$_GET['asset_id']) {
+        header('Location: ?asset_id=' . $assetNow);
+        exit;
+    }
+}
 $assetTenancy = ['multi' => false, 'active' => 0, 'all' => false, 'default' => 0];
 try {
     $tconn = connectToDatabase();
@@ -164,6 +175,49 @@ $translationNamespaces = ['common', 'asset-management'];
             font-size: 11px;
             font-weight: 600;
             letter-spacing: 0.3px;
+        }
+        /* Retired assets (they have left the estate): a plain marker on the row, a
+           banner with the date and reason in the panel, and the switch that shows them. */
+        .asset-retired-chip {
+            display: inline-block;
+            margin-right: 6px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border, #ddd);
+            color: var(--text-muted, #556);
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .asset-retired-banner {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px dashed var(--border, #ccc);
+            color: var(--text, #333);
+            font-size: 13px;
+        }
+        .asset-retired-reason {
+            flex: 1 1 220px;
+            min-width: 0;
+            padding: 4px 8px;
+            border: 1px solid var(--border, #ccc);
+            border-radius: 4px;
+            background: var(--surface, #fff);
+            color: var(--text, #333);
+            font: inherit;
+        }
+        .asset-show-retired {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: var(--text-muted, #556);
+            cursor: pointer;
+            white-space: nowrap;
         }
 
         .asset-select-bar {
@@ -1249,15 +1303,22 @@ $translationNamespaces = ['common', 'asset-management'];
         }
 
         /* Detail Tabs */
+        /* Never squeezed: a tab keeps its label on one line and the strip scrolls
+           sideways when there are more than fit - as it already did on a phone
+           (mobile.css). Connected (GH #200 part C) made nine, plus Intune. */
         .detail-tabs {
             display: flex;
             gap: 0;
             border-bottom: 1px solid var(--border, #e0e0e0);
             background-color: var(--surface-3, #f8f9fa);
+            overflow-x: auto;
+            scrollbar-width: thin;
         }
 
         .detail-tab {
-            padding: 10px 20px;
+            white-space: nowrap;
+            flex: 0 0 auto;
+            padding: 10px 16px;
             font-size: 13px;
             font-weight: 500;
             color: var(--text-muted, #666);
@@ -1471,13 +1532,80 @@ $translationNamespaces = ['common', 'asset-management'];
         }
         :root[data-theme="dark"] .expiry-flag-past { background: #4a1c1a; color: #ffb4ab; }
         :root[data-theme="dark"] .expiry-flag-soon { background: #4a3410; color: #ffd18c; }
+
+        /* Asset type layouts (GH #200). A class, not the hidden attribute: .detail-tab and
+           .info-item set their own display, which would beat [hidden]. */
+        .atl-hidden { display: none !important; }
+        .atl-revealed { outline: 1px dashed var(--text-muted, #999); outline-offset: -1px; }
+        .detail-tab.atl-revealed { opacity: .75; }
+        .atl-notice {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+            margin: 0 0 12px; padding: 8px 12px; border-radius: 6px; font-size: 13px;
+            background: var(--info-bg, #eef4fb); color: var(--info-text, #31506b); border: 1px solid var(--info-border, #cfe0f1);
+        }
+        .atl-link {
+            border: none; background: none; padding: 0; cursor: pointer; font: inherit;
+            color: var(--accent, #0078d4); text-decoration: underline;
+        }
+        .detail-tab.atl-show { color: var(--text-muted, #666); font-weight: normal; text-decoration: underline; }
+
+        /* Inventory freshness (GH #200 Part B). Amber for stale, as Last seen; red only for a
+           failed import, which is the one state somebody may need to act on. */
+        .inv-lines { padding: 10px 20px 0; font-size: 12px; color: var(--text-dim, #888); }
+        .inv-lines:empty { display: none; }
+        .inv-line + .inv-line { margin-top: 2px; }
+        .inv-line.stale { color: #b45309; font-weight: 600; }
+        .inv-line.failed { color: #b91c1c; }
+        [data-theme-mode="dark"] .inv-line.stale, [data-theme-mode="dark"] .inv-state.stale { color: #fcd34d; }
+        [data-theme-mode="dark"] .inv-line.failed, [data-theme-mode="dark"] .inv-state.failed,
+        [data-theme-mode="dark"] .inv-error { color: #fca5a5; }
+        .inv-panel { margin-top: 20px; }
+        .inv-source { margin: 0 20px 16px; }
+        .inv-source-name { font-size: 13px; font-weight: 600; color: var(--text, #333); margin-bottom: 4px; }
+        .inv-source-ref { font-weight: normal; color: var(--text-dim, #888); margin-left: 6px; }
+        .inv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .inv-table th { text-align: left; font-weight: 600; color: var(--text-muted, #666); padding: 4px 8px 4px 0; border-bottom: 1px solid var(--border, #ddd); }
+        .inv-table td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--border-soft, #eee); vertical-align: top; color: var(--text, #333); }
+        .inv-table td.num { text-align: right; }
+        .inv-state.stale { color: #b45309; font-weight: 600; }
+        .inv-state.failed { color: #b91c1c; font-weight: 600; }
+        .inv-state.quiet { color: var(--text-dim, #888); }
+        .inv-error { display: block; color: #b91c1c; font-size: 11px; margin-top: 2px; }
+
+        /* A mapped manufacturer or model (GH #200 part D). */
+        .nm-shown { font-size: 11px; color: var(--text-dim, #888); margin-top: 3px; }
+        /* Protected values (GH #200 part D). */
+        .prot-btn { border: none; background: none; padding: 0 0 0 6px; cursor: pointer; color: var(--text-dim, #999); vertical-align: -1px; }
+        .prot-btn:hover { color: var(--text, #333); }
+        .prot-btn.on { color: var(--accent, #0078d4); }
+        .prot-conflict { font-size: 11px; color: #b45309; margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+        [data-theme-mode="dark"] .prot-conflict { color: #fcd34d; }
+
+        /* Connected assets (GH #200 part C). */
+        .conn-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
+        .conn-intro { font-size: 12px; color: var(--text-dim, #888); flex: 1 1 260px; }
+        .conn-list { padding: 0 20px; }
+        .conn-item { border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface, #fff); }
+        .conn-item-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+        .conn-name { font-weight: 600; }
+        .conn-name a { color: var(--accent, #0078d4); text-decoration: none; }
+        .conn-name svg, .conn-history svg, .contract-pick-name svg { vertical-align: -2px; margin-right: 5px; }
+        .conn-desc { font-size: 12px; color: var(--text-dim, #888); flex: 1; }
+        .conn-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted, #666); padding: 3px 0; flex-wrap: wrap; }
+        .conn-row .btn { margin-left: auto; }
+        .conn-chip { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--border, #ddd); color: var(--text-muted, #666); white-space: nowrap; }
+        .conn-chip.manual { border-color: var(--accent, #0078d4); color: var(--accent, #0078d4); }
+        .conn-history-head { margin-top: 10px; }
+        .conn-history { margin: 0 20px 16px; width: calc(100% - 40px); }
+        .conn-history a { color: var(--accent, #0078d4); text-decoration: none; }
     </style>
     <?php /* Mobile-friendly opt-in (#936). Deliberately AFTER this page's own
              <style> block so its @media rules win on ties — the ordering rule
              from the wiki's Mobile-Friendly-Techniques. Every rule inside it is
              gated at 768px, so the desktop layout is untouched. */ ?>
     <link rel="stylesheet" href="../assets/css/project-links.css?v=1">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/ci-asset-link.css?v=3">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -1514,6 +1642,8 @@ $translationNamespaces = ['common', 'asset-management'];
                              still do not outrank the search. */ ?>
                     <a class="btn btn-outline btn-sm" href="scanner.php"><?php echo htmlspecialchars(t('asset-management.list.scan')); ?></a>
                     <a class="btn btn-outline btn-sm" href="assign-tags.php"><?php echo htmlspecialchars(t('asset-management.list.assign_tags')); ?></a>
+                    <?php /* Retired assets have left the estate: hidden until asked for. */ ?>
+                    <label class="asset-show-retired"><input type="checkbox" id="assetShowRetired" onchange="toggleShowRetired(this.checked)"> <?php echo htmlspecialchars(t('asset-management.retired.show')); ?></label>
                 </div>
                 <?php /* Appears only once more than one asset is picked with
                          Ctrl/Shift — see handleAssetRowClick(). Hidden by default
@@ -1706,6 +1836,25 @@ $translationNamespaces = ['common', 'asset-management'];
 
     <!-- Asset History Modal -->
     <!-- Add this equipment to a contract (discussion #106) -->
+    <?php /* GH #200 part C: pick the asset to connect. Same look as the contract picker. */ ?>
+    <div class="modal" id="connectPickerModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span><?php echo htmlspecialchars(t('asset-management.connections.picker_title')); ?></span>
+            </div>
+            <div class="modal-body">
+                <p class="form-hint" style="margin-top:0;"><?php echo htmlspecialchars(t('asset-management.connections.picker_intro')); ?></p>
+                <input type="text" id="connectPickerSearch" class="ctr-pick-search" autocomplete="off"
+                       oninput="connectPickerInput()"
+                       placeholder="<?php echo htmlspecialchars(t('asset-management.connections.search_ph')); ?>">
+                <div id="connectPickerResults" class="contract-pick-results"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeConnectPicker()"><?php echo htmlspecialchars(t('asset-management.common.close')); ?></button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="contractPickerModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1890,7 +2039,12 @@ $translationNamespaces = ['common', 'asset-management'];
             try {
                 const response = await fetch(API_BASE + 'get_asset_types.php');
                 const data = await response.json();
-                if (data.success) assetTypes = data.asset_types.filter(t => t.is_active);
+                if (data.success) {
+                    assetTypes = data.asset_types.filter(t => t.is_active);
+                    assetTypeLayouts = {};
+                    data.asset_types.forEach(t => { if (t.layout) assetTypeLayouts[t.id] = t.layout; });
+                    if (selectedAsset) applyAssetLayout();
+                }
             } catch (e) { console.error('Error loading asset types:', e); }
         }
 
@@ -1962,6 +2116,14 @@ $translationNamespaces = ['common', 'asset-management'];
                         selectedAsset[field] = value || null;
                     }
                     refreshExpiryFlag(field, value);
+                    // A status may retire the asset (or bring it back): reload, so the
+                    // date the server stamped shows, and the panel redraws with it.
+                    if (field === 'asset_status_id') {
+                        const keep = selectedAssetId;
+                        loadAssets(document.getElementById('assetSearch').value || '').then(() => selectAsset(keep));
+                    }
+                    // A new type brings its own layout (GH #200). Values are untouched.
+                    if (field === 'asset_type_id' || atlFinancialFields.includes(field)) applyAssetLayout();
                 } else {
                     showToast(window.t('asset-management.toast.update_error', { error: data.error }), 'error');
                 }
@@ -2010,10 +2172,30 @@ $translationNamespaces = ['common', 'asset-management'];
         }
 
         // Load assets from API
+        // Retired assets (they have left the estate) are left out unless the switch
+        // is on - remembered in this browser. The asset open in the panel, or named
+        // in the address bar, is always included, so a link to a retired asset from
+        // a ticket or a search still opens it.
+        let showRetired = false;
+        try { showRetired = localStorage.getItem('assets_show_retired') === '1'; } catch (e) {}
+        function assetListUrl(search) {
+            const p = new URLSearchParams();
+            if (search) p.set('search', search);
+            if (showRetired) p.set('include_retired', '1');
+            const also = selectedAssetId || new URLSearchParams(window.location.search).get('asset_id');
+            if (also) p.set('also_id', String(also));
+            return API_BASE + 'get_assets.php?' + p.toString();
+        }
+        function toggleShowRetired(on) {
+            showRetired = !!on;
+            try { localStorage.setItem('assets_show_retired', showRetired ? '1' : '0'); } catch (e) {}
+            loadAssets(document.getElementById('assetSearch').value || '');
+        }
+        document.addEventListener('DOMContentLoaded', () => { const c = document.getElementById('assetShowRetired'); if (c) c.checked = showRetired; });
+
         async function loadAssets(search = '') {
             try {
-                const url = search ? `${API_BASE}get_assets.php?search=${encodeURIComponent(search)}` : API_BASE + 'get_assets.php';
-                const response = await fetch(url);
+                const response = await fetch(assetListUrl(search));
                 const data = await response.json();
 
                 if (data.success) {
@@ -2067,6 +2249,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     <div class="asset-hostname">${assetTypeIcon(asset.asset_type_id)}${escapeHtml(asset.hostname)}</div>
                     <div class="asset-meta">
                         ${asset.asset_tag ? `<span class="asset-tag-chip">${escapeHtml(asset.asset_tag)}</span>` : ''}
+                        ${asset.retired_datetime ? `<span class="asset-retired-chip">${escapeHtml(window.t('asset-management.retired.badge'))}</span>` : ''}
                         <span class="${asset.user_count > 0 ? 'asset-assigned' : 'asset-unassigned'}">
                             ${asset.user_count > 0 ? window.t('asset-management.status.assigned') : window.t('asset-management.status.unassigned')}
                         </span>
@@ -2183,6 +2366,18 @@ $translationNamespaces = ['common', 'asset-management'];
         }
 
         // Select an asset and show details
+        /**
+         * A retired asset's banner: when it left (stamped with its status) and why,
+         * the reason editable in place - "Transferred to the Ministry of Education".
+         */
+        function retiredBanner(a) {
+            const when = window.fmtDateTime ? fmtDateTime(String(a.retired_datetime).replace(' ', 'T') + 'Z') : a.retired_datetime;
+            return `<div class="asset-retired-banner"><strong>${escapeHtml(window.t('asset-management.retired.since', { date: when }))}</strong>`
+                + `<input type="text" class="asset-retired-reason" maxlength="255" value="${escapeHtml(a.retired_reason || '')}"`
+                + ` placeholder="${escapeHtml(window.t('asset-management.retired.reason_placeholder'))}" aria-label="${escapeHtml(window.t('asset-management.retired.reason'))}"`
+                + ` onchange="updateAssetField('retired_reason', this.value.trim())"></div>`;
+        }
+
         async function selectAsset(assetId) {
             selectedAssetId = assetId;
             selectedAsset = assets.find(a => a.id == assetId);
@@ -2227,6 +2422,7 @@ $translationNamespaces = ['common', 'asset-management'];
                 <div class="asset-detail-sticky">
                     <div class="asset-detail-header">
                         <h2 class="asset-detail-hostname">${assetTypeIcon(selectedAsset.asset_type_id, 20)}${escapeHtml(selectedAsset.hostname)}</h2>
+                        ${selectedAsset.retired_datetime ? retiredBanner(selectedAsset) : ''}
                         <div class="asset-detail-subtitle">${window.t('asset-management.detail.service_tag')}: ${escapeHtml(selectedAsset.service_tag) || '-'}</div>
                         <?php /* The three asset actions. On a phone mobile.css (LAYER 14b)
                                  lifts this row out of the header and pins it along the bottom
@@ -2253,15 +2449,18 @@ $translationNamespaces = ['common', 'asset-management'];
                         <button class="detail-tab active" onclick="switchDetailTab('keyinfo')" data-dtab="keyinfo">${window.t('asset-management.detail.tab_keyinfo')}</button>
                         <button class="detail-tab" onclick="switchDetailTab('financial')" data-dtab="financial">${window.t('asset-management.detail.tab_financial')}</button>
                         <button class="detail-tab" onclick="switchDetailTab('devices')" data-dtab="devices">${window.t('asset-management.detail.tab_devices')} <span class="tab-count" id="devicesCountBadge">...</span></button>
-                        <button class="detail-tab" onclick="switchDetailTab('software')" data-dtab="software">${window.t('asset-management.detail.tab_software')} <span class="tab-count" id="softwareCountBadge">...</span></button>
+                        ${window.ASSET_MODULE_ON.software ? `<button class="detail-tab" onclick="switchDetailTab('software')" data-dtab="software">${window.t('asset-management.detail.tab_software')} <span class="tab-count" id="softwareCountBadge">...</span></button>` : ''}<?php /* GH #217 */ ?>
+                        <button class="detail-tab" onclick="switchDetailTab('connected')" data-dtab="connected">${window.t('asset-management.detail.tab_connected')} <span class="tab-count" id="connectedCountBadge">...</span></button>
                         <button class="detail-tab" onclick="switchDetailTab('tickets')" data-dtab="tickets">${window.t('asset-management.detail.tab_tickets')} <span class="tab-count" id="ticketsCountBadge">...</span></button>
-                        <button class="detail-tab" onclick="switchDetailTab('contracts')" data-dtab="contracts">${window.t('asset-management.detail.tab_contracts')} <span class="tab-count" id="contractsCountBadge">...</span></button>
+                        ${window.ASSET_MODULE_ON.contracts ? `<button class="detail-tab" onclick="switchDetailTab('contracts')" data-dtab="contracts">${window.t('asset-management.detail.tab_contracts')} <span class="tab-count" id="contractsCountBadge">...</span></button>` : ''}<?php /* GH #217 */ ?>
                         ${window.ASSET_SHOW_PROJECTS ? `<button class="detail-tab" onclick="switchDetailTab('projects')" data-dtab="projects">${window.tf ? window.tf('projects.links_other.title', 'Projects') : 'Projects'}</button>` : ''}
                         <button class="detail-tab" onclick="switchDetailTab('documents')" data-dtab="documents">${window.t('common.documents.heading')}</button>
                     </div>
                 </div>
                 <div class="asset-detail-body" id="detailBody">
                     <div class="detail-tab-panel detail-tab-panel--scroll active" id="keyinfoPanel" data-dtab-panel="keyinfo">
+                    <div class="atl-notice atl-hidden" id="layoutNotice" role="status"></div>
+                    <div class="atl-notice atl-hidden" id="reviewNotice" role="status"></div>
                     <div class="asset-info-grid">
                         <?php /* The number printed on the label. Saved on change through its
                                  own endpoint, because it is unique per company and the generic
@@ -2301,13 +2500,13 @@ $translationNamespaces = ['common', 'asset-management'];
                                  typo made while adding one by hand had no way
                                  to be corrected. saveCoreField() warns rather
                                  than blocks; see it for the reasoning. */ ?>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="make_model" data-protect-field="manufacturer">
                             <span class="info-label">${window.t('asset-management.field.manufacturer')}</span>
                             <input type="text" class="info-value-input" maxlength="50"
                                    value="${escapeHtml(selectedAsset.manufacturer || '')}" placeholder="-"
                                    onchange="saveCoreField('manufacturer', this)">
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="make_model" data-protect-field="model">
                             <span class="info-label">${window.t('asset-management.field.model')}</span>
                             <input type="text" class="info-value-input" maxlength="50"
                                    value="${escapeHtml(selectedAsset.model || '')}" placeholder="-"
@@ -2323,37 +2522,37 @@ $translationNamespaces = ['common', 'asset-management'];
                                  because the heading is a title, not a control —
                                  and this is the field most likely to carry a
                                  typo from the Add dialog. */ ?>
-                        <div class="info-item">
+                        <div class="info-item" data-protect-field="hostname">
                             <span class="info-label">${window.t('asset-management.new.name')}</span>
                             <input type="text" class="info-value-input" maxlength="50"
                                    value="${escapeHtml(selectedAsset.hostname || '')}"
                                    onchange="saveCoreField('hostname', this)">
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="hardware">
                             <span class="info-label">${window.t('asset-management.field.cpu')}</span>
                             <span class="info-value">${escapeHtml(selectedAsset.cpu_name) || '-'}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="hardware">
                             <span class="info-label">${window.t('asset-management.field.cpu_speed')}</span>
                             <span class="info-value">${escapeHtml(selectedAsset.speed) || '-'}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="hardware">
                             <span class="info-label">${window.t('asset-management.field.memory')}</span>
                             <span class="info-value">${escapeHtml(selectedAsset.memory) || '-'}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="os">
                             <span class="info-label">${window.t('asset-management.field.operating_system')}</span>
                             <span class="info-value">${escapeHtml(selectedAsset.operating_system) || '-'}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="os">
                             <span class="info-label">${window.t('asset-management.field.feature_release')}</span>
                             <span class="info-value">${escapeHtml(selectedAsset.feature_release) || '-'}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="os">
                             <span class="info-label">${window.t('asset-management.field.build_number')}</span>
                             <span class="info-value">${escapeHtml(selectedAsset.build_number) || '-'}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="os">
                             <span class="info-label">${window.t('asset-management.field.bios_version')}</span>
                             <span class="info-value">${escapeHtml(selectedAsset.bios_version) || '-'}</span>
                         </div>
@@ -2365,11 +2564,11 @@ $translationNamespaces = ['common', 'asset-management'];
                                  still true?". Watchtower has counted machines
                                  that stopped reporting for a long time; until
                                  now the asset itself would not say when. */ ?>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="reporting">
                             <span class="info-label">${window.t('asset-management.field.first_seen')}</span>
                             <span class="info-value">${seenHtml(selectedAsset.first_seen, false)}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" data-layout-section="reporting">
                             <span class="info-label">${window.t('asset-management.field.last_seen')}</span>
                             <span class="info-value">${seenHtml(selectedAsset.last_seen, true)}</span>
                         </div>
@@ -2386,10 +2585,14 @@ $translationNamespaces = ['common', 'asset-management'];
                         </div>
                         <div id="assetCustomFields"></div>
                     </div>
-                    <div class="disks-section">
+                    <?php /* GH #201: the configuration item this asset is the same equipment as. A layout
+                             section, so a type that will never be a CI (a monitor) can hide it. */ ?>
+                    <div class="ci-link-section" data-layout-section="cmdb" id="ciLinkSection"></div>
+                    <div class="disks-section" data-layout-section="storage">
                         <div class="section-header">
                             <span class="section-title">${window.t('asset-management.detail.storage')}</span>
                         </div>
+                        <div class="inv-lines" id="invLinesStorage"></div>
                         <div class="disks-grid" id="disksGrid">
                             <div class="loading"><div class="spinner"></div></div>
                         </div>
@@ -2414,6 +2617,11 @@ $translationNamespaces = ['common', 'asset-management'];
                             <div class="disks-grid" id="physicalDisksGrid"></div>
                         </div>
                     </div>
+                    <?php /* GH #200 Part B: every source that reports this asset, and how fresh each of
+                             its lists is. NOT a layout section - it is how a hidden list's freshness
+                             stays reachable, so no type's layout hides it. Empty (and so not shown)
+                             for an asset nothing reports, such as a monitor. */ ?>
+                    <div class="inv-panel" id="inventorySourcesPanel" style="display:none;"></div>
                     </div>
                     <?php /* Financial (3.5.0): purchase, supplier, cost centre, warranty and lease -
                              everything to do with money, moved out of a busy Key info. */ ?>
@@ -2462,6 +2670,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     </div>
                     </div>
                     <div class="detail-tab-panel" id="devicesPanel" data-dtab-panel="devices">
+                        <div class="inv-lines" id="invLinesDevices"></div>
                         <div class="devices-search">
                             <input type="text" id="devicesSearch" placeholder="${window.t('asset-management.devices.filter_placeholder')}" oninput="filterDevices()" autocomplete="off">
                         </div>
@@ -2470,6 +2679,7 @@ $translationNamespaces = ['common', 'asset-management'];
                         </div>
                     </div>
                     <div class="detail-tab-panel" id="softwarePanel" data-dtab-panel="software">
+                        <div class="inv-lines" id="invLinesSoftware"></div>
                         <div class="sw-filter-tabs">
                             <button class="sw-filter-tab active" data-swfilter="apps" onclick="switchSwTab('apps')">${window.t('asset-management.software.applications')} <span class="sw-tab-count" id="swCountApps">0</span></button>
                             <button class="sw-filter-tab" data-swfilter="components" onclick="switchSwTab('components')">${window.t('asset-management.software.components')} <span class="sw-tab-count" id="swCountComponents">0</span></button>
@@ -2478,6 +2688,14 @@ $translationNamespaces = ['common', 'asset-management'];
                         <div class="software-list" id="installedSoftwareList">
                             <div class="loading"><div class="spinner"></div></div>
                         </div>
+                    </div>
+                    <?php /* GH #200 part C: physical connections, from both ends. */ ?>
+                    <div class="detail-tab-panel detail-tab-panel--scroll" id="connectedPanel" data-dtab-panel="connected">
+                        <div class="conn-head">
+                            <span class="conn-intro">${escapeHtml(window.t('asset-management.connections.intro'))}</span>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="openConnectPicker()">${escapeHtml(window.t('asset-management.connections.connect'))}</button>
+                        </div>
+                        <div id="connectionsList"><div class="loading"><div class="spinner"></div></div></div>
                     </div>
                     <div class="detail-tab-panel detail-tab-panel--scroll" id="ticketsPanel" data-dtab-panel="tickets">
                         <div class="asset-tickets-list" id="assetTicketsList">
@@ -2496,18 +2714,31 @@ $translationNamespaces = ['common', 'asset-management'];
                 </div>
             `;
 
+            // The type's layout (GH #200): which sections and tabs show, and what they hide.
+            atlStartAsset();
+            applyAssetLayout();
+            document.getElementById('assetDocuments').addEventListener('fd:count', e => atlSaw('documents', e.detail.total));
+
             // Load assigned users, disks, devices, installed software, and (if matched) Intune data
             loadAssignedUsers(assetId);
             loadDisks(assetId);
             loadDevices(assetId);
-            loadInstalledSoftware(assetId);
+            if (window.ASSET_MODULE_ON.software) loadInstalledSoftware(assetId);   // GH #217: not while switched off
+            loadInventoryStatus(assetId);
+            loadConnections(assetId);
             loadIntuneDevice(assetId);
             loadAssetTickets(assetId);
-            loadAssetContracts(assetId);
+            if (window.ASSET_MODULE_ON.contracts) loadAssetContracts(assetId);
             loadAssetCostCentres(selectedAsset);
             // Projects (3.2.0): the projects this asset is part of.
             if (window.ASSET_SHOW_PROJECTS && window.ProjectLinks) ProjectLinks.mount(document.getElementById('assetProjects'), { kind: 'asset', id: assetId, base: window.APP_BASE || '../', bare: true });
             loadCustomFields(assetId);
+            // GH #217: an empty section while CMDB is off
+            if (window.CiAssetLink && window.ASSET_MODULE_ON.cmdb) CiAssetLink.mount(document.getElementById('ciLinkSection'), {
+                side: 'asset', id: assetId, base: window.APP_BASE || '../',
+                cardClass: 'ci-link-block', headClass: 'section-header', titleClass: 'section-title',
+                onState: s => { if (Number(selectedAssetId) === Number(assetId)) atlSaw('cmdb', s.linked ? 1 : 0); }
+            });
 
             // ⚠️ MOUNTED, not re-pointed. This detail pane rebuilds its whole DOM
             // on every asset you click, so the previous panel's element is already
@@ -3075,7 +3306,10 @@ $translationNamespaces = ['common', 'asset-management'];
                     if (h) h.textContent = value;
                     await loadAssets(document.getElementById('assetSearch').value || '');
                 }
-                showToast(window.t('asset-management.detail.saved'), 'success');
+                // GH #200 part D: a correction on an asset a tool reports is protected from it.
+                const wasProtected = !!((invStatus && invStatus.protected) || {})[field];
+                showToast(window.t(data.protected && !wasProtected ? 'asset-management.protect.saved_protected' : 'asset-management.detail.saved'), 'success');
+                if (['hostname', 'manufacturer', 'model'].includes(field)) loadInventoryStatus(selectedAsset.id);
             } catch (e) {
                 showToast(e.message || window.t('asset-management.detail.save_failed'), 'error');
                 // Put the stored value back, so the screen never shows something
@@ -3694,10 +3928,11 @@ $translationNamespaces = ['common', 'asset-management'];
                         });
                     });
                 } else if (data.success) {
-                    container.innerHTML = `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.disk.no_data')}</div>`;
+                    container.innerHTML = invEmptyHtml('storage', window.t('asset-management.disk.no_data'));
                 }
 
                 renderPhysicalDisks(data.success ? (data.physical_disks || []) : []);
+                if (data.success) atlSaw('storage', (data.disks || []).length + (data.physical_disks || []).length);
             } catch (error) {
                 console.error('Error loading disks:', error);
                 renderPhysicalDisks([]);
@@ -3922,8 +4157,8 @@ $translationNamespaces = ['common', 'asset-management'];
                     renderDevices(allDevices);
                 } else {
                     allDevices = [];
-                    badge.textContent = '0';
-                    document.getElementById('devicesList').innerHTML = `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.devices.no_data')}</div>`;
+                    badge.textContent = invNeverCollected('devices') ? '–' : '0';
+                    document.getElementById('devicesList').innerHTML = invEmptyHtml('devices', window.t('asset-management.devices.no_data'));
                 }
             } catch (error) {
                 console.error('Error loading devices:', error);
@@ -3992,6 +4227,585 @@ $translationNamespaces = ['common', 'asset-management'];
         function switchDetailTab(tab) {
             document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.dtab === tab));
             document.querySelectorAll('.detail-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.dtabPanel === tab));
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  Asset type layouts (GH #200)
+        //
+        //  The type decides which built-in Key info sections and tabs show
+        //  (includes/services/asset_type_layout.php). PRESENTATION ONLY: the
+        //  page still loads everything, so counts keep arriving for hidden tabs
+        //  and the asset can say when it holds details its type hides. That is
+        //  the difference between "hidden by this profile" and "not there".
+        // ════════════════════════════════════════════════════════════════
+
+        let assetTypeLayouts = {};    // type id -> layout, from get_asset_types.php
+        let atlReveal = false;        // "Show them" pressed for the open asset
+        let atlCounts = {};           // what the async loads found: storage, devices, software, tickets, contracts, documents
+        let atlBadgeWatch = null;
+
+        const atlSectionFields = {
+            make_model: ['manufacturer', 'model'],
+            hardware:   ['cpu_name', 'speed', 'memory'],
+            os:         ['operating_system', 'feature_release', 'build_number', 'bios_version'],
+            reporting:  ['first_seen', 'last_seen'],
+        };
+        const atlFinancialFields = ['purchase_date', 'purchase_cost', 'supplier_id', 'order_number', 'warranty_expiry',
+                                    'lease_start', 'lease_expiry', 'cost_centre_id'];
+        const atlBadges = { devices: 'devicesCountBadge', software: 'softwareCountBadge', connected: 'connectedCountBadge', tickets: 'ticketsCountBadge', contracts: 'contractsCountBadge' };
+
+        /** A fresh asset: nothing revealed, nothing counted, and the badges watched for their numbers. */
+        function atlStartAsset() {
+            atlReveal = false;
+            atlCounts = {};
+            if (atlBadgeWatch) atlBadgeWatch.disconnect();
+            const strip = document.getElementById('detailTabs');
+            if (!strip || !window.MutationObserver) return;
+            // The badges are filled by four loaders in several formats; reading them here
+            // keeps this feature out of each loader. The leading number is the count.
+            atlBadgeWatch = new MutationObserver(() => {
+                let changed = false;
+                Object.entries(atlBadges).forEach(([tab, id]) => {
+                    const el = document.getElementById(id);
+                    const n = el ? parseInt(el.textContent, 10) : NaN;
+                    if (!isNaN(n) && atlCounts[tab] !== n) { atlCounts[tab] = n; changed = true; }
+                });
+                if (changed) atlRenderNotice();
+            });
+            atlBadgeWatch.observe(strip, { subtree: true, childList: true, characterData: true });
+        }
+
+        /** An async load reporting how many rows it found. */
+        function atlSaw(key, n) {
+            atlCounts[key] = Number(n) || 0;
+            atlRenderNotice();
+        }
+
+        /** The open asset's layout: its type's, or everything shown. */
+        function atlLayout() {
+            const L = selectedAsset && assetTypeLayouts[selectedAsset.asset_type_id];
+            return L || <?php echo json_encode(AssetTypeLayout::defaults()); ?>;
+        }
+
+        /** Does the open asset hold anything in this hidden section or tab? A count, true, or false. */
+        function atlHasData(key) {
+            const a = selectedAsset || {};
+            if (atlSectionFields[key]) return atlSectionFields[key].some(f => a[f] !== null && a[f] !== undefined && String(a[f]).trim() !== '');
+            if (key === 'financial') return atlFinancialFields.some(f => a[f] !== null && a[f] !== undefined && String(a[f]).trim() !== '');
+            return atlCounts[key] > 0 ? atlCounts[key] : false;
+        }
+
+        /** Shows, hides and orders the sections and tabs for the open asset's type. */
+        function applyAssetLayout() {
+            const L = atlLayout();
+            document.querySelectorAll('#keyinfoPanel [data-layout-section]').forEach(el => {
+                const hidden = L.sections[el.dataset.layoutSection] === false;
+                el.classList.toggle('atl-hidden', hidden && !atlReveal);
+                el.classList.toggle('atl-revealed', hidden && atlReveal);
+                if (hidden && atlReveal) el.title = window.t('asset-management.layout.hidden_marker'); else el.removeAttribute('title');
+            });
+            const strip = document.getElementById('detailTabs');
+            if (strip) {
+                // Key info first, then the type's order; anything else (the Intune tab) keeps its place after.
+                const keyinfo = strip.querySelector('[data-dtab="keyinfo"]');
+                let anchor = keyinfo;
+                L.tabs.forEach(t => {
+                    const btn = strip.querySelector('[data-dtab="' + t.key + '"]');
+                    if (!btn) return;
+                    anchor.after(btn);
+                    anchor = btn;
+                    const hidden = !t.shown;
+                    btn.classList.toggle('atl-hidden', hidden && !atlReveal);
+                    btn.classList.toggle('atl-revealed', hidden && atlReveal);
+                    if (hidden && atlReveal) btn.title = window.t('asset-management.layout.hidden_marker'); else btn.removeAttribute('title');
+                });
+                // Never leave the reader on a tab that has just been hidden.
+                const active = strip.querySelector('.detail-tab.active');
+                if (active && active.classList.contains('atl-hidden')) switchDetailTab('keyinfo');
+            }
+            atlRenderNotice();
+        }
+
+        /**
+         * The way back to hidden details. With asset_layout_hidden_notice = 'notice' (the default),
+         * a line on Key info names what is hidden AND holds data; otherwise - or when nothing hidden
+         * holds data - a quiet "Show hidden" at the end of the tab strip. Once shown, a line says so.
+         */
+        function atlRenderNotice() {
+            const box = document.getElementById('layoutNotice');
+            const strip = document.getElementById('detailTabs');
+            if (!box || !strip) return;
+            const L = atlLayout();
+            const T = (k, p) => window.t('asset-management.layout.' + k, p);
+            const hiddenKeys = Object.keys(L.sections).filter(k => L.sections[k] === false)
+                .concat(L.tabs.filter(t => !t.shown).map(t => t.key));
+
+            let link = strip.querySelector('.atl-show');
+            if (link) link.remove();
+            box.classList.add('atl-hidden');
+            box.innerHTML = '';
+            if (!hiddenKeys.length) return;
+
+            if (atlReveal) {
+                box.innerHTML = `<span>${escapeHtml(T('revealed_line'))}</span> <button type="button" class="atl-link" onclick="atlSetReveal(false)">${escapeHtml(T('hide_them'))}</button>`;
+                box.classList.remove('atl-hidden');
+                return;
+            }
+            const withData = [];
+            hiddenKeys.forEach(k => {
+                const d = atlHasData(k);
+                if (d === false) return;
+                const name = T(L.sections[k] === false ? 'section_' + k : 'tab_' + k);
+                withData.push(typeof d === 'number' ? T('item_count', { name: name, n: d }) : name);
+            });
+            if (window.ASSET_LAYOUT_NOTICE !== 'link' && withData.length) {
+                box.innerHTML = `<span>${escapeHtml(T('hidden_line', { items: withData.join(', ') }))}</span> <button type="button" class="atl-link" onclick="atlSetReveal(true)">${escapeHtml(T('show_them'))}</button>`;
+                box.classList.remove('atl-hidden');
+                return;
+            }
+            link = document.createElement('button');
+            link.type = 'button';
+            link.className = 'detail-tab atl-show';
+            link.textContent = T('show_hidden');
+            link.onclick = () => atlSetReveal(true);
+            strip.appendChild(link);
+        }
+
+        function atlSetReveal(on) {
+            atlReveal = !!on;
+            applyAssetLayout();
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  Inventory freshness (GH #200 Part B)
+        //
+        //  Per source and section, from api/assets/get_asset_inventory_status.php:
+        //  when the last good data was observed, and what the last attempt came
+        //  to. Worked out from what each source DID - never from the type's
+        //  layout, so a hidden tab is "hidden by this profile", not "not there".
+        //  "Never collected" needs BOTH no record and no rows: an asset the agent
+        //  reported before 3.15.0 has rows and no record, and says nothing.
+        // ════════════════════════════════════════════════════════════════
+
+        let invStatus = null;
+        const invSections = ['software', 'disks', 'physical_disks', 'network_adapters', 'devices'];
+        const invTabSections = { software: ['software'], devices: ['devices'], storage: ['disks', 'physical_disks'] };
+
+        async function loadInventoryStatus(assetId) {
+            invStatus = null;
+            try {
+                const response = await fetch(`${API_BASE}get_asset_inventory_status.php?asset_id=${assetId}`);
+                const data = await response.json();
+                if (!data.success || Number(selectedAssetId) !== Number(assetId)) return;
+                invStatus = data;
+            } catch (e) {
+                return;   // the lists still show; only their freshness is missing
+            }
+            renderInventoryPanel();
+            renderInventoryLines();
+            renderReviewNotice();
+            renderProtection();
+            renderShownAs();
+        }
+
+        /**
+         * GH #200 part D: a manufacturer or model shown elsewhere under a mapped name says
+         * so under the field, which keeps the stored (editable) value.
+         */
+        function renderShownAs() {
+            ['manufacturer', 'model'].forEach(field => {
+                const item = document.querySelector(`#keyinfoPanel [data-protect-field="${field}"]`);
+                if (!item || !selectedAsset) return;
+                let hint = item.querySelector('.nm-shown');
+                if (hint) hint.remove();
+                const shown = selectedAsset[field + '_display'];
+                if (shown && shown !== selectedAsset[field]) {
+                    hint = document.createElement('div');
+                    hint.className = 'nm-shown';
+                    hint.textContent = window.t('asset-management.names.shown_as', { name: shown });
+                    item.appendChild(hint);
+                }
+            });
+        }
+
+        /**
+         * GH #200 part D: protected values. A padlock on Name, Manufacturer and Model; a
+         * protected one is never overwritten by the agent or Intune, and what they report
+         * instead is shown under it with Release. State comes with the inventory status.
+         */
+        const PROT_ICON_ON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+        const PROT_ICON_OFF = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.9-1"/></svg>';
+
+        function renderProtection() {
+            if (!invStatus) return;
+            const prot = invStatus.protected || {};
+            const P = (k, v) => window.t('asset-management.protect.' + k, v);
+            document.querySelectorAll('#keyinfoPanel [data-protect-field]').forEach(item => {
+                const field = item.dataset.protectField;
+                const on = !!prot[field];
+                const label = item.querySelector('.info-label');
+                let btn = item.querySelector('.prot-btn');
+                if (!btn) {
+                    btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'prot-btn';
+                    btn.onclick = () => setProtected(field, !btn.classList.contains('on'));
+                    label.appendChild(btn);
+                }
+                btn.classList.toggle('on', on);
+                btn.innerHTML = on ? PROT_ICON_ON : PROT_ICON_OFF;
+                btn.title = P(on ? 'on_title' : 'off_title');
+                btn.setAttribute('aria-label', btn.title);
+                let line = item.querySelector('.prot-conflict');
+                if (line) line.remove();
+                const p = prot[field];
+                if (on && p.reported_value) {
+                    line = document.createElement('div');
+                    line.className = 'prot-conflict';
+                    const src = (p.reported_source || '').replace(/^./, c => c.toUpperCase());
+                    line.innerHTML = `<span>${escapeHtml(P('conflict', { source: src, value: p.reported_value }))}</span>
+                        <button type="button" class="atl-link">${escapeHtml(P('release'))}</button>`;
+                    line.querySelector('button').onclick = () => setProtected(field, false);
+                    item.appendChild(line);
+                }
+            });
+        }
+
+        async function setProtected(field, protect) {
+            const assetId = selectedAssetId;
+            try {
+                const res = await fetch(API_BASE + 'protect_field.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ asset_id: Number(assetId), field: field, protect: protect })
+                });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || window.t('asset-management.detail.save_failed'), 'error'); return; }
+                showToast(window.t('asset-management.protect.' + (protect ? 'protected_toast' : 'released_toast')), 'success');
+                loadInventoryStatus(assetId);
+            } catch (e) {
+                showToast(window.t('asset-management.detail.save_failed'), 'error');
+            }
+        }
+
+        /**
+         * GH #200 part D: this asset is in the review list (shares a serial, wears a reused
+         * name, or a tool reported a device on it that matches nothing). Says so, with the
+         * way to decide - the Review tab is where merging and "different" happen.
+         */
+        function renderReviewNotice() {
+            const box = document.getElementById('reviewNotice');
+            if (!box || !invStatus) return;
+            const items = invStatus.review || [];
+            box.classList.toggle('atl-hidden', !items.length);
+            if (!items.length) { box.innerHTML = ''; return; }
+            const R = (k, p) => window.t('asset-management.review.' + k, p);
+            const what = items.map(it => {
+                const other = it.asset_id === Number(selectedAssetId) ? it.other : it.asset;
+                const d = it.detail || {};
+                if (it.kind === 'shared_serial') return R('label_shared_serial') + ': ' + ((other && other.hostname) || '') + ' (' + (d.serial || '') + ')';
+                if (it.kind === 'hostname_reused') return R('label_hostname_reused') + ': ' + ((other && other.hostname) || '');
+                return R('label_' + it.kind) + ': ' + (d.serial || '');
+            }).join('; ');
+            box.innerHTML = `<span>${escapeHtml(R('asset_line', { what: what }))}</span> <a class="atl-link" href="settings/?tab=review">${escapeHtml(R('asset_link'))}</a>`;
+        }
+
+        function invT(key, vars) { return window.t('asset-management.inventory.' + key, vars); }
+
+        /** The stored row tag for a source: the agent's own, or 'rest:<name>'. */
+        function invTag(source) { return source === 'agent' ? 'agent' : 'rest:' + source; }
+
+        function invSourceName(source, inline) {
+            if (source === 'agent') return invT(inline ? 'source_agent_inline' : 'source_agent');
+            return inline ? source : invT('source_rest', { name: source });
+        }
+
+        /** Elapsed, never calendar - see seenHtml(). */
+        function invAgo(iso) {
+            const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+            if (mins < 1) return invT('just_now');
+            if (mins < 60) return invT('ago_minutes', { n: mins });
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return invT('ago_hours', { n: hours });
+            const days = Math.floor(hours / 24);
+            return days === 1 ? invT('ago_one_day') : invT('ago_days', { n: days });
+        }
+
+        function invIsStale(iso) {
+            return !!iso && (Date.now() - new Date(iso).getTime()) >= (invStatus.stale_days || 7) * 86400000;
+        }
+
+        /** No source has ever recorded this section, and no rows hold it. False until the status has loaded. */
+        function invNeverCollected(section) {
+            if (!invStatus) return false;
+            if (invStatus.sources.some(s => s.sections[section])) return false;
+            return !Object.values(invStatus.rows || {}).some(r => (r[section] || 0) > 0);
+        }
+
+        /**
+         * The empty message under a list: "never reported" once we know nothing has ever
+         * collected it, the list's own message otherwise. One message, not two.
+         */
+        function invEmptyHtml(tab, fallback) {
+            const never = invTabSections[tab].every(invNeverCollected);
+            return `<div class="empty-state" style="padding: 20px;">${escapeHtml(never ? invT('never_' + tab) : fallback)}</div>`;
+        }
+
+        /** One line above a list: what one source's last attempt at one section came to. */
+        function invLine(source, rec, sectionLabel) {
+            const name = invSourceName(source, true);
+            const prefix = sectionLabel ? sectionLabel + ': ' : '';
+            const at = d => `<span title="${escapeHtml(fmtDateTime(new Date(d)))}">${escapeHtml(invAgo(d))}</span>`;
+            const kept = rec.observed_at ? ' ' + invT('kept_from', { ago: '\u0000' }).split('\u0000').map(escapeHtml).join(at(rec.observed_at)) : '';
+            const fill = (key, vars, agoIso) => escapeHtml(invT(key, Object.assign({}, vars, { ago: '\u0000' }))).split('\u0000').join(at(agoIso));
+            if (rec.last_outcome === 'failed') {
+                // The error is the source's own words and may not end a sentence.
+                const error = (rec.last_error || '').trim();
+                const stop = /[.!?]$/.test(error) ? '' : '.';
+                return `<div class="inv-line failed">${escapeHtml(prefix)}${fill('line_failed', { source: name, error: error }, rec.last_attempt_at)}${stop}${rec.observed_at ? kept : ' ' + escapeHtml(invT('nothing_kept'))}</div>`;
+            }
+            if (rec.last_outcome === 'skipped') {
+                return `<div class="inv-line">${escapeHtml(prefix)}${fill('line_skipped', { source: name }, rec.last_attempt_at)}${kept}</div>`;
+            }
+            const stale = invIsStale(rec.observed_at);
+            const title = stale ? ` title="${escapeHtml(invT('stale_title', { days: invStatus.stale_days }))}"` : '';
+            return `<div class="inv-line${stale ? ' stale' : ''}"${title}>${escapeHtml(prefix)}${fill(rec.last_outcome === 'empty' ? 'line_empty' : 'line_current', { source: name }, rec.observed_at)}</div>`;
+        }
+
+        /** The lines above Storage, Devices and Software, and the "never collected" dash on a tab's count. */
+        function renderInventoryLines() {
+            if (!invStatus) return;
+            const boxes = { software: 'invLinesSoftware', devices: 'invLinesDevices', storage: 'invLinesStorage' };
+            Object.entries(invTabSections).forEach(([tab, sections]) => {
+                const box = document.getElementById(boxes[tab]);
+                if (!box) return;
+                const lines = [];
+                invStatus.sources.forEach(src => sections.forEach(section => {
+                    const rec = src.sections[section];
+                    if (rec) lines.push(invLine(src.source, rec, sections.length > 1 ? invT('section_' + section) : ''));
+                }));
+                box.innerHTML = lines.join('');
+            });
+            // The status may arrive after a list drew its empty message - say "never reported" there.
+            const empties = { storage: ['disksGrid', 'asset-management.disk.no_data'], devices: ['devicesList', 'asset-management.devices.no_data'],
+                              software: ['installedSoftwareList', 'asset-management.software.no_data'] };
+            Object.entries(empties).forEach(([tab, [id, key]]) => {
+                const el = document.getElementById(id);
+                const only = el && el.children.length === 1 && el.firstElementChild.classList.contains('empty-state') ? el.firstElementChild : null;
+                if (only && only.textContent === window.t(key) && (tab !== 'software' || !allAssetSoftware.length)) el.innerHTML = invEmptyHtml(tab, window.t(key));
+            });
+            const devBadge = document.getElementById('devicesCountBadge');
+            if (devBadge && devBadge.textContent === '0' && invNeverCollected('devices')) devBadge.textContent = '–';
+            const swBadge = document.getElementById('softwareCountBadge');
+            if (swBadge && !allAssetSoftware.length && swBadge.textContent === '0' && invNeverCollected('software')) swBadge.textContent = '–';
+        }
+
+        /** Key info's Inventory sources panel: every source, and every list it keeps. */
+        function renderInventoryPanel() {
+            const panel = document.getElementById('inventorySourcesPanel');
+            if (!panel || !invStatus) return;
+            if (!invStatus.sources.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+            const blocks = invStatus.sources.map(src => {
+                const rows = (invStatus.rows || {})[invTag(src.source)] || {};
+                const sections = invSections.filter(s => src.sections[s] || rows[s]);
+                const body = sections.map(section => {
+                    const rec = src.sections[section];
+                    let state = '', cls = 'quiet', observed = invT('never');
+                    if (rec) {
+                        const stale = invIsStale(rec.observed_at);
+                        if (rec.last_outcome === 'failed') { state = invT('status_failed'); cls = 'failed'; }
+                        else if (rec.last_outcome === 'skipped') { state = invT('status_skipped'); }
+                        else if (rec.last_outcome === 'empty') { state = invT('status_empty'); cls = stale ? 'stale' : ''; }
+                        else { state = invT(stale ? 'status_stale' : 'status_current'); cls = stale ? 'stale' : ''; }
+                        if (rec.observed_at) observed = `<span title="${escapeHtml(fmtDateTime(new Date(rec.observed_at)))}">${escapeHtml(invAgo(rec.observed_at))}</span>`;
+                        else observed = escapeHtml(observed);
+                    } else {
+                        observed = escapeHtml(observed);
+                    }
+                    const error = rec && rec.last_outcome === 'failed' && rec.last_error
+                        ? `<span class="inv-error">${escapeHtml(rec.last_error)} (${escapeHtml(invAgo(rec.last_attempt_at))})</span>` : '';
+                    return `<tr>
+                        <td>${escapeHtml(invT('section_' + section))}</td>
+                        <td><span class="inv-state ${cls}">${escapeHtml(state || '-')}</span>${error}</td>
+                        <td>${observed}</td>
+                        <td class="num">${rows[section] || 0}</td>
+                    </tr>`;
+                }).join('');
+                const ref = src.source_device_ref ? `<span class="inv-source-ref">${escapeHtml(invT('device_ref', { ref: src.source_device_ref }))}</span>` : '';
+                return `<div class="inv-source">
+                    <div class="inv-source-name">${escapeHtml(invSourceName(src.source, false))}${ref}</div>
+                    <table class="inv-table">
+                        <thead><tr><th>${escapeHtml(invT('col_list'))}</th><th>${escapeHtml(invT('col_status'))}</th><th>${escapeHtml(invT('col_observed'))}</th><th class="num">${escapeHtml(invT('col_items'))}</th></tr></thead>
+                        <tbody>${body}</tbody>
+                    </table>
+                </div>`;
+            }).join('');
+            panel.innerHTML = `<div class="section-header"><span class="section-title">${escapeHtml(invT('panel_heading'))}</span></div>${blocks}`;
+            panel.style.display = '';
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  Connected assets (GH #200 part C)
+        //
+        //  One row per source (AssetConnectionsService). Shown grouped by the
+        //  other asset, each source's row beside the others, so a tool that
+        //  disagrees with a person is visible rather than overwriting them.
+        //  A tool's row is worded "last observed connected", never as a
+        //  current assignment. Only a person's row has Disconnect.
+        // ════════════════════════════════════════════════════════════════
+
+        let connPickerTimer = null;
+
+        function connT(key, vars) { return window.t('asset-management.connections.' + key, vars); }
+
+        function connSourceName(source) {
+            if (source === 'manual') return connT('source_person');
+            return source.indexOf('rest:') === 0 ? source.slice(5) : source;
+        }
+
+        async function loadConnections(assetId) {
+            const box = document.getElementById('connectionsList');
+            const badge = document.getElementById('connectedCountBadge');
+            try {
+                const response = await fetch(`${API_BASE}get_asset_connections.php?asset_id=${assetId}`);
+                const data = await response.json();
+                if (Number(selectedAssetId) !== Number(assetId) || !box) return;
+                if (!data.success) throw new Error(data.error || '');
+                if (badge) badge.textContent = data.current.length;
+                renderConnections(data);
+            } catch (e) {
+                if (badge) badge.textContent = '0';
+                if (box) box.innerHTML = `<div class="empty-state" style="padding: 20px;">${escapeHtml(connT('load_error'))}</div>`;
+            }
+        }
+
+        function renderConnections(data) {
+            const box = document.getElementById('connectionsList');
+            const assetLink = o => `<a href="?asset_id=${o.id}" onclick="event.preventDefault(); openConnectedAsset(${o.id})">${assetTypeIcon(o.asset_type_id, 14)}${escapeHtml(o.hostname || ('#' + o.id))}</a>`;
+            const when = iso => iso ? `<span title="${escapeHtml(fmtDateTime(new Date(iso)))}">${escapeHtml(fmtDate(new Date(iso)))}</span>` : '-';
+            let html = '';
+            if (!data.current.length) {
+                html += `<div class="empty-state" style="padding: 20px;">${escapeHtml(connT('none'))}</div>`;
+            } else {
+                html += '<div class="conn-list">' + data.current.map(group => {
+                    const hasManual = group.rows.some(r => r.manual);
+                    const lines = group.rows.map(r => {
+                        if (r.manual) {
+                            const text = r.confirmed_by ? connT('confirmed_by', { name: r.confirmed_by, date: '\u0000' }) : connT('confirmed_anon', { date: '\u0000' });
+                            return `<div class="conn-row"><span class="conn-chip manual">${escapeHtml(connSourceName('manual'))}</span>
+                                <span>${escapeHtml(text).split('\u0000').join(when(r.connected_at))}</span>
+                                <button type="button" class="btn btn-outline btn-sm" onclick="disconnectAsset(${r.id}, '${escapeHtml(group.other.hostname || '')}')">${escapeHtml(connT('disconnect'))}</button></div>`;
+                        }
+                        const ago = r.last_observed_at ? invAgoOrDate(r.last_observed_at) : '';
+                        return `<div class="conn-row"><span class="conn-chip">${escapeHtml(connSourceName(r.source))}</span>
+                            <span title="${escapeHtml(r.last_observed_at ? fmtDateTime(new Date(r.last_observed_at)) : '')}">${escapeHtml(connT('observed_by', { source: connSourceName(r.source), ago: ago }))}</span></div>`;
+                    }).join('');
+                    const confirm = hasManual ? '' : `<button type="button" class="btn btn-outline btn-sm" title="${escapeHtml(connT('confirm_title'))}" onclick="connectAsset(${group.other.id})">${escapeHtml(connT('confirm'))}</button>`;
+                    const desc = [group.other.manufacturer, group.other.model].filter(Boolean).join(' ');
+                    return `<div class="conn-item">
+                        <div class="conn-item-head"><span class="conn-name">${assetLink(group.other)}</span>
+                            <span class="conn-desc">${escapeHtml(desc)}</span>${confirm}</div>
+                        ${lines}
+                    </div>`;
+                }).join('') + '</div>';
+            }
+            if (data.history.length) {
+                html += `<div class="section-header conn-history-head"><span class="section-title">${escapeHtml(connT('history_heading'))}</span></div>
+                    <table class="inv-table conn-history"><tbody>` + data.history.map(r => {
+                        const ended = r.manual
+                            ? (r.disconnected_by ? connT('ended_by_person', { name: r.disconnected_by }) : '')
+                            : connT('ended_by_source');
+                        const from = r.manual ? r.connected_at : (r.first_observed_at || r.connected_at);
+                        return `<tr><td>${assetLink(r.other)}</td>
+                            <td>${escapeHtml(connT('history_row', { from: '\u0000', to: '\u0001' })).split('\u0000').join(when(from)).split('\u0001').join(when(r.disconnected_at))}</td>
+                            <td><span class="conn-chip${r.manual ? ' manual' : ''}">${escapeHtml(connSourceName(r.source))}</span> ${escapeHtml(ended)}</td></tr>`;
+                    }).join('') + '</tbody></table>';
+            }
+            box.innerHTML = html;
+        }
+
+        /** "3 hr ago" while recent, the date once it is old - an old observation should read as old. */
+        function invAgoOrDate(iso) {
+            const days = (Date.now() - new Date(iso).getTime()) / 86400000;
+            return days < 7 ? invAgo(iso) : fmtDate(new Date(iso));
+        }
+
+        function openConnectedAsset(id) {
+            if (assets.some(a => Number(a.id) === Number(id))) { selectAsset(id); return; }
+            window.location.href = '?asset_id=' + Number(id);
+        }
+
+        function openConnectPicker() {
+            if (!selectedAssetId) return;
+            document.getElementById('connectPickerModal').classList.add('active');
+            const box = document.getElementById('connectPickerSearch');
+            box.value = '';
+            document.getElementById('connectPickerResults').innerHTML = '';
+            box.focus();
+        }
+
+        function closeConnectPicker() {
+            document.getElementById('connectPickerModal').classList.remove('active');
+        }
+
+        function connectPickerInput() {
+            clearTimeout(connPickerTimer);
+            connPickerTimer = setTimeout(searchConnectable, 250);
+        }
+
+        async function searchConnectable() {
+            const results = document.getElementById('connectPickerResults');
+            const q = document.getElementById('connectPickerSearch').value.trim();
+            if (q.length < 2) { results.innerHTML = ''; return; }
+            try {
+                const resp = await fetch(`${API_BASE}get_assets.php?search=${encodeURIComponent(q)}`);
+                const data = await resp.json();
+                const found = (data.assets || []).filter(a => Number(a.id) !== Number(selectedAssetId)).slice(0, 25);
+                if (!found.length) {
+                    results.innerHTML = `<div class="asset-tickets-empty">${escapeHtml(connT('no_results'))}</div>`;
+                    return;
+                }
+                results.innerHTML = found.map(a => `
+                    <button type="button" class="contract-pick" onclick="connectAsset(${Number(a.id)})">
+                        <span class="contract-pick-name">${assetTypeIcon(a.asset_type_id, 14)}${escapeHtml(a.hostname || '')}</span>
+                        <span class="contract-pick-meta">${escapeHtml([a.asset_tag, a.service_tag, [a.manufacturer, a.model].filter(Boolean).join(' ')].filter(Boolean).join(' · '))}</span>
+                    </button>`).join('');
+            } catch (e) {
+                results.innerHTML = `<div class="asset-tickets-empty">${escapeHtml(connT('load_error'))}</div>`;
+            }
+        }
+
+        async function connectAsset(otherId) {
+            const assetId = selectedAssetId;
+            try {
+                const resp = await fetch(API_BASE + 'connect_asset.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ asset_id: Number(assetId), other_asset_id: Number(otherId) })
+                });
+                const data = await resp.json();
+                if (!data.success) { showToast(data.error || connT('load_error'), 'error'); return; }
+                closeConnectPicker();
+                showToast(connT('connected_toast'), 'success');
+                loadConnections(assetId);
+            } catch (e) {
+                showToast(connT('load_error'), 'error');
+            }
+        }
+
+        async function disconnectAsset(connectionId, name) {
+            if (!confirm(connT('disconnect_confirm', { name: name }))) return;
+            const assetId = selectedAssetId;
+            try {
+                const resp = await fetch(API_BASE + 'disconnect_asset.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ connection_id: Number(connectionId) })
+                });
+                const data = await resp.json();
+                if (!data.success) { showToast(data.error || connT('load_error'), 'error'); return; }
+                showToast(connT('disconnected_toast'), 'success');
+                loadConnections(assetId);
+            } catch (e) {
+                showToast(connT('load_error'), 'error');
+            }
         }
 
         // Load Intune device data for this asset, if any. Renders a third tab when matched.
@@ -4121,10 +4935,12 @@ $translationNamespaces = ['common', 'asset-management'];
                 software = software.filter(s => parseInt(s.system_component));
             }
 
-            badge.textContent = softwareIdentityCount(software);
+            badge.textContent = !allAssetSoftware.length && invNeverCollected('software') ? '–' : softwareIdentityCount(software);
 
             if (software.length === 0) {
-                container.innerHTML = `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.software.no_data')}</div>`;
+                container.innerHTML = allAssetSoftware.length
+                    ? `<div class="empty-state" style="padding: 20px;">${window.t('asset-management.software.no_data')}</div>`
+                    : invEmptyHtml('software', window.t('asset-management.software.no_data'));
                 return;
             }
 
@@ -4416,7 +5232,7 @@ $translationNamespaces = ['common', 'asset-management'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Format a stored UTC datetime as a date, in the analyst's display zone.
@@ -4480,7 +5296,7 @@ $translationNamespaces = ['common', 'asset-management'];
             // — those don't match a key, so we show them as-is.
             const FIELD_KEYS = ['type','status','location','supplier','purchase_date',
                 'purchase_cost','order_number','warranty_expiry','lease_start','lease_expiry','cost_centre','assigned_user',
-                'hostname','asset_created','asset_discovered','hostname_reused'];
+                'hostname','asset_created','asset_discovered','hostname_reused','connection','review','merged','protected','released','cmdb_link'];
 
             history.forEach(entry => {
                 const noneEm = `<em style="color:#999;">${window.t('asset-management.common.none')}</em>`;
@@ -4618,8 +5434,14 @@ $translationNamespaces = ['common', 'asset-management'];
              behaviour inside is gated on matchMedia(768px), so on desktop it is
              inert. (#936) */ ?>
     <script src="../assets/js/network-mapper-icons.js?v=3"></script>
-    <script>window.ASSET_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects') ? 'true' : 'false'; ?>; window.APP_BASE = window.APP_BASE || <?php echo json_encode(BASE_URL); ?>;</script>
+    <script>window.ASSET_LAYOUT_NOTICE = <?php echo json_encode(AssetTypeLayout::noticeMode(connectToDatabase())); ?>;</script>
+    <script>window.ASSET_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects') ? 'true' : 'false'; ?>;
+    // GH #217: the Software and Contracts tabs and the CI section go while that module is SWITCHED OFF.
+    // moduleIsEnabled, not access: a reader without the grant keeps today's tab / "restricted" wording.
+    window.ASSET_MODULE_ON = <?php echo json_encode(['software' => moduleIsEnabled(connectToDatabase(), 'software'), 'contracts' => moduleIsEnabled(connectToDatabase(), 'contracts'), 'cmdb' => moduleIsEnabled(connectToDatabase(), 'cmdb')]); ?>;
+    window.APP_BASE = window.APP_BASE || <?php echo json_encode(BASE_URL); ?>;</script>
     <script src="../assets/js/project-links.js?v=1"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/ci-asset-link.js?v=5"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

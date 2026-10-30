@@ -53,7 +53,7 @@ function statusPlannedReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT 1 FROM status_planned LIMIT 0"); $conn->query("SELECT 1 FROM status_planned_services LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -308,7 +308,7 @@ function statusPlannedStart(PDO $conn, array $p): void
     $at = min($p['planned_start_datetime'], gmdate('Y-m-d H:i:s'));
     $conn->prepare("UPDATE status_incidents SET created_datetime = ? WHERE id = ?")->execute([$at, $incidentId]);
     try { $conn->prepare("UPDATE status_incident_updates SET created_datetime = ? WHERE incident_id = ?")->execute([$at, $incidentId]); }
-    catch (Throwable $e) { /* no update log on this install */ }
+    catch (Throwable) { /* no update log on this install */ }
     $conn->prepare("UPDATE status_planned SET incident_id = ? WHERE id = ?")->execute([$incidentId, (int)$p['id']]);
 }
 
@@ -341,5 +341,5 @@ function statusPlannedFinish(PDO $conn, array $p): void
     try {
         $conn->prepare("UPDATE status_incident_updates SET created_datetime = ? WHERE id = (SELECT id FROM (SELECT MAX(id) AS id FROM status_incident_updates WHERE incident_id = ?) x)")
              ->execute([$at, $incidentId]);
-    } catch (Throwable $e) { /* no update log */ }
+    } catch (Throwable) { /* no update log */ }
 }

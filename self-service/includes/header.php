@@ -120,7 +120,7 @@ $portalNavCap = function (string $cap) use ($ss_user_id) {
         try {
             require_once __DIR__ . '/../../includes/managers.php';
             return managerHasTeam(connectToDatabase(), (int)$ss_user_id);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;   // fails closed and quietly, like the others
         }
     }
@@ -139,7 +139,7 @@ $portalNavCap = function (string $cap) use ($ss_user_id) {
             );
             $st->execute([(int)$ss_user_id]);
             return (bool)$st->fetchColumn();
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;   // fails closed and quietly, like the training one
         }
     }
@@ -155,19 +155,35 @@ $portalNavCap = function (string $cap) use ($ss_user_id) {
                               WHERE $reachSql LIMIT 1");
         $st->execute($params);
         return (bool)$st->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;
     }
 };
 
+// GH #217. The portal pages that surface an analyst module, by nav key. A module
+// switched off for the install loses its tab here, and its page sends the
+// requester back to the dashboard below - the endpoints behind each page refuse
+// as well (portalRequireModuleJson()), because a hidden tab is not a permission.
+$portalNavModules = [
+    'help_centre' => 'knowledge',
+    'training'    => 'lms',
+    'equipment'   => 'assets',
+    'catalogue'   => 'forms',
+];
 foreach ($portalNav as $navKey => $navItem) {
     if (!empty($navItem['cap']) && !$portalNavCap($navItem['cap'])) {
+        unset($portalNav[$navKey]);
+    } elseif (isset($portalNavModules[$navKey]) && !portalModuleOn($portalNavModules[$navKey])) {
         unset($portalNav[$navKey]);
     }
 }
 unset($navKey, $navItem);
 
 $activeNav  = $activeNav  ?? '';
+if (isset($portalNavModules[$activeNav]) && !portalModuleOn($portalNavModules[$activeNav])) {
+    if (!headers_sent()) header('Location: index.php');
+    exit;
+}
 $bodyClass  = $bodyClass  ?? '';
 $pageStyles = $pageStyles ?? '';
 $pageHead   = $pageHead   ?? '';
@@ -189,7 +205,7 @@ try {
     if (function_exists('connectToDatabase')) {
         $ssAppearance = selfServicePortalSettings(connectToDatabase());
     }
-} catch (Throwable $e) {
+} catch (Throwable) {
     // The portal must render even if the settings cannot be read.
 }
 ?>
@@ -298,7 +314,7 @@ if ($ssLogoOnPage) {
          * question.
          */
         // The "Back to ..." link (3.5.0) - System -> Branding. Nothing unless set up.
-        try { require_once __DIR__ . '/../../includes/back_link.php'; echo backLinkHtml(connectToDatabase(), 'portal'); } catch (Throwable $e) {}
+        try { require_once __DIR__ . '/../../includes/back_link.php'; echo backLinkHtml(connectToDatabase(), 'portal'); } catch (Throwable) {}
 
         $ssShowBell = false;
         try {
@@ -307,7 +323,7 @@ if ($ssLogoOnPage) {
             $hasAny = $ssConnBell->prepare("SELECT 1 FROM portal_notifications WHERE user_id = ? LIMIT 1");
             $hasAny->execute([(int)$ss_user_id]);
             $ssShowBell = (bool)$hasAny->fetchColumn() || $portalNavCap('is_manager');
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $ssShowBell = false;   // before Database Verification: no table, no bell
         }
         if ($ssShowBell) {

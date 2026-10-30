@@ -84,7 +84,7 @@ $m = fn(string $k) => t('system.managers.' . $k);
         .mg-pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--text-muted, #666); }
         .mg-empty { padding: 20px 10px; color: var(--text-muted, #888); font-size: 13px; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="managers">
     <?php include '../includes/header.php'; ?>
@@ -194,7 +194,7 @@ $m = fn(string $k) => t('system.managers.' . $k);
     (function () {
         const API = '../../api/system/managers.php';
         const $ = id => document.getElementById(id);
-        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         // Singular and plural are separate keys (lang/en/auth.php explains why).
         const countText = (key, n) => Number(n) === 1 ? t('system.managers.' + key + '_one') : t('system.managers.' + key, { count: n });
         const toast = (m, k) => { if (typeof showToast === 'function') showToast(m, k); };
@@ -306,6 +306,6 @@ $m = fn(string $k) => t('system.managers.' . $k);
         loadOverview();
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

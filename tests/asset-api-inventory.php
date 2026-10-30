@@ -144,10 +144,17 @@ try {
         && ($r['data']['sections']['software']['result'] ?? '') === 'failed', $code . ' ' . json_encode($r));
     $ok('...the failed one changed nothing', $count('software_inventory_detail', $id, $rest) === 1
         && (int)$conn->query("SELECT COUNT(*) FROM software_inventory_detail WHERE host_id = $id AND app_id = {$appIds[1]}")->fetchColumn() === 0);
+    // GH #200 Part B: the failure is kept, beside the last good data and its time.
+    $swState = fn() => $conn->query("SELECT x.last_outcome, x.last_error, x.observed_at FROM asset_inventory_sections x JOIN asset_inventory_sources s ON s.id = x.inventory_source_id
+        WHERE s.asset_id = $id AND s.source = 'synth' AND x.section_name = 'software'")->fetch(PDO::FETCH_ASSOC) ?: [];
+    $before = $swState();
+    $ok('...and is RECORDED as failed, with its error, the last good observation untouched', ($before['last_outcome'] ?? '') === 'failed'
+        && ($before['last_error'] ?? '') !== '' && $before['observed_at'] !== null && $before['observed_at'] < str_replace('T', ' ', rtrim($mixed['observed_at'], 'Z')), json_encode($before));
     $mixed['sections']['software']['items'][0]['system_component'] = false;
     [$code, $r] = $post($id, $mixed);
     $ok('send it again, fixed: the failed section applies, the applied one is replayed', $code === 200 && ($r['data']['sections']['software']['result'] ?? '') === 'applied'
         && ($r['data']['sections']['network_adapters']['result'] ?? '') === 'replayed', $code . ' ' . json_encode($r));
+    $ok('...and the section is recorded as succeeded again, its error cleared', ($swState()['last_outcome'] ?? '') === 'succeeded' && $swState()['last_error'] === null);
     $ok('...software now exactly app2 for this source (complete removed app1)', ($r['data']['sections']['software']['removed'] ?? -1) === 1
         && (int)$conn->query("SELECT app_id FROM software_inventory_detail WHERE host_id = $id AND source = " . $conn->quote($rest))->fetchColumn() === $appIds[1]);
 

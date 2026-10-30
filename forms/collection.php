@@ -42,10 +42,10 @@ $translationNamespaces = ['common', 'forms'];
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
     <script src="../assets/js/form-logic.js?v=9"></script>
-    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
     <!-- autotable: a table QUESTION is drawn as a real table in the PDF rather
          than flattened into a paragraph. Same versions as morning-checks. -->
-    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=5.0.9"></script>
     <!-- The shared document builder. Same code as the single-form page, so a
          record exported from here is identical to one exported from there. -->
     <script src="../assets/js/form-pdf.js?v=2"></script>
@@ -165,7 +165,7 @@ $translationNamespaces = ['common', 'forms'];
             .coll-card { box-shadow: none; }
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -235,7 +235,7 @@ $translationNamespaces = ['common', 'forms'];
         </div>
     </div>
 
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
     <script>
         const API_BASE = '<?php echo defined('BASE_URL') ? BASE_URL : '../'; ?>api/forms/';
         const LOGO_URL = <?php echo json_encode(brandingLogoUrl()); ?>;

@@ -133,7 +133,7 @@ function dockerTlsRequestIsHttps(): bool
  */
 function dockerTlsFingerprintNormalise(string $fp): string
 {
-    if (strpos($fp, '=') !== false) $fp = substr($fp, strpos($fp, '=') + 1);
+    if (str_contains($fp, '=')) $fp = substr($fp, strpos($fp, '=') + 1);
     return strtolower(preg_replace('/[^0-9a-f]/i', '', $fp));
 }
 

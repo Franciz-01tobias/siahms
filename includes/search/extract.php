@@ -219,7 +219,7 @@ function attTextExtractOoxml(
             if ($name === false) continue;
             foreach ($wanted as $w) {
                 // A trailing slash means "every entry under here" (pptx slides).
-                $hit = substr($w, -1) === '/' ? strpos($name, $w) === 0 : $name === $w;
+                $hit = substr($w, -1) === '/' ? str_starts_with($name, $w) : $name === $w;
                 if (!$hit) continue;
                 $xml = $zip->getFromIndex($i);
                 if ($xml !== false) $parts[] = $xml;

@@ -29,7 +29,7 @@ if (!function_exists('appBaseUrlDetect')) {
         $appRoot = str_replace('\\', '/', (string)realpath(dirname(__DIR__)));
         $docRoot = str_replace('\\', '/', (string)realpath($_SERVER['DOCUMENT_ROOT'] ?? ''));
         $rel = '';
-        if ($docRoot !== '' && strpos($appRoot, $docRoot) === 0) {
+        if ($docRoot !== '' && str_starts_with($appRoot, $docRoot)) {
             $rel = substr($appRoot, strlen($docRoot));
         }
         $rel = '/' . trim($rel, '/') . '/';

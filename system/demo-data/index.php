@@ -283,6 +283,11 @@ if (!isset($_SESSION['analyst_id'])) {
             color: var(--text-faint, #999);
         }
 
+        .virt-actions { display: flex; flex-direction: column; gap: 8px; margin-left: 20px; flex-shrink: 0; }
+        .import-btn.virt-remove { background: transparent; color: #c62828; border: 1px solid #c62828; }
+        .import-btn.virt-remove:hover { background: rgba(198, 40, 40, 0.08); }
+        @media (max-width: 700px) { #virtSection .bonus-card { flex-direction: column; align-items: stretch; } .virt-actions { margin: 14px 0 0; } }
+
         /* ---- Dark mode overrides ----------------------------------------
            The amber warning band, the blue tip band and the red error text are
            meaning-carrying: hues kept, washes sunk, text lifted. */
@@ -303,7 +308,7 @@ if (!isset($_SESSION['analyst_id'])) {
         [data-theme-mode="dark"] .error-text { color: var(--danger-text, #fca5a5); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="demo-data">
     <?php include '../includes/header.php'; ?>
@@ -582,6 +587,24 @@ if (!isset($_SESSION['analyst_id'])) {
             </div>
             <div class="error-text" id="err-dashboards" style="display:none"></div>
         </div>
+
+        <!-- Virtualisation (GH #199, #201): code-driven, so its own endpoint and a Remove. Needs no Core. -->
+        <div class="bonus-section" id="virtSection" style="display:block">
+            <p class="section-label"><?php echo htmlspecialchars(t('system.demo.virt_label')); ?></p>
+            <div class="bonus-card">
+                <div class="bonus-info">
+                    <h4><?php echo htmlspecialchars(t('system.demo.virt_title')); ?></h4>
+                    <p><?php echo htmlspecialchars(t('system.demo.virt_desc')); ?></p>
+                    <p class="bonus-detail"><?php echo htmlspecialchars(t('system.demo.virt_detail')); ?></p>
+                    <p class="bonus-detail" id="virtCounts" style="display:none"></p>
+                </div>
+                <div class="virt-actions">
+                    <button class="import-btn" id="btn-virt" onclick="virtDemo('import', this)"><?php echo htmlspecialchars(t('system.demo.import')); ?></button>
+                    <button class="import-btn virt-remove" id="btn-virt-remove" onclick="virtDemo('remove', this)" style="display:none"><?php echo htmlspecialchars(t('system.demo.remove')); ?></button>
+                </div>
+            </div>
+            <div class="error-text" id="err-virt" style="display:none"></div>
+        </div>
     </div>
 
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
@@ -675,6 +698,57 @@ if (!isset($_SESSION['analyst_id'])) {
             }
         }
 
+        /* Virtualisation demo: its own endpoint (api/system/demo_virtualisation.php). */
+        function virtShow(c) {
+            const btn = document.getElementById('btn-virt');
+            const rm = document.getElementById('btn-virt-remove');
+            const counts = document.getElementById('virtCounts');
+            const has = c && c.total > 0;
+            btn.className = has ? 'import-btn success' : 'import-btn';
+            btn.innerHTML = has ? checkSvg + ' ' + window.t('system.demo.already_imported') : window.t('system.demo.import');
+            btn.disabled = false;
+            rm.style.display = has ? '' : 'none';
+            rm.disabled = false;
+            rm.textContent = window.t('system.demo.remove');
+            counts.style.display = has ? '' : 'none';
+            if (has) counts.textContent = window.t('system.demo.virt_counts', { hyperv: c.hyperv_vms, proxmox: c.proxmox_vms, vcloud: c.vcloud_vms, vcenter: c.vcenter_vms, cis: c.cis, assets: c.assets });
+        }
+
+        async function virtDemo(action, btn) {
+            const name = window.t('system.demo.virt_label');
+            const reimport = action === 'import' && btn.classList.contains('success');
+            const ok = await showConfirm(action === 'remove'
+                ? { title: window.t('system.demo.remove_title'), message: window.t('system.demo.remove_confirm', { module: name }), okLabel: window.t('system.demo.remove'), okClass: 'danger' }
+                : { title: window.t(reimport ? 'system.demo.reimport_title' : 'system.demo.import_title'),
+                    message: window.t(reimport ? 'system.demo.reimport_confirm' : 'system.demo.import_confirm', { module: name }),
+                    okLabel: window.t('system.demo.import'), okClass: 'danger' });
+            if (!ok) return;
+            const errEl = document.getElementById('err-virt');
+            errEl.style.display = 'none';
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-inline"></span> ' + window.t(action === 'remove' ? 'system.demo.removing' : 'system.demo.importing');
+            try {
+                const body = new FormData();
+                body.append('action', action);
+                const data = await (await fetch('../../api/system/demo_virtualisation.php', { method: 'POST', body: body })).json();
+                if (!data.success) { errEl.textContent = data.error; errEl.style.display = 'block'; }
+                virtShow(data.counts || null);
+                if (!data.success) virtLoad();
+            } catch (error) {
+                errEl.textContent = window.t('system.demo.connection_failed', { message: error.message });
+                errEl.style.display = 'block';
+                virtLoad();
+            }
+        }
+
+        async function virtLoad() {
+            try {
+                const data = await (await fetch('../../api/system/demo_virtualisation.php')).json();
+                if (data.success) virtShow(data.counts);
+            } catch (e) { /* the Import button still works */ }
+        }
+        virtLoad();
+
         // On page load, check if core data and modules already exist
         (async function checkCoreStatus() {
             try {
@@ -714,6 +788,6 @@ if (!isset($_SESSION['analyst_id'])) {
             } catch (e) { /* ignore - user can still click Import */ }
         })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

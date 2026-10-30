@@ -1,8 +1,34 @@
-FROM php:8.1-apache
+FROM php:8.4-apache
 
-# Enable required PHP extensions
-RUN apt-get update && apt-get install -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
-    && docker-php-ext-install pdo pdo_mysql
+# PHP extensions beyond the ones PHP builds in - the list, and why each one, is
+# docker/php-extensions.txt (GH #207: until 4.0.0 this installed only pdo_mysql,
+# so LDAP sign-in, SCORM upload and .docx reading could not work in the image).
+#
+# The -dev packages are only needed to compile. The apt-mark dance is the one
+# the official PHP images use: after the build, keep exactly the runtime
+# libraries the new extensions link against, and remove everything else.
+# ⚠️ The awk, not `cut -d:`: on Debian trixie dpkg-query --search also prints
+# "diversion by X from: /path" lines, and cut turned those into package names
+# apt-get could not find. awk keeps only the "package:" lines.
+RUN set -eux; \
+    savedAptMark="$(apt-mark showmanual)"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libldap-dev libzip-dev libicu-dev; \
+    docker-php-ext-configure ldap --with-libdir="lib/$(dpkg-architecture --query DEB_HOST_MULTIARCH)"; \
+    docker-php-ext-install -j"$(nproc)" pdo_mysql ldap zip intl; \
+    apt-mark auto '.*' > /dev/null; \
+    [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
+    find /usr/local -type f -executable -exec ldd '{}' ';' \
+        | awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); printf "*%s\n", so }' \
+        | sort -u | xargs -r dpkg-query --search | awk 'sub(":$", "", $1) { print $1 }' | sort -u | xargs -r apt-mark manual; \
+    apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
+    rm -rf /var/lib/apt/lists/*
+
+# 🔴 The smoke check (GH #207). Every extension in the list must load, or the
+# build stops here - for both architectures the release workflow builds - and
+# nothing is published.
+COPY docker/php-extensions.txt /usr/local/etc/freeitsm-php-extensions.txt
+RUN php -r '$need = []; foreach (file("/usr/local/etc/freeitsm-php-extensions.txt") as $l) { $l = trim(preg_replace("/#.*/", "", $l)); if ($l !== "") $need[] = $l; } $missing = array_values(array_filter($need, function ($e) { return !extension_loaded($e); })); if ($missing) { fwrite(STDERR, "Missing PHP extensions: " . implode(", ", $missing) . "\n"); exit(1); } if (!function_exists("ldap_start_tls")) { fwrite(STDERR, "ldap loaded without StartTLS\n"); exit(1); } echo "PHP extensions OK: " . implode(", ", $need) . "\n";'
 
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite

@@ -268,7 +268,7 @@ class JiraProvider extends IssueTrackerProvider
         // successful creation.
         try {
             return $this->fetchIssue($id);
-        } catch (Exception $e) {
+        } catch (Exception) {
             return [
                 'external_id'     => $id,
                 'external_key'    => $key,
@@ -620,7 +620,7 @@ class JiraProvider extends IssueTrackerProvider
         foreach ($this->searchUpdatedSince($ids, $minutes) as $externalId) {
             try {
                 $comments = $this->fetchComments($externalId);
-            } catch (Exception $e) {
+            } catch (Exception) {
                 // One issue we cannot read must not lose the others' comments.
                 continue;
             }
@@ -682,7 +682,7 @@ class JiraProvider extends IssueTrackerProvider
             ]);
             try {
                 $res = $this->jiraRequest('GET', $url);
-            } catch (Exception $e) {
+            } catch (Exception) {
                 continue;   // a bad chunk loses its own issues, never the others'
             }
             foreach ((array)($res['issues'] ?? []) as $issue) {

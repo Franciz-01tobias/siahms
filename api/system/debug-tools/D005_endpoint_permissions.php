@@ -42,6 +42,23 @@ require_once __DIR__ . '/../../../config.php';
 require_once __DIR__ . '/../../../includes/functions.php';
 require_once __DIR__ . '/../../../includes/capabilities.php';
 
+// Debug tools are administrators-only (issue #34). Fail closed.
+// 🔴 This one had no gate at all - the only debug tool without one - so anybody,
+// signed in or not, could fetch its list of every endpoint ranked by how weakly it
+// is guarded. Reported privately, October 2026. tests/security-report-2026-10.php
+// fails for any debug tool without this block.
+try {
+    $__dbgAdmin = !empty($_SESSION['analyst_id']) && analystIsAdmin(connectToDatabase(), (int)$_SESSION['analyst_id']);
+} catch (Throwable $e) {
+    $__dbgAdmin = false;
+}
+if (!$__dbgAdmin) {
+    http_response_code(403);
+    if (!headers_sent()) header('Content-Type: text/plain; charset=utf-8');
+    echo "Administrator access required.\n";
+    exit;
+}
+
 $sections = [];
 /**
  * Adds one titled section ("=== TITLE ===" and its lines) to the report; $body is a
@@ -151,7 +168,7 @@ function d005Classify(string $src, string $rel): array {
     if (preg_match('/requireCapabilityJson\s*\(\s*[\'"]([a-z0-9_.]+)[\'"]/', $src, $m)) {
         return ['capability_string', "'" . $m[1] . "'  ⚠ passed as a STRING, not a Cap:: constant"];
     }
-    if (strpos($src, 'admin_api_guard.php') !== false || preg_match('/requireAdminJson\s*\(/', $src)) {
+    if (str_contains($src, 'admin_api_guard.php') || preg_match('/requireAdminJson\s*\(/', $src)) {
         return ['admin', 'Administrators only'];
     }
     if (preg_match('/requireModuleAccessJson\s*\(\s*[\'"]([a-z0-9-]+)[\'"]/', $src, $m)) {
@@ -222,7 +239,7 @@ if (is_dir($apiRoot)) {
         $rel = str_replace('\\', '/', substr($abs, strlen($appRoot) + 1));
 
         // The debug tools themselves are reached through the admin-gated debug runner.
-        if (strpos($rel, 'api/system/debug-tools/') === 0) continue;
+        if (str_starts_with($rel, 'api/system/debug-tools/')) continue;
 
         // By convention a leading underscore means "shared include, not an endpoint"
         // (_ai_helpers.php, _field_catalogue.php …). They define functions and do nothing
@@ -283,7 +300,7 @@ foreach ($rows as $r) {
     if ($r['public'] || $r['level'] !== 'module' || !$r['write']) continue;
     if (!preg_match('/(settings|credential|connection|provider|_key)[^\/]*\.php$/', $r['rel'])) continue;
     $src = (string) file_get_contents($appRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $r['rel']));
-    if (strpos($src, 'encryptValue(') !== false) $credential[] = $r;
+    if (str_contains($src, 'encryptValue(')) $credential[] = $r;
 }
 
 $byDesign = [];
@@ -419,8 +436,9 @@ $enforced = [];
 foreach ($rows as $r) {
     if ($r['level'] === 'capability' || $r['level'] === 'capability_string') {
         if (preg_match('/Cap::([A-Z0-9_]+)/', $r['detail'], $m)) {
-            $const = 'Cap::' . $m[1];
-            if (defined($const)) $enforced[constant($const)] = true;
+            // Cap is an enum (4.0): find the case by its name; its ->value is the key.
+            $case = Cap::tryFromName($m[1]);
+            if ($case !== null) $enforced[$case->value] = true;
         } elseif (preg_match("/'([a-z0-9_.]+)'/", $r['detail'], $m)) {
             $enforced[$m[1]] = true;
         }

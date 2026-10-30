@@ -232,7 +232,7 @@ $translationNamespaces = ['common', 'asset-management'];
     </style>
     <?php /* Mobile-friendly opt-in (#937). AFTER this page's own <style> so its
              @media rules win on ties. Every rule inside is gated at 768px. */ ?>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php require_once '../includes/header.php'; ?>
@@ -572,13 +572,13 @@ $translationNamespaces = ['common', 'asset-management'];
         function escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Init
         init();
     </script>
     <?php /* Loaded last so it can wrap this page's globals; inert on desktop. */ ?>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

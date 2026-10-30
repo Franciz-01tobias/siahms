@@ -79,7 +79,7 @@ function mfaThrottleSetting(PDO $conn, string $key): ?string
         $stmt->execute([$key]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ? (string) $row['setting_value'] : null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
 }

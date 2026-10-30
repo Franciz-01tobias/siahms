@@ -1,4 +1,7 @@
 <?php
+// FIRST: this page loads an includes/ file before config.php, so the version guard
+// must run before that file is read - see includes/php_version_guard.php.
+require_once __DIR__ . '/../includes/php_version_guard.php';
 /**
  * Self-Service Portal — Request Catalogue.
  *
@@ -740,7 +743,7 @@ document.addEventListener('DOMContentLoaded', function () {
         function esc(text) {
             const div = document.createElement('div');
             div.textContent = text == null ? '' : text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 JS;
 

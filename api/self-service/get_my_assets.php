@@ -29,6 +29,8 @@ $userId = (int)$_SESSION['ss_user_id'];
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'assets');
 
     // INNER JOIN, deliberately: users_assets carries no foreign key on asset_id
     // and there are orphan rows on real installs, which would otherwise come

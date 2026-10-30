@@ -74,6 +74,12 @@ try {
                 if (!$allowed) $reason = 'Not granted — no individual or team access';
             }
         }
+        // Switched off for the whole install (GH #217) beats any grant, and says so -
+        // otherwise "Granted directly" beside a module nobody can open is a puzzle.
+        if (!moduleIsEnabled($conn, $key)) {
+            $allowed = false;
+            $reason  = 'Switched off for the whole installation (Availability, above)';
+        }
 
         // The level (#180): Full, or Read only - with the level stated in the reason, so
         // "why can't they edit?" is answered on this screen.

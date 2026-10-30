@@ -20,7 +20,7 @@ return [
 
     'executions' => [
         'page_title'    => 'Execution log',
-        'intro'         => 'Every run of every workflow. The engine deliberately swallows its own errors so a broken rule can never break the ticket save that triggered it — which means a failing workflow is otherwise silent. This is where you find it.',
+        'intro'         => 'Every run of every workflow you can see (on an install with several companies, the runs for the companies you can see). The engine deliberately swallows its own errors so a broken rule can never break the ticket save that triggered it — which means a failing workflow is otherwise silent. This is where you find it.',
         'all'           => 'All',
         'f_workflow'    => 'Workflow',
         'f_status'      => 'Status',
@@ -120,6 +120,7 @@ return [
         'col_status'      => 'Status',
         'col_row_actions' => 'Actions',
         'never_run'       => 'Never',
+        'all_companies'   => 'All companies',
         'active'          => 'Active',
         'inactive'        => 'Inactive',
     ],
@@ -138,6 +139,10 @@ return [
         'actions_label'   => 'Actions',
         'actions_hint'    => 'Run these in order, top to bottom. At least one action is required.',
         'active_label'    => 'Active — run when the trigger fires',
+        'company_label'   => 'Runs for',
+        'company_shared'  => 'All companies (shared)',
+        'company_help'    => 'A company\'s own workflow runs only for that company\'s tickets, tasks and other records, and its actions can only change that company\'s records. A shared one runs for every company.',
+        'read_only_shared' => 'This workflow runs for every company, so only someone who can see every company can change it, test it or fire it.',
         'add_condition'   => 'Add condition',
         'add_action'      => 'Add action',
         'remove'          => 'Remove',
@@ -269,6 +274,7 @@ return [
         'nav_webhooks_deepdive' => 'Webhooks guide',
         'nav_failures'   => 'Engine failures are isolated',
         'nav_ahead'      => 'What\'s still ahead',
+        'nav_companies'  => 'Companies',
 
         // 1. Anatomy
         'anatomy_heading' => 'Anatomy of a workflow',
@@ -276,7 +282,7 @@ return [
         'anatomy_trigger'    => '<strong>Trigger</strong> &mdash; the event that fires the workflow. Examples: <code>ticket.created</code>, <code>ticket.priority_changed</code>, <code>ticket.assigned</code>. Exactly one trigger per workflow.',
         'anatomy_conditions' => '<strong>Conditions</strong> <em>(optional)</em> &mdash; filters that decide whether the workflow runs. All conditions must match (AND semantics). <em>"Only when priority is Critical AND department is Finance."</em>',
         'anatomy_actions'    => '<strong>Actions</strong> <em>(one or more)</em> &mdash; the things to do when the trigger fires and the conditions pass. Run in order, top to bottom.',
-        'anatomy_exec'    => 'Execution is synchronous &mdash; the workflow runs in the same web request that fired the event. Each run writes a row to the execution log with the full trigger payload, every condition\'s pass/fail, and every action\'s result.',
+        'anatomy_exec'    => 'Execution is synchronous &mdash; the workflow runs in the same web request that fired the event (a webhook is the exception: it is queued and sent in the background). Each run writes a row to the execution log with the full trigger payload, every condition\'s pass/fail, and every action\'s result.',
 
         // 2. Canvas
         'canvas_heading' => 'The visual canvas',
@@ -293,13 +299,13 @@ return [
         'conditions_lookup_heading' => 'Lookup fields (priority, status, department, type, analyst&hellip;)',
         'conditions_lookup_body'    => 'The value control is a <strong>checkbox list of real values</strong> pulled from the lookup table &mdash; not opaque ids. Tick one for an exact match, tick several for OR semantics (e.g. <em>"priority is Critical OR High"</em>). The operator dropdown collapses to <strong>is / is not / is empty / is not empty</strong> &mdash; the multi-select handles the rest.',
         'conditions_text_heading' => 'Text fields (subject, requester email, title&hellip;)',
-        'conditions_text_body'    => 'Plain text input with the full text-operator catalogue: <strong>equals / not equals / is one of / is not one of / contains / does not contain / is empty / is not empty</strong>. <code>gt</code> / <code>lt</code> are <em>not</em> offered &mdash; lexicographic string comparison is a footgun.',
+        'conditions_text_body'    => 'Plain text input with the full text-operator catalogue: <strong>equals / not equals / is one of / is not one of / contains / does not contain / is empty / is not empty</strong>. <code>gt</code> / <code>lt</code> are <em>not</em> offered &mdash; lexicographic string comparison is a footgun. <strong>Contains</strong> and <strong>does not contain</strong> ignore capitals and any spaces around what you type, so <em>abc.com</em> matches <em>User@ABC.com</em> and <em>urgent</em> matches <em>URGENT</em>.',
         'conditions_num_heading' => 'Numeric fields (ids, durations&hellip;)',
         'conditions_num_body'    => 'Numeric operators: <strong>equals / not equals / is one of / is not one of / greater than / less than / is empty / is not empty</strong>. No <em>contains</em> &mdash; substring search on a number is meaningless.',
 
         // 4. Actions
         'actions_heading' => 'Actions',
-        'actions_intro'   => 'Nine handlers ship today. Pick an action\'s type from the dropdown and a labelled form appears below with the right widget per arg (text input, textarea, number input, lookup dropdown):',
+        'actions_intro'   => 'Sixteen handlers ship today - the main ones are below; the others create a project proposal, attach SOP checklists and raise or comment on an issue in an external tracker. Pick an action\'s type from the dropdown and a labelled form appears below with the right widget per arg (text input, textarea, number input, lookup dropdown):',
         'actions_th_type'     => 'Type',
         'actions_th_does'     => 'What it does',
         'actions_th_args'     => 'Key args',
@@ -317,10 +323,16 @@ return [
         'actions_row6_args' => 'ticket_id, to, subject, body',
         'actions_row7_does' => 'Spawns a task. Auto-links to the source ticket if a <code>ticket_id</code> is supplied. Status / priority default to the workspace defaults if blank.',
         'actions_row7_args' => 'title, description, status_id, priority_id, assignee_id, ticket_id',
-        'actions_row8_does' => 'Creates a new ticket. Useful for fan-out workflows like <em>"new-starter form &rarr; IT + HR + Facilities tickets"</em>. When the event carries a <strong>form submission</strong>, the ticket is raised the good way automatically &mdash; the requester matched to their real account, the company taken from it, and the submitted answers laid out as a table if you leave the body blank. Anything you set here still wins; the form only fills in what you left empty.',
-        'actions_row8_args' => 'subject, body, priority_id, department_id, type_id, assigned_analyst_id, from_email, from_name',
+        'actions_row8_does' => 'Creates a new ticket. Useful for fan-out workflows like <em>"new-starter form &rarr; IT + HR + Facilities tickets"</em>. When the event carries a <strong>form submission</strong>, the ticket is raised the good way automatically &mdash; the requester matched to their real account, the company taken from it, and the submitted answers laid out as a table if you leave the body blank. Anything you set here still wins; the form only fills in what you left empty. The ticket\'s <strong>Owner</strong> is set with the assignee, and it gets a <strong>mailbox</strong> - the one you choose, else the mailbox of the ticket that fired the rule - so replies to it can be emailed.',
+        'actions_row8_args' => 'subject, body, priority_id, department_id, type_id, assigned_analyst_id, mailbox_id, from_email, from_name',
         'actions_row9_does' => 'POSTs a message to an external URL &mdash; push events into Slack, Teams, Discord, PagerDuty, Zapier/Make or any system that accepts an incoming webhook. Pick a chat preset, send the Full record (the whole object as JSON, same as the REST API), or template your own custom JSON body. Supports an optional HMAC signing secret, and a Send test button that shows the endpoint&rsquo;s real response before you save.',
         'actions_row9_args' => 'preset, url, message (presets), body (custom JSON), secret (optional)',
+        'actions_row10_does' => 'Puts the ticket in a team\'s queue. The person it is assigned to stays as it is.',
+        'actions_row10_args' => 'ticket_id, team_id',
+        'actions_row11_does' => 'Changes the ticket\'s department. A confidential department makes the ticket confidential, as it does on screen.',
+        'actions_row11_args' => 'ticket_id, department_id',
+        'actions_row12_does' => 'Changes the ticket\'s category. It has to be one the ticket\'s company uses and, when the category belongs to a ticket type, one for the ticket\'s type - otherwise the step fails and says why.',
+        'actions_row12_args' => 'ticket_id, category_id',
         'actions_note'    => 'Each action\'s required args are marked with a <code>*</code> in the form. Missing required args cause the action to fail at execution time &mdash; the engine logs the failure to the execution row and stops the rest of the chain.',
         'actions_webhook_callout' => '<strong>The <code>send_webhook</code> action is a big topic of its own</strong> &mdash; chat presets, whole-object &ldquo;Full record&rdquo; payloads, HMAC signing, a Send-test button, background delivery with retries, and a health dashboard. It has a dedicated guide: <a href="help-webhooks.php"><strong>Webhooks guide &rarr;</strong></a>',
 
@@ -372,7 +384,7 @@ return [
         'testing_dry_body'    => '<strong>Dry run</strong> evaluates the conditions for real, then <em>describes</em> each action instead of carrying it out. The run appears in <em>Recent runs</em> marked <em>Dry run</em>, listing every action it would have taken with the <code>{{variables}}</code> already filled in &mdash; so you read the actual email subject, the actual chat message, the actual note.',
         'testing_dry_safe'    => 'Nothing is written, emailed, queued or sent: no ticket changes, no notes, no webhook deliveries, and the workflow\'s run counter is untouched. That makes it safe to point at a live workflow &mdash; and it is the sensible first thing to do with a freshly cloned template. (Any signing secret is redacted in the output rather than echoed back.)',
         'testing_log_heading' => 'The execution log &mdash; what actually happened',
-        'testing_log_body'    => 'Every run of every workflow lands in the <strong>Execution log</strong> (in the Workflows header). Filter by workflow, status, trigger, date or free text, and open any run to see <strong>step by step</strong> what the engine did &mdash; which condition matched and which didn\'t (with the <em>actual value</em> it compared against), what each action returned or how it failed, and the <strong>trigger payload snapshot</strong>: exactly what the conditions were tested on and what the <code>{{variables}}</code> resolved from, captured at run time.',
+        'testing_log_body'    => 'Every run of every workflow lands in the <strong>Execution log</strong> (in the Workflows header) - with several companies, filed under the company its event belonged to and shown to the people who can see it. Filter by workflow, status, trigger, date or free text, and open any run to see <strong>step by step</strong> what the engine did &mdash; which condition matched and which didn\'t (with the <em>actual value</em> it compared against), what each action returned or how it failed, and the <strong>trigger payload snapshot</strong>: exactly what the conditions were tested on and what the <code>{{variables}}</code> resolved from, captured at run time.',
         'testing_log_why'     => 'This matters more than it sounds. The engine <strong>deliberately swallows its own errors</strong> &mdash; a broken workflow must never break the ticket save that triggered it. That is the right call, and it means a failing workflow is otherwise <em>completely silent</em>. Nothing tells you. The execution log, and the <strong>Workflows card on Watchtower</strong> (which surfaces failures, loop-protection aborts and webhooks that gave up retrying, in the last 24 hours), are what break that silence.',
         'testing_fire_heading' => 'Test fire &mdash; actually run it',
         'testing_fire'    => '<strong>Test fire</strong> runs the workflow for real with a synthetic payload generated from its own conditions, so the action path actually executes &mdash; it will genuinely send that email. The result lands in <em>Recent runs</em> with status (<em>success / failed / skipped</em>) and full step log.',
@@ -386,12 +398,19 @@ return [
         'triggers_time_cron'    => '<strong>If those crons aren\'t scheduled, these triggers never fire.</strong> The workflow will sit there, active, doing nothing. SLA events come from the SLA breach-check cron (every 5 minutes); the expiry events from <code>cron/workflow_scheduled.php</code> (hourly is plenty). Setup: <code>docs/workflow-scheduled-cron-setup.md</code>, or <a href="https://github.com/edmozley/freeitsm/wiki/Time-Based-Triggers" target="_blank" rel="noopener noreferrer">Time-Based Triggers on the wiki</a>, which also explains why a still-true condition (a breached SLA stays breached) doesn\'t re-fire every few minutes.',
         'triggers_time_once'    => 'A time-based condition <strong>stays true</strong> &mdash; a breached SLA is still breached five minutes later &mdash; so FreeITSM keeps a ledger and each situation fires <strong>exactly once</strong>. It re-arms when the thing underneath it changes: raise a ticket\'s priority and its SLA target shrinks, so the new, tighter deadline is allowed to escalate again. Renew a contract and next year\'s reminders still fire. Expiries fire at <strong>90, 30, 7 and 1 days</strong> out, each carrying <code>window_days</code> &mdash; so "only remind me at 30 days" is just a condition.',
         'triggers_family_domain' => '<strong>Rich domain events</strong> &mdash; meaningful lifecycle moments with a full typed payload: <code>ticket.created</code>, <code>ticket.status_changed</code>, <code>change.approved</code>, <code>problem.status_changed</code>, <code>task.completed</code>, <code>project.health_changed</code>, <code>service_status.incident_resolved</code>, <code>software.application_discovered</code>, and many more.',
-        'triggers_family_forms'  => '<strong>Forms and catalogue requests</strong> &mdash; <code>form.submitted</code> fires for an ordinary form. A form that needs approval fires <code>catalogue_request.submitted</code> instead, then <code>catalogue_request.approved</code> or <code>catalogue_request.rejected</code> once your approver has decided. The separate event is deliberate: it means a rule that raises a ticket on submission cannot step over an approval you asked for. All four carry the submitted answers, so <code>{{submission.fields.Device type}}</code> works at every stage, and all four can be narrowed to a single form.',
+        'triggers_family_forms'  => '<strong>Forms and catalogue requests</strong> &mdash; <code>form.submitted</code> fires for an ordinary form. A form that needs approval fires <code>catalogue_request.submitted</code> instead, then <code>catalogue_request.approved</code> or <code>catalogue_request.rejected</code> once your approver has decided. The separate event is deliberate: a rule cannot raise a ticket for a request that is still awaiting approval, or one that was rejected &mdash; <strong>Create a ticket</strong> refuses both, and on an approved request it uses the ticket the approval already raised rather than making a second. All four carry the submitted answers, so <code>{{submission.fields.Device type}}</code> works at every stage, and all four can be narrowed to a single form.',
         'triggers_family_crud'   => '<strong>Create / update / delete events</strong> &mdash; every reusable record and settings lookup emits <code>&lt;entity&gt;.created</code> / <code>.updated</code> / <code>.deleted</code>: tickets, assets, changes, problems, tasks, CMDB, contracts &amp; suppliers, calendar, software licences, network diagrams, and all their settings lists (statuses, priorities, types, tags&hellip;).',
         'triggers_picker'  => 'Because the list is dozens deep, the editor\'s <strong>trigger picker is searchable</strong> &mdash; start typing (<code>resolved</code>, <code>contract</code>, <code>delete</code>&hellip;) to filter it. Each event fires from a <strong>single shared write path</strong>, so it behaves identically whether the change came from the browser, the REST API, or another workflow &mdash; it can\'t drift.',
 
         // 9. Failures
         'failures_heading' => 'Engine failures are isolated',
+        'companies_heading' => 'Workflows and companies',
+        'companies_intro'   => 'Each workflow runs either for every company or for one. Choose which under <strong>Runs for</strong> in the editor.',
+        'companies_shared'  => '<strong>All companies (shared)</strong> - it runs for every company\'s events, as every workflow did before companies. Only someone who can see every company can create, change, test or delete a shared workflow, because it acts on all of them. Anyone else can open it to read it.',
+        'companies_own'     => '<strong>One company</strong> - it runs only when the ticket, task, change or other record the event is about belongs to that company, and its actions can only change that company\'s records. An action that names another company\'s ticket, or hands work to somebody who cannot see the company, fails and the run log says why.',
+        'companies_who'     => 'You see the shared workflows and those of the company you have switched to in the header. You can manage the workflows of any company you can see.',
+        'companies_runs'    => 'The run log shows each run under the company its event belonged to, and only to people who can see that company. Runs for events that belong to no company - a supplier being saved, say - are shown to people who can see every company.',
+        'companies_note'    => 'A shared workflow can still treat companies differently: use the <strong>Company</strong> condition, and <code>{{company.name}}</code> in a message. A condition is not a boundary, though - anyone who can edit the workflow can change it. To keep a workflow to one company, set <strong>Runs for</strong>.',
         'failures_callout' => '<strong>A buggy workflow cannot break the host module\'s request.</strong> Every dispatch is wrapped in a try/catch and every action\'s failure is logged to the execution row without aborting the chain. If a workflow stops doing what you expect, check the workflow\'s <em>Recent runs</em> panel &mdash; failures show up there with the underlying error, not as a 500 on the page that triggered them.',
 
         // 10. What's still ahead

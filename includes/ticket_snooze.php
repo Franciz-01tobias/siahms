@@ -58,7 +58,7 @@ function snoozeSchemaReady(PDO $conn): bool {
     if ($ready !== null) return $ready;
     try {
         $ready = (bool)$conn->query("SHOW COLUMNS FROM `tickets` LIKE 'snoozed_until'")->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         $ready = false;
     }
     return $ready;
@@ -81,7 +81,7 @@ function scheduleSchemaReady(PDO $conn): bool {
     if ($ready !== null) return $ready;
     try {
         $ready = (bool)$conn->query("SHOW COLUMNS FROM `tickets` LIKE 'work_end_datetime'")->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         $ready = false;
     }
     return $ready;
@@ -104,7 +104,7 @@ function snoozeWakeHour(PDO $conn): int {
         $val = $stmt->fetchColumn();
         $hour = ($val === false || $val === null || $val === '') ? 9 : (int)$val;
         $cached = ($hour >= 0 && $hour <= 23) ? $hour : 9;
-    } catch (Exception $e) {
+    } catch (Exception) {
         $cached = 9;
     }
     return $cached;
@@ -303,7 +303,7 @@ function snoozeStateFor(PDO $conn, int $ticketId): ?array {
             'snoozed_by'      => $row['snoozed_by'] !== null ? (int)$row['snoozed_by'] : null,
             'snoozed_by_name' => $row['snoozed_by_name'],
         ];
-    } catch (Exception $e) {
+    } catch (Exception) {
         // A pre-upgrade database has no snooze columns; no banner is the right
         // answer there, not a broken reading pane.
         return null;
@@ -322,5 +322,5 @@ function snoozeAudit(PDO $conn, int $ticketId, int $analystId, ?string $old, ?st
             "INSERT INTO ticket_audit (ticket_id, analyst_id, field_name, old_value, new_value, created_datetime)
              VALUES (?, ?, 'Snooze', ?, ?, UTC_TIMESTAMP())"
         )->execute([$ticketId, $analystId, $old, $new]);
-    } catch (Exception $e) { /* audit is best-effort */ }
+    } catch (Exception) { /* audit is best-effort */ }
 }

@@ -33,7 +33,7 @@ function projectTargetsReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT 1 FROM project_asset_targets LIMIT 0"); $conn->query("SELECT 1 FROM project_asset_target_snapshots LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -204,7 +204,7 @@ function projectTargetsFor(PDO $conn, array $projectIds): array
     $st->execute(array_map('intval', $projectIds));
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $t) {
         $project = ['id' => (int)$t['project_id'], 'tenant_id' => $t['p_tenant_id']];
-        try { [$done, $total] = projectTargetCount($conn, $project, $t); } catch (Throwable $e) { $done = $total = 0; }
+        try { [$done, $total] = projectTargetCount($conn, $project, $t); } catch (Throwable) { $done = $total = 0; }
         $due = $t['target_date'] ?: $t['p_target_end_date'];
         $live = !in_array($t['p_status'], ['closed', 'cancelled'], true);
         $out[(int)$t['project_id']][] = [
@@ -248,7 +248,7 @@ function projectTargetsDetail(PDO $conn, int $projectId): array
     $since = gmdate('Y-m-d', strtotime('-120 days'));
     $names = projectTargetValueNames($conn, $targets);
     foreach ($targets as &$t) {
-        try { $up->execute([$t['id'], $today, $t['done'], $t['total']]); } catch (Throwable $e) { /* a reader on a read-only replica still sees the counts */ }
+        try { $up->execute([$t['id'], $today, $t['done'], $t['total']]); } catch (Throwable) { /* a reader on a read-only replica still sees the counts */ }
         $pts->execute([$t['id'], $since]);
         $t['points'] = array_map(fn($r) => ['d' => $r['snap_date'], 'done' => (int)$r['done'], 'total' => (int)$r['total']], $pts->fetchAll(PDO::FETCH_ASSOC));
         $t['done_value_name'] = $names[$t['done_field'] . ':' . $t['done_value']] ?? $t['done_value'];
@@ -294,7 +294,7 @@ function projectTargetAssets(PDO $conn, array $project, array $t, bool $doneOnes
     $cond = $doneOnes ? $done : "NOT COALESCE(($done), 0)";
     // The joins for names go on the outside so the scope SQL stays one piece.
     $st = $conn->prepare("SELECT q.id, q.hostname, q.asset_tag, q.model, q.operating_system, q.feature_release, s.name AS status_name, l.name AS location_name
-                            FROM (SELECT a.* FROM $from" . (strpos($from, ' WHERE ') !== false ? ' AND ' : ' WHERE ') . "$cond ORDER BY a.hostname LIMIT " . (int)$limit . ") q
+                            FROM (SELECT a.* FROM $from" . (str_contains($from, ' WHERE ') ? ' AND ' : ' WHERE ') . "$cond ORDER BY a.hostname LIMIT " . (int)$limit . ") q
                        LEFT JOIN asset_status_types s ON s.id = q.asset_status_id
                        LEFT JOIN asset_locations l ON l.id = q.location_id
                         ORDER BY q.hostname");

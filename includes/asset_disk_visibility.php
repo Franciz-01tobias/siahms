@@ -44,7 +44,7 @@ function assetDiskHideSchemaReady(PDO $conn): bool {
         $q = $conn->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'asset_disk_hide_rules'");
         $q->execute([DB_NAME]);
         return $ready = ((int)$q->fetchColumn() > 0);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return $ready = false;
     }
 }
@@ -65,7 +65,7 @@ function assetDiskHideRulesFor(PDO $conn, int $analystId, int $assetId): array {
         $stmt = $conn->prepare($sql);
         $stmt->execute(array_merge([$assetId], $tenantArgs));
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
 }
@@ -116,7 +116,7 @@ function assetDiskMatchCount(PDO $conn, int $analystId, ?string $model, $sizeByt
         $stmt->execute(array_merge([$model, $sizeBytes], $tenantArgs));
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
         return ['drives' => (int)($row['drives'] ?? 0), 'assets' => (int)($row['assets'] ?? 0)];
-    } catch (Exception $e) {
+    } catch (Exception) {
         return ['drives' => 0, 'assets' => 0];
     }
 }

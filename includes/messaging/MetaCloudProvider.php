@@ -55,7 +55,7 @@ class MetaCloudProvider extends MessagingProvider
     {
         $sig = $headers['x-hub-signature-256'] ?? '';
         $secret = $this->channel['credentials']['app_secret'] ?? '';
-        if ($sig === '' || $secret === '' || strpos($sig, 'sha256=') !== 0) {
+        if ($sig === '' || $secret === '' || !str_starts_with($sig, 'sha256=')) {
             return false;
         }
         $expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);

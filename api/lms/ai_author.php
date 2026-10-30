@@ -80,6 +80,8 @@ try {
         $articleId = (int)($input['article_id'] ?? 0);
         $source    = '';
 
+        // GH #217: no article bodies while Knowledge is switched off - the picker is hidden too.
+        if ($articleId && !moduleIsEnabled($conn, 'knowledge')) throw new Exception(moduleDisabledMessage('knowledge'));
         if ($articleId) {
             // The picker only offers SHARED articles, but it posts an id and this
             // endpoint is gated on LMS_MANAGE rather than on Knowledge — so without

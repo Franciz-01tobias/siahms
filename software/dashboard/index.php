@@ -322,7 +322,7 @@ $translationNamespaces = ['common', 'software'];
             }
         }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php require_once '../includes/header.php'; ?>
@@ -957,7 +957,7 @@ $translationNamespaces = ['common', 'software'];
         function escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         document.addEventListener('keydown', function(e) {
@@ -977,6 +977,6 @@ $translationNamespaces = ['common', 'software'];
 
         init();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

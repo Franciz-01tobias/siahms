@@ -180,7 +180,7 @@ class Money {
                     if ($r['preference_key'] === 'currency_formats') self::$userPer = self::cleanFormatMap($r['preference_value']);
                 }
             }
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // Before Database Verification, or no database: the defaults stand.
         }
     }

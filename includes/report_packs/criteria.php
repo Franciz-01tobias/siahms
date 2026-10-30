@@ -35,7 +35,7 @@ const RP_RANGE_PRESETS = [
 function rpResolveRange(array $range, ?string $tz = null): array
 {
     $tz = $tz ?: (class_exists('Tz') ? Tz::current() : 'UTC');
-    try { $zone = new DateTimeZone($tz); } catch (Exception $e) { $zone = new DateTimeZone('UTC'); $tz = 'UTC'; }
+    try { $zone = new DateTimeZone($tz); } catch (Exception) { $zone = new DateTimeZone('UTC'); $tz = 'UTC'; }
 
     $preset = in_array($range['preset'] ?? '', RP_RANGE_PRESETS, true) ? $range['preset'] : 'last_month';
     $today  = new DateTimeImmutable('today', $zone);

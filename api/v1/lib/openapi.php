@@ -307,7 +307,7 @@ function apiV1EndpointErrors(array $ep, array $extras): array {
     if (($ep['perm'] ?? 'none') !== 'none') {
         $add(403, 'The key does not have the ' . $ep['perm'] . ' permission.');
     }
-    if (strpos($ep['p'], '{') !== false) {
+    if (str_contains($ep['p'], '{')) {
         $add(404, $glossary[404]);
     }
     if (in_array($ep['m'], ['POST', 'PATCH'], true)) {
@@ -432,7 +432,7 @@ function apiV1OpenApiToYaml(array $data): string {
 function apiV1YamlNode($value, int $indent): string {
     $pad = str_repeat('  ', $indent);
     if (is_array($value)) {
-        $isList = array_keys($value) === range(0, count($value) - 1);
+        $isList = $value !== [] && array_is_list($value);   // [] is not a list here, as before
         if (empty($value)) {
             return $isList ? "[]\n" : "{}\n";
         }
@@ -454,7 +454,7 @@ function apiV1YamlNode($value, int $indent): string {
                 if (is_array($v) && !empty($v)) {
                     $out .= $pad . $keyStr . ":\n" . apiV1YamlNode($v, $indent + 1);
                 } elseif (is_array($v)) {
-                    $out .= $pad . $keyStr . ': ' . (array_keys($v) === range(0, count($v) - 1) ? "[]" : "{}") . "\n";
+                    $out .= $pad . $keyStr . ': ' . ($v !== [] && array_is_list($v) ? "[]" : "{}") . "\n";
                 } else {
                     $out .= $pad . $keyStr . ': ' . apiV1YamlScalar($v) . "\n";
                 }

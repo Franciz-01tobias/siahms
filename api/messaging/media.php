@@ -93,7 +93,7 @@ $attachmentsRoot = realpath(dirname(dirname(__DIR__)) . '/tickets/attachments');
 // The trailing separator matters: without it a sibling folder whose name merely
 // STARTS with "attachments" would pass a prefix check.
 if ($real === false || $attachmentsRoot === false
-    || strpos($real, $attachmentsRoot . DIRECTORY_SEPARATOR) !== 0 || !is_file($real)) {
+    || !str_starts_with($real, $attachmentsRoot . DIRECTORY_SEPARATOR) || !is_file($real)) {
     mediaFail(404);
 }
 

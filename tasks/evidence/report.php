@@ -94,13 +94,13 @@ function evExplain(?array $e): string {
     <title><?php echo htmlspecialchars(pageTitle('tasks', $r ? t('tasks.evidence.report_title', ['title' => $r['series']['title']]) : t('tasks.nav.evidence'))); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=53">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=56">
     <link rel="stylesheet" href="../../assets/css/task-evidence.css?v=1">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-analyst-id="<?php echo $analystId; ?>" class="ev-report-body">
     <?php include '../includes/header.php'; ?>

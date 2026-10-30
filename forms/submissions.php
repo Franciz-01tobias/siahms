@@ -32,10 +32,10 @@ $translationNamespaces = ['common', 'forms'];
     <!-- For FormLogic.formatDateValue() — date answers are naive local values and must
          NOT go through Tz, which would shift them into the reader's timezone. -->
     <script src="../assets/js/form-logic.js?v=9"></script>
-    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
     <!-- autotable: a table QUESTION is drawn as a real table in the PDF rather
          than flattened into a paragraph. Same versions as morning-checks. -->
-    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=5.0.9"></script>
     <!-- The shared document builder, also used by forms/collection.php. One
          implementation of what a record looks like, so the two pages cannot
          disagree the first time a field type changes. -->
@@ -451,7 +451,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -1085,7 +1085,7 @@ $translationNamespaces = ['common', 'forms'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         function escAttr(s) {
             return String(s == null ? '' : s)
@@ -1099,6 +1099,6 @@ $translationNamespaces = ['common', 'forms'];
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

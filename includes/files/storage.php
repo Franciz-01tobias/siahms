@@ -191,7 +191,7 @@ function filesDesktopLogo(PDO $conn, int $analystId): array
                 $url = BASE_URL . $p;
             }
         }
-    } catch (Throwable $e) { /* the column may not exist before Database Verify */ }
+    } catch (Throwable) { /* the column may not exist before Database Verify */ }
 
     if ($url === null) {
         require_once __DIR__ . '/../branding.php';

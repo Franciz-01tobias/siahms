@@ -15,6 +15,10 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/rbac.php';
 require_once '../../includes/tenancy.php';
+require_once '../../includes/services/asset_type_layout.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 
 header('Content-Type: application/json');
 
@@ -99,9 +103,32 @@ try {
     } else {
         $stmt = $conn->prepare("INSERT INTO asset_types (name, description, display_order, is_active, icon_id, tenant_id) VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->execute([$name, $description, $display_order, $is_active, $icon_id, $scopeTenant]);
+        $id = (int)$conn->lastInsertId();
+        $created = true;
     }
 
-    wf_emit('asset_type', $id ? 'updated' : 'created', $id ? (int)$id : (int)$conn->lastInsertId(), $name);
+    // The type's layout (GH #200) - only when sent, so a caller that knows nothing of layouts
+    // (an older page, a script) cannot reset one by saving the name. Same ownership checks as
+    // the type itself, because it is part of the type.
+    if (array_key_exists('layout', $data)) {
+        AssetTypeLayout::save($conn, (int)$id, AssetTypeLayout::normalise($data['layout']));
+    }
+
+    // GH #201: the CMDB class "Create linked CI" makes for this type - only when sent, like
+    // the layout. It never creates a CI by itself and never touches existing assets.
+    if (array_key_exists('cmdb_class_id', $data)) {
+        $classId = !empty($data['cmdb_class_id']) ? (int)$data['cmdb_class_id'] : null;
+        if ($classId !== null) {
+            $ok = $conn->prepare('SELECT id FROM cmdb_classes WHERE id = ? AND is_active = 1');
+            $ok->execute([$classId]);
+            if (!$ok->fetchColumn()) {
+                throw new Exception('That CMDB class does not exist or is not active.');
+            }
+        }
+        $conn->prepare('UPDATE asset_types SET cmdb_class_id = ? WHERE id = ?')->execute([$classId, $id]);
+    }
+
+    wf_emit('asset_type', empty($created) ? 'updated' : 'created', (int)$id, $name);
     echo json_encode(['success' => true]);
 
 } catch (Exception $e) {

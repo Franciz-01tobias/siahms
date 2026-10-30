@@ -35,7 +35,10 @@ try {
     );
     $stmt->execute([$id]);
     $e = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$e) {
+    // GH #209: a run for a company this analyst cannot see is not there for them.
+    require_once __DIR__ . '/../../includes/workflow_tenancy.php';
+    $runTenant = ($e && isset($e['tenant_id']) && $e['tenant_id'] !== null) ? (int)$e['tenant_id'] : null;
+    if (!$e || !analystCanReadWorkflowRun($conn, (int)$_SESSION['analyst_id'], $runTenant)) {
         echo json_encode(['success' => false, 'error' => 'That run no longer exists.']);
         exit;
     }

@@ -39,7 +39,7 @@ $translationNamespaces = ['common', 'tasks'];
     <title><?php echo htmlspecialchars(pageTitle('tasks', t('tasks.nav.settings'))); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=53">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=56">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -128,7 +128,7 @@ $translationNamespaces = ['common', 'tasks'];
         [data-theme-mode="dark"] .span-mode-card.selected { background: #241b3d; }
         [data-theme-mode="dark"] .card-field-row:hover { background: #241b3d; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -138,7 +138,7 @@ $translationNamespaces = ['common', 'tasks'];
 
         <!-- Statuses Tab -->
         <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo Cap::TASKS_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo capKey(Cap::TASKS_STATUSES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.statuses_heading')); ?></h2>
                 <button class="add-btn" onclick="openLookupModal('status')"><?php echo htmlspecialchars(t('tasks.settings.add')); ?></button>
@@ -162,7 +162,7 @@ $translationNamespaces = ['common', 'tasks'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'priorities')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="priorities-tab" data-capability="<?php echo Cap::TASKS_PRIORITIES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="priorities-tab" data-capability="<?php echo capKey(Cap::TASKS_PRIORITIES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.priorities_heading')); ?></h2>
                 <button class="add-btn" onclick="openLookupModal('priority')"><?php echo htmlspecialchars(t('tasks.settings.add')); ?></button>
@@ -185,7 +185,7 @@ $translationNamespaces = ['common', 'tasks'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'calendar')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'calendar' ? ' active' : ''; ?>" id="calendar-tab" data-capability="<?php echo Cap::TASKS_CALENDAR; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'calendar' ? ' active' : ''; ?>" id="calendar-tab" data-capability="<?php echo capKey(Cap::TASKS_CALENDAR); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.calendar_heading')); ?></h2>
             </div>
@@ -219,7 +219,7 @@ $translationNamespaces = ['common', 'tasks'];
 
         <!-- Time Tab (GH #112) -->
         <?php if (settingsTabVisible($visibleTabs, 'time')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'time' ? ' active' : ''; ?>" id="time-tab" data-capability="<?php echo Cap::TASKS_TIME; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'time' ? ' active' : ''; ?>" id="time-tab" data-capability="<?php echo capKey(Cap::TASKS_TIME); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.time_heading')); ?></h2>
             </div>
@@ -247,7 +247,7 @@ $translationNamespaces = ['common', 'tasks'];
 
         <!-- Involved Tab — who else is on a task (GH #89) -->
         <?php if (settingsTabVisible($visibleTabs, 'involved')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'involved' ? ' active' : ''; ?>" id="involved-tab" data-capability="<?php echo Cap::TASKS_INVOLVED; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'involved' ? ' active' : ''; ?>" id="involved-tab" data-capability="<?php echo capKey(Cap::TASKS_INVOLVED); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.involved_heading')); ?></h2>
             </div>
@@ -267,7 +267,7 @@ $translationNamespaces = ['common', 'tasks'];
 
         <!-- Checklists Tab — checklists on tasks (discussion #138) -->
         <?php if (settingsTabVisible($visibleTabs, 'checklists')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'checklists' ? ' active' : ''; ?>" id="checklists-tab" data-capability="<?php echo Cap::TASKS_CHECKLISTS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'checklists' ? ' active' : ''; ?>" id="checklists-tab" data-capability="<?php echo capKey(Cap::TASKS_CHECKLISTS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.checklists_heading')); ?></h2>
             </div>
@@ -304,7 +304,7 @@ $translationNamespaces = ['common', 'tasks'];
 
         <!-- Evidence Tab — repeating task evidence (#181) -->
         <?php if (settingsTabVisible($visibleTabs, 'evidence')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'evidence' ? ' active' : ''; ?>" id="evidence-tab" data-capability="<?php echo Cap::TASKS_EVIDENCE; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'evidence' ? ' active' : ''; ?>" id="evidence-tab" data-capability="<?php echo capKey(Cap::TASKS_EVIDENCE); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.evidence_heading')); ?></h2>
             </div>
@@ -336,7 +336,7 @@ $translationNamespaces = ['common', 'tasks'];
 
         <!-- Card Tab -->
         <?php if (settingsTabVisible($visibleTabs, 'card')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'card' ? ' active' : ''; ?>" id="card-tab" data-capability="<?php echo Cap::TASKS_CARD; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'card' ? ' active' : ''; ?>" id="card-tab" data-capability="<?php echo capKey(Cap::TASKS_CARD); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tasks.settings.card_heading')); ?></h2>
             </div>
@@ -422,7 +422,7 @@ $translationNamespaces = ['common', 'tasks'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'tags')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'tags' ? ' active' : ''; ?>" id="tags-tab" data-capability="<?php echo Cap::TASKS_TAGS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'tags' ? ' active' : ''; ?>" id="tags-tab" data-capability="<?php echo capKey(Cap::TASKS_TAGS); ?>">
             <div class="settings-group">
                 <div class="section-header">
                     <h3><?php echo htmlspecialchars(t('tasks.settings.tags_heading')); ?></h3>
@@ -977,7 +977,7 @@ $translationNamespaces = ['common', 'tasks'];
             if (text == null) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         function openLookupModal(kind) {
@@ -1065,6 +1065,6 @@ $translationNamespaces = ['common', 'tasks'];
         });
 
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

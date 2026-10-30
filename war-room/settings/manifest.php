@@ -14,13 +14,13 @@ return [
     'module'   => 'war-room',
     'label'    => 'War room',
     'umbrella' => [
-        'cap'   => Cap::WAR_ROOM_MANAGE,
+        'cap'   => capKey(Cap::WAR_ROOM_MANAGE),
         'grant' => 'Manage war room settings',
     ],
     'tabs' => [
         [
             'id'        => 'retention',
-            'cap'       => Cap::WAR_ROOM_MANAGE,
+            'cap'       => capKey(Cap::WAR_ROOM_MANAGE),
             'label_key' => 'war-room.settings.heading',
             'grant'     => 'Set how long war room messages are kept',
             // Declaring the key here is what authorises it: settingKeyOwners()
@@ -31,7 +31,7 @@ return [
         ],
         [
             'id'        => 'ai',
-            'cap'       => Cap::WAR_ROOM_MANAGE,
+            'cap'       => capKey(Cap::WAR_ROOM_MANAGE),
             'label_key' => 'war-room.settings.ai_heading',
             'grant'     => 'Configure the war room situation report',
             'setting_keys' => [

@@ -47,6 +47,12 @@ function jobHealthT(string $key, string $fallback, array $params = []): string
     return $fallback;
 }
 
+/** A job's name: a pushed source's carries the connection's name. */
+function jobHealthName(array $def): string
+{
+    return jobHealthT($def['name_key'], $def['name'] ?? $def['key'], $def['name_params'] ?? []);
+}
+
 /**
  * The health of every job, in the registry's order.
  *
@@ -64,7 +70,15 @@ function jobHealthAll(PDO $conn): array
         $cfgFailed = true;
     }
     $out = [];
-    foreach (jobRegistry() as $key => $def) {
+    try {
+        $registry = jobRegistryAll($conn);
+    } catch (JobHealthUnknown $e) {
+        error_log('[job health] pushed sources unreadable: ' . ($e->getPrevious() ?? $e)->getMessage());
+        $registry = jobRegistry();
+        $out['pushed_sources'] = jobHealthUnknownResult(['key' => 'pushed_sources', 'name_key' => 'reporting.jobs.name_pushed_sources',
+            'affects_key' => 'reporting.jobs.affects_pushed_sources', 'command' => '', 'web' => false, 'interval' => 15, 'grace' => 15], 'pushed sources');
+    }
+    foreach ($registry as $key => $def) {
         $out[$key] = $cfgFailed ? jobHealthUnknownResult($def, 'configuration') : jobHealthOne($conn, $def, $cfg[$key] ?? []);
     }
     return $out;
@@ -120,7 +134,7 @@ function jobHealthUnknownResult(array $def, string $what, ?int $interval = null,
 {
     $key = $def['key'];
     return [
-        'key' => $key, 'name' => jobHealthT($def['name_key'], $key), 'affects' => jobHealthT($def['affects_key'], ''),
+        'key' => $key, 'name' => jobHealthName($def), 'affects' => jobHealthT($def['affects_key'], $def['affects'] ?? ''),
         'command' => $def['command'], 'web' => (bool)$def['web'], 'needed' => null,
         'interval' => $interval ?? (int)$def['interval'], 'default_interval' => (int)$def['interval'], 'grace' => $grace ?? (int)$def['grace'],
         'last_scheduled_success' => null, 'last_success' => null, 'last_success_trigger' => null, 'last_run' => null,
@@ -143,7 +157,7 @@ function jobHealthJudge(PDO $conn, array $def, array $cfg, string $key, int $int
     $ts = fn(?string $utc) => $utc ? strtotime($utc . ' UTC') : null;
 
     $lastSched = $row("SELECT finished_datetime FROM job_runs
-                        WHERE job_key = ? AND trigger_kind IN ('cron','web') AND outcome IN ('ok','partial')
+                        WHERE job_key = ? AND trigger_kind IN ('cron','web','push') AND outcome IN ('ok','partial')
                         ORDER BY id DESC LIMIT 1", [$key]);
     $lastAny   = $row("SELECT finished_datetime, trigger_kind FROM job_runs
                         WHERE job_key = ? AND outcome IN ('ok','partial') ORDER BY id DESC LIMIT 1", [$key]);
@@ -183,8 +197,9 @@ function jobHealthJudge(PDO $conn, array $def, array $cfg, string $key, int $int
 
     $base = [
         'key'                    => $key,
-        'name'                   => jobHealthT($def['name_key'], $key),
-        'affects'                => jobHealthT($def['affects_key'], ''),
+        'name'                   => jobHealthName($def),
+        'affects'                => jobHealthT($def['affects_key'], $def['affects'] ?? ''),
+        'pushed'                 => !empty($def['pushed']),
         'command'                => $def['command'],
         'web'                    => (bool)$def['web'],
         'needed'                 => $needed,
@@ -274,7 +289,7 @@ function jobHealthReachesAllCompanies(PDO $conn, int $analystId): bool
         $ids = getAccessibleTenantIds($conn, $analystId);
         $all = $conn->query("SELECT id FROM tenants")->fetchAll(PDO::FETCH_COLUMN);
         return !array_diff(array_map('intval', $all), array_map('intval', $ids));
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;   // fail closed
     }
 }

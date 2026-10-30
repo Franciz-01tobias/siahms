@@ -35,7 +35,7 @@ $sections = [
     'explorer'    => 7,
     'uploading'   => 4,
     'upload_errors' => 7,
-    'viewing'     => 6,
+    'viewing'     => 7,
     'permissions' => 6,
     'inheritance' => 4,
     'audit'       => 3,
@@ -74,7 +74,7 @@ $para = fn(string $k) => preg_replace(['/\*\*([^*]+)\*\*/', '/`([^`]+)`/'], ['<s
         .help-container { height: 100vh !important; }
         <?php endif; ?>
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="files" data-mobile-page="files-help">
     <?php include 'includes/header.php'; ?>
@@ -147,6 +147,6 @@ $para = fn(string $k) => preg_replace(['/\*\*([^*]+)\*\*/', '/`([^`]+)`/'], ['<s
         if (location.hash) goTo(location.hash.slice(1), 'auto');
         window.addEventListener('hashchange', () => goTo(location.hash.slice(1), 'smooth'));
     </script>
-    <?php if (!$embed): ?><script src="../assets/js/mobile.js?v=82"></script><?php endif; ?>
+    <?php if (!$embed): ?><script src="../assets/js/mobile.js?v=83"></script><?php endif; ?>
 </body>
 </html>

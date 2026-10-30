@@ -35,6 +35,8 @@ $formId  = (int)($_GET['form_id'] ?? 0);
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'forms');
 
     if ($method === 'POST') {
         $body    = json_decode(file_get_contents('php://input'), true);

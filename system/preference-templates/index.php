@@ -193,7 +193,7 @@ $ptT = fn(string $k) => t('system.pref_templates.' . $k);
         const API = '../../api/system/preference_templates.php';
         const $ = id => document.getElementById(id);
         const T = (k, p) => t('system.pref_templates.' + k, p);
-        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         const toast = (m, k) => { if (typeof showToast === 'function') showToast(m, k); };
         let data = { templates: [], sections: [], analysts: [], me: 0 };
         let editing = null, applying = null;
@@ -372,6 +372,6 @@ $ptT = fn(string $k) => t('system.pref_templates.' . $k);
         return { openEdit };
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

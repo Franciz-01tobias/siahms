@@ -287,7 +287,7 @@ $translationNamespaces = ['common', 'change-management'];
         .modal-header { padding: 0; border-bottom: none; margin-bottom: 20px; font-size: 20px; font-weight: 600; color: var(--text, #333); }
         .modal-actions { margin-top: 20px; }
     </style>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -301,7 +301,7 @@ $translationNamespaces = ['common', 'change-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'fields')): ?>
         <!-- Form Fields Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'fields' ? ' active' : ''; ?>" id="fields-tab" data-capability="<?php echo Cap::CHANGES_FIELDS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'fields' ? ' active' : ''; ?>" id="fields-tab" data-capability="<?php echo capKey(Cap::CHANGES_FIELDS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('change-management.settings.fields_heading')); ?></h2>
             </div>
@@ -319,7 +319,7 @@ $translationNamespaces = ['common', 'change-management'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo Cap::CHANGES_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo capKey(Cap::CHANGES_STATUSES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('change-management.settings.statuses_heading')); ?></h2>
                 <button class="add-btn" onclick="openLookupModal('status')"><?php echo htmlspecialchars(t('change-management.settings.add')); ?></button>
@@ -335,7 +335,7 @@ $translationNamespaces = ['common', 'change-management'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'priorities')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="priorities-tab" data-capability="<?php echo Cap::CHANGES_PRIORITIES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="priorities-tab" data-capability="<?php echo capKey(Cap::CHANGES_PRIORITIES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('change-management.settings.priorities_heading')); ?></h2>
                 <button class="add-btn" onclick="openLookupModal('priority')"><?php echo htmlspecialchars(t('change-management.settings.add')); ?></button>
@@ -351,7 +351,7 @@ $translationNamespaces = ['common', 'change-management'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'types')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'types' ? ' active' : ''; ?>" id="types-tab" data-capability="<?php echo Cap::CHANGES_TYPES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'types' ? ' active' : ''; ?>" id="types-tab" data-capability="<?php echo capKey(Cap::CHANGES_TYPES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('change-management.settings.types_heading')); ?></h2>
                 <button class="add-btn" onclick="openLookupModal('type')"><?php echo htmlspecialchars(t('change-management.settings.add')); ?></button>
@@ -367,7 +367,7 @@ $translationNamespaces = ['common', 'change-management'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'impacts')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'impacts' ? ' active' : ''; ?>" id="impacts-tab" data-capability="<?php echo Cap::CHANGES_IMPACTS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'impacts' ? ' active' : ''; ?>" id="impacts-tab" data-capability="<?php echo capKey(Cap::CHANGES_IMPACTS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('change-management.settings.impacts_heading')); ?></h2>
                 <button class="add-btn" onclick="openLookupModal('impact')"><?php echo htmlspecialchars(t('change-management.settings.add')); ?></button>
@@ -384,7 +384,7 @@ $translationNamespaces = ['common', 'change-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'templates')): ?>
         <!-- Standard-change templates (#180 §8) - get_templates / save_template / template_action. -->
-        <div class="tab-content<?php echo $activeTabId === 'templates' ? ' active' : ''; ?>" id="templates-tab" data-capability="<?php echo Cap::CHANGES_TEMPLATES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'templates' ? ' active' : ''; ?>" id="templates-tab" data-capability="<?php echo capKey(Cap::CHANGES_TEMPLATES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('change-management.templates.heading')); ?></h2>
                 <button class="add-btn" onclick="openTemplateEditor(null)"><?php echo htmlspecialchars(t('change-management.templates.new')); ?></button>
@@ -400,7 +400,7 @@ $translationNamespaces = ['common', 'change-management'];
         <?php if (settingsTabVisible($visibleTabs, 'approvals')): ?>
         <!-- Approval rules (#180) - api/change-management/get|save_approval_settings.php.
              Every choice here is a dropdown or a tick; the defaults are today's behaviour. -->
-        <div class="tab-content<?php echo $activeTabId === 'approvals' ? ' active' : ''; ?>" id="approvals-tab" data-capability="<?php echo Cap::CHANGES_APPROVALS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'approvals' ? ' active' : ''; ?>" id="approvals-tab" data-capability="<?php echo capKey(Cap::CHANGES_APPROVALS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('change-management.approval_settings.heading')); ?></h2>
             </div>
@@ -1009,7 +1009,7 @@ $translationNamespaces = ['common', 'change-management'];
             if (text == null) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         function openLookupModal(kind) {
@@ -1212,7 +1212,7 @@ $translationNamespaces = ['common', 'change-management'];
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text == null ? '' : text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         function escapeAttr(text) {
             return escapeHtml(text).replace(/"/g, '&quot;');
@@ -1509,6 +1509,6 @@ $translationNamespaces = ['common', 'change-management'];
         }
 
     </script>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=83"></script>
 </body>
 </html>

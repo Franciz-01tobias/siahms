@@ -101,12 +101,12 @@ function icsEvent(array $ev, string $tz): array
 {
     try {
         $start = new DateTime($ev['start'], new DateTimeZone($tz));
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
     try {
         $end = new DateTime($ev['end'] ?: $ev['start'], new DateTimeZone($tz));
-    } catch (Exception $e) {
+    } catch (Exception) {
         $end = clone $start;
     }
 

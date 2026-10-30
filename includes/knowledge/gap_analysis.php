@@ -33,7 +33,7 @@ function knowledgeOpenAiKey(PDO $conn): string
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'knowledge_openai_api_key'");
         $st->execute();
         return (string)decryptValue((string)($st->fetchColumn() ?: ''));
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return '';
     }
 }
@@ -382,27 +382,28 @@ function gapBulkRichness(PDO $conn, array $ticketIds): array
             // Halved as a rough allowance for the HTML wrapped around the prose.
             $acc[(int)$r['ticket_id']]['resolution_len'] = (int)((int)$r['longest_out'] / 2);
         }
-    } catch (Throwable $e) { /* leave at zero */ }
+    } catch (Throwable) { /* leave at zero */ }
 
     try {
         foreach ($q("SELECT ticket_id, SUM(CHAR_LENGTH(note_text)) AS len
                        FROM ticket_notes WHERE ticket_id IN ($in) GROUP BY ticket_id") as $r) {
             $acc[(int)$r['ticket_id']]['notes_len'] = (int)((int)$r['len'] / 2);
         }
-    } catch (Throwable $e) { /* leave at zero */ }
+    } catch (Throwable) { /* leave at zero */ }
 
-    try {
+    // Not while Time tracking is switched off for the install (GH #217).
+    if (moduleIsEnabled($conn, 'time-tracking')) try {
         foreach ($q("SELECT ticket_id, SUM(time_spent_minutes) AS m
                        FROM ticket_time_entries WHERE is_active = 1 AND ticket_id IN ($in) GROUP BY ticket_id") as $r) {
             $acc[(int)$r['ticket_id']]['minutes'] = (int)$r['m'];
         }
-    } catch (Throwable $e) { /* leave at zero */ }
+    } catch (Throwable) { /* leave at zero */ }
 
     try {
         foreach ($q("SELECT DISTINCT ticket_id FROM problem_tickets WHERE ticket_id IN ($in)") as $r) {
             $acc[(int)$r['ticket_id']]['has_problem'] = true;
         }
-    } catch (Throwable $e) { /* leave at zero */ }
+    } catch (Throwable) { /* leave at zero */ }
 
     $out = [];
     foreach ($acc as $id => $parts) {

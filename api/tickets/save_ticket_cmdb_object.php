@@ -9,6 +9,9 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -16,6 +19,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+// GH #217: refused while the cmdb module is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'cmdb');
 
 try {
     $data = json_decode(file_get_contents('php://input'), true) ?: [];

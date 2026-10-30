@@ -94,7 +94,7 @@ function calendarSyncDecodeCredentials($stored): array
     if ($stored === null || $stored === '') return [];
     try {
         $plain = decryptValue($stored);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
     $decoded = json_decode((string) $plain, true);
@@ -126,7 +126,7 @@ function calendarSyncSchemaReady(PDO $conn): bool
     if ($ready !== null) return $ready;
     try {
         $ready = (bool)$conn->query("SHOW TABLES LIKE 'calendar_enrolments'")->fetch(PDO::FETCH_NUM);
-    } catch (Exception $e) {
+    } catch (Exception) {
         $ready = false;
     }
     return $ready;
@@ -186,7 +186,7 @@ function calendarSyncConnectionIds(PDO $conn): array
         return array_map('intval', $conn->query(
             "SELECT id FROM calendar_connections WHERE is_active = 1 ORDER BY id"
         )->fetchAll(PDO::FETCH_COLUMN));
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
 }
@@ -233,7 +233,7 @@ function calendarSyncConnectionProvider(PDO $conn, ?int $connectionId): string
             $st = $conn->prepare("SELECT provider FROM calendar_connections WHERE id = ? AND is_active = 1");
             $st->execute([$connectionId]);
             $cache[$connectionId] = (string)($st->fetchColumn() ?: '');
-        } catch (Exception $e) {
+        } catch (Exception) {
             $cache[$connectionId] = '';
         }
     }
@@ -310,7 +310,7 @@ function calendarSyncEnrolment(PDO $conn, int $analystId): array
         $aStmt = $conn->prepare("SELECT email FROM analysts WHERE id = ?");
         $aStmt->execute([$analystId]);
         $email = $aStmt->fetchColumn() ?: null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Falls through as null — an unknown address is reported honestly rather
         // than the caller being handed a guess.
     }
@@ -340,7 +340,7 @@ function calendarSyncEnrolment(PDO $conn, int $analystId): array
         $stmt = $conn->prepare("SELECT * FROM calendar_enrolments WHERE analyst_id = ?");
         $stmt->execute([$analystId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return $off;
     }
     if (!$row) return $off;
@@ -394,7 +394,7 @@ function scheduleFeedMode(PDO $conn): string
         $stmt->execute([SCHEDULE_FEED_SETTING]);
         $v = $stmt->fetchColumn();
         if (in_array($v, [FEED_MODE_OFF, FEED_MODE_REF, FEED_MODE_FULL], true)) $mode = $v;
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Setting table unreadable — the permissive default stands, which is the
         // same state as an install that has never touched this.
     }
@@ -426,7 +426,7 @@ function scheduleFeedDetail(PDO $conn, int $analystId): string
         );
         $stmt->execute([$analystId]);
         if ($stmt->fetchColumn() === FEED_MODE_REF) return FEED_MODE_REF;
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Falls through to full, which is what they will have been seeing.
     }
     return FEED_MODE_FULL;

@@ -25,7 +25,7 @@ return [
     'label'  => 'Knowledge',
 
     'umbrella' => [
-        'cap'       => Cap::KNOWLEDGE_MANAGE,
+        'cap'       => capKey(Cap::KNOWLEDGE_MANAGE),
         'grant'     => 'Manage everything in Knowledge settings',
         'sensitive' => true,   // implies the SMTP and AI credentials
     ],
@@ -33,7 +33,7 @@ return [
     'tabs' => [
         [
             'id'           => 'email',
-            'cap'          => Cap::KNOWLEDGE_EMAIL,
+            'cap'          => capKey(Cap::KNOWLEDGE_EMAIL),
             'label_key'    => 'knowledge.settings.tab_email',
             'grant'        => 'Configure how articles are emailed out, including the SMTP credentials',
             'sensitive'    => true,
@@ -48,7 +48,7 @@ return [
         [
             // The shared AI panel writes these; api/system/ai/* authorises against them.
             'id'           => 'ai',
-            'cap'          => Cap::KNOWLEDGE_AI,
+            'cap'          => capKey(Cap::KNOWLEDGE_AI),
             'label_key'    => 'knowledge.settings.tab_ai',
             'grant'        => 'Configure the Knowledge AI provider, including its API key',
             'sensitive'    => true,
@@ -60,7 +60,7 @@ return [
         [
             // Re-embedding the knowledge base calls the provider once per article.
             'id'           => 'embeddings',
-            'cap'          => Cap::KNOWLEDGE_EMBEDDINGS,
+            'cap'          => capKey(Cap::KNOWLEDGE_EMBEDDINGS),
             'label_key'    => 'knowledge.settings.tab_embeddings',
             'grant'        => 'Generate article embeddings, and hold the OpenAI key they use (this costs money)',
             'sensitive'    => true,
@@ -68,7 +68,7 @@ return [
         ],
         [
             'id'           => 'recycle-bin',
-            'cap'          => Cap::KNOWLEDGE_RECYCLE_BIN,
+            'cap'          => capKey(Cap::KNOWLEDGE_RECYCLE_BIN),
             'label_key'    => 'knowledge.settings.tab_recycle',
             'grant'        => 'Set how long deleted articles are kept',
             'setting_keys' => ['knowledge_recycle_bin_days'],
@@ -79,7 +79,7 @@ return [
             // narrower one of its own: whoever may change it may already change
             // every access list.
             'id'           => 'permissions',
-            'cap'          => Cap::KNOWLEDGE_MANAGE,
+            'cap'          => capKey(Cap::KNOWLEDGE_MANAGE),
             'label_key'    => 'knowledge.settings.tab_permissions',
             'grant'        => 'Choose whether folder permissions apply to everything inside them',
             'sensitive'    => true,

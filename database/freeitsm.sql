@@ -1301,6 +1301,7 @@ CREATE TABLE IF NOT EXISTS `tickets` (
     `snooze_reason`         VARCHAR(255) NULL,
     -- 'normal' or 'confidential' (discussion #62); see includes/ticket_sensitivity.php.
     `sensitivity`           VARCHAR(20) NOT NULL DEFAULT 'normal',
+    `is_workspace`          TINYINT NOT NULL DEFAULT 0,
     `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,   -- set by the demo data importer (#1297)
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_tickets_number` (`ticket_number`),
@@ -2049,6 +2050,7 @@ CREATE TABLE IF NOT EXISTS `proxmox_connections` (
     `last_sync_status`      VARCHAR(20) NULL,
     `last_sync_message`     TEXT NULL,
     `created_datetime`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `is_demo`                    TINYINT(1) NOT NULL DEFAULT 0,   -- set by the Virtualisation demo (System -> Demo Data)
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -2083,6 +2085,7 @@ CREATE TABLE IF NOT EXISTS `proxmox_vms` (
     `mac_addresses`      TEXT NULL,
     `details_json`       LONGTEXT NULL,
     `last_seen_datetime` DATETIME NULL,
+    `is_demo`                    TINYINT(1) NOT NULL DEFAULT 0,   -- set by the Virtualisation demo (System -> Demo Data)
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_proxmox_vm` (`connection_id`, `vmid`),
     CONSTRAINT `fk_proxmox_vms_connection` FOREIGN KEY (`connection_id`) REFERENCES `proxmox_connections` (`id`) ON DELETE CASCADE
@@ -2104,6 +2107,7 @@ CREATE TABLE IF NOT EXISTS `vcloud_connections` (
     `last_sync_status`      VARCHAR(20) NULL,
     `last_sync_message`     TEXT NULL,
     `created_datetime`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `is_demo`                    TINYINT(1) NOT NULL DEFAULT 0,   -- set by the Virtualisation demo (System -> Demo Data)
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -2122,6 +2126,7 @@ CREATE TABLE IF NOT EXISTS `vcloud_vms` (
     `mac_addresses`      TEXT NULL,
     `details_json`       LONGTEXT NULL,
     `last_seen_datetime` DATETIME NULL,
+    `is_demo`                    TINYINT(1) NOT NULL DEFAULT 0,   -- set by the Virtualisation demo (System -> Demo Data)
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_vcloud_vm` (`connection_id`, `vm_uuid`),
     CONSTRAINT `fk_vcloud_vms_connection` FOREIGN KEY (`connection_id`) REFERENCES `vcloud_connections` (`id`) ON DELETE CASCADE
@@ -2140,6 +2145,288 @@ CREATE TABLE IF NOT EXISTS `vcloud_edge_gateways` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_vcloud_edge` (`connection_id`, `gateway_id`),
     CONSTRAINT `fk_vcloud_edge_gateways_connection` FOREIGN KEY (`connection_id`) REFERENCES `vcloud_connections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+-- The virtual estate (GH #199 Part A): hosts, clusters, roles and VMs reported by a
+-- source. Hyper-V pushes. Removal is never deletion: an object missing from a complete
+-- report is marked not_seen_since; one on an unreadable host, not_confirmed_since.
+-- ----------------------------------------------------------
+
+-- A source that reports a virtual estate. Hyper-V (pushed by scripts/Invoke-HyperVInventory.ps1) first;
+-- vCenter, Proxmox and Cloud Director may move here later. One company per connection: every
+-- object it reports belongs to that company. api_key_id is the ONE key allowed to post its reports.
+CREATE TABLE IF NOT EXISTS `virt_connections` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `name`                      VARCHAR(150) NOT NULL,
+    `source_kind`               VARCHAR(20) NOT NULL DEFAULT 'hyperv',
+    `tenant_id`                 INT NULL,
+    `expected_interval_minutes` INT NOT NULL DEFAULT 15,
+    `grace_minutes`             INT NOT NULL DEFAULT 15,
+    `retention_days`            INT NULL,
+    `api_key_id`                INT NULL,
+    `is_active`                 TINYINT(1) NOT NULL DEFAULT 1,
+    `last_report_at`            DATETIME NULL,
+    `last_observed_at`          DATETIME NULL,
+    `last_outcome`              VARCHAR(20) NULL,
+    `last_summary`              VARCHAR(1000) NULL,
+    `collector_json`            TEXT NULL,
+    `created_by_id`             INT NULL,
+    `created_datetime`          DATETIME NULL,
+    `is_demo`                    TINYINT(1) NOT NULL DEFAULT 0,   -- set by the Virtualisation demo (System -> Demo Data)
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_virt_connections_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A Failover Cluster. external_id is Get-Cluster Id (a GUID).
+CREATE TABLE IF NOT EXISTS `virt_clusters` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `connection_id`             INT NOT NULL,
+    `tenant_id`                 INT NULL,
+    `external_id`               VARCHAR(100) NOT NULL,
+    `name`                      VARCHAR(255) NULL,
+    `quorum_type`               VARCHAR(100) NULL,
+    `witness`                   VARCHAR(255) NULL,
+    `first_seen_at`             DATETIME NULL,
+    `last_seen_observed_at`     DATETIME NULL,
+    `not_seen_since`            DATETIME NULL,
+    `not_confirmed_since`       DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_virt_clusters_ext` (`connection_id`, `external_id`),
+    CONSTRAINT `fk_virt_clusters_conn` FOREIGN KEY (`connection_id`) REFERENCES `virt_connections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A Hyper-V host, standalone or a cluster node. external_id is the hardware UUID
+-- (Win32_ComputerSystemProduct); when that is missing or invalid it is name:<host> and
+-- identity_kind says so, because then a rename cannot be told from a new machine.
+CREATE TABLE IF NOT EXISTS `virt_hosts` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `connection_id`             INT NOT NULL,
+    `tenant_id`                 INT NULL,
+    `external_id`               VARCHAR(100) NOT NULL,
+    `identity_kind`             VARCHAR(10) NOT NULL DEFAULT 'source',
+    `name`                      VARCHAR(255) NULL,
+    `cluster_id`                INT NULL,
+    `node_state`                VARCHAR(30) NULL,
+    `os_version`                VARCHAR(100) NULL,
+    `cpu_count`                 INT NULL,
+    `memory_bytes`              BIGINT NULL,
+    `first_seen_at`             DATETIME NULL,
+    `last_seen_observed_at`     DATETIME NULL,
+    `not_seen_since`            DATETIME NULL,
+    `not_confirmed_since`       DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_virt_hosts_ext` (`connection_id`, `external_id`),
+    KEY `idx_virt_hosts_cluster` (`cluster_id`),
+    CONSTRAINT `fk_virt_hosts_conn` FOREIGN KEY (`connection_id`) REFERENCES `virt_connections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A cluster role (Get-ClusterGroup). external_id is its Id (a GUID).
+CREATE TABLE IF NOT EXISTS `virt_cluster_roles` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `connection_id`             INT NOT NULL,
+    `tenant_id`                 INT NULL,
+    `external_id`               VARCHAR(100) NOT NULL,
+    `name`                      VARCHAR(255) NULL,
+    `cluster_id`                INT NULL,
+    `role_type`                 VARCHAR(60) NULL,
+    `owner_host_id`             INT NULL,
+    `state`                     VARCHAR(30) NULL,
+    `preferred_owners_json`     TEXT NULL,
+    `first_seen_at`             DATETIME NULL,
+    `last_seen_observed_at`     DATETIME NULL,
+    `not_seen_since`            DATETIME NULL,
+    `not_confirmed_since`       DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_virt_roles_ext` (`connection_id`, `external_id`),
+    CONSTRAINT `fk_virt_roles_conn` FOREIGN KEY (`connection_id`) REFERENCES `virt_connections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A virtual machine. external_id is Get-VM Id (a GUID): kept by register and restore
+-- imports, NEW after a copy import - which is what virt_identity_reviews is for.
+-- is_clustered NULL = not known. possible_owners_json: the nodes the cluster may run it on.
+CREATE TABLE IF NOT EXISTS `virt_vms` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `connection_id`             INT NOT NULL,
+    `tenant_id`                 INT NULL,
+    `external_id`               VARCHAR(100) NOT NULL,
+    `name`                      VARCHAR(255) NULL,
+    `host_id`                   INT NULL,
+    `cluster_id`                INT NULL,
+    `state`                     VARCHAR(30) NULL,
+    `is_clustered`              TINYINT(1) NULL,
+    `cluster_role_id`           INT NULL,
+    `possible_owners_json`      TEXT NULL,
+    `generation`                INT NULL,
+    `cpu_count`                 INT NULL,
+    `memory_bytes`              BIGINT NULL,
+    `guest_addresses`           VARCHAR(1000) NULL,
+    `os_name`                   VARCHAR(255) NULL,
+    `first_seen_at`             DATETIME NULL,
+    `last_seen_observed_at`     DATETIME NULL,
+    `not_seen_since`            DATETIME NULL,
+    `not_confirmed_since`       DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_virt_vms_ext` (`connection_id`, `external_id`),
+    KEY `idx_virt_vms_host` (`host_id`),
+    KEY `idx_virt_vms_name` (`connection_id`, `name`),
+    CONSTRAINT `fk_virt_vms_conn` FOREIGN KEY (`connection_id`) REFERENCES `virt_connections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A VM's virtual disks, replaced as a set when its report section is complete.
+CREATE TABLE IF NOT EXISTS `virt_vm_disks` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `vm_id`                     INT NOT NULL,
+    `external_id`               VARCHAR(191) NOT NULL,
+    `path`                      VARCHAR(500) NULL,
+    `size_bytes`                BIGINT NULL,
+    `used_bytes`                BIGINT NULL,
+    `controller`                VARCHAR(60) NULL,
+    `observed_at`               DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_virt_vm_disks` (`vm_id`, `external_id`),
+    CONSTRAINT `fk_virt_vm_disks_vm` FOREIGN KEY (`vm_id`) REFERENCES `virt_vms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A VM's network adapters.
+CREATE TABLE IF NOT EXISTS `virt_vm_networks` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `vm_id`                     INT NOT NULL,
+    `external_id`               VARCHAR(191) NOT NULL,
+    `name`                      VARCHAR(255) NULL,
+    `switch_name`               VARCHAR(255) NULL,
+    `mac_address`               VARCHAR(20) NULL,
+    `ip_addresses`              VARCHAR(1000) NULL,
+    `vlan_id`                   INT NULL,
+    `observed_at`               DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_virt_vm_networks` (`vm_id`, `external_id`),
+    CONSTRAINT `fk_virt_vm_networks_vm` FOREIGN KEY (`vm_id`) REFERENCES `virt_vms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Where a VM ran, and from when to when (by the reports' observed times): live migration
+-- and failover history. One open row (to_observed_at NULL) per VM.
+CREATE TABLE IF NOT EXISTS `virt_placements` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `vm_id`                     INT NOT NULL,
+    `host_id`                   INT NULL,
+    `cluster_id`                INT NULL,
+    `from_observed_at`          DATETIME NOT NULL,
+    `to_observed_at`            DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_virt_placements_vm` (`vm_id`, `to_observed_at`),
+    CONSTRAINT `fk_virt_placements_vm` FOREIGN KEY (`vm_id`) REFERENCES `virt_vms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every report received, applied or not, and what each section came to.
+-- scope_key identifies what the report covered (a cluster, the standalone hosts, everything):
+-- the same scope, observed time and content again is a replay.
+CREATE TABLE IF NOT EXISTS `virt_reports` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `connection_id`             INT NOT NULL,
+    `scope_key`                 VARCHAR(191) NOT NULL,
+    `observed_at`               DATETIME NOT NULL,
+    `received_at`               DATETIME NOT NULL,
+    `fingerprint`               CHAR(64) NOT NULL,
+    `outcome`                   VARCHAR(20) NOT NULL,
+    `sections_json`             TEXT NULL,
+    `unreadable_json`           TEXT NULL,
+    `collector_json`            TEXT NULL,
+    `api_key_id`                INT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_virt_reports_scope` (`connection_id`, `scope_key`, `observed_at`),
+    CONSTRAINT `fk_virt_reports_conn` FOREIGN KEY (`connection_id`) REFERENCES `virt_connections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- An object that came back with a new identity while one with the same name stopped being
+-- seen (a copy-imported VM, a host with a new motherboard). A person decides: same machine
+-- (the old record takes the new identity and keeps its history) or different machines.
+-- Never decided by FreeITSM, never merged by name.
+CREATE TABLE IF NOT EXISTS `virt_identity_reviews` (
+    `id`                        INT NOT NULL AUTO_INCREMENT,
+    `connection_id`             INT NOT NULL,
+    `tenant_id`                 INT NULL,
+    `object_kind`               VARCHAR(10) NOT NULL,
+    `old_object_id`             INT NOT NULL,
+    `new_object_id`             INT NOT NULL,
+    `name`                      VARCHAR(255) NULL,
+    `old_external_id`           VARCHAR(100) NULL,
+    `new_external_id`           VARCHAR(100) NULL,
+    `status`                    VARCHAR(16) NOT NULL DEFAULT 'open',
+    `raised_at`                 DATETIME NOT NULL,
+    `decided_by_id`             INT NULL,
+    `decided_at`                DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_virt_reviews_conn` (`connection_id`, `status`),
+    CONSTRAINT `fk_virt_reviews_conn` FOREIGN KEY (`connection_id`) REFERENCES `virt_connections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- GH #199 Part B: how one connection's estate becomes CIs - which of YOUR classes and relationship
+-- types each kind maps to (NULL = that kind is not mapped), whether CI names follow the source,
+-- and whether the sync is on. Off until an administrator previews and turns it on.
+CREATE TABLE IF NOT EXISTS `virt_cmdb_mappings` (
+    `connection_id`        INT NOT NULL,
+    `enabled`              TINYINT(1) NOT NULL DEFAULT 0,
+    `cluster_class_id`     INT NULL,
+    `host_class_id`        INT NULL,
+    `vm_class_id`          INT NULL,
+    `role_class_id`        INT NULL,
+    `member_type_id`       INT NULL,
+    `runs_on_ha_type_id`   INT NULL,
+    `runs_on_type_id`      INT NULL,
+    `role_in_type_id`      INT NULL,
+    `sync_names`           TINYINT(1) NOT NULL DEFAULT 1,
+    `last_sync_at`         DATETIME NULL,
+    `last_sync_summary`    VARCHAR(500) NULL,
+    `updated_by_id`        INT NULL,
+    `updated_at`           DATETIME NULL,
+    PRIMARY KEY (`connection_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- GH #199 Part B: a CI bound to ONE discovered object - "this CI is that VM". One row per PERIOD,
+-- closed never deleted (the same shape as asset_ci_links, GH #201): one live binding per CI and per
+-- object. virt_object_id is the virt_* row id, which a reviewed rebinding keeps.
+CREATE TABLE IF NOT EXISTS `cmdb_object_sources` (
+    `id`                   INT NOT NULL AUTO_INCREMENT,
+    `cmdb_object_id`       INT NOT NULL,
+    `connection_id`        INT NOT NULL,
+    `object_kind`          VARCHAR(10) NOT NULL,
+    `virt_object_id`       INT NOT NULL,
+    `started_at`           DATETIME NOT NULL,
+    `started_by_id`        INT NULL,
+    `start_source`         VARCHAR(80) NOT NULL,
+    `ended_at`             DATETIME NULL,
+    `ended_by_id`          INT NULL,
+    `end_source`           VARCHAR(80) NULL,
+    `end_reason`           VARCHAR(20) NULL,
+    `ci_name`              VARCHAR(255) NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_cmdb_object_sources_ci` (`cmdb_object_id`, `ended_at`),
+    KEY `idx_cmdb_object_sources_obj` (`object_kind`, `virt_object_id`, `ended_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- GH #199 Part B: the relationships a discovery sync created, and so may change or remove. Every
+-- other relationship - everything a person drew - is never touched.
+CREATE TABLE IF NOT EXISTS `cmdb_relationship_sources` (
+    `relationship_id`      INT NOT NULL,
+    `connection_id`        INT NOT NULL,
+    `created_at`           DATETIME NOT NULL,
+    PRIMARY KEY (`relationship_id`),
+    KEY `idx_cmdb_relationship_sources_conn` (`connection_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- GH #199 Part B: a person's decision about a discovered object that the sync must not decide
+-- alone: create_new (despite a same-name CI), leave_unbound, or ci_deleted (its CI was deleted by
+-- a person - never recreated until someone says so).
+CREATE TABLE IF NOT EXISTS `virt_cmdb_decisions` (
+    `object_kind`          VARCHAR(10) NOT NULL,
+    `virt_object_id`       INT NOT NULL,
+    `connection_id`        INT NOT NULL,
+    `decision`             VARCHAR(20) NOT NULL,
+    `decided_by_id`        INT NULL,
+    `decided_at`           DATETIME NOT NULL,
+    PRIMARY KEY (`object_kind`, `virt_object_id`),
+    KEY `idx_virt_cmdb_decisions_conn` (`connection_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
@@ -2334,6 +2621,80 @@ CREATE TABLE IF NOT EXISTS `integration_comment_map` (
     UNIQUE KEY `uq_integration_comment` (`link_id`, `external_comment_id`),
     KEY `ix_integration_comment_note` (`local_note_id`),
     CONSTRAINT `fk_integration_comment_link` FOREIGN KEY (`link_id`) REFERENCES `integration_links` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every event Zabbix sent to api/external/zabbix/alert.php, and what was done with it
+-- (includes/integrations/zabbix.php). problem_id is Zabbix's {EVENT.ID}: a recovery
+-- carries its problem's, which is how it finds the ticket the problem opened.
+-- action: created | updated | resolved | recovery_unmatched | error.
+CREATE TABLE IF NOT EXISTS `zabbix_events` (
+    `id`                INT NOT NULL AUTO_INCREMENT,
+    `problem_id`        VARCHAR(64) NOT NULL,
+    `event_value`       TINYINT NOT NULL DEFAULT 1,                  -- 1 problem, 0 recovery
+    `host`              VARCHAR(255) NOT NULL,
+    `trigger_name`      VARCHAR(500) NULL,
+    `severity`          TINYINT NOT NULL DEFAULT 3,                  -- 0 Not classified .. 5 Disaster
+    `ticket_id`         INT NULL,
+    `action`            VARCHAR(30) NOT NULL,
+    `detail`            VARCHAR(255) NULL,
+    `received_datetime` DATETIME NOT NULL,
+    PRIMARY KEY (`id`),
+    KEY `ix_zabbix_events_problem` (`problem_id`),
+    KEY `ix_zabbix_events_received` (`received_datetime`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every call 3CX reported to api/external/3cx/crm.php, and what was done with it
+-- (includes/integrations/threecx.php). 3CX gives a template no call id, so call_key
+-- is a hash of number, start, agent, length and type - the same report twice is
+-- recorded once. analyst_id is who the note was written as; user_id the caller.
+-- action: noted | created | logged | error.
+CREATE TABLE IF NOT EXISTS `threecx_calls` (
+    `id`                INT NOT NULL AUTO_INCREMENT,
+    `call_key`          VARCHAR(80) NOT NULL,
+    `call_type`         VARCHAR(20) NOT NULL,                        -- Inbound | Outbound | Missed | Notanswered
+    `number`            VARCHAR(50) NOT NULL,
+    `agent`             VARCHAR(50) NULL,                            -- the 3CX extension
+    `agent_email`       VARCHAR(255) NULL,
+    `analyst_id`        INT NULL,
+    `user_id`           INT NULL,
+    `ticket_id`         INT NULL,
+    `duration_seconds`  INT NULL,
+    `started_datetime`  DATETIME NULL,                               -- UTC, from 3CX
+    `action`            VARCHAR(30) NOT NULL,
+    `detail`            VARCHAR(255) NULL,
+    `received_datetime` DATETIME NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_threecx_calls_key` (`call_key`),
+    KEY `ix_threecx_calls_received` (`received_datetime`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Microsoft Teams channel alerts (System → Integrations → Microsoft Teams;
+-- includes/integrations/msteams.php). One row per Teams channel: its Workflows
+-- webhook address (ENCRYPTED, so 2000 wide - see webhook_deliveries.url), which
+-- alerts it gets (a JSON list of fixed keys, ticked on the page), the priority
+-- an "urgent ticket" alert starts at, and the teams whose tickets it is sent.
+-- Every ticked alert IS an ordinary workflow (send_webhook, Teams card format);
+-- msteams_channel_workflows says which one, so the page can update or remove
+-- exactly its own and never a workflow somebody wrote by hand.
+CREATE TABLE IF NOT EXISTS `msteams_channels` (
+    `id`                    INT NOT NULL AUTO_INCREMENT,
+    `name`                  VARCHAR(100) NOT NULL,
+    `webhook_url`           VARCHAR(2000) NULL,
+    `alerts`                TEXT NULL,                     -- JSON list, e.g. ["every_new","sla_breached"]
+    `priority_threshold_id` INT NULL,                      -- "at or above" this priority
+    `team_ids`              TEXT NULL,                     -- JSON list of teams.id
+    `display_order`         INT NOT NULL DEFAULT 0,
+    `created_datetime`      DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_datetime`      DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `msteams_channel_workflows` (
+    `channel_id`   INT NOT NULL,
+    `alert_key`    VARCHAR(40) NOT NULL,
+    `workflow_id`  INT NOT NULL,
+    PRIMARY KEY (`channel_id`, `alert_key`),
+    KEY `ix_msteams_channel_workflows_workflow` (`workflow_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- One website chat conversation. Created when a visitor opens the widget and (if the
@@ -2788,6 +3149,10 @@ CREATE TABLE IF NOT EXISTS `asset_types` (
     -- in, and the 66 glyphs already there were paid for and half-unused.
     -- NULL = no icon, which is every type until somebody picks one.
     `icon_id`           INT NULL,
+    -- GH #201: the CMDB class an asset of this type becomes through "Create linked CI".
+    -- NULL = not mapped (no button). It never creates a CI by itself. No foreign key:
+    -- a class deleted or deactivated later simply reads as no mapping.
+    `cmdb_class_id`     INT NULL,
     -- Multi-tenancy: NULL = global default type (shared by every company); set =
     -- a type a company added for itself. Existing rows stay NULL, so a
     -- single-company install is unaffected. (Config meaning of tenant_id: NULL =
@@ -2807,6 +3172,11 @@ CREATE TABLE IF NOT EXISTS `asset_status_types` (
     `name`              VARCHAR(100) NOT NULL,
     `description`       VARCHAR(255) NULL,
     `is_active`         TINYINT(1) NOT NULL DEFAULT 1,
+    -- 1 = an asset in this status has left the estate (retired, disposed,
+    -- transferred): it leaves the default lists, counts and alerts, and the
+    -- asset is stamped with retired_datetime. Off by default - nothing changes
+    -- until somebody ticks it (includes/asset_retirement.php).
+    `is_retired`        TINYINT(1) NOT NULL DEFAULT 0,
     `display_order`     INT NOT NULL DEFAULT 0,
     -- Multi-tenancy: NULL = global default status; set = a company's own. See
     -- asset_types above for the tenant_id config convention.
@@ -2886,6 +3256,11 @@ CREATE TABLE IF NOT EXISTS `assets` (
     -- that shape of question on the dashboard and in the calendar.
     `lease_start`       DATE NULL,   -- when a leased asset's lease began (3.5.0)
     `lease_expiry`      DATE NULL,
+    -- When the asset moved into a retired status (asset_status_types.is_retired)
+    -- and why - "Transferred to the Ministry of Education". Set and cleared by
+    -- AssetsService with the status, never typed on its own.
+    `retired_datetime`  DATETIME NULL,
+    `retired_reason`    VARCHAR(255) NULL,
     -- Multi-tenancy (SCOPED DATA, not config): the company this asset belongs to.
     -- NULL = the Default company (existing installs stay NULL, so a single-company
     -- install is unaffected). Agent ingest derives it from the API key's tenant_id;
@@ -3030,14 +3405,21 @@ CREATE TABLE IF NOT EXISTS `asset_inventory_sources` (
     CONSTRAINT `fk_inventory_source_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- GH #200 Part B: the last good data (observed_at, fingerprint - NULL until a section
+-- has once succeeded) and, beside it, the last attempt and what came of it, so a
+-- failed or skipped section never makes old data look new or throws it away.
+-- imported_by_id is NULL for the agent, which is no analyst.
 CREATE TABLE IF NOT EXISTS `asset_inventory_sections` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `inventory_source_id` INT NOT NULL,
     `section_name` VARCHAR(32) NOT NULL,
-    `observed_at` DATETIME NOT NULL,
-    `imported_at` DATETIME NOT NULL,
-    `imported_by_id` INT NOT NULL,
-    `fingerprint` CHAR(64) NOT NULL,
+    `observed_at` DATETIME NULL,
+    `imported_at` DATETIME NULL,
+    `imported_by_id` INT NULL,
+    `fingerprint` CHAR(64) NULL,
+    `last_outcome` VARCHAR(16) NULL,
+    `last_error` VARCHAR(500) NULL,
+    `last_attempt_at` DATETIME NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_inventory_source_section` (`inventory_source_id`, `section_name`),
     CONSTRAINT `fk_inventory_section_source` FOREIGN KEY (`inventory_source_id`) REFERENCES `asset_inventory_sources` (`id`) ON DELETE CASCADE
@@ -3246,6 +3628,153 @@ CREATE TABLE IF NOT EXISTS `asset_type_field_sets` (
     KEY `ix_atfs_set` (`set_id`),
     CONSTRAINT `fk_atfs_type` FOREIGN KEY (`asset_type_id`) REFERENCES `asset_types` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_atfs_set` FOREIGN KEY (`set_id`) REFERENCES `asset_field_sets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Which built-in Key info sections and tabs an asset TYPE shows (GH #200). Presentation only:
+-- never what is stored or required. No row = shown, in the default place.
+CREATE TABLE IF NOT EXISTS `asset_type_layout` (
+    `id`                INT NOT NULL AUTO_INCREMENT,
+    `asset_type_id`     INT NOT NULL,
+    `item_kind`         VARCHAR(10) NOT NULL,
+    `item_key`          VARCHAR(32) NOT NULL,
+    `is_shown`          TINYINT(1) NOT NULL DEFAULT 1,
+    `sort_order`        INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_asset_type_layout_item` (`asset_type_id`, `item_kind`, `item_key`),
+    CONSTRAINT `fk_atl_type` FOREIGN KEY (`asset_type_id`) REFERENCES `asset_types` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Connected assets (GH #200 part C): a monitor plugged into a computer, a phone in
+-- a dock. A PHYSICAL attachment - not custody (users_assets), not a CMDB dependency.
+-- One row per source: the same monitor confirmed by a person and observed by a tool
+-- is two rows, and each source only ever opens or closes its own. asset_id is the
+-- side that reported it (the asset a REST report was about, or the one a person was
+-- on); the page shows a connection from both ends. disconnected_at NULL = connected.
+CREATE TABLE IF NOT EXISTS `asset_connections` (
+    `id`                  INT NOT NULL AUTO_INCREMENT,
+    `asset_id`            INT NOT NULL,
+    `connected_asset_id`  INT NOT NULL,
+    `source`              VARCHAR(64) NOT NULL,
+    `connected_at`        DATETIME NOT NULL,
+    `first_observed_at`   DATETIME NULL,
+    `last_observed_at`    DATETIME NULL,
+    `disconnected_at`     DATETIME NULL,
+    `confirmed_by_id`     INT NULL,
+    `disconnected_by_id`  INT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_asset_connections_asset` (`asset_id`, `disconnected_at`),
+    KEY `idx_asset_connections_other` (`connected_asset_id`, `disconnected_at`),
+    CONSTRAINT `fk_asset_connections_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_asset_connections_other` FOREIGN KEY (`connected_asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The asset <-> configuration item link (GH #201): "these two records are the same piece of
+-- equipment". One row per PERIOD of being linked, closed (unlinked_at) and never deleted, so
+-- the table is also the history - the CMDB has none of its own. At most one live row per asset
+-- and per CI, enforced by AssetCiLinkService under a lock. asset_id follows a merge;
+-- original_asset_id and asset_name are the record it was made on, and never change. No foreign
+-- key on cmdb_object_id: a deleted CI's row stays, with its name and class kept in ci_name.
+CREATE TABLE IF NOT EXISTS `asset_ci_links` (
+    `id`                 INT NOT NULL AUTO_INCREMENT,
+    `asset_id`           INT NOT NULL,
+    `original_asset_id`  INT NOT NULL,
+    `asset_name`         VARCHAR(255) NULL,
+    `cmdb_object_id`     INT NOT NULL,
+    `linked_at`          DATETIME NOT NULL,
+    `linked_by_id`       INT NULL,
+    `link_source`        VARCHAR(80) NOT NULL DEFAULT 'ui',
+    `unlinked_at`        DATETIME NULL,
+    `unlinked_by_id`     INT NULL,
+    `unlink_source`      VARCHAR(80) NULL,
+    `unlink_reason`      VARCHAR(20) NULL,
+    `ci_name`            VARCHAR(255) NULL,
+    `ci_class_name`      VARCHAR(150) NULL,
+    `is_demo`                    TINYINT(1) NOT NULL DEFAULT 0,   -- set by the Virtualisation demo (System -> Demo Data)
+    PRIMARY KEY (`id`),
+    KEY `idx_asset_ci_links_asset` (`asset_id`, `unlinked_at`),
+    KEY `idx_asset_ci_links_ci` (`cmdb_object_id`, `unlinked_at`),
+    CONSTRAINT `fk_asset_ci_links_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reconciliation you can review (GH #200 part D): the cases matching already refuses
+-- to guess about - two assets sharing a serial, a reused hostname, an ambiguous match,
+-- a peripheral a tool reported that matches no asset - kept for a person to decide.
+-- match_key makes the same case one row however often it is seen again.
+-- status: open | merged | different | ignored | resolved (it sorted itself out).
+CREATE TABLE IF NOT EXISTS `asset_review_items` (
+    `id`               INT NOT NULL AUTO_INCREMENT,
+    `tenant_id`        INT NOT NULL,
+    `kind`             VARCHAR(32) NOT NULL,
+    `match_key`        VARCHAR(191) NOT NULL,
+    `asset_id`         INT NULL,
+    `other_asset_id`   INT NULL,
+    `source`           VARCHAR(64) NULL,
+    `detail`           VARCHAR(1000) NULL,
+    `first_seen_at`    DATETIME NOT NULL,
+    `last_seen_at`     DATETIME NOT NULL,
+    `status`           VARCHAR(16) NOT NULL DEFAULT 'open',
+    `resolved_by_id`   INT NULL,
+    `resolved_at`      DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_asset_review_key` (`tenant_id`, `match_key`),
+    KEY `idx_asset_review_status` (`tenant_id`, `status`),
+    CONSTRAINT `fk_asset_review_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_asset_review_other` FOREIGN KEY (`other_asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Manufacturer and model names (GH #200 part D): "HP Inc." and "Hewlett-Packard" shown
+-- and filtered as "HP". Applied when values are SHOWN; assets keep what was reported.
+-- Install-wide - a vendor's name is not a company's choice. from_value matches without
+-- regard to case (the column's collation).
+CREATE TABLE IF NOT EXISTS `asset_name_mappings` (
+    `id`             INT NOT NULL AUTO_INCREMENT,
+    `field`          VARCHAR(16) NOT NULL,
+    `from_value`     VARCHAR(100) NOT NULL,
+    `to_value`       VARCHAR(100) NOT NULL,
+    `created_by_id`  INT NULL,
+    `created_at`     DATETIME NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_asset_name_mapping` (`field`, `from_value`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Protected values (GH #200 part D): a name, manufacturer or model a person set that
+-- no reporting tool may overwrite. What the tool reports instead is kept beside it
+-- (reported_*), so the page can show the disagreement; Release lets the tool win again.
+CREATE TABLE IF NOT EXISTS `asset_protected_fields` (
+    `id`               INT NOT NULL AUTO_INCREMENT,
+    `asset_id`         INT NOT NULL,
+    `field_name`       VARCHAR(32) NOT NULL,
+    `protected_by_id`  INT NULL,
+    `protected_at`     DATETIME NOT NULL,
+    `reported_value`   VARCHAR(255) NULL,
+    `reported_source`  VARCHAR(64) NULL,
+    `reported_at`      DATETIME NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_asset_protected_field` (`asset_id`, `field_name`),
+    CONSTRAINT `fk_asset_protected_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Two assets merged into one by a person from the review list (GH #200 part D).
+-- The merged asset is gone, so this is what still finds the one that was kept:
+-- its QR label (merged_qr_token) and a REST tool still reporting to its id.
+-- No FK on merged_asset_id: that asset no longer exists.
+CREATE TABLE IF NOT EXISTS `asset_merges` (
+    `id`                 INT NOT NULL AUTO_INCREMENT,
+    `merged_asset_id`    INT NOT NULL,
+    `into_asset_id`      INT NOT NULL,
+    `tenant_id`          INT NULL,
+    `merged_hostname`    VARCHAR(50) NULL,
+    `merged_service_tag` VARCHAR(50) NULL,
+    `merged_asset_tag`   VARCHAR(64) NULL,
+    `merged_qr_token`    VARCHAR(64) NULL,
+    `merged_by_id`       INT NULL,
+    `merged_at`          DATETIME NOT NULL,
+    `summary`            TEXT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_asset_merges_merged` (`merged_asset_id`),
+    KEY `idx_asset_merges_into` (`into_asset_id`),
+    KEY `idx_asset_merges_qr` (`merged_qr_token`),
+    CONSTRAINT `fk_asset_merges_into` FOREIGN KEY (`into_asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- A set attached to ONE asset — the pilot case. Ten televisions, three of them
@@ -3584,6 +4113,7 @@ CREATE TABLE IF NOT EXISTS `servers` (
     `guest_os`          VARCHAR(255) NULL,
     `last_synced`       DATETIME NULL,
     `raw_data`          LONGTEXT NULL,
+    `is_demo`                    TINYINT(1) NOT NULL DEFAULT 0,   -- set by the Virtualisation demo (System -> Demo Data)
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -5568,6 +6098,14 @@ CREATE TABLE IF NOT EXISTS `forms` (
     -- Optional JSON array of analyst ids. NULL preserves legacy single-approver
     -- behaviour; when present any one member may decide.
     `approver_ids`      TEXT NULL,
+    -- Group approval (GH #220): a team decides instead of approver_id when this is
+    -- set - approvals_required different members approve, rejections_required
+    -- different members reject. NULL = the named-person approval, unchanged.
+    `approval_team_id`           INT NULL,
+    `approvals_required`         INT NOT NULL DEFAULT 1,
+    `rejections_required`        INT NOT NULL DEFAULT 1,
+    -- Named-person mode only: refuse the requester approving their own request.
+    `approval_exclude_requester` TINYINT(1) NOT NULL DEFAULT 0,
     -- What happens when this form is submitted, approved or rejected (#95).
     -- JSON: {"submitted":[…],"approved":[…],"rejected":[…]}, each a list of
     -- {type, args} in the workflow engine's own action shape — they ARE workflow
@@ -5611,6 +6149,8 @@ CREATE TABLE IF NOT EXISTS `forms` (
     -- SET NULL: losing the approver shouldn't delete the catalogue item, it just
     -- becomes unconfigured (and stops gating) until a new approver is chosen.
     CONSTRAINT `fk_forms_approver` FOREIGN KEY (`approver_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    -- SET NULL, like the approver: a deleted team leaves the form unconfigured.
+    CONSTRAINT `fk_forms_approval_team` FOREIGN KEY (`approval_team_id`) REFERENCES `teams` (`id`) ON DELETE SET NULL,
     -- SET NULL: deleting a collection leaves its forms unpaired, which is a
     -- legitimate state. Contrast form_submissions below, where it is not.
     CONSTRAINT `fk_forms_collection` FOREIGN KEY (`collection_id`) REFERENCES `form_collections` (`id`) ON DELETE SET NULL
@@ -5677,6 +6217,14 @@ CREATE TABLE IF NOT EXISTS `form_submissions` (
     `approval_decided_by_id`     INT NULL,
     `approval_decided_datetime`  DATETIME NULL,
     `approval_comment`           TEXT NULL,
+    -- Group approval (GH #220), snapshotted from the form at submit time like
+    -- approver_id. approval_round goes up when an administrator moves the request;
+    -- only the current round's votes count.
+    `approval_team_id`           INT NULL,
+    `approvals_required`         INT NULL,
+    `rejections_required`        INT NULL,
+    `approval_exclude_requester` TINYINT(1) NOT NULL DEFAULT 0,
+    `approval_round`             INT NOT NULL DEFAULT 1,
     -- Which collection this submission WAS part of, stamped at submit time
     -- from forms.collection_id. The two are ALLOWED TO DISAGREE and that is
     -- the point: re-pairing a form must never rewrite what last year's
@@ -5698,6 +6246,7 @@ CREATE TABLE IF NOT EXISTS `form_submissions` (
     UNIQUE KEY `uq_form_submissions_task_ref` (`task_id`, `client_reference`),
     KEY `idx_form_submissions_ticket` (`ticket_id`),
     KEY `idx_form_submissions_approval` (`approval_status`, `approver_id`),
+    KEY `idx_form_submissions_team` (`approval_status`, `approval_team_id`),
     -- The collection view reads every submission for a collection across
     -- several forms, so this is the column it filters on.
     KEY `idx_form_submissions_collection` (`collection_id`),
@@ -5706,10 +6255,47 @@ CREATE TABLE IF NOT EXISTS `form_submissions` (
     CONSTRAINT `fk_form_submissions_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_form_submissions_approver` FOREIGN KEY (`approver_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_form_submissions_decided_by` FOREIGN KEY (`approval_decided_by_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_form_submissions_approval_team` FOREIGN KEY (`approval_team_id`) REFERENCES `teams` (`id`) ON DELETE SET NULL,
     -- RESTRICT (no delete rule), DELIBERATELY: a collection holding
     -- submissions can be CLOSED but not deleted. SET NULL here would quietly
     -- destroy the very record this column exists to keep.
     CONSTRAINT `fk_form_submissions_collection` FOREIGN KEY (`collection_id`) REFERENCES `form_collections` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Group approval votes (GH #220). One row per person per request per round: the
+-- UNIQUE key makes a second click from the same person count once, even when two
+-- clicks race. was_member: they were in the team when they voted. A vote is kept
+-- when its voter leaves the team or the company - it is the record of a decision.
+CREATE TABLE IF NOT EXISTS `form_submission_votes` (
+    `id`             INT NOT NULL AUTO_INCREMENT,
+    `submission_id`  INT NOT NULL,
+    `approval_round` INT NOT NULL DEFAULT 1,
+    `analyst_id`     INT NULL,
+    `decision`       VARCHAR(20) NOT NULL,            -- approved / rejected
+    `comment`        TEXT NULL,
+    `was_member`     TINYINT(1) NOT NULL DEFAULT 1,
+    `voted_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_form_submission_votes` (`submission_id`, `approval_round`, `analyst_id`),
+    CONSTRAINT `fk_form_submission_votes_submission` FOREIGN KEY (`submission_id`) REFERENCES `form_submissions` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_form_submission_votes_analyst` FOREIGN KEY (`analyst_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- An administrator's actions on a request (GH #220): override (decided without
+-- the votes, with a reason) or moved (to another team or person, with a reason).
+-- Kept apart from the votes on purpose: an override is never counted as votes.
+CREATE TABLE IF NOT EXISTS `form_submission_approval_events` (
+    `id`             INT NOT NULL AUTO_INCREMENT,
+    `submission_id`  INT NOT NULL,
+    `analyst_id`     INT NULL,
+    `action`         VARCHAR(30) NOT NULL,            -- override_approved / override_rejected / moved
+    `detail`         TEXT NULL,
+    `reason`         TEXT NULL,
+    `event_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_form_submission_approval_events` (`submission_id`),
+    CONSTRAINT `fk_form_submission_approval_events_submission` FOREIGN KEY (`submission_id`) REFERENCES `form_submissions` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_form_submission_approval_events_analyst` FOREIGN KEY (`analyst_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `form_submission_data` (
@@ -6647,10 +7233,17 @@ CREATE TABLE IF NOT EXISTS `workflows` (
     `last_run_status`   VARCHAR(20) NULL,             -- 'success' | 'failed' | 'skipped' | 'aborted'
     `run_count`         INT NOT NULL DEFAULT 0,
     `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,   -- set by the demo data importer (#1297)
+    -- GH #209. NULL = SHARED: runs for every company's events (and every workflow
+    -- from before companies). Set = runs only for that company's events, and its
+    -- actions may only touch that company's records. CASCADE, never SET NULL: a
+    -- deleted company's workflows must go with it, not become shared ones.
+    `tenant_id`         INT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_workflows_trigger` (`trigger_event`),
     KEY `idx_workflows_active` (`is_active`),
-    CONSTRAINT `fk_workflows_created_by` FOREIGN KEY (`created_by`) REFERENCES `analysts` (`id`) ON DELETE SET NULL
+    KEY `idx_workflows_tenant` (`tenant_id`),
+    CONSTRAINT `fk_workflows_created_by` FOREIGN KEY (`created_by`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_workflows_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Execution rows deliberately SURVIVE workflow deletion (they're the audit
@@ -6668,10 +7261,17 @@ CREATE TABLE IF NOT EXISTS `workflow_executions` (
     `finished_datetime` DATETIME NULL,
     `step_log`          TEXT NULL,                    -- JSON array of per-step results
     `error_message`     TEXT NULL,
+    -- GH #209. The company the EVENT belonged to (the ticket's, the task's...), so
+    -- the run log - which holds the payload - is shown only to people who can see
+    -- that company. NULL = no company known (a settings event, or a run from
+    -- before this column): shown only to people who can see every company.
+    `tenant_id`         INT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_we_workflow` (`workflow_id`),
     KEY `idx_we_started` (`started_datetime`),
-    CONSTRAINT `fk_we_workflow` FOREIGN KEY (`workflow_id`) REFERENCES `workflows` (`id`) ON DELETE SET NULL
+    KEY `idx_we_tenant` (`tenant_id`),
+    CONSTRAINT `fk_we_workflow` FOREIGN KEY (`workflow_id`) REFERENCES `workflows` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_we_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Outbound webhook delivery queue. The `send_webhook` workflow action enqueues
@@ -6733,7 +7333,8 @@ CREATE TABLE IF NOT EXISTS `webhook_message_formats` (
 INSERT IGNORE INTO `webhook_message_formats` (`format_key`, `label`, `body_template`, `url_pattern`, `markdown_hint`, `is_builtin`, `display_order`) VALUES
     ('slack',   'Slack',            '{"text": "{{message}}"}',    'hooks\\.slack\\.com',                                        'Slack mrkdwn: *bold*, _italic_, `code`. Links are <https://example.com|like this>.', 1, 10),
     ('teams',   'Microsoft Teams',  '{"@type": "MessageCard", "@context": "https://schema.org/extensions", "summary": "{{message}}", "text": "{{message}}"}', 'webhook\\.office\\.com|office\\.com/webhookb2|logic\\.azure\\.com', 'Teams MessageCard: **bold**, *italic*, [link](https://example.com).', 1, 20),
-    ('discord', 'Discord',          '{"content": "{{message}}"}', 'discord(app)?\\.com/api/webhooks',                           'Discord markdown: **bold** (two asterisks — a single *asterisk* is italic). Emoji shortcodes like :rotating_light: work.', 1, 30);
+    ('discord', 'Discord',          '{"content": "{{message}}"}', 'discord(app)?\\.com/api/webhooks',                           'Discord markdown: **bold** (two asterisks — a single *asterisk* is italic). Emoji shortcodes like :rotating_light: work.', 1, 30),
+    ('teams_workflows', 'Microsoft Teams (Workflows card)', '{"type": "message", "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "contentUrl": null, "content": {"$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "type": "AdaptiveCard", "version": "1.4", "msteams": {"width": "Full"}, "body": [{"type": "TextBlock", "text": "{{message}}", "wrap": true}], "actions": [{"type": "Action.OpenUrl", "title": "Open in FreeITSM", "url": "{{link}}"}]}}]}', 'logic\\.azure\\.com|powerplatform\\.com|powerautomate\\.com', 'Teams card: **bold**, *italic*, [link](https://example.com), - a list item; a blank line starts a new paragraph.', 1, 40);
 
 CREATE TABLE IF NOT EXISTS `webhook_deliveries` (
     `id`                 INT NOT NULL AUTO_INCREMENT,
@@ -7188,6 +7789,16 @@ CREATE TABLE IF NOT EXISTS `cmdb_relationship_types` (
     -- Defaults to 'none' so an upgraded install reports nothing until someone
     -- deliberately says a relationship carries impact.
     `impact_direction`  VARCHAR(10) NOT NULL DEFAULT 'none',
+    -- GH #199 Part C: what a failure travelling along this relationship MEANS.
+    --   'none'       = an ordinary dependency: the object it reaches is affected
+    --   'membership' = membership of a redundant group ("is a member of" a cluster):
+    --                  losing some members reduces the group's redundancy; losing all
+    --                  of them affects it
+    --   'placement'  = placement with failover ("runs on", for a highly available
+    --                  role ONLY): the object may be interrupted while its host's group
+    --                  has another member, and is affected when it has none
+    -- One column, so a type can never be both. 'none' everywhere means today's results.
+    `redundancy`        VARCHAR(20) NOT NULL DEFAULT 'none',
     `display_order`     INT NULL DEFAULT 0,
     `is_active`         TINYINT(1) NULL DEFAULT 1,
     `created_datetime`  DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
@@ -8158,6 +8769,23 @@ CREATE TABLE IF NOT EXISTS `domains` (
     `security_grade`         VARCHAR(2) NULL,
     `check_results`          LONGTEXT NULL,          -- JSON: the last posture checks
     `watch_baseline`         LONGTEXT NULL,          -- JSON: what change detection compares against
+    -- A subdomain's parent (students.example.org → example.org), in the same
+    -- company. Its registration - registrar, expiry, renewal - is the parent's:
+    -- it is never looked up at a registry and has no expiry alerts of its own.
+    -- One level only: a parent is never itself a subdomain.
+    `parent_domain_id`       INT NULL,
+    -- GH #203. public | internal (DomainScope, includes/domains/scope.php). An
+    -- internal domain never leaves the network: DNS through this server only, no
+    -- registry, CT, look-alike scan or HTTPS connection. It gets a health status
+    -- instead of a grade.
+    `scope`                  VARCHAR(10) NOT NULL DEFAULT 'public',
+    -- Internal health: the last COMPLETED result (healthy | problem), when that
+    -- was, when it was last healthy, and whether the latest attempt failed to
+    -- complete. Stale is worked out when read (domainHealth), never stored.
+    `health_status`              VARCHAR(10) NULL,
+    `health_completed_datetime`  DATETIME NULL,
+    `health_healthy_datetime`    DATETIME NULL,
+    `health_incomplete`          TINYINT(1) NOT NULL DEFAULT 0,
     `created_by`             INT NULL,
     `created_datetime`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_datetime`       DATETIME NULL,
@@ -8172,6 +8800,7 @@ CREATE TABLE IF NOT EXISTS `domains` (
     KEY `idx_domains_customer_contact` (`customer_contact_id`),
     KEY `idx_domains_tech_analyst` (`tech_analyst_id`),
     KEY `idx_domains_cost_centre` (`cost_centre_id`),
+    KEY `idx_domains_parent` (`parent_domain_id`),
     CONSTRAINT `fk_domains_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_domains_status` FOREIGN KEY (`status_id`) REFERENCES `domain_statuses` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_domains_registrar` FOREIGN KEY (`registrar_supplier_id`) REFERENCES `suppliers` (`id`) ON DELETE SET NULL,
@@ -8254,6 +8883,40 @@ CREATE TABLE IF NOT EXISTS `domain_certificates` (
     CONSTRAINT `fk_domain_certificates_domain` FOREIGN KEY (`domain_id`) REFERENCES `domains` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- Certificates recorded by hand against a domain or subdomain: the ones its
+-- checks cannot reach (an internal server, a VPN appliance, a SAML signing or
+-- code-signing certificate). Their expiry joins the checked certificates'
+-- alerts, calendar entries and Watchtower count. The provider is a Contracts
+-- supplier (supplier_id) or, when it is not one, plain text (provider_name).
+CREATE TABLE IF NOT EXISTS `domain_manual_certificates` (
+    `id`               INT NOT NULL AUTO_INCREMENT,
+    `domain_id`        INT NOT NULL,
+    `purpose`          VARCHAR(255) NOT NULL,         -- the system or purpose it is for
+    `cert_type_id`     INT NULL,
+    `supplier_id`      INT NULL,
+    `provider_name`    VARCHAR(255) NULL,
+    `expiry_date`      DATE NOT NULL,
+    `url`              VARCHAR(500) NULL,
+    `notes`            TEXT NULL,
+    `created_by`       INT NULL,
+    `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_datetime` DATETIME NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_dmc_domain` (`domain_id`),
+    KEY `idx_dmc_expiry` (`expiry_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The certificate types a recorded certificate can be (Domains → Settings),
+-- one list for every company, like the domain statuses.
+CREATE TABLE IF NOT EXISTS `domain_certificate_types` (
+    `id`               INT NOT NULL AUTO_INCREMENT,
+    `name`             VARCHAR(100) NOT NULL,
+    `is_active`        TINYINT(1) NOT NULL DEFAULT 1,
+    `display_order`    INT NOT NULL DEFAULT 0,
+    `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
 -- Domains, joined to the rest of FreeITSM (3.0.0). Four plain links - each is
@@ -9455,6 +10118,135 @@ SELECT * FROM (
     SELECT 'Cancelled', '#dc2626', 0, 5
 ) s
 WHERE NOT EXISTS (SELECT 1 FROM `domain_statuses` LIMIT 1);
+
+-- Seed: the certificate types, into an empty table only (the same rule).
+INSERT INTO `domain_certificate_types` (`name`, `display_order`)
+SELECT * FROM (
+    SELECT 'DV (domain validated)' AS n, 1 AS o UNION ALL
+    SELECT 'OV (organisation validated)', 2 UNION ALL
+    SELECT 'EV (extended validation)', 3 UNION ALL
+    SELECT 'Wildcard', 4 UNION ALL
+    SELECT 'Multi-domain (SAN)', 5 UNION ALL
+    SELECT 'Code signing', 6 UNION ALL
+    SELECT 'Email (S/MIME)', 7 UNION ALL
+    SELECT 'Client / device', 8 UNION ALL
+    SELECT 'Internal CA', 9 UNION ALL
+    SELECT 'Other', 10
+) t
+WHERE NOT EXISTS (SELECT 1 FROM `domain_certificate_types` LIMIT 1);
+-- ===========================================================================
+-- Starters & leavers (4.6.0). A case is someone joining, moving or leaving.
+-- The module owns only what nothing else holds - who, which kind, which date,
+-- which template - and drives the rest through other modules' services: the
+-- steps are TASKS (a parent task, a subtask per step), kit moves through ASSET
+-- custody, checklists come from CHECKLISTS, automation from WORKFLOWS.
+-- See includes/starters/service.php.
+-- ===========================================================================
+
+-- What happens for a kind of change: a named list of steps.
+CREATE TABLE IF NOT EXISTS `jml_templates` (
+    `id`                INT NOT NULL AUTO_INCREMENT,
+    `tenant_id`         INT NULL,                       -- NULL = shared by every company
+    `kind`              VARCHAR(10) NOT NULL,           -- starter | mover | leaver (JmlKind)
+    `name`              VARCHAR(150) NOT NULL,
+    `description`       VARCHAR(500) NULL,
+    `is_active`         TINYINT(1) NOT NULL DEFAULT 1,
+    `display_order`     INT NOT NULL DEFAULT 0,
+    -- The questions (a Forms form, any version of it) - asked on the case's task,
+    -- or answered in the portal before the case opens. NULL = no questions.
+    `form_id`           INT NULL,
+    -- When a form opens a case, which template it gets: JSON {match, rules:[{question,
+    -- op, value}]} against the answers, by question LABEL so a new form version
+    -- keeps working. NULL = the template to use when no other one matches.
+    `match_rule`        TEXT NULL,
+    `created_datetime`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `is_demo`           TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_jml_templates_kind` (`kind`, `is_active`),
+    CONSTRAINT `fk_jml_templates_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_jml_templates_form` FOREIGN KEY (`form_id`) REFERENCES `forms` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One step of a template. Becomes a subtask of the case's task, due
+-- due_offset_days from the case's date (negative = before it), for the team or
+-- analyst named, with the checklist template attached if one is chosen.
+CREATE TABLE IF NOT EXISTS `jml_template_steps` (
+    `id`                     INT NOT NULL AUTO_INCREMENT,
+    `template_id`            INT NOT NULL,
+    `title`                  VARCHAR(255) NOT NULL,
+    `description`            TEXT NULL,
+    `assigned_team_id`       INT NULL,
+    `assigned_analyst_id`    INT NULL,
+    `due_offset_days`        INT NOT NULL DEFAULT 0,
+    `checklist_template_id`  INT NULL,
+    -- Only if: JSON {match, rules:[{question, op, value}]} against the case's
+    -- answers (same operators as a form's show/hide rules). NULL = always.
+    `condition_rule`         TEXT NULL,
+    `display_order`          INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_jml_template_steps_template` (`template_id`, `display_order`),
+    CONSTRAINT `fk_jml_steps_template` FOREIGN KEY (`template_id`) REFERENCES `jml_templates` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_jml_steps_team` FOREIGN KEY (`assigned_team_id`) REFERENCES `teams` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_steps_analyst` FOREIGN KEY (`assigned_analyst_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_steps_checklist` FOREIGN KEY (`checklist_template_id`) REFERENCES `checklist_templates` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A case: one person joining, moving or leaving on a date. The work is the
+-- task parent_task_id and its subtasks - progress is read from them, never
+-- stored here twice.
+CREATE TABLE IF NOT EXISTS `jml_cases` (
+    `id`                  INT NOT NULL AUTO_INCREMENT,
+    `tenant_id`           INT NULL,                     -- NULL = the Default company
+    `kind`                VARCHAR(10) NOT NULL,         -- starter | mover | leaver
+    -- The person: a user already in FreeITSM, or - for a starter not yet in
+    -- Users - just a name and an email until they are added.
+    `user_id`             INT NULL,
+    `person_name`         VARCHAR(255) NOT NULL,
+    `person_email`        VARCHAR(255) NULL,
+    `job_title`           VARCHAR(150) NULL,
+    `manager_user_id`     INT NULL,
+    `effective_date`      DATE NOT NULL,                -- first day, move date or last day
+    `status`              VARCHAR(12) NOT NULL DEFAULT 'open',   -- open | done | cancelled
+    `template_id`         INT NULL,
+    `parent_task_id`      INT NULL,
+    -- The answers: a Forms submission - from the portal, or filled in on the task.
+    `form_submission_id`  INT NULL,
+    -- 1 while the template's steps wait for the answers they depend on.
+    `steps_pending`       TINYINT(1) NOT NULL DEFAULT 0,
+    `notes`               TEXT NULL,
+    `owner_analyst_id`    INT NULL,
+    `created_by`          INT NULL,
+    `created_datetime`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `completed_datetime`  DATETIME NULL,
+    `is_demo`             TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_jml_cases_status_date` (`status`, `effective_date`),
+    KEY `idx_jml_cases_tenant` (`tenant_id`),
+    KEY `idx_jml_cases_user` (`user_id`),
+    CONSTRAINT `fk_jml_cases_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_cases_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_cases_manager` FOREIGN KEY (`manager_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_cases_template` FOREIGN KEY (`template_id`) REFERENCES `jml_templates` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_cases_task` FOREIGN KEY (`parent_task_id`) REFERENCES `tasks` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_cases_owner` FOREIGN KEY (`owner_analyst_id`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_cases_created_by` FOREIGN KEY (`created_by`) REFERENCES `analysts` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_jml_cases_submission` FOREIGN KEY (`form_submission_id`) REFERENCES `form_submissions` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A case's history, the same shape as project_audit.
+CREATE TABLE IF NOT EXISTS `jml_audit` (
+    `id`               INT NOT NULL AUTO_INCREMENT,
+    `case_id`          INT NOT NULL,
+    `analyst_id`       INT NULL,
+    `field_name`       VARCHAR(100) NOT NULL,
+    `old_value`        VARCHAR(1000) NULL,
+    `new_value`        VARCHAR(1000) NULL,
+    `created_datetime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_jml_audit_case` (`case_id`, `created_datetime`),
+    CONSTRAINT `fk_jml_audit_case` FOREIGN KEY (`case_id`) REFERENCES `jml_cases` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- ----------------------------------------------------------
 -- Seed: Default admin account

@@ -90,7 +90,7 @@ try {
     $core = $resolve->invoke(null, $conn, ['cost_centre_id' => 'zz160-a'], $default);
     ok('a code (any case) becomes its id (POSITIVE CONTROL)', ($core['cost_centre_id'] ?? null) === $ccA, json_encode($core));
     $e = null; try { $resolve->invoke(null, $conn, ['cost_centre_id' => 'NOPE-160'], $default); } catch (ServiceError $x) { $e = $x->getMessage(); }
-    ok('an unknown code is refused with the code named', $e !== null && strpos($e, 'NOPE-160') !== false, (string)$e);
+    ok('an unknown code is refused with the code named', $e !== null && str_contains($e, 'NOPE-160'), (string)$e);
     $e = null; try { $resolve->invoke(null, $conn, ['cost_centre_id' => 'ZZ160-X'], $default); } catch (ServiceError $x) { $e = $x->getMessage(); }
     ok('another company\'s code is unknown here', $e !== null, (string)$e);
     $e = null; try { $resolve->invoke(null, $conn, ['cost_centre_id' => (string)$ccA], $default); } catch (ServiceError $x) { $e = $x->getMessage(); }

@@ -21,6 +21,11 @@ $translationNamespaces = ['common', 'contracts'];
 // only for analysts who can open Domains.
 $ctShowDomains = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'domains');
 $ctShowProjects = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects');   // 3.2.0
+// GH #217: a contract's equipment, tasks and calendar events belong to Assets, Tasks and
+// Calendar - hidden when the analyst cannot open that module or it is switched off.
+$ctShowAssets = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'assets');
+$ctShowTasks = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'tasks');
+$ctShowCalendar = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'calendar');
 if ($ctShowDomains) $translationNamespaces[] = 'domains';
 $contract_id = $_GET['id'] ?? null;
 
@@ -387,7 +392,7 @@ $peopleBase = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analys
         .checkbox-row label { margin: 0; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="contracts" data-mobile-page="contract-view">
     <?php include 'includes/header.php'; ?>
@@ -553,9 +558,9 @@ $peopleBase = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analys
                     <h2>${escapeHtml(c.contract_number)} — ${escapeHtml(c.title)}</h2>
                     <div class="actions">
                         <a href="index.php" class="btn btn-back"><span class="cv-act-icon" aria-hidden="true">←</span><span class="cv-act-label">${escapeHtml(window.t('contracts.detail.back'))}</span></a>
-                        <button type="button" class="btn btn-create-task" onclick="openTaskModal()"><span class="cv-act-icon" aria-hidden="true">✅</span><span class="cv-act-label">${escapeHtml(window.t('contracts.detail.task'))}</span></button>
-                        <button type="button" class="btn btn-create-event" onclick="openEventModal()"><span class="cv-act-icon" aria-hidden="true">📅</span><span class="cv-act-label">${escapeHtml(window.t('contracts.detail.calendar'))}</span></button>
-                        <button type="button" class="btn btn-equipment-report" onclick="openReportModal()"><span class="cv-act-icon" aria-hidden="true">🖨️</span><span class="cv-act-label">${escapeHtml(window.t('contracts.report.button'))}</span></button>
+                        ${window.CT_SHOW_TASKS ? `<button type="button" class="btn btn-create-task" onclick="openTaskModal()"><span class="cv-act-icon" aria-hidden="true">✅</span><span class="cv-act-label">${escapeHtml(window.t('contracts.detail.task'))}</span></button>` : ''}
+                        ${window.CT_SHOW_CALENDAR ? `<button type="button" class="btn btn-create-event" onclick="openEventModal()"><span class="cv-act-icon" aria-hidden="true">📅</span><span class="cv-act-label">${escapeHtml(window.t('contracts.detail.calendar'))}</span></button>` : ''}
+                        ${window.CT_SHOW_ASSETS ? `<button type="button" class="btn btn-equipment-report" onclick="openReportModal()"><span class="cv-act-icon" aria-hidden="true">🖨️</span><span class="cv-act-label">${escapeHtml(window.t('contracts.report.button'))}</span></button>` : ''}<!-- GH #217: each button only while its module is on -->
                         <a href="edit.php?id=${c.id}" class="btn btn-edit-contract"><span class="cv-act-icon" aria-hidden="true">✏️</span><span class="cv-act-label">${escapeHtml(window.t('contracts.actions.edit'))}</span></a>
                     </div>
                 </div>
@@ -661,23 +666,23 @@ $peopleBase = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analys
                     </div>
                 </div>
                 <div class="related-list">
-                    <div class="related-section" id="equipment">
+                    ${window.CT_SHOW_ASSETS ? `<div class="related-section" id="equipment">
                         <h3>
                             ${escapeHtml(window.t('contracts.detail.linked_assets'))}
                             <button type="button" class="related-add" onclick="openAssetPicker()">${escapeHtml(window.t('contracts.detail.add_asset'))}</button>
                         </h3>
                         <div id="relatedAssetsList" class="related-empty">${escapeHtml(window.t('common.loading'))}</div>
-                    </div>
+                    </div>` : ''}
                     ${window.CT_SHOW_PROJECTS ? '<div class="related-section" id="relatedProjectsSection"><h3>' + escapeHtml(window.tf ? window.tf('projects.links_other.title', 'Projects') : 'Projects') + '</h3><div id="relatedProjectsList"></div></div>' : ''}
                     ${window.CT_SHOW_DOMAINS ? '<div class="related-section" id="relatedDomainsSection"><h3>' + escapeHtml(window.t('domains.links.domains_title')) + '</h3><div id="relatedDomainsList"></div></div>' : ''}
-                    <div class="related-section" id="relatedTasksSection">
+                    ${window.CT_SHOW_TASKS ? `<div class="related-section" id="relatedTasksSection">
                         <h3>${escapeHtml(window.t('contracts.detail.related_tasks'))}</h3>
                         <div id="relatedTasksList" class="related-empty">${escapeHtml(window.t('common.loading'))}</div>
-                    </div>
-                    <div class="related-section" id="relatedEventsSection">
+                    </div>` : ''}
+                    ${window.CT_SHOW_CALENDAR ? `<div class="related-section" id="relatedEventsSection">
                         <h3>${escapeHtml(window.t('contracts.detail.related_events'))}</h3>
                         <div id="relatedEventsList" class="related-empty">${escapeHtml(window.t('common.loading'))}</div>
-                    </div>
+                    </div>` : ''}
                 </div>
             `;
         }
@@ -761,7 +766,7 @@ $peopleBase = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analys
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Contract Terms Detail (read-only)
@@ -822,15 +827,15 @@ $peopleBase = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analys
 
         // Related items
         async function loadRelatedItems() {
-            loadRelatedAssets();
+            if (window.CT_SHOW_ASSETS) loadRelatedAssets();   // GH #217
             if (window.CT_SHOW_DOMAINS && window.DomainLinks && currentContract) {
                 DomainLinks.mount(document.getElementById('relatedDomainsList'), { kind: 'contract', id: currentContract.id, base: window.CT_BASE, bare: true });
             }
             if (window.CT_SHOW_PROJECTS && window.ProjectLinks && currentContract) {
                 ProjectLinks.mount(document.getElementById('relatedProjectsList'), { kind: 'contract', id: currentContract.id, base: window.CT_BASE, bare: true });
             }
-            loadRelatedTasks();
-            loadRelatedEvents();
+            if (window.CT_SHOW_TASKS) loadRelatedTasks();       // GH #217
+            if (window.CT_SHOW_CALENDAR) loadRelatedEvents();
         }
 
         // ── Equipment covered by this contract (discussion #106) ─────────────
@@ -1464,9 +1469,9 @@ $peopleBase = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analys
             </div>
         </div>
     </div>
-    <script>window.CT_SHOW_DOMAINS = <?php echo $ctShowDomains ? 'true' : 'false'; ?>; window.CT_SHOW_PROJECTS = <?php echo $ctShowProjects ? 'true' : 'false'; ?>; window.CT_BASE = <?php echo json_encode(BASE_URL); ?>;</script>
+    <script>window.CT_SHOW_DOMAINS = <?php echo $ctShowDomains ? 'true' : 'false'; ?>; window.CT_SHOW_PROJECTS = <?php echo $ctShowProjects ? 'true' : 'false'; ?>; /* GH #217 */ window.CT_SHOW_ASSETS = <?php echo $ctShowAssets ? 'true' : 'false'; ?>; window.CT_SHOW_TASKS = <?php echo $ctShowTasks ? 'true' : 'false'; ?>; window.CT_SHOW_CALENDAR = <?php echo $ctShowCalendar ? 'true' : 'false'; ?>; window.CT_BASE = <?php echo json_encode(BASE_URL); ?>;</script>
     <script src="../assets/js/domain-links.js?v=2"></script>
     <script src="../assets/js/project-links.js?v=1"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

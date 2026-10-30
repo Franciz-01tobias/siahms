@@ -16,6 +16,9 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once __DIR__ . '/../../includes/admin_api_guard.php';
 require_once __DIR__ . '/../../includes/webhook_delivery.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {

@@ -20,6 +20,9 @@
  */
 require_once __DIR__ . '/../../includes/files/api_bootstrap.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 filesApiRun(function () use ($conn, $analystId) {
     $in      = filesApiBody();
     $mode    = ($in['mode'] ?? '') === 'copy' ? 'copy' : 'move';

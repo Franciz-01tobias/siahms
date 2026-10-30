@@ -102,7 +102,7 @@ try {
 
     echo "\n  Capture\n";
     $s = prefTemplateCapture($conn, $src, ['timezone', 'app-sidebar', 'not-a-section']);
-    ok('takes the ticked sections\' keys only', array_keys($s) === ['timezone', 'app_sidebar', 'app_sidebar_modules', 'app_sidebar_names'], json_encode(array_keys($s)));
+    ok('takes the ticked sections\' keys only', array_keys($s) === ['timezone', 'app_sidebar', 'app_sidebar_modules', 'app_sidebar_names', 'app_sidebar_waffle'], json_encode(array_keys($s)));
     ok('copies the values the source has', $s['timezone'] === 'Pacific/Auckland' && $s['app_sidebar'] === '1');
     ok('holds null for a key the source never set', array_key_exists('app_sidebar_names', $s) && $s['app_sidebar_names'] === null);
 

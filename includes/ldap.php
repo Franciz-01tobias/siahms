@@ -322,7 +322,7 @@ function ldapAuthenticate(array $provider, string $login, string $password): arr
     // password of non-zero length, the directory checks it properly, and
     // silently trimming would mean rejecting a password some directory might
     // legitimately hold.
-    if ($password === '' || strpos($password, "\0") !== false) {
+    if ($password === '' || str_contains($password, "\0")) {
         return ['ok' => false, 'reason' => 'credentials', 'error' => 'A password is required.'];
     }
     if ($login === '') {
@@ -376,7 +376,7 @@ function ldapAuthenticate(array $provider, string $login, string $password): arr
     try {
         ldapBindService($ds, $provider);
         $groups = ldapUserGroups($ds, $provider, $userDn);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Password was already proven. A group-read failure must not silently
         // become "access granted", so the caller's gate decides — an empty
         // group list fails a configured gate closed.
@@ -479,7 +479,7 @@ function ldapPortalProviders(PDO $conn, ?string $identifier = null): array {
         } else {
             $tenantId = null;
             $addr = strtolower(trim((string)$identifier));
-            if ($addr !== '' && strpos($addr, '@') !== false) {
+            if ($addr !== '' && str_contains($addr, '@')) {
                 $tenantId = resolveTenantIdForAddress($conn, $addr);
             }
 
@@ -500,7 +500,7 @@ function ldapPortalProviders(PDO $conn, ?string $identifier = null): array {
             }
             $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         return []; // column/table not present yet (pre db-verify)
     }
 
@@ -524,7 +524,7 @@ function ldapAnalystProviders(PDO $conn): array {
               WHERE protocol = 'ldap' AND enabled = 1 AND tenant_id IS NULL
               ORDER BY sort_order, display_name"
         );
-    } catch (Exception $e) {
+    } catch (Exception) {
         return []; // column/table not present yet (pre db-verify)
     }
     $out = [];
@@ -591,7 +591,7 @@ function ldapCreateAnalyst(PDO $conn, int $providerId, string $preferredUser, st
     if (!empty($mods)) {
         $ins = $conn->prepare("INSERT INTO analyst_modules (analyst_id, module_key) VALUES (?, ?)");
         foreach ($mods as $m) {
-            try { $ins->execute([$analystId, $m]); } catch (Exception $e) { /* ignore dupes */ }
+            try { $ins->execute([$analystId, $m]); } catch (Exception) { /* ignore dupes */ }
         }
     }
     ssoApplyJitCompanies($conn, $providerId, $analystId);   // which companies (3.5.0)
@@ -703,7 +703,7 @@ function ldapResolveAnalyst(PDO $conn, array $provider, array $ldapUser): array 
             "INSERT INTO analyst_sso_identities (analyst_id, provider_id, subject, email, linked_datetime, last_login_datetime)
              VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
         )->execute([$analystId, $providerId, $subject, $email ?: null]);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // uq_sso_provider_analyst can trip if the analyst was linked concurrently.
         // The analyst is resolved either way, so this is not fatal.
     }
@@ -818,7 +818,7 @@ function ldapResolveUser(PDO $conn, array $provider, array $ldapUser): array {
             try {
                 $conn->prepare("UPDATE users SET username = ? WHERE id = ? AND (username IS NULL OR username = '')")
                      ->execute([$username, $userId]);
-            } catch (Exception $e) {
+            } catch (Exception) {
                 // uq_users_username — another directory already uses that name.
                 // Harmless: they are identified by the link from here on.
             }
@@ -837,7 +837,7 @@ function ldapResolveUser(PDO $conn, array $provider, array $ldapUser): array {
             $tenantId = ($provider['tenant_id'] !== null)
                 ? (int)$provider['tenant_id']
                 : ($emailOrNull !== null ? resolveTenantForNewUser($conn, $email) : null);
-        } catch (Exception $e) { /* leave NULL → triage, never a wrong company */ }
+        } catch (Exception) { /* leave NULL → triage, never a wrong company */ }
 
         // display_name falls back through the directory name, then the sign-in
         // name, then the address — never blank, because this is what an analyst
@@ -853,7 +853,7 @@ function ldapResolveUser(PDO $conn, array $provider, array $ldapUser): array {
             );
             $ins->execute([$emailOrNull, ($username !== '' ? $username : null), $display, $providerId, $tenantId]);
             $userId = (int)$conn->lastInsertId();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return ['ok' => false, 'error' => 'Your account could not be created. Contact your service desk.'];
         }
     }
@@ -864,7 +864,7 @@ function ldapResolveUser(PDO $conn, array $provider, array $ldapUser): array {
             "INSERT INTO user_sso_identities (user_id, provider_id, subject, email, linked_datetime, last_login_datetime)
              VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
         )->execute([$userId, $providerId, $subject, $emailOrNull]);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // uq_user_sso_provider_user can trip on a concurrent link; resolved anyway.
     }
 

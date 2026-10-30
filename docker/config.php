@@ -56,9 +56,17 @@ if (!defined('SSL_CA_BUNDLE')) {
     define('SSL_CA_BUNDLE', sslResolveCaBundle());
 }
 
-// Error reporting (set to 0 in production)
+// Error reporting. Errors are always logged and never shown to visitors - a
+// warning printed into a page names server paths, before sign-in too. For a
+// development container set FREEITSM_DISPLAY_ERRORS=1 in the environment
+// (docker-compose.yml); the same switch as FREEITSM_DISPLAY_ERRORS in a hand
+// install's db_config.php. The command line always shows them.
+if (getenv('FREEITSM_DISPLAY_ERRORS')) {
+    define('FREEITSM_DISPLAY_ERRORS', true);
+}
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('log_errors', '1');
+ini_set('display_errors', (PHP_SAPI === 'cli' || defined('FREEITSM_DISPLAY_ERRORS')) ? '1' : '0');
 
 /**
  * BASE_URL — absolute URL path prefix for the app's deployment root.

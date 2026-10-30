@@ -182,7 +182,7 @@ $translationNamespaces = ['common', 'morning-checks'];
            .btn primaries. Toggle switch base styles live in inbox.css. */
         body { --accent: var(--mc-accent, #00acc1); --accent-hover: var(--mc-accent-hover, #00838f); }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -191,7 +191,7 @@ $translationNamespaces = ['common', 'morning-checks'];
         <?php renderSettingsTabBar($visibleTabs, $activeTabId); ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'checks')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'checks' ? ' active' : ''; ?>" id="checks-tab" data-capability="<?php echo Cap::MORNING_CHECKS_CHECKS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'checks' ? ' active' : ''; ?>" id="checks-tab" data-capability="<?php echo capKey(Cap::MORNING_CHECKS_CHECKS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('morning-checks.settings.checks_heading')); ?></h2>
                 <button class="add-btn" onclick="openAddModal()"><?php echo htmlspecialchars(t('morning-checks.settings.add')); ?></button>
@@ -208,7 +208,7 @@ $translationNamespaces = ['common', 'morning-checks'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo Cap::MORNING_CHECKS_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo capKey(Cap::MORNING_CHECKS_STATUSES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('morning-checks.settings.statuses_heading')); ?></h2>
                 <button class="add-btn" onclick="openAddStatusModal()"><?php echo htmlspecialchars(t('morning-checks.settings.add')); ?></button>
@@ -262,7 +262,7 @@ $translationNamespaces = ['common', 'morning-checks'];
              ⚠️ Routing is a label and a filter, never a permission — anyone with
              the module can still complete any check, which is the point on the
              morning the named person is off sick. -->
-        <div class="tab-content<?php echo $activeTabId === 'groups' ? ' active' : ''; ?>" id="groups-tab" data-capability="<?php echo Cap::MORNING_CHECKS_GROUPS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'groups' ? ' active' : ''; ?>" id="groups-tab" data-capability="<?php echo capKey(Cap::MORNING_CHECKS_GROUPS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('morning-checks.settings.groups_heading')); ?></h2>
                 <button class="add-btn" onclick="openGroupModal()"><?php echo htmlspecialchars(t('morning-checks.settings.add')); ?></button>
@@ -792,7 +792,7 @@ $translationNamespaces = ['common', 'morning-checks'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // ===== Statuses tab =====
@@ -1247,6 +1247,6 @@ $translationNamespaces = ['common', 'morning-checks'];
             loadGroups();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

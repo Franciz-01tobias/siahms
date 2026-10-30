@@ -265,7 +265,7 @@ $translationNamespaces = ['common', 'morning-checks'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -392,6 +392,8 @@ $translationNamespaces = ['common', 'morning-checks'];
                      ticket was why "raise" got used less than it should have. -->
                 <input type="hidden" id="rtCheckId">
                 <input type="hidden" id="rtResultId">
+                <?php // GH #217: no ticket-or-task choice while Tasks is off (or not granted) - it is always a ticket.
+                if (analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'tasks')): ?>
                 <div class="form-group">
                     <label><?php echo htmlspecialchars(t('morning-checks.raise_modal.what')); ?></label>
                     <div class="mc-kind-toggle">
@@ -399,6 +401,7 @@ $translationNamespaces = ['common', 'morning-checks'];
                         <button type="button" class="mc-kind-btn" data-kind="task" onclick="setRaiseKind('task')"><?php echo htmlspecialchars(t('morning-checks.raise_modal.kind_task')); ?></button>
                     </div>
                 </div>
+                <?php endif; ?>
                 <div class="form-group">
                     <label for="rtSubject"><?php echo htmlspecialchars(t('morning-checks.raise_modal.subject')); ?></label>
                     <input type="text" id="rtSubject" required>
@@ -444,8 +447,8 @@ $translationNamespaces = ['common', 'morning-checks'];
     </div>
 
     <script src="../assets/js/vendor/chart.umd.min.js"></script>
-    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
-    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
+    <script src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=5.0.9"></script>
     <script>
         const API_BASE = '../api/morning-checks/';
         const TICKETS_API = '../api/tickets/';
@@ -759,7 +762,7 @@ $translationNamespaces = ['common', 'morning-checks'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         function escapeHtmlAttr(text) {
@@ -1462,6 +1465,6 @@ $translationNamespaces = ['common', 'morning-checks'];
     <!-- The mobile layer's JS: gives this page the views hamburger (top right)
          and moves the page controls into that drawer on a phone. Loaded last so
          it can wrap the page's own globals rather than edit them. -->
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

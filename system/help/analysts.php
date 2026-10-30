@@ -38,7 +38,30 @@ require __DIR__ . '/_top.php';
     <div class="help-note"><strong>Read the chips next to a name.</strong> On a multi-company install, an analyst who can't reach every company gets an orange chip telling you how many they <em>can</em> reach &mdash; and a red <strong>no companies</strong> chip if the answer is none, which means they will see no tickets at all. Hover it for the list.</div>
 </div>
 
-<!-- 2. Adding an analyst -->
+<!-- 2. Finding people in the list -->
+<div class="help-section" id="list">
+    <div class="help-section-header"><?php echo helpSectionNum('list'); ?>
+        <div>
+            <h3>Finding people in the list</h3>
+            <p>With a handful of analysts the plain list is all you need. With a few hundred, the bar above the list lets you search, filter and group them. It starts as the plain list, so nothing changes until you choose something.</p>
+        </div>
+    </div>
+    <div class="help-table"><table>
+        <tr><th>Control</th><th>What it does</th></tr>
+        <tr><td><strong>Search</strong></td><td>Matches name, username and email as you type. Several words must all match, in any order.</td></tr>
+        <tr><td><strong>Group by</strong></td><td>Company, team, department, job title, status, administrator or sign-in method. Company only appears once you have more than one.</td></tr>
+        <tr><td><strong>Then by</strong></td><td>A second level inside each group - for example company, then team.</td></tr>
+        <tr><td><strong>Layout</strong></td><td><strong>Collapsible tree</strong> (groups you open and close, with Expand and Collapse for all of them), <strong>Tabs</strong> (one tab per group, like the settings screens) or <strong>One page with a jump list</strong> (every group on one page, with a list down the side to jump between them - a dropdown on a phone).</td></tr>
+        <tr><td><strong>Sort</strong></td><td>Full name, username, or last sign-in (most recent first; never signed in at the bottom).</td></tr>
+        <tr><td><strong>Per page</strong></td><td>All, or 25, 50 or 100 at a time. When grouped, each group has its own pages.</td></tr>
+        <tr><td><strong>Filters</strong></td><td>Company, team (including <em>No team</em>), status, administrator, sign-in method and <em>Never signed in</em>. The number on the button says how many are on; <strong>Clear</strong> turns them all off.</td></tr>
+    </table></div>
+    <div class="help-note"><strong>Someone can be in more than one group.</strong> Grouped by team, an analyst in two teams appears under both, and the counts include them in both. Grouped by company, the company is every one they can work in - their own and any a team gives them - and a <strong>via team</strong> chip marks the people who are only there because of a team. People who can reach every company are in <strong>All companies</strong>.</div>
+    <div class="help-note"><strong>Your layout is remembered.</strong> Grouping, layout, sort, page size, the status filter, which groups you left open and which tab you were on all come back next time - for you, not for everyone. The search and the other filters start empty each visit. To give everyone else a starting point, set the list up and use <strong>Default</strong> &rarr; <strong>Make this view the default for everyone</strong>; anyone who has never changed their own view gets it, and <strong>Go back to the default view</strong> undoes your own changes.</div>
+    <div class="help-note ok"><strong>Hiding leavers.</strong> Deactivate is the usual way to handle someone leaving (see Leavers below), so inactive accounts build up. Set <strong>Status</strong> to <em>Active only</em> and it stays that way for you.</div>
+</div>
+
+<!-- 3. Adding an analyst -->
 <div class="help-section" id="adding">
     <div class="help-section-header"><?php echo helpSectionNum('adding'); ?>
         <div>
@@ -61,7 +84,7 @@ require __DIR__ . '/_top.php';
     <div class="help-note"><strong>A new analyst is not in any team.</strong> Creating the account is only half the job — use <strong>Assign teams</strong> afterwards, or think carefully about the department consequences in the Teams section below.</div>
 </div>
 
-<!-- 3. Administrators -->
+<!-- 4. Administrators -->
 <div class="help-section" id="admin">
     <div class="help-section-header"><?php echo helpSectionNum('admin'); ?>
         <div>
@@ -74,7 +97,7 @@ require __DIR__ . '/_top.php';
     <div class="help-note"><strong>Grant it sparingly.</strong> An administrator can see and change every company's configuration, read the topology, mint API keys and reset anyone's password. Most analysts, including senior ones, never need it.</div>
 </div>
 
-<!-- 4. Sign-in method -->
+<!-- 5. Sign-in method -->
 <div class="help-section" id="signin">
     <div class="help-section-header"><?php echo helpSectionNum('signin'); ?>
         <div>
@@ -88,7 +111,7 @@ require __DIR__ . '/_top.php';
     <div class="help-note ok"><strong>Deleting a provider is safe.</strong> If you later remove an SSO provider, every analyst who used it quietly reverts to local sign-in rather than being locked out.</div>
 </div>
 
-<!-- 5. Company & module access -->
+<!-- 6. Company & module access -->
 <div class="help-section" id="access">
     <div class="help-section-header"><?php echo helpSectionNum('access'); ?>
         <div>
@@ -106,7 +129,7 @@ require __DIR__ . '/_top.php';
     <div class="help-note warn"><strong>Module access combines with their teams, and how it combines depends on your privilege mode.</strong> In <em>most privilege</em> mode the analyst gets the union — a team can only widen what they can reach. In <em>least privilege</em> mode it's the intersection, so adding someone to a team with a narrow module list can <em>remove</em> modules from them. If a module vanishes from someone's waffle after a team change, this is why.</div>
 </div>
 
-<!-- 6. Teams & departments -->
+<!-- 7. Teams & departments -->
 <div class="help-section" id="teams">
     <div class="help-section-header"><?php echo helpSectionNum('teams'); ?>
         <div>
@@ -122,18 +145,18 @@ require __DIR__ . '/_top.php';
     <div class="help-note warn"><strong>The trap:</strong> putting someone into a team that has <em>no</em> departments gives them <em>zero</em> departments — a narrower result than leaving them out of teams altogether. If a new analyst reports an empty ticket list right after you added them to a team, check that team's departments first.</div>
 </div>
 
-<!-- 7. Resetting a password -->
+<!-- 8. Resetting a password -->
 <div class="help-section" id="passwords">
     <div class="help-section-header"><?php echo helpSectionNum('passwords'); ?>
         <div>
             <h3>Resetting a password</h3>
-            <p>The key button on a row sets a new local password. Type it twice; the minimum is six characters. It takes effect immediately and the analyst is not emailed — you'll need to tell them yourself.</p>
+            <p>The key button on a row sets a new local password. Type it twice; it must be at least eight characters, and not a published or very common password such as the default. It takes effect immediately and the analyst is not emailed — you'll need to tell them yourself.</p>
         </div>
     </div>
     <p>Any administrator can reset any account's password, including their own. There's no &ldquo;must change at next sign-in&rdquo; flag here; if you want passwords to age out, use the <strong>Password expiry</strong> setting on System &rarr; Security.</p>
 </div>
 
-<!-- 8. Leavers -->
+<!-- 9. Leavers -->
 <div class="help-section" id="leavers">
     <div class="help-section-header"><?php echo helpSectionNum('leavers'); ?>
         <div>

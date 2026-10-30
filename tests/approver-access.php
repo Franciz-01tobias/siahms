@@ -82,14 +82,14 @@ try {
     ok('Choose approvers is not restricted on a fresh install', !capActionRestricted($conn, Cap::CHANGES_CHOOSE_APPROVERS));
     ok('Design forms is not restricted either', !capActionRestricted($conn, Cap::FORMS_DESIGN));
     ok('so a plain analyst may still do both', analystMayAct($conn, $plain, Cap::CHANGES_CHOOSE_APPROVERS) && analystMayAct($conn, $plain, Cap::FORMS_DESIGN));
-    ok('Roles lists them as everyday work', capIsEveryday(Cap::CHANGES_CHOOSE_APPROVERS) && capIsEveryday(Cap::FORMS_DESIGN));
+    ok('Roles lists them as everyday work', capIsEveryday(capKey(Cap::CHANGES_CHOOSE_APPROVERS)) && capIsEveryday(capKey(Cap::FORMS_DESIGN)));
     ok('the capability registry is healthy', capSelfCheck() === [], implode('; ', capSelfCheck()));
 
     // A ZZ role holding both, given to the second analyst.
     $conn->prepare("INSERT INTO rbac_roles (name, description, is_active) VALUES ('ZZ approver-access test', 'temporary', 1)")->execute();
     $made['role'] = $roleId = (int)$conn->lastInsertId();
     $conn->prepare("INSERT INTO rbac_role_capabilities (role_id, capability_key) VALUES (?, ?), (?, ?)")
-         ->execute([$roleId, Cap::CHANGES_CHOOSE_APPROVERS, $roleId, Cap::FORMS_DESIGN]);
+         ->execute([$roleId, capKey(Cap::CHANGES_CHOOSE_APPROVERS), $roleId, capKey(Cap::FORMS_DESIGN)]);
     $conn->prepare("INSERT INTO rbac_analyst_roles (analyst_id, role_id) VALUES (?, ?)")->execute([$granted, $roleId]);
 
     echo "\nChoose approvers, restricted\n";
@@ -138,12 +138,12 @@ try {
             return [$code, $body];
         };
         [$c, $b] = $get('api/forms/catalogue_approvals.php?filter=mine');
-        ok('HTTP: their inbox loads ("For me")', $c === 200 && strpos($b, '"success":true') !== false, substr($b, 0, 120));
-        ok('HTTP: and does not count every pending request', strpos($b, '"all":null') !== false);
+        ok('HTTP: their inbox loads ("For me")', $c === 200 && str_contains($b, '"success":true'), substr($b, 0, 120));
+        ok('HTTP: and does not count every pending request', str_contains($b, '"all":null'));
         [$c, $b] = $get('api/forms/catalogue_approvals.php?filter=all');
         ok('HTTP: "All pending" is refused', $c === 403);
         [$c, $b] = $get('forms/approvals.php');
-        ok('HTTP: the approvals page opens', $c === 200 && strpos($b, 'ca-container') !== false && strpos($b, 'data-filter="all"') === false);
+        ok('HTTP: the approvals page opens', $c === 200 && str_contains($b, 'ca-container') && !str_contains($b, 'data-filter="all"'));
         [$c, $b] = $get('forms/');
         ok('HTTP: the rest of Forms still sends them away', $c === 302);
         @unlink(session_save_path() . '/sess_' . $sess);

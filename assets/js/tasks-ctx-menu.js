@@ -398,7 +398,7 @@
         if (text == null) return '';
         const div = document.createElement('div');
         div.textContent = String(text);
-        return div.innerHTML;
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
     /** Escapes a value for use inside a double-quoted HTML attribute. */
     function escAttr(value) {

@@ -46,15 +46,15 @@ foreach ($files as $f) {
     $b = basename($f);
     if (in_array($b, $noRfp, true)) continue;
     $s = file_get_contents($f);
-    if ($b === 'get_rfps.php') { if (strpos($s, 'rfpListSql(') === false) $ungated[] = $b; continue; }
-    if (strpos($s, 'rfpGate(') === false && strpos($s, 'rfpCanView(') === false) $ungated[] = $b;
+    if ($b === 'get_rfps.php') { if (!str_contains($s, 'rfpListSql(')) $ungated[] = $b; continue; }
+    if (!str_contains($s, 'rfpGate(') && !str_contains($s, 'rfpCanView(')) $ungated[] = $b;
 }
 ok('no endpoint is missing the gate', !$ungated, implode(', ', $ungated));
 foreach ($noRfp as $b) {
     ok("$b still exists (else take it off the exempt list)", is_file(__DIR__ . '/../api/rfp-builder/' . $b));
 }
 $preview = file_get_contents(__DIR__ . '/../contracts/rfp-builder/preview.php');
-ok('the print preview, which reads the database itself, checks too', strpos($preview, 'rfpCanView(') !== false);
+ok('the print preview, which reads the database itself, checks too', str_contains($preview, 'rfpCanView('));
 
 // ── 2. Behaviour ────────────────────────────────────────────────────────────
 $conn = connectToDatabase();

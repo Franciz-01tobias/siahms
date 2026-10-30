@@ -16,14 +16,14 @@ return [
     'module' => 'workflow',
     'label'  => 'Workflow',
     'umbrella' => [
-        'cap'       => Cap::WORKFLOW_MANAGE,
+        'cap'       => capKey(Cap::WORKFLOW_MANAGE),
         'grant'     => 'Manage everything in Workflow settings',
         'sensitive' => true,   // implies the AI credentials
     ],
     'tabs' => [
         [
             'id'           => 'ai',
-            'cap'          => Cap::WORKFLOW_AI,
+            'cap'          => capKey(Cap::WORKFLOW_AI),
             'label_key'    => 'workflow.settings_tabs.ai',
             'grant'        => 'Configure the Workflow AI provider, including its API key',
             'sensitive'    => true,
@@ -31,7 +31,7 @@ return [
         ],
         [
             'id'        => 'formats',
-            'cap'       => Cap::WORKFLOW_FORMATS,
+            'cap'       => capKey(Cap::WORKFLOW_FORMATS),
             'label_key' => 'workflow.settings_tabs.formats',
             'grant'     => 'Manage the webhook message formats',
         ],

@@ -98,7 +98,7 @@ function signaturesForAnalyst(PDO $conn, int $analystId): array
                               ORDER BY is_default DESC, display_order ASC, id ASC");
         $stmt->execute([$analystId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // A part-upgraded install has no signatures, which means replies are composed
         // exactly as they were before this feature — never an error in the reply box.
         return [];

@@ -55,7 +55,8 @@
             const left = t.state === 'no_estimate' ? '<span class="prj-cap-flag">' + esc(T('capacity.no_estimate')) + '</span>'
                 : (t.estimate_hours !== null ? esc(hrs(t.remaining_hours)) + ' <span class="prj-muted">/ ' + esc(hrs(t.estimate_hours)) + '</span>' : '');
             const due = t.due_date ? '<span class="' + (t.late ? 'prj-due late' : 'prj-due') + '">' + esc(P.fmtDate(t.due_date)) + '</span>' : '<span class="prj-cap-flag">' + esc(T('capacity.no_due')) + '</span>';
-            return '<tr><td><a href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '">' + esc(t.title) + '</a></td>'
+            // GH #217: plain text while Tasks is off - nowhere to open it.
+            return '<tr><td>' + (window.PRJ_TASKS ? '<a href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '">' + esc(t.title) + '</a>' : esc(t.title)) + '</td>'
                 + '<td><a href="' + esc(window.PRJ_BASE + 'projects/view.php?id=' + t.project_id) + '" title="' + esc(t.project_name) + '">' + esc(t.project_code) + '</a></td>'
                 + '<td>' + left + '</td><td>' + due + '</td>'
                 + t.weeks.map(h => '<td class="num">' + (h > 0 ? esc(hrs(h)) : '<span class="prj-muted">-</span>') + '</td>').join('') + '</tr>';

@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'Udbyder',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'Basal IMAP / SMTP (brugernavn &amp; adgangskode)',
+                'provider_imap' => 'Basal IMAP / SMTP (brugernavn & adgangskode)',
                 'display_name' => 'Visningsnavn',
                 'display_name_placeholder' => 'f.eks. Service Desk',
                 'target_mailbox' => 'Målpostkasse',

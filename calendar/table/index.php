@@ -37,11 +37,11 @@ $translationNamespaces = ['common', 'calendar'];
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../../assets/css/calendar-grid.css?v=1">
     <link rel="stylesheet" href="../../assets/css/itsm_calendar.css?v=8">
-    <link rel="stylesheet" href="../../assets/css/data-table.css?v=4">
+    <link rel="stylesheet" href="../../assets/css/data-table.css?v=7">
     <style>body { --accent: var(--cal-accent, #ef6c00); --accent-hover: var(--cal-accent-hover, #e65100); }</style>
     <!-- Mobile: the shared shell plus LAYER 15c, which already contains a
          .dt-page table view (columns are user-chosen, so it scrolls). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
@@ -57,8 +57,8 @@ $translationNamespaces = ['common', 'calendar'];
         <?php include '../../includes/data-table-skeleton.php'; ?>
     </div>
 
-    <script src="../../assets/js/data-table.js?v=6"></script>
+    <script src="../../assets/js/data-table.js?v=9"></script>
     <script src="../../assets/js/calendar-table.js?v=3"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

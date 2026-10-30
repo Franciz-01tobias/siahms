@@ -53,7 +53,7 @@ function assetLabelsSchemaReady(PDO $conn): bool {
     try {
         $cols = $conn->query("SHOW COLUMNS FROM `assets` LIKE 'qr_token'")->fetch(PDO::FETCH_ASSOC);
         $ready = (bool)$cols;
-    } catch (Exception $e) {
+    } catch (Exception) {
         $ready = false;
     }
     return $ready;
@@ -113,7 +113,13 @@ function assetIdForToken(PDO $conn, string $token): ?int {
     $stmt = $conn->prepare("SELECT id FROM assets WHERE qr_token = ? LIMIT 1");
     $stmt->execute([$token]);
     $id = $stmt->fetchColumn();
-    return $id === false ? null : (int)$id;
+    if ($id === false) {
+        // GH #200 part D: a label on a device whose record was merged into another
+        // still finds the one that was kept.
+        require_once __DIR__ . '/services/asset_merge.php';
+        return AssetMergeService::intoForQrToken($conn, $token);
+    }
+    return (int)$id;
 }
 
 /**
@@ -217,7 +223,7 @@ function assetLabelCustomFields(PDO $conn, ?int $tenantId = null): array {
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $out['cf_' . $r['field_key']] = (string)$r['label'];
         }
-    } catch (Exception $e) { /* custom fields not installed yet */ }
+    } catch (Exception) { /* custom fields not installed yet */ }
     return $out;
 }
 

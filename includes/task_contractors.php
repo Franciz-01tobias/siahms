@@ -33,7 +33,7 @@ function tasksContractorReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT assigned_supplier_id, assigned_contact_id FROM tasks LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -132,7 +132,7 @@ function tasksContractorEmailOn(PDO $conn): bool
     try {
         require_once __DIR__ . '/projects/settings.php';
         return projectSetting($conn, 'project_contractor_email') === 'on';
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;
     }
 }
@@ -214,7 +214,7 @@ function tasksContractorReminders(PDO $conn): int
     $sent = 0;
     foreach ($rows as $r) {
         try { $claim->execute(['task_contractor:' . (int)$r['id'] . ':' . $r['kind'], (string)$r['due_date']]); }
-        catch (Throwable $e) { return $sent; }   // no ledger: sending without one would repeat every run
+        catch (Throwable) { return $sent; }   // no ledger: sending without one would repeat every run
         if ($claim->rowCount() !== 1) continue;
         if (tasksContractorEmail($conn, (int)$r['id'], $r['kind'])) $sent++;
     }

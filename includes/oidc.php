@@ -317,7 +317,7 @@ function oidcFetchUserInfo(string $userinfoEndpoint, string $accessToken): array
             $data = json_decode($body, true);
             return is_array($data) ? $data : [];
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Fall back gracefully to ID token claims
     }
     return [];

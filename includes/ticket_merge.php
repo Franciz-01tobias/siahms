@@ -105,7 +105,7 @@ function mergeSettings(PDO $conn): array {
                 $out[$k] = $row['setting_value'];
             }
         }
-    } catch (Exception $e) { /* defaults stand */ }
+    } catch (Exception) { /* defaults stand */ }
 
     if (!in_array($out['reference_mode'], ['survivor', 'new'], true))               $out['reference_mode'] = 'survivor';
     if (!in_array($out['originals_mode'], ['thread', 'thread_html', 'html'], true)) $out['originals_mode'] = 'thread';
@@ -131,7 +131,7 @@ function resolveMergedTicket(PDO $conn, int $ticketId): int {
             $stmt = $conn->prepare("SELECT merged_into_id FROM tickets WHERE id = ?");
             $stmt->execute([$ticketId]);
             $next = $stmt->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return $ticketId;                    // column not there yet (pre-upgrade)
         }
         if ($next === false || $next === null) return $ticketId;
@@ -217,7 +217,7 @@ function unmergeTicket(PDO $conn, int $actorId, int $mergeId): array {
             if (!$ids) continue;
             try {
                 $conn->exec("UPDATE `$table` SET ticket_id = $sourceId WHERE id IN (" . implode(',', $ids) . ") AND ticket_id = $targetId");
-            } catch (Exception $e) { /* table absent on a part-upgraded install */ }
+            } catch (Exception) { /* table absent on a part-upgraded install */ }
         }
 
         // The HTML snapshot the merge attached to the survivor describes a merge that
@@ -234,7 +234,7 @@ function unmergeTicket(PDO $conn, int $actorId, int $mergeId): array {
                 }
                 $conn->prepare("DELETE FROM email_attachments WHERE email_id = ?")->execute([$sid]);
                 $conn->prepare("DELETE FROM emails WHERE id = ? AND ticket_id = ?")->execute([$sid, $targetId]);
-            } catch (Exception $e) { /* best effort — never fail an unmerge over a file */ }
+            } catch (Exception) { /* best effort — never fail an unmerge over a file */ }
         }
 
         // Reopen the source AS IT WAS. Not "Open" — that would be wrong for a ticket
@@ -256,7 +256,7 @@ function unmergeTicket(PDO $conn, int $actorId, int $mergeId): array {
         try {
             $conn->prepare("DELETE FROM ticket_links WHERE source_ticket_id = ? AND target_ticket_id = ? AND relation_type = 'duplicate_of'")
                  ->execute([$sourceId, $targetId]);
-        } catch (Exception $e) { /* linking not installed */ }
+        } catch (Exception) { /* linking not installed */ }
 
         // In 'new' reference mode the survivor was created BY the merge. Once the last
         // source has been taken back out it holds nothing of its own, so it goes to
@@ -319,7 +319,7 @@ function mergedAwayInfo(PDO $conn, int $ticketId): ?array {
         $stmt->execute([$ticketId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
 }
@@ -522,7 +522,7 @@ function mergeOneTicket(PDO $conn, int $actorId, int $sourceId, int $targetId, a
             if ($rows) $movedRelated[$table] = $rows;
 
             $conn->prepare("UPDATE `$table` SET ticket_id = ? WHERE ticket_id = ?")->execute([$targetId, $sourceId]);
-        } catch (Exception $e) { /* table absent on a part-upgraded install */ }
+        } catch (Exception) { /* table absent on a part-upgraded install */ }
     }
 
     // Dedupe-on-move: linking the same CMDB object or problem twice would show the
@@ -544,7 +544,7 @@ function mergeOneTicket(PDO $conn, int $actorId, int $sourceId, int $targetId, a
             if ($rows) $movedRelated[$table] = $rows;
 
             $conn->prepare("UPDATE `$table` SET ticket_id = ? WHERE ticket_id = ?")->execute([$targetId, $sourceId]);
-        } catch (Exception $e) { /* absent */ }
+        } catch (Exception) { /* absent */ }
     }
 
     // Ticket-to-ticket links: re-point at the target, then drop self-links and any
@@ -561,7 +561,7 @@ function mergeOneTicket(PDO $conn, int $actorId, int $sourceId, int $targetId, a
                  AND l1.relation_type   = l2.relation_type
                  AND l1.id > l2.id"
         );
-    } catch (Exception $e) { /* linking not installed */ }
+    } catch (Exception) { /* linking not installed */ }
 
     $snapshotEmailId = null;
     if ($snapshotHtml !== null) {
@@ -613,7 +613,7 @@ function mergeOneTicket(PDO $conn, int $actorId, int $sourceId, int $targetId, a
             "INSERT INTO ticket_links (source_ticket_id, target_ticket_id, relation_type, created_by_id, created_datetime)
              VALUES (?, ?, 'duplicate_of', ?, UTC_TIMESTAMP())"
         )->execute([$sourceId, $targetId, $actorId ?: null]);
-    } catch (Exception $e) { /* linking not installed, or already linked */ }
+    } catch (Exception) { /* linking not installed, or already linked */ }
 }
 
 /** The install's first closed status id, or null if none is flagged. */
@@ -621,7 +621,7 @@ function mergeFirstClosedStatusId(PDO $conn): ?int {
     try {
         $row = $conn->query("SELECT id FROM ticket_statuses WHERE is_closed = 1 ORDER BY display_order, id LIMIT 1")->fetchColumn();
         return $row ? (int)$row : null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
 }
@@ -632,7 +632,7 @@ function mergeTicketNumber(PDO $conn, int $ticketId): string {
         $stmt = $conn->prepare("SELECT ticket_number FROM tickets WHERE id = ?");
         $stmt->execute([$ticketId]);
         return (string)$stmt->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return '#' . $ticketId;
     }
 }
@@ -653,7 +653,7 @@ function mergeAudit(PDO $conn, int $ticketId, int $actorId, string $field, ?stri
             "INSERT INTO ticket_audit (ticket_id, analyst_id, field_name, old_value, new_value, created_datetime)
              VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
         )->execute([$ticketId, $actorId ?: null, $field, $old, $new]);
-    } catch (Exception $e) { /* audit is best-effort, never fail a merge for it */ }
+    } catch (Exception) { /* audit is best-effort, never fail a merge for it */ }
 }
 
 /**
@@ -689,7 +689,7 @@ function mergeBuildSnapshotHtml(PDO $conn, int $sourceId, array $source): string
         );
         $stmt->execute([$sourceId]);
         $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) { $messages = []; }
+    } catch (Exception) { $messages = []; }
 
     try {
         $stmt = $conn->prepare(
@@ -699,7 +699,7 @@ function mergeBuildSnapshotHtml(PDO $conn, int $sourceId, array $source): string
         );
         $stmt->execute([$sourceId]);
         $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) { $notes = []; }
+    } catch (Exception) { $notes = []; }
 
     $rows = '';
     foreach ($messages as $m) {

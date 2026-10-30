@@ -143,7 +143,7 @@ function notificationsAudienceFor(PDO $conn, string $event, array $payload): arr
     // proposals (approvers / proposer), sign-offs, benefit reviews, the overdue
     // digest, nudges, scheduled reports. The dispatcher works out who, because
     // "who" is a Projects setting; without notify_ids the project manager is told.
-    if (strpos($event, 'project.') === 0 && array_key_exists('notify_ids', $payload)) {
+    if (str_starts_with($event, 'project.') && array_key_exists('notify_ids', $payload)) {
         return array_values(array_unique(array_filter(array_map('intval', (array)($payload['notify_ids'] ?? [])))));
     }
 
@@ -167,7 +167,7 @@ function notificationsAudienceFor(PDO $conn, string $event, array $payload): arr
                 foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
                     $ids[] = (int)$id;
                 }
-            } catch (Exception $e) {
+            } catch (Exception) {
                 // An install that has not run Database Verification since
                 // upgrading has no table. The owner still gets told — a missing
                 // table must narrow the audience, never empty it.
@@ -197,7 +197,7 @@ function notificationsAudienceFor(PDO $conn, string $event, array $payload): arr
             $stmt = $conn->prepare("SELECT analyst_id FROM analyst_teams WHERE team_id = ?");
             $stmt->execute([$teamId]);
             $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-        } catch (Exception $e) {
+        } catch (Exception) {
             return [];
         }
         return array_values(array_unique(array_filter($ids)));
@@ -375,7 +375,7 @@ function notificationsEntityFor(string $event, array $payload, string $entityTyp
         if ($found !== false && $found !== null && $found !== '') {
             $ref = (string)$found;
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // A missing reference is cosmetic; the notification is still useful.
     }
 
@@ -405,7 +405,7 @@ function notificationsBodyFor(string $event, ?string $actorName, array $payload 
             $s->execute([(int)$payload['task']['status_id']]);
             $name = $s->fetchColumn();
             if ($name !== false) return json_encode(['to' => (string)$name]);
-        } catch (Throwable $e) { /* fall through to the plain wording */ }
+        } catch (Throwable) { /* fall through to the plain wording */ }
     }
     if ($event === 'task.due_date_changed') {
         return json_encode(['to' => (string)($payload['task']['due_date'] ?? ''), 'kind' => 'date']);

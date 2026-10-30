@@ -98,6 +98,9 @@ if ($mode === 'assist' || !$isOpen || $hasTicket) {
 // The AI answers only while open and while the conversation is still bot-handled — never
 // after a hand-off to a human (deflect + already ticketed), and never out of hours.
 $aiShouldAnswer = $isOpen && ($mode === 'assist' || !$hasTicket);
+// GH #217: the AI answers from the knowledge base, so not while Knowledge is
+// switched off for the install - the visitor reaches a person as usual.
+if (!moduleIsEnabled($conn, 'knowledge')) $aiShouldAnswer = false;
 
 if ($aiShouldAnswer) {
     // Scope the knowledge search to the widget's company — the same tenant_id that

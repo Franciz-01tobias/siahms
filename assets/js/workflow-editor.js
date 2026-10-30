@@ -111,13 +111,48 @@ const WFE = (() => {
         const escHtml = s => {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         };
         host.innerHTML =
             '<strong>' + escHtml(window.t('workflow.templates.needs_config')) + '</strong><ul>' +
             items.map(i => '<li><strong>' + escHtml(i.where) + '</strong> — ' + escHtml(i.reason) + '</li>').join('') +
             '</ul>';
         host.style.display = 'block';
+    }
+
+    /**
+     * GH #209. Put the workflow's company in the Runs for picker. A shared
+     * workflow opened by someone who cannot see every company has no "All
+     * companies" option to select, so one is added for it - read-only, as
+     * setReadOnly() makes the whole editor.
+     *
+     * @param {?{id:number, name:string}} company  null = shared
+     */
+    function showCompany(company) {
+        const sel = document.getElementById('wfCompany');
+        if (!sel) return;
+        const v = company ? String(company.id) : '';
+        if (![...sel.options].some(o => o.value === v)) {
+            const o = document.createElement('option');
+            o.value = v;
+            o.textContent = company ? company.name : window.t('workflow.editor.company_shared');
+            sel.appendChild(o);
+        }
+        sel.value = v;
+    }
+
+    /**
+     * GH #209. A shared workflow runs for every company, so someone who cannot
+     * see them all may look but not change, test or fire it. The server refuses
+     * anyway; this says so before they try.
+     */
+    function setReadOnly() {
+        const note = document.getElementById('wfReadOnly');
+        if (note) { note.textContent = window.t('workflow.editor.read_only_shared'); note.style.display = 'block'; }
+        ['wfSaveBtn', 'testFireBtn', 'dryRunBtn', 'wfCompany'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = true;
+        });
     }
 
     /**
@@ -169,11 +204,13 @@ const WFE = (() => {
             document.getElementById('wfName').value = workflow.name;
             document.getElementById('wfDescription').value = workflow.description;
             document.getElementById('wfActive').checked = workflow.isActive;
+            showCompany(w.company);
 
             renderAll();
             selectWorkflow();
             renderExecutions(d.executions || []);
             setRunButtonsEnabled(true);
+            if (w.can_edit === false) setReadOnly();
             setStatus('saved');
             showTemplateGaps(workflow.id);
         } catch (e) {
@@ -310,7 +347,7 @@ const WFE = (() => {
         const escHtml = s => {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         };
         if (n.kind === 'trigger') {
             const label = window.WF_TRIGGERS[triggerEvent] || triggerEvent || 'Pick a trigger';
@@ -1080,7 +1117,9 @@ const WFE = (() => {
                 body: JSON.stringify({
                     url: a.url || '', preset: a.preset || 'custom',
                     message: a.message || '', body: a.body || '', secret: a.secret || '',
-                    trigger_event: (typeof triggerEvent !== 'undefined') ? (triggerEvent || '') : ''
+                    trigger_event: (typeof triggerEvent !== 'undefined') ? (triggerEvent || '') : '',
+                    // GH #209: sample a ticket from the workflow's own company.
+                    company_id: (document.getElementById('wfCompany') || {}).value || ''
                 })
             });
             const d = await r.json();
@@ -1095,7 +1134,7 @@ const WFE = (() => {
     }
 
     // Local HTML escaper (escHtml elsewhere is function-scoped, not shared).
-    function wfEsc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    function wfEsc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
     // =========================================================
     //  Merge codes ({{variables}})
@@ -1375,6 +1414,12 @@ const WFE = (() => {
             workflow.isActive = document.getElementById('wfActive').checked;
             markDirty();
         });
+        // GH #209. A new workflow starts in the default the page worked out.
+        const company = document.getElementById('wfCompany');
+        if (company) {
+            if (!window.WF_ID) company.value = company.dataset.default || '';
+            company.addEventListener('change', markDirty);
+        }
     }
 
     // Detail-panel handlers exposed via WFE.* for inline onchange / oninput.
@@ -1494,6 +1539,9 @@ const WFE = (() => {
             conditions, actions,
             is_active: workflow.isActive ? 1 : 0,
         };
+        // GH #209. Only on an install with companies; '' = shared.
+        const company = document.getElementById('wfCompany');
+        if (company) payload.company_id = company.value === '' ? null : +company.value;
         try {
             const r = await fetch(window.WF_API + 'save.php', {
                 method: 'POST',
@@ -1550,9 +1598,12 @@ const WFE = (() => {
             cur[parts[parts.length - 1]] = value;
         };
         for (const c of conditions) {
-            const field = c.data && c.data.field;
-            const op = (c.data && c.data.op) || 'equals';
-            const val = c.data ? c.data.value : null;
+            // TRAP: a condition node keeps field / op / value on ITSELF (addConditionNode),
+            // not under .data. This read c.data.field until 4.0.1, so the payload was always
+            // {} and every workflow with a condition came back "skipped" on Test fire.
+            const field = c.field;
+            const op = c.op || 'equals';
+            const val = c.value === undefined ? null : c.value;
             if (!field) continue;
             switch (op) {
                 case 'equals':
@@ -1635,7 +1686,7 @@ const WFE = (() => {
         const escHtml = s => {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         };
         /** Formats a run's UTC start time in the analyst's zone, or returns it unchanged if formatting fails. */
         const fmtDate = s => {
@@ -1794,7 +1845,7 @@ const WFE = (() => {
         const escHtml = s => {
             const el = document.createElement('div');
             el.textContent = s == null ? '' : String(s);
-            return el.innerHTML;
+            return el.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         };
         document.getElementById('wfAiResult').style.display = '';
         document.getElementById('wfAiGenerateBtn').style.display = 'none';

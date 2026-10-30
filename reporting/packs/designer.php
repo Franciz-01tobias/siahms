@@ -51,7 +51,7 @@ $translationNamespaces = ['common', 'reporting'];
         window.RP_API  = '../../api/reporting/packs/';
         window.RP_LOGO = <?php echo json_encode(brandingLogoUrl()); ?>;
     </script>
-    <script src="../../assets/js/vendor/jspdf.umd.min.js"></script>
+    <script src="../../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
     <script src="../../assets/js/chart.min.js"></script>
     <script src="../../assets/js/report-packs/engine.js?v=1"></script>
     <script src="../../assets/js/report-packs/charts.js?v=1"></script>
@@ -59,6 +59,6 @@ $translationNamespaces = ['common', 'reporting'];
     <script src="../../assets/js/report-packs/render-pdf.js?v=1"></script>
     <script src="../../assets/js/report-packs/runtime.js?v=1"></script>
     <script src="../../assets/js/report-packs/editor.js?v=1"></script>
-    <script src="../../assets/js/report-packs/designer.js?v=2"></script>
+    <script src="../../assets/js/report-packs/designer.js?v=3"></script>
 </body>
 </html>

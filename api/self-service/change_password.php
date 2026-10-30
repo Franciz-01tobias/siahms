@@ -46,6 +46,11 @@ if ($newPassword !== $confirmPassword) {
     exit;
 }
 
+require_once __DIR__ . '/../../includes/password_policy.php';   // the one rule for a new password
+if ($why = passwordPolicyError($newPassword)) {
+    echo json_encode(['success' => false, 'error' => $why]);
+    exit;
+}
 if (strlen($newPassword) < 8) {
     echo json_encode(['success' => false, 'error' => 'Password must be at least 8 characters']);
     exit;
@@ -61,6 +66,12 @@ try {
 
     if (!$user || !password_verify($currentPassword, $user['password_hash'])) {
         echo json_encode(['success' => false, 'error' => 'Current password is incorrect']);
+        exit;
+    }
+    // Only now, with the current password proved: checked any earlier, "must be
+    // different" would tell someone holding the session whether a guess was it.
+    if ($why = passwordPolicyError($newPassword, $user['password_hash'])) {
+        echo json_encode(['success' => false, 'error' => $why]);
         exit;
     }
 

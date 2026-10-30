@@ -7,6 +7,7 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
+require_once '../../includes/phone_dial.php';   // the requester's Call links
 
 header('Content-Type: application/json');
 
@@ -44,6 +45,8 @@ try {
     // Normal / Confidential (discussion #62), guarded the same way.
     require_once '../../includes/ticket_sensitivity.php';
     $sensCol = ticketSensitivityReady($conn) ? "t.sensitivity," : "'normal' AS sensitivity,";
+    require_once '../../includes/ticket_workspace.php';
+    $workspaceCol = ticketWorkspaceReady($conn) ? 't.is_workspace,' : '0 AS is_workspace,';
 
     // Query full email details with ticket information
     $sql = "SELECT
@@ -78,6 +81,7 @@ try {
                 t.resolution_code_id,
                 t.assigned_team_id,
                 $sensCol
+                $workspaceCol
                 t.assigned_analyst_id,
                 t.origin_id,
                 t.first_time_fix,
@@ -88,6 +92,8 @@ try {
                 t.tenant_id,
                 t.user_id,
                 u.email AS requester_email,
+                u.phone AS requester_phone,
+                u.mobile AS requester_mobile,
                 t.created_datetime as ticket_created,
                 t.updated_datetime as ticket_updated,
                 t.deleted_datetime
@@ -151,6 +157,15 @@ try {
     }
 
     // Convert bit fields to boolean
+    // The requester's numbers, each with its Call link - only when click-to-call
+    // is on, so the reading pane is unchanged on an install without it.
+    $dial = phoneDialTemplate($conn);
+    $email['requester_dial'] = [];
+    foreach (['requester_phone', 'requester_mobile'] as $col) {
+        $href = phoneDialHref($dial, $email[$col] ?? null);
+        if ($href !== '') $email['requester_dial'][] = ['number' => (string)$email[$col], 'href' => $href];
+    }
+    unset($email['requester_phone'], $email['requester_mobile']);
     $email['is_read'] = (bool)$email['is_read'];
     $email['has_attachments'] = (bool)$email['has_attachments'];
     $email['first_time_fix'] = $email['first_time_fix'] === null ? null : (bool)$email['first_time_fix'];
@@ -199,7 +214,7 @@ try {
     // Problem Management: problems this incident is linked to (badge + link in the
     // reading pane). Degrades to [] if the module's tables aren't present yet.
     $email['problems'] = [];
-    try {
+    if (moduleIsEnabled($conn, 'problems')) try {   // GH #217: none while Problems is switched off
         $pq = $conn->prepare(
             "SELECT p.id, p.problem_number, p.title, ps.name AS status
              FROM problem_tickets pt
@@ -215,7 +230,7 @@ try {
     // reading pane). Degrades to [] if the module's tables aren't present yet.
     // change_number is derived (CHG-####) from the id, so only id/title/status here.
     $email['changes'] = [];
-    try {
+    if (moduleIsEnabled($conn, 'changes')) try {   // GH #217: none while Changes is switched off
         $cq = $conn->prepare(
             "SELECT c.id, c.title, cs.name AS status
              FROM change_tickets ct

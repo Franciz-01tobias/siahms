@@ -130,8 +130,8 @@ function settingKeyOwners(): array
         // --- Tickets: time tracking (discussion #72) ---
         // The INSTALL-WIDE defaults. A company may override either of them —
         // see includes/tenant_settings.php and the Time tracking tab.
-        'time_tracking_enabled'     => ['module' => 'tickets', 'cap' => Cap::TICKETS_MANAGE, 'tab' => 'time-tracking'],
-        'time_tracking_api_enabled' => ['module' => 'tickets', 'cap' => Cap::TICKETS_MANAGE, 'tab' => 'time-tracking'],
+        'time_tracking_enabled'     => ['module' => 'tickets', 'cap' => capKey(Cap::TICKETS_MANAGE), 'tab' => 'time-tracking'],
+        'time_tracking_api_enabled' => ['module' => 'tickets', 'cap' => capKey(Cap::TICKETS_MANAGE), 'tab' => 'time-tracking'],
 
         // --- Tickets: classification fields (#1540) ---
         // The INSTALL-WIDE defaults for whether each of the three fields appears on
@@ -286,7 +286,7 @@ function analystCanWriteSettingKey(PDO $conn, int $analystId, string $key): bool
     if ($owner === null) return false;   // unowned key — deny by default
 
     if ($owner['cap'] !== null) {
-        return analystHasCapability($conn, $analystId, $owner['cap']);
+        return analystHasCapability($conn, $analystId, Cap::from($owner['cap']));
     }
     return analystCanAccessModule($conn, $analystId, $owner['module']);
 }

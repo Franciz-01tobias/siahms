@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>इस पेज पर नज़र रखें।</strong> worker चलते ही ऊपर की स्थिति हरी हो जाती है और डिलीवरी नीचे दिखने लगती हैं। पूरे सेटअप नोट्स (Windows &amp; Linux, सिग्नेचर वेरिफ़िकेशन) <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">Workflows wiki</a> में हैं।',
         'fact_worker' => 'Worker स्क्रिप्ट',
         'fact_retry' => 'रीट्राई शेड्यूल',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1h &middot; 6h, फिर विफल',
         'fact_retention' => 'लॉग रिटेंशन',
         'fact_queued' => 'अभी क्यू में',
         'days' => '{n} दिन',

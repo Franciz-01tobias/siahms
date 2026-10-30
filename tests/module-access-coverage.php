@@ -28,7 +28,7 @@ $root = dirname(__DIR__);
 // and the two includes that guard at the top of every file that loads them.
 $GUARD = '/requireModuleAccessJson|requireAnyModuleAccessJson|requireAdminJson|analystIsAdmin|analystCanAccessModule'
        . '|requireCapability|requireAiNamespaceJson|requireLmsCourseAccessJson'
-       . '|admin_api_guard\.php|domains\/api_bootstrap\.php|projects\/api_bootstrap\.php|files\/api_bootstrap\.php/';
+       . '|admin_api_guard\.php|domains\/api_bootstrap\.php|projects\/api_bootstrap\.php|starters\/api_bootstrap\.php|files\/api_bootstrap\.php/';
 
 // Whole folders with their own audience.
 $EXEMPT_DIRS = [
@@ -100,7 +100,7 @@ $unguarded = [];
 $guarded = 0;
 foreach ($files as $rel) {
     foreach ($EXEMPT_DIRS as $dir => $why) {
-        if (strpos($rel, $dir) === 0) continue 2;
+        if (str_starts_with($rel, $dir)) continue 2;
     }
     if (isset($EXEMPT[$rel])) continue;
     if (preg_match($GUARD, file_get_contents($root . '/' . $rel))) { $guarded++; continue; }
@@ -124,7 +124,7 @@ echo "3. Pages\n";
 // The four Tickets pages that had no gate of their own (the shared header checks
 // sign-in only after HTML has started, so its redirect could never fire).
 foreach (['tickets/csat/index.php', 'tickets/dashboard/index.php', 'tickets/dashboard/library.php', 'tickets/triage/index.php'] as $p) {
-    check(strpos(file_get_contents($root . '/' . $p), "requireModuleAccess('tickets')") !== false, "$p is gated on tickets");
+    check(str_contains(file_get_contents($root . '/' . $p), "requireModuleAccess('tickets')"), "$p is gated on tickets");
 }
 
 echo "4. Read only modules: every write is refused to a read-only analyst (#180)\n";
@@ -149,7 +149,7 @@ foreach ($READ_ONLY_DIRS as $module => $dir) {
         if (basename($abs)[0] === '_') continue;
         $src = file_get_contents($abs);
         if (!preg_match($writeShaped, $src)) continue;                        // a read
-        if (preg_match('/requireCapabilityJson|admin_api_guard/', $src) || strpos(basename($abs), 'settings') !== false) continue;   // a settings tab: its own permission
+        if (preg_match('/requireCapabilityJson|admin_api_guard/', $src) || str_contains(basename($abs), 'settings')) continue;   // a settings tab: its own permission
         if (isset($WRITE_EXEMPT[$rel])) continue;
         $checked++;
         if (strpos($src, "requireModuleWriteJson('{$module}')") === false) $holes[] = $rel;

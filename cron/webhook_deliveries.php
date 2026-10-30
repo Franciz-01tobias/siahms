@@ -59,6 +59,11 @@ try {
         }
     }
 
+    // Queued deliveries wait, unsent, while Workflows is switched off - and are not
+    // sent as a backlog by this check; they go when Workflows is back on.
+    // GH #217: nothing to do while the module is switched off for the install.
+    if (cronModuleSwitchedOff($conn, 'workflow', 'webhook_deliveries', $trigger)) exit(0);
+
     // ---- Min interval between runs (CLI + HTTP) ----
     if ($minInterval > 0 && !empty($settings['webhook_cron_last_run'])) {
         $ageStmt = $conn->prepare("SELECT TIMESTAMPDIFF(SECOND, ?, UTC_TIMESTAMP())");
@@ -78,7 +83,9 @@ try {
     $runId = JobRun::start($conn, 'webhook_deliveries', $trigger);
 
     // ---- Deliver due rows ----
-    $counts = webhookRunQueue($conn, 100);
+    // 90 of the 120 seconds above: the queue stops starting new tries once one
+    // more might not finish, rather than being killed mid-send.
+    $counts = webhookRunQueue($conn, 100, 90);
 
     // ---- Scrub payload bodies past the payload-retention window ----
     // Runs BEFORE the row prune, and on a shorter clock: the rendered payload can
@@ -93,9 +100,9 @@ try {
     // A delivery the receiver refused is the WEBHOOK's failure, retried on its own
     // schedule - not the job's. The job worked if it ran the queue.
     JobRun::finish($conn, $runId, 'ok', ['attempted' => $counts['attempted'], 'delivered' => $counts['delivered'],
-        'failed' => $counts['failed'], 'dead' => $counts['dead']],
-        "Attempted {$counts['attempted']}, delivered {$counts['delivered']}, failed {$counts['failed']}, dead {$counts['dead']}.");
-    echo "OK — attempted {$counts['attempted']}, delivered {$counts['delivered']}, failed {$counts['failed']}, dead {$counts['dead']}, payloads scrubbed {$scrubbed}, pruned {$prune->rowCount()}.\n";
+        'failed' => $counts['failed'], 'dead' => $counts['dead'], 'interrupted' => $counts['interrupted']],
+        "Attempted {$counts['attempted']}, delivered {$counts['delivered']}, failed {$counts['failed']}, dead {$counts['dead']}, interrupted settled {$counts['interrupted']}.");
+    echo "OK — attempted {$counts['attempted']}, delivered {$counts['delivered']}, failed {$counts['failed']}, dead {$counts['dead']}, interrupted settled {$counts['interrupted']}, payloads scrubbed {$scrubbed}, pruned {$prune->rowCount()}.\n";
 } catch (Throwable $e) {
     if (isset($conn)) JobRun::fail($conn, $runId, $e);
     if (!$isCli) http_response_code(500);

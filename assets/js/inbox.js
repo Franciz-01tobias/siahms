@@ -315,13 +315,18 @@ function tgGroupOlder(container) {
             : t('tickets.reading.hide_older');
     });
 }
-/* Sweep a freshly rendered thread. The LAST message host is the newest —
-   the thread renders oldest-first — and is the one that stays open. */
+/* Sweep a freshly rendered thread. The FIRST message host is the newest and is
+   the one "Expand the newest message" keeps open.
+   TRAP: the thread renders NEWEST FIRST (loadCorrespondenceThread reverses it -
+   see the TRAP in tgGroupOlder). This said "the LAST host is the newest" until
+   4.0.1, so with that setting on, a long ticket opened with its OLDEST message
+   expanded and the customer's latest reply collapsed. The single-email view has
+   one host, which is index 0 either way. */
 function mcSweep(root) {
     if (!MC.collapse_enabled || !root || !root.querySelectorAll) return;
     const hosts = root.querySelectorAll('.thread-message-body, .email-body-content');
     hosts.forEach((h, i) => mcApply(h, {
-        newest: i === hosts.length - 1,
+        newest: i === 0,
         id: h.closest('[data-email-id]') ? h.closest('[data-email-id]').getAttribute('data-email-id') : ''
     }));
 }
@@ -409,6 +414,51 @@ function assignableAnalysts(tickets, keepId) {
         || companies.every(c => a.accessible_tenant_ids.includes(c)));
 }
 let currentEmail = null;
+let ticketRenderGeneration = 0;
+let ticketSelectionGeneration = 0;
+// Writes to the open ticket still in flight (PR #211). While it is above zero the
+// workspace holds back a refresh of the ticket (TicketWorkspace.holdRender) and
+// will not let it be left. assets/js/ticket-workspace.js counts each /api/ write
+// itself; trackTicketWrite() below covers a writer's WHOLE handler, for the ones
+// that re-load the thread after saving.
+let ticketPendingWrites = 0;
+
+/**
+ * Run a write handler as one pending write, from its first line until it has
+ * finished re-drawing - so a refresh cannot land between the save and the
+ * handler's own update of the screen. Then draw any refresh that was held back.
+ */
+async function trackTicketWrite(handler) {
+    ticketPendingWrites++;
+    try {
+        return await handler();
+    } finally {
+        ticketPendingWrites--;
+        window.TicketWorkspace?.flushRender();
+    }
+}
+
+/** A delayed response belongs to one rendering, not merely a reusable ticket ID. */
+function ticketReadGuard(ticketId) {
+    const generation = ticketRenderGeneration;
+    return () => generation === ticketRenderGeneration && currentEmail && Number(currentEmail.ticket_id) === Number(ticketId);
+}
+
+function ticketHasUnsavedInput() {
+    if (document.querySelector('#emailModal.active')) return true;
+    if (document.querySelector('#noteModal.active')) return true;
+    return !!document.getElementById('channelComposerText')?.value.trim()
+        || !!document.getElementById('channelAttachFile')?.files.length;
+}
+
+function discardTicketDraft() {
+    if (document.querySelector('#emailModal.active')) closeEmailModal();
+    if (document.querySelector('#noteModal.active')) closeNoteModal();
+    const channel = document.getElementById('channelComposerText');
+    if (channel) channel.value = '';
+    const attachment = document.getElementById('channelAttachFile');
+    if (attachment) attachment.value = '';
+}
 let currentRecordings = [];
 let folderCounts = {};
 // Messaging channels (WhatsApp etc.): set when a ticket's thread loads, so the
@@ -829,6 +879,9 @@ function initTinyMCE() {
     const isDark = (document.documentElement.getAttribute('data-theme-mode') || 'light') === 'dark';
 
     tinymce.init({
+        // Plugins and skins load without the page's ?v=, so a browser could pair a new
+        // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+        cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
         selector: '#emailBody',
         license_key: 'gpl',
         height: 440,   // was 350: the Message label row and the To/Cc label rows were removed to give it this room (2.10.0)
@@ -1541,7 +1594,7 @@ let dragHoverFolderId = null;
  * Dragging several rows shows a stacked-sheets drag image with the count; dragend clears all drag state.
  */
 function attachEmailDragHandlers() {
-    document.querySelectorAll('#emailList .email-item').forEach(el => {
+    document.querySelectorAll(ticketRowSelector('')).forEach(el => {
         el.addEventListener('dragstart', (e) => {
             if (ticketMenuIsSheet()) { e.preventDefault(); return; }
             const mailId = Number(el.dataset.emailId);
@@ -1568,7 +1621,7 @@ function attachEmailDragHandlers() {
             // whichever rows happen to be painted `.selected`, so the dimming can
             // never disagree with what is actually being dragged.
             selectedEmailIds.forEach(id => {
-                const r = document.querySelector(`#emailList .email-item[data-email-id="${id}"]`);
+                const r = document.querySelector(ticketRowSelector(`[data-email-id="${id}"]`));
                 if (r) r.classList.add('dragging');
             });
 
@@ -1603,7 +1656,7 @@ function attachEmailDragHandlers() {
             }
         });
         el.addEventListener('dragend', () => {
-            document.querySelectorAll('#emailList .email-item.dragging').forEach(r => r.classList.remove('dragging'));
+            document.querySelectorAll(ticketRowSelector('.dragging')).forEach(r => r.classList.remove('dragging'));
             draggedTicketId = null;
             draggedTicketNumber = null;
             draggedTicketIds = [];
@@ -1899,6 +1952,7 @@ async function handleTicketDrop(targetEl, ticketId, ticketNumber) {
 
 // Load emails based on current filter
 async function loadEmails() {
+    if (window.TicketTable?.isActive()) return TicketTable.reload();
     try {
         let url = API_BASE + 'get_emails.php?';
 
@@ -1990,6 +2044,7 @@ function companyChip(email) {
 
 // Render email list
 function renderEmailList() {
+    if (window.TicketTable?.isActive()) { renderSelectionUi(); return; }
     const emailListEl = document.getElementById('emailList');
 
     if (emails.length === 0) {
@@ -2054,7 +2109,7 @@ function renderEmailList() {
  * stays empty. Re-rendering the list (e.g. on filter change) re-runs this.
  */
 async function loadInboxSlaIndicators() {
-    const slots = document.querySelectorAll('#emailList [data-sla-slot]');
+    const slots = document.querySelectorAll((window.TicketTable?.isActive() ? '#ticketTableContainer' : '#emailList') + ' [data-sla-slot]');
     if (!slots.length) return;
     const ids = Array.from(slots).map(el => el.getAttribute('data-sla-slot')).filter(Boolean);
     if (!ids.length) return;
@@ -2129,9 +2184,9 @@ function setSelectedEmailRow(emailId) {
     // function would otherwise strip `.selected` off the other rows and leave the
     // list looking like one ticket is selected while an action hits several.
     if (selectedEmailIds && selectedEmailIds.size > 1) { renderSelectionUi(); return; }
-    document.querySelectorAll('#emailList .email-item.selected')
+    document.querySelectorAll(ticketRowSelector('.selected'))
         .forEach(el => el.classList.remove('selected'));
-    const row = document.querySelector(`#emailList .email-item[data-email-id="${emailId}"]`);
+    const row = document.querySelector(ticketRowSelector(`[data-email-id="${emailId}"]`));
     if (row) row.classList.add('selected');
 }
 
@@ -2165,15 +2220,20 @@ let selectedEmailIds   = new Set();   // every row in the selection
 let selectionAnchorId  = null;        // where a Shift range measures from
 let selectionFocusId   = null;        // the keyboard cursor
 
+/** Selection belongs to the displayed list, never hidden previous rows. */
+function ticketRowSelector(suffix = '') {
+    return (window.TicketTable?.isActive() ? '#ticketTableContainer' : '#emailList') + ' .email-item' + suffix;
+}
+
 /** Email ids in the order they are on screen — range selection follows what you SEE. */
 function visibleEmailIds() {
-    return Array.from(document.querySelectorAll('#emailList .email-item'))
+    return Array.from(document.querySelectorAll(ticketRowSelector('')))
         .map(el => Number(el.dataset.emailId));
 }
 
 /** The ticket id behind a row (actions work on tickets; rows are keyed by email). */
 function ticketIdForEmail(emailId) {
-    const row = document.querySelector(`#emailList .email-item[data-email-id="${emailId}"]`);
+    const row = document.querySelector(ticketRowSelector(`[data-email-id="${emailId}"]`));
     if (row && row.dataset.ticketId) return Number(row.dataset.ticketId);
     const rec = emails.find(e => e.id == emailId);
     return rec ? Number(rec.ticket_id) : null;
@@ -2191,7 +2251,7 @@ function selectionCount() {
 
 /** Paint the list: `.selected` on every chosen row, `.kb-focus` on the cursor. */
 function renderSelectionUi() {
-    document.querySelectorAll('#emailList .email-item').forEach(el => {
+    document.querySelectorAll(ticketRowSelector('')).forEach(el => {
         const id = Number(el.dataset.emailId);
         el.classList.toggle('selected', selectedEmailIds.has(id));
         el.classList.toggle('kb-focus', selectionFocusId === id);
@@ -2202,7 +2262,7 @@ function renderSelectionUi() {
     // the browser starts selecting on mousedown and this runs on click. The
     // mousedown handler further down is what actually prevents it; this stays for
     // the drag case.
-    const list = document.getElementById('emailList');
+    const list = document.getElementById(window.TicketTable?.isActive() ? 'ticketTableContainer' : 'emailList');
     if (list) list.classList.toggle('multi-selecting', selectedEmailIds.size > 1);
     // If a selection did start anyway, clear it rather than leave it smeared.
     const sel = window.getSelection && window.getSelection();
@@ -2223,48 +2283,48 @@ function clearMultiSelection({ repaint = true } = {}) {
  * The one entry point for a click on a row. Every modifier combination lands here
  * so the rules live in one readable place rather than spread across handlers.
  */
-function handleEmailRowClick(event, emailId) {
+async function handleEmailRowClick(event, emailId) {
     const ctrl  = event.ctrlKey || event.metaKey;   // ⌘ on a Mac does the same job
     const shift = event.shiftKey;
+    // Work out the new selection BEFORE applying it (PR #211): if it would take an
+    // open workspace off screen, the analyst may still say no to discarding a draft,
+    // and then nothing must have changed.
+    let next = new Set(selectedEmailIds);
 
     if (shift) {
         // Shift, with or without Ctrl: take the block from the anchor to here.
         // Plain Shift replaces the selection; Ctrl+Shift adds the block to it.
-        const ids   = visibleEmailIds();
-        const from  = ids.indexOf(selectionAnchorId !== null ? selectionAnchorId : emailId);
-        const to    = ids.indexOf(emailId);
+        const ids  = visibleEmailIds();
+        const from = ids.indexOf(selectionAnchorId !== null ? selectionAnchorId : emailId);
+        const to   = ids.indexOf(emailId);
         if (from === -1 || to === -1) return;
-
-        const block = ids.slice(Math.min(from, to), Math.max(from, to) + 1);
-        if (!ctrl) selectedEmailIds.clear();
-        block.forEach(id => selectedEmailIds.add(id));
-
-        // The anchor deliberately STAYS PUT so a second Shift+click re-measures
-        // from the same origin and can shrink the block as well as grow it.
-        selectionFocusId = emailId;
-        renderSelectionUi();
-        onSelectionChanged({ clickedId: emailId });
-        return;
-    }
-
-    if (ctrl) {
+        if (!ctrl) next.clear();
+        ids.slice(Math.min(from, to), Math.max(from, to) + 1).forEach(id => next.add(id));
+    } else if (ctrl) {
         // Toggle this one. Ctrl+clicking the only selected row leaves nothing
         // selected, which is legitimate — the reading pane empties.
-        if (selectedEmailIds.has(emailId)) selectedEmailIds.delete(emailId);
-        else                               selectedEmailIds.add(emailId);
-        selectionAnchorId = emailId;
-        selectionFocusId  = emailId;
-        renderSelectionUi();
-        onSelectionChanged({ clickedId: emailId });
-        return;
+        if (next.has(emailId)) next.delete(emailId);
+        else                   next.add(emailId);
+    } else {
+        // Plain click — collapse to this one and open it, exactly as before.
+        next = new Set([emailId]);
     }
 
-    // Plain click — collapse to this one and open it, exactly as before.
-    selectedEmailIds = new Set([emailId]);
-    selectionAnchorId = emailId;
-    selectionFocusId  = emailId;
+    // Keep/bar selection does not leave the open editor. A summary, an empty
+    // selection or another single ticket does, and must protect its drafts.
+    const retainsEditor = (next.size === 1 && next.has(selectedEmailId))
+        || (next.size > 1 && multiSelectPaneMode !== 'summary' && currentEmail);
+    if (!retainsEditor && window.TicketWorkspace?.isActive() && !await TicketWorkspace.canLeave()) return;
+
+    selectedEmailIds = next;
+    // The anchor deliberately STAYS PUT on Shift so a second Shift+click
+    // re-measures from the same origin and can shrink the block as well as grow
+    // it. Plain and Ctrl clicks set a new anchor.
+    if (!shift) selectionAnchorId = emailId;
+    selectionFocusId = emailId;
     renderSelectionUi();
-    selectEmail(emailId);
+    if (shift || ctrl) onSelectionChanged({clickedId: emailId});
+    else return selectEmail(emailId);
 }
 
 // ---------------------------------------------------------------------------
@@ -2300,16 +2360,45 @@ async function loadMultiSelectPanePreference() {
 }
 
 /** Called whenever the selection changes. Routes to whichever surface is chosen. */
-function onSelectionChanged({ clickedId = null } = {}) {
+/**
+ * Is the ticket table showing on its own, with no ticket beside it? Then keys
+ * only move the highlight: opening a ticket there shrinks the table to make room,
+ * so doing it on every arrow made the layout jump and loaded a ticket per row
+ * passed. A click or Enter opens it. Once one is open, the keys follow again,
+ * so the ticket shown is always the one highlighted.
+ */
+function tableShownAlone() {
+    return !!window.TicketTable?.isActive() && !document.body.classList.contains('ticket-table-detail');
+}
+
+async function onSelectionChanged({ clickedId = null, fromKeys = false } = {}) {
     const n = selectionCount();
+    // Keys on the table shown alone change the selection, not the screen.
+    if (fromKeys && n > 0 && tableShownAlone()) {
+        hideSelectionBar();
+        hideKeepModeWarning();
+        if (n > 1 && multiSelectPaneMode === 'bar') renderSelectionBar();
+        return;
+    }
+    // Keyboard/select-all callers also arrive here. Protect the live editor
+    // before the native empty/summary pane replaces it, just as row clicks do.
+    const replacesEditor = n === 0 || (n > 1 && multiSelectPaneMode === 'summary');
+    if (replacesEditor && window.TicketWorkspace?.isActive() && !await TicketWorkspace.canLeave()) {
+        selectedEmailIds = new Set(selectedEmailId === null ? [] : [selectedEmailId]);
+        selectionAnchorId = selectionFocusId = selectedEmailId;
+        renderSelectionUi();
+        return;
+    }
 
     if (n === 0) {
+        window.TicketWorkspace?.dispose();
         hideSelectionBar();
         hideKeepModeWarning();
         selectedEmailId = null;
         currentEmail = null;
         const pane = document.getElementById('readingPane');
         if (pane) pane.innerHTML = `<div class="reading-pane-empty">${escapeHtml(t('tickets.reading_pane.select_ticket'))}</div>`;
+        window.TicketTable?.showDetail(false);
         return;
     }
 
@@ -2319,6 +2408,7 @@ function onSelectionChanged({ clickedId = null } = {}) {
         hideKeepModeWarning();
         const only = Array.from(selectedEmailIds)[0];
         if (only !== selectedEmailId) selectEmail(only);
+        else window.TicketTable?.showDetail();
         return;
     }
 
@@ -2326,7 +2416,7 @@ function onSelectionChanged({ clickedId = null } = {}) {
     if (multiSelectPaneMode === 'summary') {
         hideSelectionBar();
         hideKeepModeWarning();
-        renderSelectionSummaryPane();
+        return renderSelectionSummaryPane();
     } else if (multiSelectPaneMode === 'bar') {
         hideKeepModeWarning();
         renderSelectionBar();
@@ -2353,7 +2443,9 @@ function onSelectionChanged({ clickedId = null } = {}) {
 function updateSelectionSurfaces() {
     const n = selectionCount();
     if (n <= 1) { hideSelectionBar(); hideKeepModeWarning(); return; }
-    if (multiSelectPaneMode === 'summary')    renderSelectionSummaryPane();
+    // The summary IS a pane: on the table shown alone it waits for a click (the
+    // mouse path calls renderSelectionSummaryPane() itself), as a ticket does.
+    if (multiSelectPaneMode === 'summary')    { if (!tableShownAlone()) renderSelectionSummaryPane(); }
     else if (multiSelectPaneMode === 'bar')   renderSelectionBar();
     else                                      renderKeepModeWarning();
 }
@@ -2371,12 +2463,14 @@ function selectionActionsHtml(compact) {
 }
 
 /** Replaces the reading pane with a "N tickets selected" summary listing them with the bulk actions. */
-function renderSelectionSummaryPane() {
+async function renderSelectionSummaryPane() {
     const pane = document.getElementById('readingPane');
     if (!pane) return;
+    if (window.TicketWorkspace?.isActive() && !await TicketWorkspace.canLeave()) return;
+    window.TicketWorkspace?.dispose();
     const ids  = visibleEmailIds().filter(id => selectedEmailIds.has(id));   // keep list order
     const rows = ids.map(id => {
-        const row = document.querySelector(`#emailList .email-item[data-email-id="${id}"]`);
+        const row = document.querySelector(ticketRowSelector(`[data-email-id="${id}"]`));
         const ref = row ? (row.dataset.ticketNumber || '') : '';
         const rec = emails.find(e => e.id == id);
         return `<div class="sel-summary-row">
@@ -2385,6 +2479,7 @@ function renderSelectionSummaryPane() {
                 </div>`;
     }).join('');
 
+    window.TicketTable?.showDetail();
     pane.innerHTML = `
         <div class="sel-summary">
             <div class="sel-summary-count">${escapeHtml(t('tickets.bulk.n_selected').replace('%d', ids.length))}</div>
@@ -2449,7 +2544,9 @@ function hideKeepModeWarning() {
 }
 
 /** Clear right down to nothing selected (the ✕ / Escape route). */
-function clearSelectionToNone() {
+async function clearSelectionToNone() {
+    if (window.TicketWorkspace?.isActive() && !await TicketWorkspace.canLeave()) return;
+    window.TicketWorkspace?.dispose();
     selectedEmailIds.clear();
     selectionAnchorId = null;
     selectionFocusId  = null;
@@ -2466,7 +2563,7 @@ function selectAllVisible() {
     if (selectionAnchorId === null) selectionAnchorId = ids[0];
     selectionFocusId = ids[ids.length - 1];
     renderSelectionUi();
-    onSelectionChanged({});
+    onSelectionChanged({ fromKeys: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -2514,7 +2611,7 @@ function moveSelectionCursor(delta, { extend = false, keepSelection = false }) {
         selectionFocusId = nextId;
         renderSelectionUi();
         scrollRowIntoView(nextId);
-        onSelectionChanged({ clickedId: nextId });
+        onSelectionChanged({ clickedId: nextId, fromKeys: true });
         return;
     }
 
@@ -2524,13 +2621,20 @@ function moveSelectionCursor(delta, { extend = false, keepSelection = false }) {
     selectionFocusId  = nextId;
     renderSelectionUi();
     scrollRowIntoView(nextId);
+    if (tableShownAlone()) return;   // the highlight moves; Enter or a click opens it
     selectEmail(nextId);
 }
 
 /** Scrolls the list's own scroll container so the row is visible, never the page itself. */
 function scrollRowIntoView(emailId) {
-    const row = document.querySelector(`#emailList .email-item[data-email-id="${emailId}"]`);
+    const row = document.querySelector(ticketRowSelector(`[data-email-id="${emailId}"]`));
     if (!row) return;
+
+    // The table's rows take focus (tabIndex 0). If one has it, it must follow the
+    // arrows - otherwise focus stays on the row first clicked, and keys aimed at
+    // the highlighted row (Enter) land on that one instead.
+    const f = document.activeElement;
+    if (f && f !== row && f.classList && f.classList.contains('email-item') && row.tabIndex >= 0) row.focus({ preventScroll: true });
 
     // Scroll ONLY the list's own scroll container, never the page. Element.scrollIntoView()
     // can't be scoped — it scrolls every scrollable ancestor up to the document, so at the
@@ -2561,7 +2665,7 @@ function toggleFocusedRow() {
     else                                        selectedEmailIds.add(selectionFocusId);
     selectionAnchorId = selectionFocusId;
     renderSelectionUi();
-    onSelectionChanged({ clickedId: selectionFocusId });
+    onSelectionChanged({ clickedId: selectionFocusId, fromKeys: true });
 }
 
 document.addEventListener('keydown', function (e) {
@@ -2571,6 +2675,19 @@ document.addEventListener('keydown', function (e) {
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
     if (document.querySelector('.modal.active')) return;
     if (typeof tinymce !== 'undefined' && tinymce.activeEditor && tinymce.activeEditor.hasFocus && tinymce.activeEditor.hasFocus()) return;
+
+    // TRAP: these are the LIST's keys, and the list is not always what the person
+    // is looking at. In full screen it is hidden (CSS only - #emailList still
+    // exists), and a floating window (the file viewer) has focus of its own. Taking
+    // the arrows there moved between tickets nobody could see, and stopped a PDF
+    // or the ticket itself from scrolling. Whatever has focus owns the keys.
+    if (document.body.classList.contains('ticket-popout')) {
+        // Nothing focused (a window over it has just closed, say): hand the key to
+        // the ticket, so it scrolls rather than nothing at all.
+        if ((!el || el === document.body) && /^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(e.key)) focusTicketScroller();
+        return;
+    }
+    if (el && el.closest && el.closest('.fw-layer, .reading-pane, .ticket-table-splitter')) return;
 
     const ctrl = e.ctrlKey || e.metaKey;
 
@@ -2594,6 +2711,12 @@ document.addEventListener('keydown', function (e) {
     if (e.key === ' ' && selectionFocusId !== null) {
         e.preventDefault();
         toggleFocusedRow();
+        return;
+    }
+    if (e.key === 'Enter' && !e.defaultPrevented && !ctrl && !e.shiftKey && !e.altKey
+        && selectionFocusId !== null && selectionCount() <= 1 && document.getElementById('emailList')) {
+        e.preventDefault();
+        enterRow(selectionFocusId);
     }
 });
 
@@ -2809,6 +2932,8 @@ function bulkProgressHtml() {
 
 // Select and display email by email ID
 async function selectEmail(emailId) {
+    if (window.TicketWorkspace?.isActive() && selectedEmailId !== emailId && !await TicketWorkspace.canLeave()) return;
+    window.TicketTable?.showDetail();
     // 🔑 A NEGATIVE ID IS A TICKET WITH NO EMAIL. get_emails.php sends
     // COALESCE(le.id, -t.id), so the sign says which kind of thing the row is.
     // Selection, drag and the highlight all work off this id unchanged; only
@@ -2821,6 +2946,7 @@ async function selectEmail(emailId) {
         return loadTicketById(-emailId);
     }
     selectedEmailId = emailId;
+    const selectionGeneration = ++ticketSelectionGeneration;
     // Opening a single ticket collapses the selection to it, so the highlight,
     // the reading pane and what an action would hit can never disagree. Callers
     // that want a multi-selection never route through here.
@@ -2844,6 +2970,7 @@ async function selectEmail(emailId) {
         readingPane.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     } else {
         spinnerTimer = setTimeout(() => {
+            if (selectionGeneration !== ticketSelectionGeneration || (window.TicketWorkspace?.isActive() && Number(currentEmail?.id) === Number(emailId))) return;
             readingPane.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
         }, 250);
     }
@@ -2852,6 +2979,7 @@ async function selectEmail(emailId) {
         const response = await fetch(`${API_BASE}get_email_detail.php?id=${emailId}`);
         const data = await response.json();
         if (spinnerTimer) clearTimeout(spinnerTimer);
+        if (selectionGeneration !== ticketSelectionGeneration) return;
 
         if (data.success) {
             displayEmail(data.email, data.recordings || []);
@@ -2861,6 +2989,7 @@ async function selectEmail(emailId) {
         }
     } catch (error) {
         if (spinnerTimer) clearTimeout(spinnerTimer);
+        if (selectionGeneration !== ticketSelectionGeneration) return;
         console.error('Error:', error);
         readingPane.innerHTML = '<div class="reading-pane-empty">Failed to load email</div>';
         syncPopoutToTicketState(false);
@@ -2869,13 +2998,17 @@ async function selectEmail(emailId) {
 
 // Load and display ticket by ticket ID (from URL parameter)
 async function loadTicketById(ticketId) {
+    if (window.TicketWorkspace?.isActive() && Number(currentEmail?.ticket_id) !== Number(ticketId) && !await TicketWorkspace.canLeave()) return;
+    window.TicketTable?.showDetail();
+    const selectionGeneration = ++ticketSelectionGeneration;
     const readingPane = document.getElementById('readingPane');
+    if (!(window.TicketWorkspace?.isActive() && Number(currentEmail?.ticket_id) === Number(ticketId)))
     readingPane.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
     try {
         const response = await fetch(`${API_BASE}get_email_detail.php?ticket_id=${ticketId}`);
         const data = await response.json();
-
+        if (selectionGeneration !== ticketSelectionGeneration) return;
         if (data.success) {
             // For a ticket with no email the row id is the negative ticket id,
             // so keep using that or the highlight would clear itself.
@@ -2887,14 +3020,59 @@ async function loadTicketById(ticketId) {
             syncPopoutToTicketState(false);
         }
     } catch (error) {
+        if (selectionGeneration !== ticketSelectionGeneration) return;
         console.error('Error:', error);
         readingPane.innerHTML = '<div class="reading-pane-empty">Failed to load ticket</div>';
         syncPopoutToTicketState(false);
     }
 }
 
+/** The flag belongs to the ticket, even when this analyst chooses the reading pane. */
+function buildWorkspaceBadge(email) {
+    return window.TICKET_WORKSPACE?.mode === 'selected' && Number(email.is_workspace) === 1
+        ? '<span class="tw-workspace-badge">' + escapeHtml(t('tickets.workspace.badge')) + '</span>' : '';
+}
+
+function buildWorkspaceAction(email) {
+    const config = window.TICKET_WORKSPACE;
+    if (!email || email.deleted_datetime || config?.mode !== 'selected' || !config.ready || !config.can_write) return '';
+    const on = Number(email.is_workspace) === 1;
+    // Same shape as the items togglePaneMoreMenu() copies from the toolbar: an
+    // icon span, then the label, so it lines up with Audit, Export and the rest.
+    return `<button type="button" onclick="setTicketWorkspace(${!on})">
+                <span class="action-btn-icon">${on ? '↩️' : '🗂️'}</span>
+                <span>${escapeHtml(t('tickets.workspace.' + (on ? 'back_to_pane' : 'make_workspace')))}</span>
+            </button>`;
+}
+
+async function setTicketWorkspace(value) {
+    if (!currentEmail || !await TicketWorkspace.canLeave()) return;
+    const id = Number(currentEmail.ticket_id);
+    ticketPendingWrites++;
+    try {
+        const response = await fetch(API_BASE + 'assign_ticket.php', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ticket_id:id, workspace:value})
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || t('tickets.workspace.save_failed'));
+        if (Number(currentEmail?.ticket_id) === id) {
+            TicketWorkspace.releaseTask();
+            currentEmail.is_workspace = value ? 1 : 0;
+        }
+    } catch (error) {
+        showToast(error.message || t('tickets.workspace.save_failed'), 'error');
+    } finally {
+        ticketPendingWrites--;
+        // Read after the save rather than trusting a poll with the old flag.
+        if (Number(currentEmail?.ticket_id) === id) loadTicketById(id);
+    }
+}
+
 // Display email in reading pane
 function displayEmail(email, recordings) {
+    if (window.TicketWorkspace?.holdRender(email, recordings)) return;
+    ticketRenderGeneration++;
     currentEmail = email;
     currentRecordings = recordings || [];
 
@@ -3064,14 +3242,82 @@ function displayEmail(email, recordings) {
             <button onclick="permanentlyDeleteFromTrash(${email.ticket_id}, '${escapeHtml(email.ticket_number || '')}')" style="font-size:12.5px;padding:6px 14px;border:1px solid #e6c4c4;background:#fff;color:#b71c1c;border-radius:5px;cursor:pointer;font-weight:600;">✕ Delete forever</button>
         </div>` : '';
 
-    readingPane.innerHTML = trashBanner + (isTrashed ? '<div style="pointer-events:none;opacity:0.55;">' : '') + `
-        <div class="ticket-properties-container" id="ticketPropertiesContainer">
-            <div class="ticket-properties-header" onclick="toggleTicketProperties(event)">
-                <div class="ticket-properties-title">
-                    <span class="ticket-properties-chevron">&#9660;</span>
-                    ${escapeHtml(t('tickets.reading_pane.properties_title'))}
-                </div>
-                <div class="ticket-properties-summary">
+    const workspace = !!window.TicketWorkspace?.enabled(email);
+    // TRAP: define controls once and choose their destinations while rendering.
+    // Relocating a rendered classic pane would quietly lose future controls.
+    const propertyFields = {
+        department: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_department'))}</label>
+                        <select class="toolbar-select" id="departmentSelect" onchange="assignDepartment()">
+                            <option value=""></option>
+                            ${departmentOptions}
+                        </select>
+                    </div>`,
+        type: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_type'))}</label>
+                        <select class="toolbar-select" id="ticketTypeSelect" onchange="assignTicketType()">
+                            <option value=""></option>
+                            ${ticketTypeOptions}
+                        </select>
+                    </div>`,
+        classification: `${classificationFields}`,
+        status: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_status'))}</label>
+                        <select class="toolbar-select" id="statusSelect" onchange="assignStatus()">
+                            ${statusOptions}
+                        </select>
+                    </div>`,
+        priority: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_priority'))}</label>
+                        <select class="toolbar-select" id="prioritySelect" onchange="assignPriority()">
+                            <option value=""></option>
+                            ${priorityOptions}
+                        </select>
+                    </div>`,
+        sensitivity: `<div class="toolbar-field" title="${escapeHtml(t('tickets.reading_pane.sensitivity_help'))}">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_sensitivity'))}</label>
+                        <select class="toolbar-select${email.sensitivity === 'confidential' ? ' is-confidential' : ''}" id="sensitivitySelect" onchange="assignSensitivity()">
+                            <option value="normal" ${email.sensitivity !== 'confidential' ? 'selected' : ''}>${escapeHtml(t('tickets.reading_pane.sensitivity_normal'))}</option>
+                            <option value="confidential" ${email.sensitivity === 'confidential' ? 'selected' : ''}>${escapeHtml(t('tickets.reading_pane.sensitivity_confidential'))}</option>
+                        </select>
+                    </div>`,
+        origin: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_origin'))}</label>
+                        <select class="toolbar-select" id="originSelect" onchange="assignOrigin()">
+                            <option value=""></option>
+                            ${originOptions}
+                        </select>
+                    </div>`,
+        firstTimeFix: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_first_time_fix'))}</label>
+                        <select class="toolbar-select" id="firstTimeFixSelect" onchange="assignFirstTimeFix()">
+                            ${firstTimeFixOptions}
+                        </select>
+                    </div>`,
+        training: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_it_training'))}</label>
+                        <select class="toolbar-select" id="itTrainingSelect" onchange="assignItTraining()">
+                            ${itTrainingOptions}
+                        </select>
+                    </div>`,
+        team: `${teamField}`,
+        owner: `<div class="toolbar-field">
+                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_owner'))}</label>
+                        <select class="toolbar-select" id="ownerSelect" onchange="assignOwner()">
+                            <option value=""></option>
+                            ${ownerOptions}
+                        </select>
+                    </div>`,
+        company: `${companyField}`,
+        custom: `<div class="tf-panel-fields" id="ticketCustomFields"></div>`,
+    };
+    const propertyFieldsHtml = workspace
+        ? TicketWorkspace.fieldGroup('classification', [propertyFields.department,propertyFields.type,propertyFields.classification,propertyFields.status,propertyFields.priority].join('')) +
+          TicketWorkspace.fieldGroup('responsibility', [propertyFields.team,propertyFields.owner,propertyFields.company,propertyFields.sensitivity].join('')) +
+          TicketWorkspace.fieldGroup('other', [propertyFields.origin,propertyFields.firstTimeFix,propertyFields.training,propertyFields.custom].join(''))
+        : Object.values(propertyFields).join('');
+    const summaryHtml = `                <div class="ticket-properties-summary">
+                    ${buildWorkspaceBadge(email)}
                     <!-- Discussion #62: shown with the panel collapsed too, so nobody works a
                          confidential ticket without seeing that it is one. -->
                     <span class="summary-confidential" id="summaryConfidential" ${email.sensitivity === 'confidential' ? '' : 'hidden'} title="${escapeHtml(t('tickets.reading_pane.sensitivity_help'))}">${confidentialIcon()}${escapeHtml(t('tickets.reading_pane.sensitivity_confidential'))}</span>
@@ -3088,78 +3334,24 @@ function displayEmail(email, recordings) {
                         <span class="ticket-properties-summary-value" id="summaryOwner">${escapeHtml(summaryOwner)}</span>
                     </span>
                 </div>
+`;
+    const propertiesHtml = `
+        <div class="ticket-properties-container" id="ticketPropertiesContainer">
+            <div class="ticket-properties-header" onclick="toggleTicketProperties(event)">
+                <div class="ticket-properties-title">
+                    <span class="ticket-properties-chevron">&#9660;</span>
+                    ${escapeHtml(t('tickets.reading_pane.properties_title'))}
+                </div>
+                ${workspace ? '' : summaryHtml}
             </div>
             <div class="ticket-properties-panel">
                 <div class="ticket-toolbar">
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_department'))}</label>
-                        <select class="toolbar-select" id="departmentSelect" onchange="assignDepartment()">
-                            <option value=""></option>
-                            ${departmentOptions}
-                        </select>
-                    </div>
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_type'))}</label>
-                        <select class="toolbar-select" id="ticketTypeSelect" onchange="assignTicketType()">
-                            <option value=""></option>
-                            ${ticketTypeOptions}
-                        </select>
-                    </div>
-${classificationFields}
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_status'))}</label>
-                        <select class="toolbar-select" id="statusSelect" onchange="assignStatus()">
-                            ${statusOptions}
-                        </select>
-                    </div>
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_priority'))}</label>
-                        <select class="toolbar-select" id="prioritySelect" onchange="assignPriority()">
-                            <option value=""></option>
-                            ${priorityOptions}
-                        </select>
-                    </div>
-                    <div class="toolbar-field" title="${escapeHtml(t('tickets.reading_pane.sensitivity_help'))}">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_sensitivity'))}</label>
-                        <select class="toolbar-select${email.sensitivity === 'confidential' ? ' is-confidential' : ''}" id="sensitivitySelect" onchange="assignSensitivity()">
-                            <option value="normal" ${email.sensitivity !== 'confidential' ? 'selected' : ''}>${escapeHtml(t('tickets.reading_pane.sensitivity_normal'))}</option>
-                            <option value="confidential" ${email.sensitivity === 'confidential' ? 'selected' : ''}>${escapeHtml(t('tickets.reading_pane.sensitivity_confidential'))}</option>
-                        </select>
-                    </div>
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_origin'))}</label>
-                        <select class="toolbar-select" id="originSelect" onchange="assignOrigin()">
-                            <option value=""></option>
-                            ${originOptions}
-                        </select>
-                    </div>
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_first_time_fix'))}</label>
-                        <select class="toolbar-select" id="firstTimeFixSelect" onchange="assignFirstTimeFix()">
-                            ${firstTimeFixOptions}
-                        </select>
-                    </div>
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_it_training'))}</label>
-                        <select class="toolbar-select" id="itTrainingSelect" onchange="assignItTraining()">
-                            ${itTrainingOptions}
-                        </select>
-                    </div>
-                    ${teamField}
-                    <div class="toolbar-field">
-                        <label class="toolbar-label">${escapeHtml(t('tickets.reading_pane.field_owner'))}</label>
-                        <select class="toolbar-select" id="ownerSelect" onchange="assignOwner()">
-                            <option value=""></option>
-                            ${ownerOptions}
-                        </select>
-                    </div>
-                    ${companyField}
-                    <div class="tf-panel-fields" id="ticketCustomFields"></div>
+                    ${propertyFieldsHtml}
                 </div>
             </div>
         </div>
-        ${companyWarningBanner}
-        <div class="email-header">
+`;
+    const headerHtml = `        <div class="email-header">
             <div class="email-subject-line">
                 <span class="email-subject-text">${escapeHtml(t('tickets.reading_pane.ticket_label'))} ${escapeHtml(email.ticket_number || '')} - ${escapeHtml(email.subject)}</span>
                 <button class="icon-btn ticket-popout-toggle" onclick="toggleTicketPopout()" title="${escapeHtml(t('tickets.reading_pane.toggle_fullscreen'))}" aria-label="${escapeHtml(t('tickets.reading_pane.toggle_fullscreen'))}">
@@ -3170,7 +3362,7 @@ ${classificationFields}
             <div class="email-meta">
                 <div class="email-meta-row">
                     <div class="email-meta-label">${escapeHtml(t('tickets.reading_pane.meta_from'))}</div>
-                    <div class="email-meta-value">${senderLabel(email.from_name, email.from_address, true)}</div>
+                    <div class="email-meta-value">${senderLabel(email.from_name, email.from_address, true)}${requesterDialHtml(email)}</div>
                 </div>
                 <div class="email-meta-row">
                     <div class="email-meta-label">${escapeHtml(t('tickets.reading_pane.meta_to'))}</div>
@@ -3185,20 +3377,18 @@ ${classificationFields}
                 ` : ''}
             </div>
         </div>
-        <div class="attachment-info-bar" id="attachmentInfoBar" onclick="showAttachmentList()" style="display: none;">
+`;
+    const attachmentHtml = `        <div class="attachment-info-bar" id="attachmentInfoBar" onclick="showAttachmentList()" style="display: none;">
             <span>${escapeHtml(t('tickets.actions.loading_attachments'))}</span>
         </div>
-        ${buildSnoozeBanner(email)}
+`;
+    const bannersHtml = `        ${buildSnoozeBanner(email)}
         ${buildMergeBanner(email)}
         <!-- Collision detection (#934). Left empty by the render and filled by the
              presence poll, so a re-render never flashes a stale set of faces. -->
         <div class="presence-strip" id="presenceStrip" hidden></div>
-        <div class="pane-strips">
-            ${buildLinksSection(email)}
-            ${buildAiSummarySlot()}
-        </div>
-        ${buildRecordingsStrip(currentRecordings)}
-        <div class="action-toolbar">
+`;
+    const actionsHtml = `        <div class="action-toolbar">
             <button class="action-btn" onclick="openNoteModal()">
                 <span class="action-btn-icon">📝</span>
                 <span>${escapeHtml(t('tickets.actions.add_note'))}</span>
@@ -3215,24 +3405,29 @@ ${classificationFields}
                 <span class="action-btn-icon">📅</span>
                 <span>${escapeHtml(t('tickets.actions.schedule'))}</span>
             </button>
-            <button class="action-btn" onclick="openTicketAiChat()">
+            ${ticketModuleOn('knowledge') ? `<button class="action-btn" onclick="openTicketAiChat()">
                 <span class="action-btn-icon">🤖</span>
                 <span>${escapeHtml(t('tickets.actions.ask_ai'))}</span>
-            </button>
+            </button>` : ''}
             ${buildReadForMeButton()}
-            <button class="action-btn pane-secondary" onclick="showAuditHistory()">
+            ${workspace ? '' : `<button class="action-btn pane-secondary" onclick="showAuditHistory()">
                 <span class="action-btn-icon">📋</span>
                 <span>${escapeHtml(t('tickets.actions.audit'))}</span>
+            </button>`}
+            <button class="action-btn pane-secondary" onclick="openCaseReport()" title="${escapeHtml(tf('tickets.actions.export_tip', 'Export this ticket and its tasks as a case report'))}">
+                <span class="action-btn-icon">📄</span>
+                <span>${escapeHtml(tf('tickets.actions.export', 'Export'))}</span>
             </button>
             ${buildWriteUpButton(email)}
-            <button class="action-btn pane-secondary" onclick="requestCsatSurvey()" title="Send a satisfaction survey to the requester">
+            ${ticketModuleOn('csat') ? `<button class="action-btn pane-secondary" onclick="requestCsatSurvey()" title="Send a satisfaction survey to the requester">
                 <span class="action-btn-icon">⭐</span>
                 <span>${escapeHtml(t('tickets.actions.request_feedback'))}</span>
-            </button>
+            </button>` : ''}
             <button class="action-btn action-btn-danger pane-secondary" onclick="deleteTicket()">
                 <span class="action-btn-icon">🗑️</span>
                 <span>${escapeHtml(t('tickets.actions.delete'))}</span>
             </button>
+            ${workspace ? buildLinkActions() : ''}
             <div class="pane-more-wrap">
                 <button type="button" class="action-btn pane-more-btn" onclick="togglePaneMoreMenu(event)" aria-haspopup="true">
                     <span class="action-btn-icon">⋯</span>
@@ -3241,20 +3436,32 @@ ${classificationFields}
                 <div class="pane-more-menu" id="paneMoreMenu" hidden></div>
             </div>
         </div>
-        <div class="email-body">
-            <div id="ticketChecklistContainer"></div>
-            <div id="threadContainer">
-                ${emailBodyHost(email.body_content, 'email-body-content', email.body_type)}
-            </div>
-            <div id="slaContainer"></div>
-            <div id="timeEntriesContainer"></div>
-            <div id="notesContainer"></div>
-        </div>
-    ` + (isTrashed ? '</div>' : '');
-
+`;
+    const threadHtml = `<div id="threadContainer">${emailBodyHost(email.body_content, 'email-body-content', email.body_type)}</div>`;
+    const checklistHtml = '<div id="ticketChecklistContainer"></div>';
+    const notesHtml = '<div id="notesContainer"></div>';
+    const timeHtml = '<div id="slaContainer"></div><div id="timeEntriesContainer"></div>';
+    const linksHtml = buildLinksSection(email, workspace);
+    const aiHtml = buildAiSummarySlot();
+    const recordingsHtml = buildRecordingsStrip(currentRecordings);
+    const contentHtml = workspace ? TicketWorkspace.render({
+        header: headerHtml + summaryHtml + companyWarningBanner + bannersHtml + actionsHtml,
+        properties: propertiesHtml,
+        conversation: attachmentHtml + aiHtml + recordingsHtml + threadHtml + notesHtml,
+        work: checklistHtml + '<div class="tw-task-list" id="twTaskList"></div><div class="tw-tasks" id="twTaskArea"></div>',
+        links: linksHtml,
+        time: timeHtml,
+    }) : propertiesHtml + companyWarningBanner + headerHtml + attachmentHtml + bannersHtml
+        + '<div class="pane-strips">' + linksHtml + aiHtml + '</div>' + recordingsHtml + actionsHtml
+        + '<div class="email-body">' + checklistHtml + threadHtml + timeHtml + notesHtml + '</div>';
+    // Keep the native trash guard around both layouts, not just individual actions.
+    readingPane.innerHTML = trashBanner + (isTrashed ? '<div inert style="opacity:0.55;">' : '')
+        + contentHtml + (isTrashed ? '</div>' : '');
+    window.TicketWorkspace?.prepare(readingPane, {ticketId: email.ticket_id, enabled: workspace});
     // Isolate the just-rendered email body in a shadow root (see emailBodyHost).
     hydrateEmailBodies(readingPane);
     watchPaneCompact(readingPane);
+    watchLinksStrip(readingPane);
 
     loadAiSummary(email.ticket_id);
     if (typeof loadTicketChecklists === "function") loadTicketChecklists(email.ticket_id);
@@ -3606,7 +3813,7 @@ async function undoMerge(mergeId) {
 
 /** Jump to a ticket by its reference — used by the merge banner's button. */
 async function openTicketByNumber(ticketNumber) {
-    const row = Array.from(document.querySelectorAll('#emailList .email-item'))
+    const row = Array.from(document.querySelectorAll(ticketRowSelector('')))
         .find(el => (el.dataset.ticketNumber || '') === ticketNumber);
     if (row) { handleEmailRowClick({ ctrlKey: false, shiftKey: false, metaKey: false }, Number(row.dataset.emailId)); return; }
     // Not in the current folder's list — search for it so the jump works from
@@ -3638,23 +3845,23 @@ function rpBadge(type, id) {
  * Equipment, CMDB, domain, project and task pills are not on the ticket record, so the strip draws empty
  * holders for them and their own loaders fill them in afterwards.
  */
-function buildLinksSection(email) {
+function buildLinksSection(email, workspace = false) {
     const pills = [];
 
     // Problems (⚠) — open in the Problem module.
-    (email.problems || []).forEach(p => {
+    (ticketModuleOn('problems') ? email.problems || [] : []).forEach(p => {
         pills.push(`<a class="pm-ticket-badge" href="../problem-management/index.php?id=${p.id}" target="_blank" title="Problem: ${escapeHtml(p.title || '')}">
-            ⚠ ${escapeHtml(p.problem_number || ('#' + p.id))}${p.status ? ' · ' + escapeHtml(p.status) : ''}
+            ⚠ <span class="pill-text">${escapeHtml(p.problem_number || ('#' + p.id))}${p.status ? ' · ' + escapeHtml(p.status) : ''}</span>
             ${rpBadge('problem', p.id)}
             <span class="pm-ticket-unlink" onclick="event.preventDefault();event.stopPropagation();unlinkTicketFromProblem(${p.id});">✕</span>
         </a>`);
     });
 
     // Changes (🔁) — open in the Change module.
-    (email.changes || []).forEach(c => {
+    (ticketModuleOn('changes') ? email.changes || [] : []).forEach(c => {
         const ref = 'CHG-' + String(c.id).padStart(4, '0');
         pills.push(`<a class="pm-ticket-badge" href="../change-management/index.php?id=${c.id}" target="_blank" title="Change: ${escapeHtml(c.title || '')}">
-            🔁 ${escapeHtml(ref)}${c.status ? ' · ' + escapeHtml(c.status) : ''}
+            🔁 <span class="pill-text">${escapeHtml(ref)}${c.status ? ' · ' + escapeHtml(c.status) : ''}</span>
             ${rpBadge('change', c.id)}
             <span class="pm-ticket-unlink" onclick="event.preventDefault();event.stopPropagation();unlinkTicketFromChange(${c.id});">✕</span>
         </a>`);
@@ -3664,7 +3871,7 @@ function buildLinksSection(email) {
     const L = email.linked_tickets || {};
     /** Builds one linked-ticket pill with its relation prefix (Parent, Child, Duplicate...) and an unlink cross. */
     const tp = (item, prefix) => `<a class="pm-ticket-badge" href="#" onclick="event.preventDefault();loadTicketById(${item.ticket_id});" title="${escapeHtml(item.subject || '')}">
-        🔗 ${escapeHtml(prefix)} ${escapeHtml(item.ticket_number || ('#' + item.ticket_id))}${item.status ? ' · ' + escapeHtml(item.status) : ''}
+        🔗 <span class="pill-text">${escapeHtml(prefix)} ${escapeHtml(item.ticket_number || ('#' + item.ticket_id))}${item.status ? ' · ' + escapeHtml(item.status) : ''}</span>
         ${rpBadge('ticket', item.ticket_id)}
         <span class="pm-ticket-unlink" onclick="event.preventDefault();event.stopPropagation();unlinkTicketLink(${item.link_id});">✕</span>
     </a>`;
@@ -3691,7 +3898,7 @@ function buildLinksSection(email) {
         pills.push(`<a class="pm-ticket-badge tracker-badge tracker-${escapeHtml(k.status_category || 'unknown')}"
             href="${escapeHtml(k.external_url || '#')}" target="_blank" rel="noopener"
             title="${escapeHtml(title)}">
-            ${dot} ${escapeHtml(ref)}${bits.length ? ' · ' + escapeHtml(bits.join(' · ')) : ''}
+            ${dot} <span class="pill-text">${escapeHtml(ref)}${bits.length ? ' · ' + escapeHtml(bits.join(' · ')) : ''}</span>
         </a>`);
     });
 
@@ -3708,28 +3915,48 @@ function buildLinksSection(email) {
 
     return `<div class="problem-strip links-strip">
         <span class="problem-strip-label">Links</span>
-        ${body}
-        <span class="strip-pill-group" id="stripAssetPills"></span>
-        <span class="strip-pill-group" id="stripCmdbPills"></span>
-        <span class="strip-pill-group" id="stripDomainPills"></span>
-        <span class="strip-pill-group" id="stripProjectPills"></span>
-        <span class="strip-pill-group" id="stripTaskPills"></span>
-        <div class="link-add-wrap">
+        <span class="links-strip-pills">
+            ${body}
+            <span class="strip-pill-group" id="stripAssetPills"></span>
+            <span class="strip-pill-group" id="stripCmdbPills"></span>
+            <span class="strip-pill-group" id="stripDomainPills"></span>
+            <span class="strip-pill-group" id="stripProjectPills"></span>
+            ${workspace ? '' : '<span class="strip-pill-group" id="stripTaskPills"></span>'}
+        </span>
+        ${workspace ? '' : '<button type="button" class="links-strip-more" hidden onclick="toggleLinksStripMore(this)"></button>'}
+        ${workspace ? '' : buildLinkActions()}
+        <div class="strip-picker-host" id="stripPickerHost" hidden></div>
+    </div>`;
+}
+
+/**
+ * May this pane offer that module's part? False when the analyst has no access OR
+ * the module is switched off for the install (GH #217) - tickets/index.php works it
+ * out once as window.TICKETS_MODULE_ON. A module it does not list is offered.
+ *
+ * @param {string} key  a module key, e.g. 'tasks'
+ */
+function ticketModuleOn(key) {
+    return (window.TICKETS_MODULE_ON || {})[key] !== false;
+}
+
+/** Shared by the reading pane's Links strip and the workspace action row. */
+function buildLinkActions() {
+    return `        <div class="link-add-wrap">
             <button class="problem-link-btn" onclick="toggleLinkAddMenu(event)">Link to… ▾</button>
             <div class="link-add-menu" id="linkAddMenu">
-                <button type="button" onclick="linkAddChoose('problem')">Problem</button>
-                <button type="button" onclick="linkAddChoose('change')">Change</button>
+                ${ticketModuleOn('problems') ? `<button type="button" onclick="linkAddChoose('problem')">Problem</button>` : ''}
+                ${ticketModuleOn('changes') ? `<button type="button" onclick="linkAddChoose('change')">Change</button>` : ''}
                 <button type="button" onclick="linkAddChoose('ticket')">Ticket</button>
-                <button type="button" onclick="linkAddChoose('equipment')">${escapeHtml(t('tickets.assets.menu_item'))}</button>
-                <button type="button" onclick="linkAddChoose('cmdb')">${escapeHtml(t('tickets.cmdb.menu_item'))}</button>
+                ${ticketModuleOn('assets') ? `<button type="button" onclick="linkAddChoose('equipment')">${escapeHtml(t('tickets.assets.menu_item'))}</button>` : ''}
+                ${ticketModuleOn('cmdb') ? `<button type="button" onclick="linkAddChoose('cmdb')">${escapeHtml(t('tickets.cmdb.menu_item'))}</button>` : ''}
                 ${window.TICKETS_SHOW_DOMAINS ? `<button type="button" onclick="linkAddChoose('domain')">${escapeHtml(t('tickets.domains.menu_item'))}</button>` : ''}
                 ${window.TICKETS_SHOW_PROJECTS ? `<button type="button" onclick="linkAddChoose('project')">${escapeHtml(t('tickets.projects.menu_item'))}</button>` : ''}
                 <button type="button" onclick="linkAddChoose('tracker')">${escapeHtml(t('tickets.tracker.menu_item'))}</button>
-                <button type="button" onclick="linkAddChoose('task')">${escapeHtml(t('tickets.tasks.menu_item'))}</button>
+                ${ticketModuleOn('tasks') ? `<button type="button" onclick="linkAddChoose('task')">${escapeHtml(t('tickets.tasks.menu_item'))}</button>` : ''}
             </div>
         </div>
-        <div class="strip-picker-host" id="stripPickerHost" hidden></div>
-    </div>`;
+`;
 }
 
 /**
@@ -3764,6 +3991,7 @@ function syncLinksStripEmpty() {
  * full-width basis on this child.
  */
 function openStripPicker(placeholder) {
+    if (window.TicketWorkspace?.isActive()) TicketWorkspace.activate('links');
     const host = document.getElementById('stripPickerHost');
     if (!host) return null;
     host.hidden = false;
@@ -3831,26 +4059,34 @@ let tasksForTicket = [];
  * behind for the close warning in assignStatus() to count.
  */
 async function loadTicketTasks(ticketId) {
-    const host = document.getElementById('stripTaskPills');
+    const isCurrent = ticketReadGuard(ticketId);
+    const host = document.getElementById('twTaskList') || document.getElementById('stripTaskPills');
     if (!host) return;
     // Clear FIRST. Otherwise a failed fetch leaves the previous ticket's tasks in
     // place, and the close warning then reports a count belonging to a ticket the
     // analyst is no longer looking at.
     tasksForTicket = [];
+    if (!ticketModuleOn('tasks')) return;   // GH #217
     try {
         const res = await fetch('../api/tickets/get_ticket_tasks.php?ticket_id=' + ticketId);
         const data = await res.json();
-        if (!data.success) return;
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Task lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'work', 'ready', null, 'tasks');
         tasksForTicket = data.tasks || [];
+        window.TicketWorkspace?.tasksLoaded(ticketId, tasksForTicket);
         renderTicketTasks(ticketId);
-    } catch (e) { /* silent — the strip simply shows no task pills */ }
+    } catch (e) {
+        if (!isCurrent()) return;
+        window.TicketWorkspace?.setSectionState(ticketId, 'work', 'error', null, 'tasks');
+    }
 }
 
 /**
  * Draws tasksForTicket as task pills (done box, subtask progress, unlink cross) and hides the strip's empty note when there are any.
  */
 function renderTicketTasks(ticketId) {
-    const host = document.getElementById('stripTaskPills');
+    const host = document.getElementById('twTaskList') || document.getElementById('stripTaskPills');
     if (!host) return;
 
     host.innerHTML = (tasksForTicket || []).map(tk => {
@@ -3868,8 +4104,9 @@ function renderTicketTasks(ticketId) {
         // nothing — a link that looks like it worked. Same trap the notification
         // deep-links document for `?ticket_id=`.
         return `<a class="${cls}" href="../tasks/index.php?task=${tk.id}" target="_blank"
-                   title="${escapeHtml(bits.join(' · '))}">
-            ${box} ${escapeHtml(tk.title)}${prog}
+                   title="${escapeHtml(bits.join(' · '))}"
+                   ${window.TicketWorkspace?.isActive() ? `onclick="if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); TicketWorkspace.openTask(${ticketId}, ${tk.id}); }"` : ''}>
+            ${box} <span class="pill-text">${escapeHtml(tk.title)}${prog}</span>
             ${rpBadge('task', tk.id)}
             <span class="pm-ticket-unlink" title="${escapeHtml(t('tickets.tasks.unlink_title'))}"
                   onclick="event.preventDefault();event.stopPropagation();unlinkTicketTask(event, ${tk.id}, ${ticketId});">&#10005;</span>
@@ -4384,12 +4621,16 @@ function formatRecordingDuration(seconds) {
 // Load and display all correspondence for a ticket. isAuto=true marks a 15s
 // background refresh (channel tickets) so we don't disturb the analyst's draft.
 async function loadCorrespondenceThread(ticketId, isAuto = false) {
+    const isCurrent = ticketReadGuard(ticketId);
     const container = document.getElementById('threadContainer');
     if (!container) { if (isAuto) stopChannelAutoRefresh(); return; }
 
     try {
         const response = await fetch(`${API_BASE}get_ticket_thread.php?ticket_id=${ticketId}`);
         const data = await response.json();
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Ticket section lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'conversation', 'ready', null, 'thread');
 
         // Remember the channel so Reply composes over WhatsApp etc. rather than email.
         currentTicketChannel = data.channel || 'email';
@@ -4441,6 +4682,11 @@ async function loadCorrespondenceThread(ticketId, isAuto = false) {
             tgGroupOlder(container);
         }
     } catch (error) {
+        if (!isCurrent()) return;
+        if (window.TicketWorkspace?.isActive()) {
+            TicketWorkspace.setSectionState(ticketId, 'conversation', 'error', null, 'thread');
+            return;
+        }
         console.error('Error loading thread:', error);
     }
 
@@ -4646,6 +4892,11 @@ async function sendChannelTemplate(ticketId) {
 
 // Send the analyst's reply out over the ticket's channel.
 async function sendChannelMessage(ticketId) {
+    return trackTicketWrite(() => sendChannelMessageNow(ticketId));
+}
+
+/** Send the analyst's reply out over the ticket's channel. The body of sendChannelMessage(), counted as one write by trackTicketWrite(). */
+async function sendChannelMessageNow(ticketId) {
     const ta = document.getElementById('channelComposerText');
     const btn = document.getElementById('channelSendBtn');
     if (!ta) return;
@@ -4685,6 +4936,7 @@ async function sendChannelAttachment(ticketId) {
     const attachBtn = document.getElementById('channelAttachBtn');
     const ta = document.getElementById('channelComposerText');
     if (!input || !input.files || !input.files[0]) return;
+    ticketPendingWrites++;
     const file = input.files[0];
     const caption = ta ? ta.value.trim() : '';
 
@@ -4712,6 +4964,8 @@ async function sendChannelAttachment(ticketId) {
         showToast(Tc('attachment_send_failed'), 'error');
     } finally {
         if (attachBtn) { attachBtn.disabled = false; attachBtn.innerHTML = original; }
+        ticketPendingWrites--;
+        window.TicketWorkspace?.flushRender();
         input.value = ''; // let the same file be picked again if the send failed
     }
 }
@@ -5255,6 +5509,7 @@ async function confirmCloseWithMandatoryFields(ticketIds) {
                 message: t('tickets.mandatory_close.block_message') + '\n\n' + fieldList,
                 okLabel: t('tickets.mandatory_close.block_ok'), okClass: 'primary'
             });
+            window.TicketWorkspace?.revealMissing(tk.ticket_id, tk.missing);
             return false;
         }
         const after = [];
@@ -5578,6 +5833,7 @@ async function restoreTicketFromTrash(ticketId) {
 // Clear the reading pane if it's showing the given ticket (it just left the trash).
 function clearReadingPaneIfTicket(ticketId) {
     if (currentEmail && currentEmail.ticket_id == ticketId) {
+        window.TicketWorkspace?.dispose();
         currentEmail = null;
         selectedEmailId = null;
         document.getElementById('readingPane').innerHTML = '<div class="reading-pane-empty">Select an email to read</div>';
@@ -5626,15 +5882,18 @@ function auditAuthor(entry) {
 }
 
 // Show audit history modal
-async function showAuditHistory() {
+async function showAuditHistory(inline = false) {
     if (!currentEmail || !currentEmail.ticket_id) {
         showToast('No ticket selected', 'error');
         return;
     }
 
+    const ticketId = currentEmail.ticket_id;
+    const isCurrent = ticketReadGuard(ticketId);
     try {
-        const response = await fetch(`${API_BASE}get_ticket_audit.php?ticket_id=${currentEmail.ticket_id}`);
+        const response = await fetch(`${API_BASE}get_ticket_audit.php?ticket_id=${ticketId}`);
         const data = await response.json();
+        if (!isCurrent()) return;
 
         if (data.success) {
             const auditHtml = data.audit.length === 0
@@ -5662,6 +5921,12 @@ async function showAuditHistory() {
                     </tbody>
                 </table>`;
 
+            if (inline) {
+                const body = document.getElementById('twAuditBody');
+                if (body) body.innerHTML = auditHtml;
+                window.TicketWorkspace?.setSectionState(ticketId, 'history', 'ready');
+                return;
+            }
             // Create modal
             const modal = document.createElement('div');
             modal.className = 'modal-overlay';
@@ -5680,9 +5945,12 @@ async function showAuditHistory() {
 
             document.body.appendChild(modal);
         } else {
+            if (inline) window.TicketWorkspace?.setSectionState(ticketId, 'history', 'error');
             showToast('Error loading audit history: ' + data.error, 'error');
         }
     } catch (error) {
+        if (!isCurrent()) return;
+        if (inline) window.TicketWorkspace?.setSectionState(ticketId, 'history', 'error');
         console.error('Error:', error);
         showToast('Failed to load audit history', 'error');
     }
@@ -5705,10 +5973,24 @@ function refreshCurrentView() {
 }
 
 // Utility: Escape HTML
+/**
+ * The requester's numbers with their Call buttons, for the From line - or ''.
+ * get_email_detail.php only sends requester_dial when click-to-call is on
+ * (System → Integrations → 3CX), and builds each link there, so the rules for
+ * reading a phone field live in one place (includes/phone_dial.php).
+ */
+function requesterDialHtml(email) {
+    return (email.requester_dial || []).map(d =>
+        ` · ${escapeHtml(d.number)} <a class="phone-dial" style="margin-left:4px;font-size:12px;font-weight:600;white-space:nowrap" href="${escapeHtml(d.href)}"`
+        + (/^https:/i.test(d.href) ? ' target="_blank" rel="noopener"' : '')
+        + ` title="${escapeHtml(t('common.phone_dial.call_title', { number: d.number }))}">${escapeHtml(t('common.phone_dial.call'))}</a>`
+    ).join('');
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**
@@ -5885,15 +6167,24 @@ let cmdbAcHighlightedIdx = -1;
 
 /** Fetches the CMDB objects linked to a ticket and draws them as pills in the Links strip. */
 async function loadCmdbObjects(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     const host = document.getElementById('stripCmdbPills');
-    if (!host) return;
+    if (!host || !ticketModuleOn('cmdb')) return;   // GH #217
     try {
         const res = await fetch('../api/tickets/get_ticket_cmdb_objects.php?ticket_id=' + ticketId);
         const data = await res.json();
-        if (!data.success) return;
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Ticket section lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'links', 'ready', null, 'cmdb');
         cmdbObjectsForTicket = data.links || [];
         renderCmdbObjects(ticketId);
-    } catch (e) { /* silent — the strip simply shows no CI pills */ }
+    } catch (e) {
+        // The reading pane stays silent — the strip simply shows no CI pills. The
+        // workspace says so on its Links tab (PR #211), where an empty tab would
+        // otherwise look like a ticket with no links.
+        if (!isCurrent()) return;
+        window.TicketWorkspace?.setSectionState(ticketId, 'links', 'error', null, 'cmdb');
+    }
 }
 
 /** Draws cmdbObjectsForTicket as CMDB pills, with class and parent in the tooltip and an unlink cross. */
@@ -5906,7 +6197,7 @@ function renderCmdbObjects(ticketId) {
             : '';
         const title = [link.class_name, where].filter(Boolean).join(' · ');
         return `<a class="pm-ticket-badge" href="../cmdb/object.php?id=${link.object_id}" title="${escapeHtml(title)}">
-            🗄️ ${escapeHtml(link.name)}
+            🗄️ <span class="pill-text">${escapeHtml(link.name)}</span>
             <span class="pm-ticket-unlink" title="${escapeHtml(t('tickets.cmdb.unlink_title'))}" onclick="event.preventDefault();event.stopPropagation();removeCmdbObject(event, ${link.link_id}, ${ticketId});">✕</span>
         </a>`;
     }).join('');
@@ -6003,14 +6294,26 @@ let domainAcTimer = null;
 
 /** Fetches the domains linked to a ticket and draws them as pills, when the analyst may see Domains. */
 async function loadTicketDomains(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     const host = document.getElementById('stripDomainPills');
     if (!host || !window.TICKETS_SHOW_DOMAINS) return;
     domainsForTicket = [];
     try {
         const res = await fetch('../api/domains/links.php?for=ticket&id=' + ticketId);
         const data = await res.json();
-        if (data.success) domainsForTicket = data.domains || [];
-    } catch (e) { /* silent - the strip simply shows no domain pills */ }
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Ticket section lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'links', 'ready', null, 'domains');
+        domainsForTicket = data.domains || [];
+    } catch (e) {
+        // Silent in the reading pane - the strip simply shows no domain pills. The
+        // workspace reports it on its Links tab, and draws nothing over the error.
+        if (!isCurrent()) return;
+        if (window.TicketWorkspace?.isActive()) {
+            TicketWorkspace.setSectionState(ticketId, 'links', 'error', null, 'domains');
+            return;
+        }
+    }
     renderTicketDomains(ticketId);
 }
 
@@ -6023,7 +6326,7 @@ function renderTicketDomains(ticketId) {
         const when = dm.expiry_date ? (window.fmtNaiveDate ? fmtNaiveDate(String(dm.expiry_date).slice(0, 10) + 'T00:00:00') : dm.expiry_date) : '';
         const title = when ? t('tickets.domains.expires', { date: when }) : '';
         return `<a class="pm-ticket-badge" href="../${escapeHtml(dm.url)}" title="${escapeHtml(title)}">
-            🌐 ${escapeHtml(dm.name)}
+            🌐 <span class="pill-text">${escapeHtml(dm.name)}</span>
             <span class="pm-ticket-unlink" title="${escapeHtml(t('tickets.domains.unlink_title'))}" onclick="event.preventDefault();event.stopPropagation();removeTicketDomain(event, ${dm.id}, ${ticketId});">✕</span>
         </a>`;
     }).join('');
@@ -6121,16 +6424,28 @@ let projectAcTimer = null;
 
 /** Fetches the projects a ticket is part of and draws them as coloured pills, when the analyst may see Projects. */
 async function loadTicketProjects(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     const host = document.getElementById('stripProjectPills');
     if (!host || !window.TICKETS_SHOW_PROJECTS) return;
     projectsForTicket = [];
     try {
         const res = await fetch('../api/projects/links.php?for=ticket&id=' + ticketId);
         const data = await res.json();
-        if (data.success) projectsForTicket = data.projects || [];
-    } catch (e) { /* silent - the strip simply shows no project pills */ }
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Ticket section lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'links', 'ready', null, 'projects');
+        projectsForTicket = data.projects || [];
+    } catch (e) {
+        // Silent in the reading pane - the strip simply shows no project pills. The
+        // workspace reports it on its Links tab, and draws nothing over the error.
+        if (!isCurrent()) return;
+        if (window.TicketWorkspace?.isActive()) {
+            TicketWorkspace.setSectionState(ticketId, 'links', 'error', null, 'projects');
+            return;
+        }
+    }
     host.innerHTML = projectsForTicket.map(p => `<a class="pm-ticket-badge" href="../${escapeHtml(p.url)}" title="${escapeHtml(p.code + ' - ' + (p.status || ''))}">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${escapeHtml(p.colour)};margin-right:5px"></span>${escapeHtml(p.name)}
+            <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${escapeHtml(p.colour)};margin-right:5px"></span><span class="pill-text">${escapeHtml(p.name)}</span>
             <span class="pm-ticket-unlink" title="${escapeHtml(t('tickets.projects.unlink_title'))}" onclick="event.preventDefault();event.stopPropagation();removeTicketProject(event, ${p.id}, ${ticketId});">&#10005;</span>
         </a>`).join('');
     if (typeof syncLinksStripEmpty === 'function') syncLinksStripEmpty();
@@ -6244,15 +6559,23 @@ let assetAcHighlightedIdx = -1;
 
 /** Fetches the equipment linked to a ticket and draws it as pills in the Links strip. */
 async function loadTicketAssets(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     const host = document.getElementById('stripAssetPills');
-    if (!host) return;
+    if (!host || !ticketModuleOn('assets')) return;   // GH #217
     try {
         const res = await fetch('../api/tickets/get_ticket_assets.php?ticket_id=' + ticketId);
         const data = await res.json();
-        if (!data.success) return;
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Ticket section lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'links', 'ready', null, 'assets');
         assetsForTicket = data.links || [];
         renderTicketAssets(ticketId);
-    } catch (e) { /* silent — the strip simply shows no equipment pills */ }
+    } catch (e) {
+        // Silent in the reading pane — the strip simply shows no equipment pills.
+        // The workspace reports it on its Links tab.
+        if (!isCurrent()) return;
+        window.TicketWorkspace?.setSectionState(ticketId, 'links', 'error', null, 'assets');
+    }
 }
 
 /** The one-line name for an asset: hostname if it has one, else the tag. */
@@ -6278,7 +6601,7 @@ function renderTicketAssets(ticketId) {
         if (link.service_tag)   bits.push(t('tickets.assets.serial', { serial: link.service_tag }));
         if (link.location_name) bits.push(link.location_name);
         return `<a class="pm-ticket-badge" href="../asset-management/index.php?asset_id=${link.asset_id}" title="${escapeHtml(bits.join(' · '))}">
-            🖥️ ${escapeHtml(assetDisplayName(link))}
+            🖥️ <span class="pill-text">${escapeHtml(assetDisplayName(link))}</span>
             ${rpBadge('asset', link.asset_id)}
             <span class="pm-ticket-unlink" title="${escapeHtml(t('tickets.assets.unlink_title'))}" onclick="event.preventDefault();event.stopPropagation();removeTicketAsset(event, ${link.link_id}, ${ticketId});">✕</span>
         </a>`;
@@ -6419,30 +6742,45 @@ async function removeTicketAsset(ev, linkId, ticketId) {
 
 // Load notes for a ticket
 async function loadNotes(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     try {
         const response = await fetch(`${API_BASE}get_notes.php?ticket_id=${ticketId}`);
         const data = await response.json();
+        if (!isCurrent()) return;
 
+        if (!data.success) throw new Error('Note lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'conversation', 'ready', null, 'notes');
         if (data.success) {
             currentNotes = data.notes;
             renderNotes();
         }
     } catch (error) {
+        if (!isCurrent()) return;
         console.error('Error loading notes:', error);
+        window.TicketWorkspace?.setSectionState(ticketId, 'conversation', 'error', null, 'notes');
     }
 }
 
 // Load attachments for a ticket
 async function loadTicketAttachments(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     try {
         const response = await fetch(`${API_BASE}get_ticket_attachments.php?ticket_id=${ticketId}`);
         const data = await response.json();
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Ticket section lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'conversation', 'ready', null, 'attachments');
 
         if (data.success) {
             ticketAttachments = data.attachments;
             renderAttachmentInfoBar();
         }
     } catch (error) {
+        if (!isCurrent()) return;
+        if (window.TicketWorkspace?.isActive()) {
+            TicketWorkspace.setSectionState(ticketId, 'conversation', 'error', null, 'attachments');
+            return;
+        }
         console.error('Error loading attachments:', error);
     }
 }
@@ -6546,7 +6884,7 @@ function showAttachmentList() {
                 const ct = (att.content_type || '').toLowerCase();
                 let media;
                 if (ct.startsWith('image/')) {
-                    media = `<img src="${url}" alt="${escapeHtml(att.filename)}" class="att-preview-media" loading="lazy" onclick="window.open('${url}','_blank')" title="${escapeHtml(t('tickets.reading_pane.attach_click_fullsize'))}">`;
+                    media = `<img src="${url}" alt="${escapeHtml(att.filename)}" class="att-preview-media" loading="lazy" onclick="openAttachment(${att.id})" title="${escapeHtml(t('tickets.reading_pane.attach_click_fullsize'))}">`;
                 } else if (ct.startsWith('audio/')) {
                     media = `<audio controls preload="none" src="${url}" class="att-preview-audio"></audio>`;
                 } else {
@@ -6593,7 +6931,7 @@ function attachmentCardsHtml(trackerLink) {
         const ct = (att.content_type || '').toLowerCase();
         let media = '';
         if (ct.startsWith('image/')) {
-            media = `<img src="${url}" alt="${escapeHtml(att.filename)}" class="att-card-media" loading="lazy" onclick="window.open('${url}','_blank')" title="${escapeHtml(t('tickets.reading_pane.attach_click_fullsize'))}">`;
+            media = `<img src="${url}" alt="${escapeHtml(att.filename)}" class="att-card-media" loading="lazy" onclick="openAttachment(${att.id})" title="${escapeHtml(t('tickets.reading_pane.attach_click_fullsize'))}">`;
         } else if (ct.startsWith('audio/')) {
             media = `<audio controls preload="none" src="${url}" class="att-card-audio"></audio>`;
         } else if (ct.startsWith('video/')) {
@@ -6683,9 +7021,17 @@ async function sendAttachmentToTracker(btn) {
     }
 }
 
-// Open/download an attachment
+// Open an attachment. A picture or a PDF opens in the Files viewer, in a floating
+// window over the ticket (GH #226 follow-up, as a note's file does); anything else
+// opens in a new tab, which downloads it or lets the browser show it.
 function openAttachment(attachmentId) {
-    window.open(`${API_BASE}get_attachment.php?id=${attachmentId}`, '_blank');
+    const url = `${API_BASE}get_attachment.php?id=${attachmentId}`;
+    const att = (ticketAttachments || []).find(a => Number(a.id) === Number(attachmentId));
+    if (att && VIEWER_FILE_RE.test(att.filename || '') && window.FilesViewer && window.FilesViewer.openUrl) {
+        // openUrl decides by the file NAME (and never shows SVG); null = not a kind it shows.
+        if (window.FilesViewer.openUrl({ name: att.filename, src: url, downloadUrl: url, size: att.file_size || 0 })) return;
+    }
+    window.open(url, '_blank');
 }
 
 // Render notes
@@ -6717,17 +7063,30 @@ function renderNotes() {
         // link; a DMS entry is a link out. Both go through the documents block's
         // own endpoints, so the permission check happens server-side on every
         // click rather than being implied by the row being on screen.
+        // A picture pasted into the note is drawn where it sits (GH #224), opens
+        // in the same viewer window as the note's files, and is left out of the
+        // file list below so it is not shown twice.
+        const body = window.NoteImages.render(note.note_text, note.documents || [], {
+            url: d => '../api/documents/download.php?id=' + encodeURIComponent(d.id),
+            attrs: (d, name) => `data-view-file="${escapeHtml(name)}" data-size="${Number(d.size_bytes) || 0}"`
+        });
+        const listed = (note.documents || []).filter(d => !body.used[String(d.id)]);
         let files = '';
-        if (note.documents && note.documents.length) {
-            files = '<div class="note-file-list">' + note.documents.map(d => {
+        if (listed.length) {
+            files = '<div class="note-file-list">' + listed.map(d => {
                 const href = d.kind === 'link'
                     ? safeExternalUrl(d.external_url)
                     : '../api/documents/download.php?id=' + encodeURIComponent(d.id);
                 if (!href) return '';
                 const name = d.original_name || d.title || '';
                 const size = d.kind === 'link' ? '' : noteFileSize(d.size_bytes);
+                // GH #226: a picture or PDF opens in a floating window over the ticket
+                // (the Files viewer) - followed as a plain link a picture REPLACED the
+                // Tickets page, with no way back but Back, which left the ticket too.
+                const inViewer = d.kind !== 'link' && VIEWER_FILE_RE.test(name);
                 return `<a class="note-file" href="${escapeHtml(href)}"
                            ${d.kind === 'link' ? 'target="_blank" rel="noopener noreferrer"' : ''}
+                           ${inViewer ? `data-view-file="${escapeHtml(name)}" data-size="${Number(d.size_bytes) || 0}"` : ''}
                            title="${escapeHtml(name)}">
                             <span class="note-file-name">${escapeHtml(name)}</span>
                             <span class="note-file-size">${escapeHtml(size)}</span>
@@ -6760,7 +7119,7 @@ function renderNotes() {
                     <span class="note-author">${escapeHtml(author)}${visBadge}</span>
                     <span>${formatDateTime(note.created_datetime)}</span>
                 </div>
-                <div class="note-text">${escapeHtml(note.note_text)}</div>
+                <div class="note-text">${body.html}</div>
                 ${files}
             </div>
         `;
@@ -6768,7 +7127,31 @@ function renderNotes() {
 
     html += '</div>';
     container.innerHTML = html;
+    if (!container.dataset.imageViewer) {
+        container.dataset.imageViewer = '1';
+        container.addEventListener('click', openNoteFile);
+    }
     if (typeof styleSopResponsesInNotes === 'function') styleSopResponsesInNotes();
+}
+
+// The files Tickets opens in the Files viewer: pictures and PDFs. The viewer can show
+// more (Word, spreadsheets, zips...) - Ed chose these two. SVG is deliberately absent:
+// it can carry script.
+const VIEWER_FILE_RE = /\.(png|jpe?g|gif|webp|bmp|pdf)$/i;
+
+// A click on a note's picture or PDF (GH #226): open it in a floating window - drag
+// it, resize it, close it with Close or Escape - instead of following the link. The
+// link stays a real link, so Ctrl/middle-click still opens it in a new tab, and
+// the address is the same download.php, so the permission check is unchanged.
+function openNoteFile(ev) {
+    const a = ev.target.closest('a.note-file[data-view-file], a.note-inline-image[data-view-file]');
+    if (!a || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+    if (!window.FilesViewer || !window.FilesViewer.openUrl) return;
+    const href = a.getAttribute('href');
+    const w = window.FilesViewer.openUrl({
+        name: a.dataset.viewFile, src: href, downloadUrl: href, size: Number(a.dataset.size) || 0
+    });
+    if (w) ev.preventDefault();
 }
 
 // ===== Files chosen for the note being written (discussion #69) =============
@@ -6822,7 +7205,7 @@ function renderPendingNoteFiles() {
 
 // Open note modal
 function openNoteModal() {
-    document.getElementById('noteText').value = '';
+    noteEditor().clear();
     pendingNoteFiles = [];
     renderPendingNoteFiles();
     const fileInput = document.getElementById('noteFileInput');
@@ -6849,9 +7232,23 @@ function openNoteModal() {
 
 
     document.getElementById('noteModal').classList.add('active');
+    // Ready to type (or paste) straight away (Ed). A frame later, so the modal
+    // is displayed - focus on an element still display:none does nothing.
+    requestAnimationFrame(() => noteEditor().focus());
     // A note counts as writing too — a colleague should know before they type
     // the same thing (#934).
     setPresenceComposing(true);
+}
+
+// The note box (GH #224): a screenshot pasted into it lands at the cursor, and
+// travels with the note when it is saved. Built once, on first use.
+let noteEditorInstance = null;
+/** The note box's editor (assets/js/note-images.js), created the first time it is needed. */
+function noteEditor() {
+    if (!noteEditorInstance) {
+        noteEditorInstance = window.NoteImages.attachEditor(document.getElementById('noteText'));
+    }
+    return noteEditorInstance;
 }
 
 // Wire the modal's file controls once, on the elements themselves rather than
@@ -6889,7 +7286,13 @@ function closeNoteModal() {
 
 // Save note
 async function saveNote() {
-    const noteText = document.getElementById('noteText').value.trim();
+    return trackTicketWrite(() => saveNoteNow());
+}
+
+/** Save the note in the note modal. The body of saveNote(), counted as one write by trackTicketWrite(). */
+async function saveNoteNow() {
+    const box = noteEditor().serialize();
+    const noteText = box.text.trim();
 
     if (!noteText) {
         showToast('Please enter a note', 'error');
@@ -6904,20 +7307,35 @@ async function saveNote() {
     // like any other.
     const filesToAttach = pendingNoteFiles;
 
-    try {
-        const response = await fetch(API_BASE + 'save_note.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ticket_id: currentEmail.ticket_id,
-                note_text: noteText,
-                // Ticked = the requester reads this in the self-service portal.
-                // Defaults to unticked, so a note is internal unless someone
-                // deliberately says otherwise — the behaviour this replaced,
-                // and the safe direction.
-                is_internal: !isShared
-            })
+    // Pasted pictures go up WITH the note, in one request (GH #224): the server
+    // stores them first, so a refused picture refuses the whole save and the
+    // text stays in the box. Without any, the long-standing JSON request.
+    let body;
+    let headers = {};
+    if (box.images.length) {
+        body = new FormData();
+        body.append('ticket_id', currentEmail.ticket_id);
+        body.append('note_text', noteText);
+        body.append('is_internal', isShared ? '0' : '1');
+        box.images.forEach(im => {
+            body.append('images[]', im.file, im.file.name);
+            body.append('image_keys[]', im.key);
         });
+    } else {
+        headers = { 'Content-Type': 'application/json' };
+        body = JSON.stringify({
+            ticket_id: currentEmail.ticket_id,
+            note_text: noteText,
+            // Ticked = the requester reads this in the self-service portal.
+            // Defaults to unticked, so a note is internal unless someone
+            // deliberately says otherwise — the behaviour this replaced,
+            // and the safe direction.
+            is_internal: !isShared
+        });
+    }
+
+    try {
+        const response = await fetch(API_BASE + 'save_note.php', { method: 'POST', headers, body });
         const data = await response.json();
 
         if (data.success) {
@@ -6956,10 +7374,11 @@ async function saveNote() {
                 }
             }
             pendingNoteFiles = [];
+            noteEditor().clear();
             closeNoteModal();
             loadNotes(currentEmail.ticket_id);
         } else {
-            showToast('Error saving note: ' + data.error, 'error');
+            showToast(t('tickets.note_modal.save_failed', { error: data.error }), 'error');
         }
     } catch (error) {
         console.error('Error:', error);
@@ -7014,6 +7433,7 @@ function correspondentAddress(email) {
 function openReplyModal() {
     // Channel tickets (WhatsApp etc.) reply via the inline composer, not email.
     if (currentTicketChannel && currentTicketChannel !== 'email') {
+        window.TicketWorkspace?.activate('conversation');
         // Channel ticket: jump to the inline composer (free-text box if the window is
         // open, otherwise the template picker).
         const composer = document.getElementById('channelComposer');
@@ -7489,7 +7909,7 @@ async function openMergeModal() {
     const s = await loadMergeSettings();
 
     mergeCandidateList = ids.map(id => {
-        const row = document.querySelector(`#emailList .email-item[data-email-id="${id}"]`);
+        const row = document.querySelector(ticketRowSelector(`[data-email-id="${id}"]`));
         const rec = emails.find(e => e.id == id);
         return {
             emailId:  id,
@@ -7753,7 +8173,7 @@ function discardMergeSummary() {
 
 /** Open whichever list row belongs to a ticket id (after a merge, the survivor). */
 function selectEmailByTicketId(ticketId) {
-    const row = document.querySelector(`#emailList .email-item[data-ticket-id="${ticketId}"]`);
+    const row = document.querySelector(ticketRowSelector(`[data-ticket-id="${ticketId}"]`));
     if (row) handleEmailRowClick({ ctrlKey: false, shiftKey: false, metaKey: false }, Number(row.dataset.emailId));
 }
 
@@ -8205,6 +8625,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Send email via Microsoft Graph API
 async function sendEmail() {
+    return trackTicketWrite(() => sendEmailNow());
+}
+
+/** Send the reply / forward in the email modal. The body of sendEmail(), counted as one write by trackTicketWrite(). */
+async function sendEmailNow() {
     // Get values from form
     const to = document.getElementById('emailTo').value.trim();
     const cc = document.getElementById('emailCc').value.trim();
@@ -8325,17 +8750,21 @@ function logout() {
  * history row is written by the server, not here.
  */
 async function loadTicketCustomFields(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     const box = document.getElementById('ticketCustomFields');
     if (!box || !window.TicketFields) return;
     try {
         const r = await fetch(API_BASE + 'get_ticket_custom_fields.php?ticket_id=' + encodeURIComponent(ticketId));
         const d = await r.json();
+        if (!isCurrent()) return;
         if (!d.success) throw new Error(d.error);
         // Drawn only if the ticket is still the one on screen.
         if (!currentEmail || String(currentEmail.ticket_id) !== String(ticketId)) return;
         box.innerHTML = TicketFields.render(d.fields || [], { variant: 'toolbar', onchange: 'saveTicketCustomField(this)' });
     } catch (e) {
-        box.innerHTML = '';
+        if (!isCurrent()) return;
+        box.innerHTML = window.TicketWorkspace?.isActive()
+            ? '<div role="alert">' + escapeHtml(t('tickets.workspace.unavailable')) + '</div>' : '';
     }
 }
 
@@ -8349,6 +8778,7 @@ async function saveTicketCustomField(el) {
         });
         const d = await r.json();
         if (!d.success) throw new Error(d.error);
+        window.TicketWorkspace?.propertySaved(el);
         showToast(tf('common.ticket_fields.saved', 'Saved'), 'success');
     } catch (e) {
         showToast(e.message || 'Error', 'error');
@@ -8366,13 +8796,116 @@ async function saveTicketCustomField(el) {
  * Desktop only: the phone has its own collapsed header.
  */
 function watchPaneCompact(pane) {
+    if (pane?.classList.contains('ticket-workspace')) return;
     const body = pane && pane.querySelector('.email-body');
     pane && pane.classList.remove('pane-compact');
     if (!body || !window.matchMedia('(min-width: 769px)').matches) return;
+    // TRAP: folding the header gives the thread its height. On a thread only a
+    // little taller than the pane, that leaves nothing to scroll, the browser
+    // snaps scrollTop to 0, the header unfolds and the thread scrolls again - a
+    // loop, and an animated one since the fold is animated. So only fold when the
+    // thread would still scroll past the lower threshold afterwards.
+    const folds = () => ['.email-meta', '.pane-strips']
+        .reduce((h, sel) => h + (pane.querySelector(sel)?.offsetHeight || 0), 0) + 30;
     body.addEventListener('scroll', () => {
-        if (body.scrollTop > 60) pane.classList.add('pane-compact');
-        else if (body.scrollTop < 10) pane.classList.remove('pane-compact');
+        const compact = pane.classList.contains('pane-compact');
+        if (!compact && body.scrollTop > 60 && body.scrollHeight - body.clientHeight - folds() > 10) pane.classList.add('pane-compact');
+        else if (compact && body.scrollTop < 10) pane.classList.remove('pane-compact');
     }, { passive: true });
+}
+
+/**
+ * The reading pane's Links strip on a desktop is ONE row (reading-pane.css):
+ * "Links", then the pills in a box that takes whatever width is left, then
+ * Link to… - so the button never wraps onto a line of its own. Each pill's name
+ * truncates as the box narrows; once a name would be squeezed below a few
+ * characters, the last pills fold away into a "+N" chip that unfolds the strip
+ * (and "Less" folds it again).
+ *
+ * Measured, not breakpointed: it re-fits whenever the strip is resized (window,
+ * column drags, the AI summary opening) and whenever a loader adds pills - the
+ * equipment, CMDB, domain, project and task pills all arrive after the strip.
+ * Only the chip and classes change here, never the box's children, so the
+ * MutationObserver cannot set itself off.
+ *
+ * The phone (the strip moves into the Links sheet) and the workspace's Links tab
+ * keep wrapping: there the pill box is display: contents and this returns early.
+ */
+let linksStripWatch = null;
+function watchLinksStrip(pane) {
+    linksStripWatch?.disconnect();
+    linksStripWatch = null;
+    const strip = pane?.querySelector('.pane-strips > .links-strip');
+    const box = strip?.querySelector('.links-strip-pills');
+    if (!box || typeof ResizeObserver === 'undefined') return;
+    let queued = false;
+    const refit = () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => { queued = false; fitLinksStrip(strip); });
+    };
+    const ro = new ResizeObserver(refit);
+    const mo = new MutationObserver(refit);
+    ro.observe(strip);
+    mo.observe(box, { childList: true, subtree: true });
+    linksStripWatch = { disconnect() { ro.disconnect(); mo.disconnect(); } };
+    refit();
+}
+
+/** A name squeezed to a stub: truncated AND under ~4 characters wide. */
+const LINK_PILL_MIN_TEXT = 48;
+
+/** Folds the strip's last pills into the "+N" chip until the rest fit, and titles the truncated names. */
+function fitLinksStrip(strip) {
+    const box = strip.querySelector('.links-strip-pills');
+    const more = strip.querySelector('.links-strip-more');
+    if (!box || !more) return;
+    const pills = [...box.querySelectorAll('.pm-ticket-badge')];
+    pills.forEach(p => p.classList.remove('pill-folded'));
+    more.hidden = true;
+    if (getComputedStyle(box).display !== 'flex' || !box.clientWidth) return;
+
+    if (strip.classList.contains('links-unfolded')) {
+        more.hidden = false;
+        more.textContent = t('tickets.links.less');
+        more.removeAttribute('aria-label');
+    } else if (pills.length > 1) {
+        const squeezed = () => box.scrollWidth > box.clientWidth + 1 || pills.some(p => {
+            const name = p.querySelector('.pill-text');
+            return !p.classList.contains('pill-folded') && name
+                && name.scrollWidth > name.clientWidth && name.clientWidth < LINK_PILL_MIN_TEXT;
+        });
+        if (squeezed()) {
+            let folded = 0;
+            more.hidden = false;
+            more.textContent = '+' + pills.length;   // room for the widest count before measuring
+            for (let i = pills.length - 1; i > 0 && (folded === 0 || squeezed()); i--) {
+                pills[i].classList.add('pill-folded');
+                folded++;
+                more.textContent = '+' + folded;
+            }
+            more.setAttribute('aria-label', t('tickets.links.more_label', { count: folded }));
+        }
+    }
+
+    // A truncated name is still readable on hover. The pill's own title (the
+    // status, the class, the expiry...) follows it, as it would on the pill.
+    pills.forEach(p => {
+        const name = p.querySelector('.pill-text');
+        if (!name) return;
+        if (name.scrollWidth > name.clientWidth) {
+            name.title = name.textContent.trim() + (p.title ? ' - ' + p.title : '');
+        } else {
+            name.removeAttribute('title');
+        }
+    });
+}
+
+/** The "+N" / "Less" chip: unfolds the whole strip onto as many lines as it needs, or folds it back to one. */
+function toggleLinksStripMore(btn) {
+    const strip = btn.closest('.links-strip');
+    strip.classList.toggle('links-unfolded');
+    fitLinksStrip(strip);
 }
 
 /**
@@ -8395,7 +8928,18 @@ function togglePaneMoreMenu(event) {
         item.addEventListener('click', () => { menu.hidden = true; btn.click(); });
         menu.appendChild(item);
     });
+    menu.insertAdjacentHTML('beforeend', buildWorkspaceAction(currentEmail));
     menu.hidden = false;
+    // The menu hangs leftwards from More (right: 0 in reading-pane.css). When the
+    // toolbar wraps and More starts a new line, that runs past the pane's left
+    // edge and the pane clips it - so open it rightwards instead when it would.
+    menu.style.left = '';
+    menu.style.right = '';
+    const pane = menu.closest('.reading-pane') || document.body;
+    if (menu.getBoundingClientRect().left < pane.getBoundingClientRect().left) {
+        menu.style.left = '0';
+        menu.style.right = 'auto';
+    }
     const close = e => { if (!menu.contains(e.target)) { menu.hidden = true; document.removeEventListener('click', close); } };
     setTimeout(() => document.addEventListener('click', close), 0);
 }
@@ -9685,6 +10229,7 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         const panel = document.getElementById('ticketAiPanel');
         if (panel && panel.classList.contains('active')) {
+            e.preventDefault();   // that Escape was the panel's - full screen must not take it too
             closeTicketAiChat();
         }
     }
@@ -9699,7 +10244,102 @@ document.addEventListener('keydown', function(e) {
 function toggleTicketPopout() {
     const on = document.body.classList.toggle('ticket-popout');
     try { localStorage.setItem('tickets_popout', on ? '1' : '0'); } catch (e) {}
+    applyPopoutChrome(on);
 }
+
+/* GH #225. The action row above a full-screen ticket names the ticket and offers
+ * Back, and the Messages / Table choice is hidden by CSS - it switches a list
+ * that is not on screen. Going in also puts focus on the ticket's scrolling
+ * area, so the arrow keys and Page Up/Down scroll it straight away. */
+let inboxActionTitle = null;
+function applyPopoutChrome(entered) {
+    const on = document.body.classList.contains('ticket-popout');
+    const title = document.getElementById('inboxActionTitle');
+    if (title) {
+        if (inboxActionTitle === null) inboxActionTitle = title.textContent;
+        title.textContent = on && currentEmail && currentEmail.ticket_number ? currentEmail.ticket_number : inboxActionTitle;
+    }
+    const back = document.getElementById('popoutBackBtn');
+    if (back) back.hidden = !on;
+    if (!on) { focusTicketList(); return; }
+    const idle = () => { const f = document.activeElement; return !f || f === document.body; };
+    if (entered || idle()) focusTicketScroller();
+    // The conversation may still be filling in, with nothing to scroll yet - try
+    // once more when it has, unless the person has clicked somewhere meanwhile.
+    if (entered) setTimeout(() => { if (idle() && document.body.classList.contains('ticket-popout')) focusTicketScroller(); }, 400);
+}
+
+/** Focuses the biggest scrolling area in the reading pane - the conversation in
+ *  the classic layout, the open panel in the workspace - without moving it. */
+function focusTicketScroller() {
+    const pane = document.querySelector('.reading-pane');
+    if (!pane) return;
+    let best = null, bestH = 0;
+    for (const n of [pane, ...pane.querySelectorAll('*')]) {
+        const oy = getComputedStyle(n).overflowY;
+        if ((oy !== 'auto' && oy !== 'scroll') || n.scrollHeight <= n.clientHeight) continue;
+        if (n.closest('.ticket-properties-container')) continue;
+        if (n.clientHeight > bestH) { best = n; bestH = n.clientHeight; }
+    }
+    if (!best) return;
+    makePaneScrollerFocusable(best);
+    best.focus({ preventScroll: true });
+}
+
+/** Leaving full screen goes back to the LIST - Escape, Back or the shrink icon -
+ *  so the next arrow moves between tickets and Enter opens one, without a click
+ *  first. The table's rows take focus, so the highlighted one gets it; the
+ *  message list's rows do not, and there the list's keys work with focus on
+ *  nothing, so focus just leaves the ticket. */
+function focusTicketList() {
+    const row = selectionFocusId !== null ? document.querySelector(ticketRowSelector(`[data-email-id="${selectionFocusId}"]`)) : null;
+    if (row && row.tabIndex >= 0) { row.focus({ preventScroll: true }); scrollRowIntoView(selectionFocusId); return; }
+    const f = document.activeElement;
+    if (f && f !== document.body && f.closest && f.closest('.reading-pane')) f.blur();
+}
+
+/** Lets a scrolling area take focus (by script or by a click) without joining the Tab order. */
+function makePaneScrollerFocusable(n) {
+    if (!n.hasAttribute('tabindex')) { n.setAttribute('tabindex', '-1'); n.classList.add('pane-scroller'); }
+}
+
+/* A click in the ticket hands it the keys, in the three-pane view too: the
+ * scrolling area under the pointer is made focusable before the click's own
+ * focusing runs, so the click focuses it and the list's keys stand aside (the
+ * keydown handler above). Clicking a list row focuses nothing in the pane, so
+ * the arrows go back to moving between tickets. */
+document.addEventListener('pointerdown', function (e) {
+    const pane = e.target.closest && e.target.closest('.reading-pane');
+    if (!pane) return;
+    for (let n = e.target; n && n !== pane.parentElement; n = n.parentElement) {
+        if (n.nodeType !== 1) continue;
+        const oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) { makePaneScrollerFocusable(n); return; }
+    }
+}, true);
+
+/* Escape steps back one level - full screen to the ticket beside the table (or
+ * the three panes), then, in the table, the ticket closed and the table full
+ * width (PR #223) - after anything nearer has had it: a dialog, a floating
+ * window (FloatWin closes the focused one first), the AI panel, a field or the
+ * reply editor. */
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const popout = document.body.classList.contains('ticket-popout');
+    const tableDetail = window.TicketTable?.isActive() && document.body.classList.contains('ticket-table-detail');
+    if (!popout && !tableDetail) return;
+    const el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+    if (el && el.closest && el.closest('.fw-layer')) return;
+    if (document.querySelector('.modal.active, #ticketContextMenu.active, #trashContextMenu.active')) return;
+    // A window still open over the page takes this Escape (FloatWin closes it). Asked
+    // of the manager, not the DOM: a closing window keeps its element while it fades.
+    if (window.FloatWin && document.querySelector('.fw-layer') && FloatWin.page().active()) return;
+    if (typeof tinymce !== 'undefined' && tinymce.activeEditor && tinymce.activeEditor.hasFocus && tinymce.activeEditor.hasFocus()) return;
+    e.preventDefault();
+    if (popout) toggleTicketPopout();
+    else TicketTable.backToList();
+});
 
 /* Double-click on an email row: open it AND pop out. Sets the popout pref
  * so the syncPopoutToTicketState call inside displayEmail applies the class
@@ -9709,6 +10349,33 @@ function toggleTicketPopout() {
 function selectEmailFullScreen(emailId) {
     try { localStorage.setItem('tickets_popout', '1'); } catch (e) {}
     selectEmail(emailId);
+}
+
+/**
+ * Enter on the list steps IN one level, as Escape steps out one: the ticket
+ * opens (beside the table, or in the reading pane), and Enter on the ticket
+ * already showing makes it full screen. A ticket the table's Back closed is
+ * shown again as it was - its draft is still in the pane.
+ */
+function enterRow(emailId) {
+    const showing = currentEmail && currentEmail.id === emailId;
+    if (tableShownAlone()) {
+        if (showing) window.TicketTable.showDetail();
+        else selectEmail(emailId);
+        return;
+    }
+    if (showing) openRowFullScreen(emailId);
+    else selectEmail(emailId);
+}
+
+/** Double-click: the ticket, straight to full screen. One already open just
+ *  goes full screen - reopening it would throw away a half-written reply. */
+function openRowFullScreen(emailId) {
+    if (currentEmail && currentEmail.id === emailId) {
+        if (!document.body.classList.contains('ticket-popout')) toggleTicketPopout();
+        return;
+    }
+    selectEmailFullScreen(emailId);
 }
 
 /* --- Time entries ----------------------------------------------------------
@@ -9723,9 +10390,13 @@ let currentTimeEntries = [];
  * When time tracking is switched off for the ticket's company the server says so and the section is left empty - nothing is deleted.
  */
 async function loadTimeEntries(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     try {
         const response = await fetch(`${API_BASE}get_time_entries.php?ticket_id=${ticketId}`);
         const data = await response.json();
+        if (!isCurrent()) return;
+        if (!data.success) throw new Error('Ticket section lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'time', 'ready', null, 'entries');
 
         // Time tracking switched off for this ticket's company (discussion #72).
         // The SERVER decides, per ticket, because the answer is per company and a
@@ -9742,6 +10413,11 @@ async function loadTimeEntries(ticketId) {
         currentTimeEntries = data.success ? data.entries : [];
         renderTimeEntries(data.success ? data.total_minutes : 0);
     } catch (e) {
+        if (!isCurrent()) return;
+        if (window.TicketWorkspace?.isActive()) {
+            TicketWorkspace.setSectionState(ticketId, 'time', 'error', null, 'entries');
+            return;
+        }
         console.error('Time entries load failed:', e);
         currentTimeEntries = [];
         renderTimeEntries(0);
@@ -9874,13 +10550,16 @@ async function deleteTimeEntry(id) {
 // trap where an F5 with the pref saved leaves the user with folder + list
 // hidden and the empty "select a ticket" message in the reading pane.
 function syncPopoutToTicketState(hasTicket) {
+    const was = document.body.classList.contains('ticket-popout');
     if (!hasTicket) {
         document.body.classList.remove('ticket-popout');
+        if (was) applyPopoutChrome(false);
         return;
     }
     let prefersPopout = false;
     try { prefersPopout = localStorage.getItem('tickets_popout') === '1'; } catch (e) {}
     if (prefersPopout) document.body.classList.add('ticket-popout');
+    if (was || prefersPopout) applyPopoutChrome(!was && prefersPopout);
 }
 
 /* --- Right-click context menu for email rows -------------------------------
@@ -10632,7 +11311,7 @@ function openTicketMenuLevel(menu, label, sub) {
     document.addEventListener('touchstart', function (e) {
         fired = false;
         if (!ticketMenuIsSheet() || e.touches.length !== 1) return;
-        const row = e.target.closest && e.target.closest('#emailList .email-item');
+        const row = e.target.closest && e.target.closest(ticketRowSelector(''));
         if (!row) return;
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
@@ -11365,7 +12044,7 @@ async function emptyTrash() {
  */
 document.addEventListener('mousedown', function (e) {
     if (!e.shiftKey) return;
-    if (e.target.closest && e.target.closest('#emailList')) e.preventDefault();
+    if (e.target.closest && e.target.closest('#emailList, #ticketTableContainer')) e.preventDefault();
 });
 
 // Outside click + Escape close the menus
@@ -11689,16 +12368,24 @@ async function saveContextTimeEntry() {
  * doesn't bother the analyst with "SLA disabled for this ticket" noise.
  */
 async function loadSlaState(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     const container = document.getElementById('slaContainer');
     if (!container) return;
     container.innerHTML = '';
     try {
         const res = await fetch(API_BASE + 'get_ticket_sla.php?ticket_id=' + ticketId);
         const data = await res.json();
-        if (!data.success || !data.sla || !data.sla.enabled) return; // silent hide
+        if (!isCurrent()) return;
+        if (!data.success || !data.sla) throw new Error('SLA lookup failed');
+        window.TicketWorkspace?.setSectionState(ticketId, 'time', 'ready', null, 'sla');
+        window.TicketWorkspace?.updateSla(ticketId, data.sla);
+        if (!data.sla.enabled) return;
         renderSlaPanel(data.sla);
     } catch (e) {
+        if (!isCurrent()) return;
         console.error('SLA load failed:', e);
+        window.TicketWorkspace?.updateSla(ticketId, null);
+        window.TicketWorkspace?.setSectionState(ticketId, 'time', 'error', null, 'sla');
     }
 }
 
@@ -11786,6 +12473,18 @@ function ticketIsClosed(email) {
 }
 
 /** The "Write up" toolbar button, only when the Knowledge write-up is turned on and the ticket is closed. */
+/**
+ * Opens the case report for the open ticket in a new tab (GH #204): the ticket, its
+ * conversation and its tasks as one printable record. The choices and the Print button
+ * are on that page.
+ */
+function openCaseReport() {
+    if (!currentEmail) return;
+    const id = currentEmail.ticket_id || currentEmail.id;
+    if (!id) return;
+    window.open((window.CASE_REPORT_URL || 'case-report.php') + '?id=' + encodeURIComponent(id), '_blank', 'noopener');
+}
+
 function buildWriteUpButton(email) {
     if (!window.KB_WRITEUP_ENABLED || !ticketIsClosed(email)) return '';
     return `
@@ -12233,12 +12932,14 @@ function buildReadForMeButton() {
  * Asks for an automatic refresh when the server says one is due.
  */
 async function loadAiSummary(ticketId) {
+    const isCurrent = ticketReadGuard(ticketId);
     if (!aiSummaryOn() || !ticketId) return;
     _aiSummaryTicketId = ticketId;
     _aiSummaryState = null;
     try {
         const r = await fetch(`../api/tickets/ai_summary.php?ticket_id=${encodeURIComponent(ticketId)}`);
         const d = await r.json();
+        if (!isCurrent()) return;
         // The ticket may have changed underneath a slow request. Landing an old
         // ticket's summary on a new ticket would be a quiet, confident lie.
         // Confidential and not sent to AI (#62): say so where the summary would
@@ -12257,6 +12958,7 @@ async function loadAiSummary(ticketId) {
            asks, and asking twice cannot bill twice. */
         if (d.auto_due && d.configured) refreshAiSummary(true);
     } catch (e) {
+        if (!isCurrent()) return;
         // A summary that cannot load leaves the ticket exactly as it was.
     }
 }

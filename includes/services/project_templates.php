@@ -136,7 +136,7 @@ class ProjectTemplatesService
                         if ($id === null) { $skipped++; continue; }   // no "Retired" here - leave it out, never guess
                         $tg['done_value'] = (string)$id;
                     }
-                    try { $t = projectTargetNormalise($tg); } catch (ServiceError $e) { $skipped++; continue; }
+                    try { $t = projectTargetNormalise($tg); } catch (ServiceError) { $skipped++; continue; }
                     $st->execute([$pid, $t['name'], $t['scope'], $t['scope_field'], $t['scope_value'], $t['done_field'], $t['done_op'], $t['done_value'], $i + 1, $ctx->actorId > 0 ? $ctx->actorId : null]);
                 }
             }
@@ -163,12 +163,12 @@ class ProjectTemplatesService
                 $in = implode(',', array_map('intval', $taskIds));
                 $conn->exec("DELETE FROM tasks WHERE id IN ($in)");
             }
-            try { $conn->prepare("DELETE rt FROM project_raid_tasks rt JOIN project_raid r ON r.id = rt.raid_id WHERE r.project_id = ?")->execute([$pid]); } catch (Throwable $e) { /* not created yet */ }
+            try { $conn->prepare("DELETE rt FROM project_raid_tasks rt JOIN project_raid r ON r.id = rt.raid_id WHERE r.project_id = ?")->execute([$pid]); } catch (Throwable) { /* not created yet */ }
             foreach (['project_gate_items', 'project_benefits', 'project_milestones', 'project_asset_targets', 'project_tolerances', 'project_raid', 'project_items', 'project_stages', 'project_audit'] as $t) {
-                try { $conn->prepare("DELETE FROM $t WHERE project_id = ?")->execute([$pid]); } catch (Throwable $e) { /* table may predate Verification */ }
+                try { $conn->prepare("DELETE FROM $t WHERE project_id = ?")->execute([$pid]); } catch (Throwable) { /* table may predate Verification */ }
             }
             $conn->prepare("DELETE FROM projects WHERE id = ?")->execute([$pid]);
-        } catch (Throwable $e) { /* best effort - the original error is what matters */ }
+        } catch (Throwable) { /* best effort - the original error is what matters */ }
         ProjectsService::syncCalendar($conn);   // its end date was already drawn
     }
 

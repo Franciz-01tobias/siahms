@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Følg med på denne siden.</strong> Når arbeideren kjører, blir statusen over grønn og leveringene vises nedenfor. Fullstendige oppsettsnotater (Windows &amp; Linux, verifisering av signatur) finnes i <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">wikien om arbeidsflyter</a>.',
         'fact_worker' => 'Arbeiderskript',
         'fact_retry' => 'Plan for nye forsøk',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1t &middot; 6t, deretter mislykket',
         'fact_retention' => 'Oppbevaring av logg',
         'fact_queued' => 'I kø nå',
         'days' => '{n} dager',

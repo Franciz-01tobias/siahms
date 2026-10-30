@@ -156,7 +156,7 @@ try {
     ok('open and past its due date is Overdue', ($r['outcome'] ?? '') === 'overdue', $r['outcome'] ?? 'no row');
     $r = $rowFor($rep, null, $mo[5]);
     ok('the month never created is MISSING', ($r['outcome'] ?? '') === 'missing', $r ? $r['outcome'] : 'no row');
-    ok('...and the explanation does not claim the job did not run', $r && strpos($r['explanation']['code'] ?? '', 'not_run') === false);
+    ok('...and the explanation does not claim the job did not run', $r && !str_contains($r['explanation']['code'] ?? '', 'not_run'));
     ok('...it says run history is not available (before recording began)', ($r['explanation']['code'] ?? '') === 'history_not_available', $r['explanation']['code'] ?? '');
     ok('summary counts one of each', $rep['summary']['on_time'] === 1 && $rep['summary']['on_time_rescheduled'] === 1 && $rep['summary']['late'] === 1
         && $rep['summary']['skipped'] === 1 && $rep['summary']['removed'] === 1 && $rep['summary']['missing'] >= 1, json_encode($rep['summary']));

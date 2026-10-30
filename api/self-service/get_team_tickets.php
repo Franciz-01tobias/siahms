@@ -102,10 +102,7 @@ try {
                 ts.colour AS status_colour, ts.is_closed,
                 t.created_datetime, t.updated_datetime,
                 d.name AS department_name,
-                COALESCE(NULLIF(u.display_name, ''), u.email) AS requester_name,
-                (SELECT LEFT(e.body_preview, 160) FROM emails e
-                  WHERE e.ticket_id = t.id
-                  ORDER BY e.received_datetime DESC LIMIT 1) AS preview
+                COALESCE(NULLIF(u.display_name, ''), u.email) AS requester_name
            FROM tickets t
       LEFT JOIN ticket_statuses ts   ON ts.id = t.status_id
       LEFT JOIN ticket_priorities tp ON tp.id = t.priority_id
@@ -117,8 +114,14 @@ try {
     );
     $stmt->execute($whereArgs);
 
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // The newest message the TICKET'S requester may see - not simply the newest.
+    require_once '../../includes/portal_visibility.php';
+    $previews = portalVisiblePreviews($conn, array_column($rows, 'id'));
+
     $out = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $t) {
+    foreach ($rows as $t) {
+        $t['preview'] = $previews[(int)$t['id']] ?? null;
         $access = portalTicketAccess($conn, $userId, (int)$t['id']);
         if (!$access) continue;                 // the final word, as on every other endpoint
         if ($access['stub']) {

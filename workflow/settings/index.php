@@ -72,7 +72,7 @@ $translationNamespaces = ['common', 'workflow'];
         }
     </style>
     <!-- Mobile layer LAST (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="workflow" data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -82,7 +82,7 @@ $translationNamespaces = ['common', 'workflow'];
 
         <!-- AI tab -->
         <?php if (settingsTabVisible($visibleTabs, 'ai')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo Cap::WORKFLOW_AI; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo capKey(Cap::WORKFLOW_AI); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('workflow.ai_settings.title')); ?></h2>
             </div>
@@ -99,7 +99,7 @@ $translationNamespaces = ['common', 'workflow'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'formats')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'formats' ? ' active' : ''; ?>" id="formats-tab" data-capability="<?php echo Cap::WORKFLOW_FORMATS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'formats' ? ' active' : ''; ?>" id="formats-tab" data-capability="<?php echo capKey(Cap::WORKFLOW_FORMATS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('workflow.formats.title')); ?></h2>
                 <button class="add-btn" onclick="WFF.openNew()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -187,7 +187,7 @@ $translationNamespaces = ['common', 'workflow'];
         function esc(s) {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         function toast(msg, kind) {
             if (window.showToast) window.showToast(msg, kind || 'info');
@@ -307,6 +307,6 @@ $translationNamespaces = ['common', 'workflow'];
         window.WFF = WFF;
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

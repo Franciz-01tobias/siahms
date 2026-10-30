@@ -10,6 +10,9 @@ require_once '../../config.php';
 require_once '../../includes/admin_api_guard.php'; // System admins only (issue #34)
 require_once '../../includes/functions.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 $input = json_decode(file_get_contents('php://input'), true);

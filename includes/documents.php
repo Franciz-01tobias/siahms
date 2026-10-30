@@ -175,6 +175,18 @@ function documentEntityRegistry(): array {
             'can'    => function (PDO $c, int $a, int $id) { return analystCanAccessDomain($c, $a, $id); },
             'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
         ],
+        'jml_case' => [
+            // Starters & leavers (4.6.0): a signed returns form, an equipment
+            // request. Scoped data, like a domain's: the case's company decides.
+            'module' => 'starters',
+            'table'  => 'jml_cases',
+            'label'  => 'Starter or leaver',
+            'url'    => 'starters/view.php?id=%d',
+            'title'  => 'person_name',
+            'alive'  => null,
+            'can'    => function (PDO $c, int $a, int $id) { [$sql, $args] = activeTenantFilter($c, $a, 'x'); $st = $c->prepare('SELECT 1 FROM jml_cases x WHERE x.id = ?' . $sql); $st->execute(array_merge([$id], $args)); return (bool)$st->fetchColumn(); },
+            'filter' => function (PDO $c, int $a, string $alias) { return activeTenantFilter($c, $a, $alias); },
+        ],
         'knowledge_article' => [
             // ⚠️ Knowledge is the module that does NOT follow the others:
             // NULL means SHARED here, the opposite of tickets and assets. Its own
@@ -389,7 +401,7 @@ function documentCanViewParent(PDO $conn, int $analystId, ?array $allowedModules
     if (is_callable($def['can'])) {
         try {
             if (!$def['can']($conn, $analystId, $parentId)) return false;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;   // an access check that errors is a NO, never a yes
         }
     }
@@ -402,7 +414,7 @@ function documentCanViewParent(PDO $conn, int $analystId, ?array $allowedModules
         $st = $conn->prepare($sql . " LIMIT 1");
         $st->execute([$parentId]);
         return (bool) $st->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;
     }
 }
@@ -471,7 +483,7 @@ function documentVisibilityClause(PDO $conn, int $analystId, ?array $allowedModu
                     $sql   .= ' ' . $fSql;               // already begins " AND "
                     $params = array_merge($params, $fParams);
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 // A filter that cannot be built must not silently widen the
                 // query. Drop this type instead.
                 array_pop($params);
@@ -507,7 +519,7 @@ function documentCanView(PDO $conn, int $analystId, ?array $allowedModules, int 
         );
         $st->execute([$documentId]);
         $links = $st->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;
     }
 
@@ -581,7 +593,7 @@ function documentVisibleParents(PDO $conn, int $analystId, ?array $allowedModule
         );
         $st->execute([$documentId]);
         $links = $st->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return $out;
     }
 
@@ -608,7 +620,7 @@ function documentVisibleParents(PDO $conn, int $analystId, ?array $allowedModule
                 // A parent that cannot resolve one gets no link rather than a
                 // link to record 0.
                 $urlId = ($got === false || $got === null) ? 0 : (int) $got;
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 $urlId = 0;
             }
         }
@@ -793,7 +805,7 @@ function documentHelpCentreReady(PDO $conn): bool {
     if ($ready !== null) return $ready;
     try {
         $ready = (bool) $conn->query("SHOW COLUMNS FROM `document_links` LIKE 'show_in_help_centre'")->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $ready = false;
     }
     return $ready;

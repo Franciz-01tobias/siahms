@@ -34,19 +34,24 @@
 
 require_once __DIR__ . '/../asset_warranty_calendar.php';
 require_once __DIR__ . '/settings.php';
+require_once __DIR__ . '/subdomains.php';
 
 /** Both kinds. The name is kept: every caller already asks for "the calendar". */
 function domainSyncExpiryCalendar(PDO $conn): array
 {
+    // GH #217: nothing at all while the Calendar is switched off - not even the clear-out,
+    // so switching it back on finds the entries as they were until the next sync.
+    if (!moduleIsEnabled($conn, 'calendar')) return ['success' => true, 'synced' => 0, 'synced_certificates' => 0];
     try {
         if (!awcColumnExists($conn, 'calendar_events', 'source') || !awcColumnExists($conn, 'domains', 'expiry_date')) {
             return ['success' => false, 'error' => 'Schema not ready'];
         }
         $live = "(s.id IS NULL OR s.alerts_enabled = 1)";
+        // A subdomain renews with its parent: only the parent has a renewal entry.
         $n = domainSyncCalendarKind($conn, 'domain_expiry', domainSetting($conn, 'domain_expiry_surface'),
             'Domain renewals', '#4d7c0f', 'expiry_date', 'Domain expires: ',
             'Auto-generated from the Domains register. Change the expiry date on the domain (or renew it and refresh its lookup) to move this.',
-            $live);
+            $live . (domainSubdomainsReady($conn) ? ' AND d.parent_domain_id IS NULL' : ''));
         // A separate column check: an install that has the expiry column but not
         // the certificate one must keep its renewals (the lease_expiry lesson).
         $c = awcColumnExists($conn, 'domains', 'ssl_expiry_date')
@@ -55,10 +60,44 @@ function domainSyncExpiryCalendar(PDO $conn): array
                 'Auto-generated from the Domains register: the soonest-expiring certificate its checks found. Renewing the certificate and running Check now moves this.',
                 $live)
             : 0;
+        $c += domainSyncManualCertCalendar($conn, $live);
         return ['success' => true, 'synced' => $n, 'synced_certificates' => $c];
     } catch (Throwable $e) {
         return ['success' => false, 'error' => $e->getMessage()];
     }
+}
+
+/**
+ * Certificates recorded by hand join the checked ones in "Certificate renewals":
+ * the same source (so the same clear-and-redraw keeps them in step), the same
+ * category and the same surface setting - one entry per certificate.
+ * Runs AFTER the domain_cert kind, which has just cleared the source.
+ *
+ * @param string $live  the same status condition the checked certificates use
+ */
+function domainSyncManualCertCalendar(PDO $conn, string $live): int
+{
+    if (!domainManualCertsReady($conn)) return 0;
+    if (!in_array(domainSetting($conn, 'domain_cert_surface'), ['calendar', 'both'], true)) return 0;
+    $cat = awcEnsureCategory($conn, 'domain_cert', 'Certificate renewals', '#0e7490');
+    $rows = $conn->query(
+        "SELECT m.purpose, m.expiry_date, d.domain_name, d.display_name
+           FROM domain_manual_certificates m
+           JOIN domains d ON d.id = m.domain_id
+      LEFT JOIN domain_statuses s ON s.id = d.status_id
+          WHERE $live"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    $ins = $conn->prepare(
+        "INSERT INTO calendar_events (title, description, category_id, start_datetime, end_datetime, all_day, created_by, source)
+         VALUES (?, ?, ?, ?, ?, 1, 0, 'domain_cert')"
+    );
+    foreach ($rows as $r) {
+        $dt = substr($r['expiry_date'], 0, 10) . ' 00:00:00';
+        $ins->execute(['Certificate expires: ' . $r['purpose'] . ' (' . ($r['display_name'] ?: $r['domain_name']) . ')',
+                       'Auto-generated from a certificate recorded in the Domains register. Change its expiry date there to move this.',
+                       $cat, $dt, $dt]);
+    }
+    return count($rows);
 }
 
 /**

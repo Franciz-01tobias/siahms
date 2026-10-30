@@ -138,16 +138,16 @@ try {
     $o = $conn->query("SELECT outcome FROM job_runs WHERE id = {$id}")->fetchColumn();
     ok('one failed and one good source makes the run PARTIAL', $o === 'partial', (string)$o);
     $d = $conn->query("SELECT outcome, summary FROM job_runs WHERE id = {$dead}")->fetch(PDO::FETCH_ASSOC);
-    ok('a run that died long ago is marked failed when a later one finishes', $d['outcome'] === 'failed' && strpos($d['summary'], 'Never finished') === 0);
+    ok('a run that died long ago is marked failed when a later one finishes', $d['outcome'] === 'failed' && str_starts_with($d['summary'], 'Never finished'));
     $conn->exec("DELETE FROM job_run_sources WHERE run_id IN ({$id}, {$dead})");
     $conn->exec("DELETE FROM job_runs WHERE id IN ({$id}, {$dead})");
 
     $c = JobRun::clean('GET https://user:secret@jira.example.com/rest?token=abcd failed; password=hunter2 key 0123456789abcdef0123456789abcdef');
-    ok('clean() removes credentials in URLs', strpos($c, 'secret') === false);
-    ok('clean() removes query strings', strpos($c, 'abcd') === false);
-    ok('clean() removes password=...', strpos($c, 'hunter2') === false);
-    ok('clean() removes long hex tokens', strpos($c, '0123456789abcdef') === false);
-    ok('POSITIVE CONTROL: clean() keeps the host and the words', strpos($c, 'jira.example.com') !== false && strpos($c, 'failed') !== false);
+    ok('clean() removes credentials in URLs', !str_contains($c, 'secret'));
+    ok('clean() removes query strings', !str_contains($c, 'abcd'));
+    ok('clean() removes password=...', !str_contains($c, 'hunter2'));
+    ok('clean() removes long hex tokens', !str_contains($c, '0123456789abcdef'));
+    ok('POSITIVE CONTROL: clean() keeps the host and the words', str_contains($c, 'jira.example.com') && str_contains($c, 'failed'));
 
     // ---- REST: ?strict=1 answers 503 while anything needed is unhealthy ----
     if ($BASE !== null) {
@@ -170,7 +170,7 @@ try {
             [$c1, $b1] = $call('');
             ok('GET /jobs/health answers 200 without strict', $c1 === 200, (string)$c1);
             ok('...with every job', count($b1['data']['jobs'] ?? []) === count(jobRegistry()));
-            ok('...and no command lines in it', strpos(json_encode($b1), 'cron/') === false && strpos(json_encode($b1), 'cron\/') === false);
+            ok('...and no command lines in it', !str_contains(json_encode($b1), 'cron/') && !str_contains(json_encode($b1), 'cron\/'));
             [$c2] = $call('?strict=1');
             ok('?strict=1 answers ' . ($healthy ? '200 (this install is healthy)' : '503 (this install is unhealthy)'), $c2 === ($healthy ? 200 : 503), (string)$c2);
             $conn->prepare("UPDATE api_keys SET permissions = ? WHERE id = ?")->execute([json_encode(['tickets' => ['read']]), $keyId]);
@@ -196,7 +196,7 @@ class SyntheticUnavailablePDO extends PDO {
 $res = jobHealthSummary(new SyntheticUnavailablePDO());
 $states = array_count_values(array_column($res['jobs'], 'status'));
 ok('every read failing: NOT healthy (it used to say healthy, 13 not needed)', $res['healthy'] === false, json_encode($states));
-ok('...every job is "unknown", none "not needed"', ($states['unknown'] ?? 0) === count(jobRegistry()) && !isset($states['not_needed']), json_encode($states));
+ok('...every job is "unknown", none "not needed"', ($states['unknown'] ?? 0) === count(jobRegistry()) + 1 /* + the pushed sources (GH #199), unreadable too */ && !isset($states['not_needed']), json_encode($states));
 
 /** The real database, except for queries matching $fail - which throw, as a failed read or (code 42S02) a missing table. */
 class SelectiveFailPDO extends PDO {

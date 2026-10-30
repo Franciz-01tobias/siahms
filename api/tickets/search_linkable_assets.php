@@ -25,6 +25,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+// GH #217: refused while the assets module is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'assets');
 
 const LINKABLE_ASSET_LIMIT = 25;
 

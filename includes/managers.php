@@ -79,7 +79,7 @@ function managersSettings(PDO $conn): array
             $k = substr($r['setting_key'], strlen('managers_'));
             if (array_key_exists($k, $s)) $s[$k] = (string)$r['setting_value'];
         }
-    } catch (Throwable $e) { /* defaults */ }
+    } catch (Throwable) { /* defaults */ }
     if (!in_array($s['directory_depth'], ['direct', 'all'], true)) $s['directory_depth'] = 'direct';
     if (!in_array($s['confidential'], ['none', 'stub', 'all'], true)) $s['confidential'] = 'none';
     if (!in_array($s['edit_by'], ['admins', 'people_editors'], true)) $s['edit_by'] = 'admins';
@@ -99,7 +99,7 @@ function managersActive(PDO $conn): bool
     if (!ticketSensitivityReady($conn) || !ticketViewsReady($conn)) return $memo = false;
     try {
         $conn->query("SELECT grant_type FROM manager_grants LIMIT 0");
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return $memo = false;
     }
     return $memo = true;

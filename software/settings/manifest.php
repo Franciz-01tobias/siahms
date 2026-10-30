@@ -16,14 +16,14 @@ return [
     'module' => 'software',
     'label'  => 'Software',
     'umbrella' => [
-        'cap'       => Cap::SOFTWARE_MANAGE,
+        'cap'       => capKey(Cap::SOFTWARE_MANAGE),
         'grant'     => 'Manage everything in Software settings',
         'sensitive' => true,
     ],
     'tabs' => [
         [
             'id'        => 'api-keys',
-            'cap'       => Cap::SOFTWARE_API_KEYS,
+            'cap'       => capKey(Cap::SOFTWARE_API_KEYS),
             'label_key' => 'software.settings.tab_api_keys',
             'grant'     => 'Create and revoke the API keys inventory agents use',
             'sensitive' => true,
@@ -35,7 +35,7 @@ return [
             // Assets "warranty" tab, which answers the same question about
             // warranty expiries and holds the same shape of setting.
             'id'           => 'renewals',
-            'cap'          => Cap::SOFTWARE_RENEWALS,
+            'cap'          => capKey(Cap::SOFTWARE_RENEWALS),
             'label_key'    => 'software.settings.tab_renewals',
             'grant'        => 'Configure where licence renewals are surfaced',
             // Only the surface key — see the note in watchtower_queries.php for why

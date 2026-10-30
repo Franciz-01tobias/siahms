@@ -10,6 +10,9 @@ require_once '../../includes/services/forms.php';   // CLOSE_EFFECTS
 
 header('Content-Type: application/json');
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
@@ -31,9 +34,9 @@ try {
 
     // key => the capability that may write it.
     $allowed = [
-        'logo_alignment'          => Cap::FORMS_LAYOUT,
-        'collection_close_effect' => Cap::FORMS_COLLECTIONS,
-        'design_restricted'       => Cap::FORMS_ACCESS,   // who may design forms (#180)
+        'logo_alignment'          => capKey(Cap::FORMS_LAYOUT),
+        'collection_close_effect' => capKey(Cap::FORMS_COLLECTIONS),
+        'design_restricted'       => capKey(Cap::FORMS_ACCESS),   // who may design forms (#180)
     ];
     $validAlignments = ['left', 'center', 'right'];
 
@@ -41,7 +44,7 @@ try {
         if (!isset($settings[$key])) continue;
         // A caller without the capability for THIS key is refused this key,
         // rather than the whole request - the tabs are separately granted.
-        requireCapabilityJson($cap);
+        requireCapabilityJson(Cap::from($cap));
 
         $value = $settings[$key];
         if ($key === 'logo_alignment' && !in_array($value, $validAlignments)) {

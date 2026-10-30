@@ -37,7 +37,7 @@ $translationNamespaces = ['common', 'asset-management'];
     <script src="../../assets/js/i18n.js?v=3"></script>
     <?php echo Money::scriptTag(); ?>
     <script src="../../assets/js/money.js?v=1"></script>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include '../includes/header.php'; ?>
@@ -73,8 +73,9 @@ $translationNamespaces = ['common', 'asset-management'];
         'api'   => '../../api/assets/leases/',
         'base'  => BASE_URL,
         'multi' => isMultiTenant($conn),
+        'contracts' => moduleIsEnabled($conn, 'contracts'),   // GH #217: no contract picker or link while Contracts is switched off
     ]); ?>;</script>
-    <script src="../../assets/js/leases.js?v=2"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/leases.js?v=3"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

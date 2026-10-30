@@ -35,7 +35,7 @@ $translationNamespaces = ['common', 'calendar'];
     </style>
     <!-- Mobile-friendly overrides (LAYER 16). Linked LAST of the stylesheets so
          its @media rules win ties against the module CSS and the block above. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -192,7 +192,7 @@ $translationNamespaces = ['common', 'calendar'];
     </div>
 
     <script>window.API_BASE = '../api/calendar/';</script>
-    <script src="../assets/js/itsm_calendar.js?v=4"></script>
+    <script src="../assets/js/itsm_calendar.js?v=5"></script>
     <script src="../assets/js/qrcode.min.js"></script>
     <script src="../assets/js/subscribe.js?v=1"></script>
     <script>
@@ -211,6 +211,6 @@ $translationNamespaces = ['common', 'calendar'];
     </script>
     </script>
     <!-- Loaded last so it can wrap the calendar's own globals. -->
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

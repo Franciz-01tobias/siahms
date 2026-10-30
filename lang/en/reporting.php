@@ -151,6 +151,7 @@ return [
         'trigger_web'    => 'Schedule (web address)',
         'trigger_page'   => 'Page load',
         'trigger_manual' => 'Run now',
+        'trigger_push'   => 'Report received',
 
         'problem_stuck'      => 'A run started {since} and has not finished.',
         'problem_failing'    => 'Its most recent run failed ({since}).',
@@ -168,6 +169,7 @@ return [
         'unknown_sources'       => 'which of its sources are in use',
         'unknown_source_health' => 'how its sources last ran',
         'unknown_history'       => 'its run history',
+        'unknown_pushed_sources' => 'which pushed sources (Hyper-V connections) are switched on',
 
         // The jobs, and what stops without each one.
         'name_sla_breach'            => 'SLA breach check',
@@ -188,6 +190,11 @@ return [
         'affects_domains'            => 'Domain lookups, checks and expiry alerts',
         'name_lms_reminders'         => 'Training reminders',
         'affects_lms_reminders'      => 'LMS reminder emails',
+        // GH #199: a pushed source - healthy when its collector's reports arrive on time.
+        'name_virt_push'             => 'Hyper-V reports: {name}',
+        'affects_virt_push'          => 'What Assets -> Servers shows for this estate goes stale, and nothing marks VMs that have gone',
+        'name_pushed_sources'        => 'Pushed sources',
+        'affects_pushed_sources'     => 'Whether Hyper-V collectors are reporting on time',
         'name_proxmox_sync'          => 'Proxmox sync',
         'affects_proxmox_sync'       => 'Proxmox virtual machines in Assets',
         'name_vcloud_sync'           => 'VMware Cloud Director sync',
@@ -323,9 +330,11 @@ return [
         'packs_area_software'      => 'Software',
         'packs_area_software_body' => 'Software by publisher, the most installed applications, licences and their renewals, and headline figures. These show the inventory as it is now.',
         'packs_area_assets'        => 'Assets and Intune',
-        'packs_area_assets_body'   => 'Assets by type, operating system or status, warranties and leases ending in the period, Intune compliance, operating systems and encryption, and headline figures.',
+        'packs_area_assets_body'   => 'Assets by type, operating system or status, warranties and leases ending in the period, assets retired in the period (with serial number, date and reason), Intune compliance, operating systems and encryption, and headline figures.',
         'packs_area_projects'      => 'Projects',
         'packs_area_projects_body' => 'A project summary, project health as a doughnut, a status table (health, progress, current stage, target date, project manager and why), the milestones in the period and whether each was met, and the top open risks. Health, status and risks show the projects as they are now.',
+        'packs_area_changes'       => 'Change Management',
+        'packs_area_changes_body'  => 'Changes by status, type, risk, priority or impact, and a list of the period\'s changes - raised in the period, or scheduled in it. A change records no completion date, so a status chart shows the period\'s changes as they stand now.',
         'packs_area_layout'        => 'Layout',
         'packs_area_layout_body'   => 'Headings (which can start a new page and appear in the contents), text boxes, lines, spaces and page breaks. A cover page and a contents page are switched on from the Insert tab.',
         'packs_keys_heading' => 'Shortcuts',
@@ -583,6 +592,7 @@ return [
                 'refresh'       => 'Figures',
             ],
             'area' => [
+                'changes'  => 'Change Management',
                 'layout'   => 'Layout',
                 'tickets'  => 'Tickets',
                 'status'   => 'Service Status',
@@ -708,6 +718,11 @@ return [
 
         'other'      => 'Other',
         'unassigned' => 'Unassigned',
+        'not_assessed' => 'Not assessed',
+        'change_basis' => [
+            'created'   => 'Raised in the period',
+            'scheduled' => 'Scheduled in the period',
+        ],
         'ongoing'    => '(ongoing)',
         'uptime_label' => 'uptime',
         'down_label'   => 'down',
@@ -750,6 +765,7 @@ return [
         ],
 
         'opt' => [
+            'change_basis'  => 'Changes',
             'by'                => 'Group by',
             'basis'             => 'Tickets',
             'chart'             => 'Chart type',
@@ -803,6 +819,7 @@ return [
             'month' => 'Month',
         ],
         'series' => [
+            'changes'       => 'Changes',
             'both'     => 'Created and closed',
             'created'  => 'Created',
             'closed'   => 'Closed',
@@ -819,6 +836,11 @@ return [
         ],
 
         'dim' => [
+            'change_status'   => 'Status',
+            'change_type'     => 'Type',
+            'change_priority' => 'Priority',
+            'change_impact'   => 'Impact',
+            'change_risk'     => 'Risk',
             'status'         => 'Status',
             'priority'       => 'Priority',
             'category'       => 'Category',
@@ -840,6 +862,12 @@ return [
         ],
 
         'col' => [
+            'ref'           => 'Ref',
+            'assignee'      => 'Assigned to',
+            'scheduled'     => 'Scheduled',
+            'serial'        => 'Serial number',
+            'retired'       => 'Retired',
+            'reason'        => 'Reason',
             'ticket'        => 'Ticket',
             'subject'       => 'Subject',
             'status'        => 'Status',
@@ -912,6 +940,8 @@ return [
         ],
 
         'empty' => [
+            'retired'   => 'No assets were retired in this period.',
+            'changes'   => 'No changes in this period.',
             'tickets'   => 'No tickets in this period.',
             'services'  => 'No services to show.',
             'incidents' => 'No incidents in this period.',
@@ -938,6 +968,11 @@ return [
 
         // The toolbox: one title and description per item the designer offers.
         'tool' => [
+            'assets_retired'    => ['title' => 'Retired assets',    'desc' => 'Assets moved into a retired status in the period - what left the estate, its serial number, when and why. The list for a transfer of equipment.'],
+            'changes_by_status' => ['title' => 'Changes by status', 'desc' => 'The period\'s changes by their status now. A change records no completion date, so this is the current status of the changes raised (or scheduled) in the period.'],
+            'changes_by_type'   => ['title' => 'Changes by type',   'desc' => 'The period\'s changes by type - standard, normal, emergency or your own.'],
+            'changes_by_risk'   => ['title' => 'Changes by risk',   'desc' => 'The period\'s changes by their assessed risk, from Low to Critical, and those not yet assessed.'],
+            'changes_list'      => ['title' => 'Change list',       'desc' => 'The period\'s changes: reference, title, type, status, risk, who has it and when it is scheduled.'],
             'heading'   => ['title' => 'Heading',     'desc' => 'A section title with a line under it. Can start a new page and appears in the contents.'],
             'text'      => ['title' => 'Text box',    'desc' => 'Your own words, with bold, underline, colours, lists and alignment.'],
             'pagebreak' => ['title' => 'Page break',  'desc' => 'Everything after it starts on a new page.'],

@@ -14,6 +14,7 @@ require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
 require_once '../includes/people.php';
 require_once '../includes/recent_trail.php';
+require_once '../includes/phone_dial.php';   // the Call button beside a number
 require_once 'includes/render.php';
 I18n::initFromSession();
 Tz::init();
@@ -24,6 +25,7 @@ $conn = connectToDatabase();
 $analystId = (int)$_SESSION['analyst_id'];
 $userId = (int)($_GET['id'] ?? 0);
 $data = personDetail($conn, $analystId, $userId);
+$dial = phoneDialTemplate($conn);
 if ($data) entityVisit('person', $userId, $conn);
 
 $current_page = 'people';
@@ -58,7 +60,7 @@ $multi = isMultiTenant($conn);
                         <?php echo ($p['job_title'] || $p['department']) ? ' · ' : ''; ?><a href="company.php?id=<?php echo (int)$p['company_id']; ?>"><?php echo pplE($p['company']); ?></a>
                     <?php endif; ?>
                 </div>
-                <?php if ($p['email']): ?><div class="ppl-hero-contact"><a href="mailto:<?php echo pplE($p['email']); ?>"><?php echo pplE($p['email']); ?></a><?php echo $p['phone'] ? ' · ' . pplE($p['phone']) : ''; ?></div><?php endif; ?>
+                <?php if ($p['email']): ?><div class="ppl-hero-contact"><a href="mailto:<?php echo pplE($p['email']); ?>"><?php echo pplE($p['email']); ?></a><?php echo $p['phone'] ? ' · ' . phoneWithDialHtml($dial, $p['phone']) : ''; ?></div><?php endif; ?>
             </div>
             <?php if ($canTickets || $canAssets): ?>
             <div class="ppl-hero-actions">
@@ -83,8 +85,8 @@ $multi = isMultiTenant($conn);
                         };
                         $f('email', $p['email'] ? '<a href="mailto:' . pplE($p['email']) . '">' . pplE($p['email']) . '</a>' : null, true);
                         $f('username', $p['username'] !== $p['email'] ? $p['username'] : null);
-                        $f('phone', $p['phone']);
-                        $f('mobile', $p['mobile']);
+                        $f('phone', $p['phone'] ? phoneWithDialHtml($dial, $p['phone']) : null, true);
+                        $f('mobile', $p['mobile'] ? phoneWithDialHtml($dial, $p['mobile']) : null, true);
                         $f('office', $p['office']);
                         $f('department', $p['department']);
                         $f('employee_id', $p['employee_id']);
@@ -107,6 +109,6 @@ $multi = isMultiTenant($conn);
         </div>
     <?php endif; ?>
     </main>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=83"></script>
 </body>
 </html>

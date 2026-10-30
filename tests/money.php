@@ -53,7 +53,7 @@ is_('normalise upper-cases and trims', Money::normalise(' idr '), 'IDR');
 is_('normalise: blank is null', Money::normalise(''), null);
 is_('normalise: null is null', Money::normalise(null), null);
 $threw = false;
-try { Money::normalise('ABC'); } catch (InvalidArgumentException $e) { $threw = strpos($e->getMessage(), 'ABC') !== false; }
+try { Money::normalise('ABC'); } catch (InvalidArgumentException $e) { $threw = str_contains($e->getMessage(), 'ABC'); }
 is_('normalise refuses an unknown code, naming it', $threw, true);
 
 echo "\nCleaning settings as they are read:\n";

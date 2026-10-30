@@ -53,4 +53,6 @@ $prjNav = [
 </div>
 
 <?php renderWaffleMenuJS(); ?>
-<script>window.PRJ_API = <?php echo json_encode(BASE_URL . 'api/projects/'); ?>; window.PRJ_BASE = <?php echo json_encode(BASE_URL); ?>; window.PRJ_ME = <?php echo (int)($_SESSION['analyst_id'] ?? 0); ?>;</script>
+<script>window.PRJ_API = <?php echo json_encode(BASE_URL . 'api/projects/'); ?>; window.PRJ_BASE = <?php echo json_encode(BASE_URL); ?>; window.PRJ_ME = <?php echo (int)($_SESSION['analyst_id'] ?? 0); ?>;
+// GH #217: false when Tasks is switched off (or not granted) - task titles stop linking to the Tasks board and RAID follow-up actions go.
+window.PRJ_TASKS = <?php echo analystCanAccessModule(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'tasks') ? 'true' : 'false'; ?>;</script>

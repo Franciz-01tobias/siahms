@@ -374,7 +374,7 @@ $translationNamespaces = ['common', 'forms'];
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -384,7 +384,7 @@ $translationNamespaces = ['common', 'forms'];
 
         <!-- Layout Tab -->
         <?php if (settingsTabVisible($visibleTabs, 'layout')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'layout' ? ' active' : ''; ?>" id="layout-tab" data-capability="<?php echo Cap::FORMS_LAYOUT; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'layout' ? ' active' : ''; ?>" id="layout-tab" data-capability="<?php echo capKey(Cap::FORMS_LAYOUT); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('forms.settings.layout_heading')); ?></h2>
             </div>
@@ -427,7 +427,7 @@ $translationNamespaces = ['common', 'forms'];
              with one happens on the FORM, in the forms list, beside portal
              visibility and approval. -->
         <?php if (settingsTabVisible($visibleTabs, 'collections')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'collections' ? ' active' : ''; ?>" id="collections-tab" data-capability="<?php echo Cap::FORMS_COLLECTIONS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'collections' ? ' active' : ''; ?>" id="collections-tab" data-capability="<?php echo capKey(Cap::FORMS_COLLECTIONS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('forms.collections.heading')); ?></h2>
             </div>
@@ -545,7 +545,7 @@ $translationNamespaces = ['common', 'forms'];
                 if (analystHasCapability($accConn, (int)$an['id'], Cap::FORMS_DESIGN)) $designers[] = $an['full_name'];
             }
         ?>
-        <div class="tab-content<?php echo $activeTabId === 'access' ? ' active' : ''; ?>" id="access-tab" data-capability="<?php echo Cap::FORMS_ACCESS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'access' ? ' active' : ''; ?>" id="access-tab" data-capability="<?php echo capKey(Cap::FORMS_ACCESS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('forms.settings.access_heading')); ?></h2>
             </div>
@@ -569,7 +569,7 @@ $translationNamespaces = ['common', 'forms'];
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'ai')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo Cap::FORMS_AI; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="ai-tab" data-capability="<?php echo capKey(Cap::FORMS_AI); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('forms.settings.ai_heading')); ?></h2>
             </div>
@@ -968,6 +968,6 @@ $translationNamespaces = ['common', 'forms'];
     </script>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

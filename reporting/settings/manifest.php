@@ -23,12 +23,12 @@ return [
 
     'actions' => [
         [
-            'cap'      => Cap::REPORTING_JOB_HEALTH,
+            'cap'      => capKey(Cap::REPORTING_JOB_HEALTH),
             'grant'    => 'View background job health (Reporting -> System logs -> Background jobs, and the Watchtower card)',
             'restrict' => null,
         ],
         [
-            'cap'       => Cap::REPORTING_JOB_SETTINGS,
+            'cap'       => capKey(Cap::REPORTING_JOB_SETTINGS),
             'grant'     => 'Change what background jobs are expected to do - their intervals, and marking one "not used here"',
             'sensitive' => true,
             'restrict'  => null,

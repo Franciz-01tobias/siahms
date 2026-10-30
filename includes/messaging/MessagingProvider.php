@@ -22,18 +22,15 @@
 
 abstract class MessagingProvider
 {
-    /** @var array decrypted messaging_channels row (credentials already a PHP array) */
-    protected $channel;
-
     /**
      * Keeps the decrypted messaging_channels row the provider works with.
      *
+     * readonly (4.0): the row holds DECRYPTED credentials, so nothing may swap or alter
+     * it once the provider has it - set here, once, and never again.
+     *
      * @param array $channel  the messaging_channels row, decrypted (credentials already a PHP array)
      */
-    public function __construct(array $channel)
-    {
-        $this->channel = $channel;
-    }
+    public function __construct(protected readonly array $channel) {}
 
     /** Channel type this instance serves, e.g. 'whatsapp'. */
     public function getType(): string

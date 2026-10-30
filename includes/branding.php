@@ -85,7 +85,7 @@ function brandingLogoUrl(?PDO $conn = null): string
         if ($rel !== '' && brandingPathIsSafe($rel) && file_exists(__DIR__ . '/../' . $rel)) {
             $cached = $base . $rel;
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Fall through to the bundled logo.
     }
     return $cached;
@@ -98,9 +98,9 @@ function brandingLogoUrl(?PDO $conn = null): string
  */
 function brandingPathIsSafe(string $rel): bool
 {
-    if (strpos($rel, BRANDING_UPLOAD_DIR) !== 0) return false;
-    if (strpos($rel, '..') !== false) return false;
-    if (strpos($rel, "\0") !== false) return false;
+    if (!str_starts_with($rel, BRANDING_UPLOAD_DIR)) return false;
+    if (str_contains($rel, '..')) return false;
+    if (str_contains($rel, "\0")) return false;
     return (bool)preg_match('/^[A-Za-z0-9._\/-]+$/', $rel);
 }
 
@@ -311,7 +311,7 @@ function brandingLoginDesign(?PDO $conn = null, string $scope = 'login'): array
             if (!isset($fields[$field])) continue;
             $out[$field] = brandingLoginValidate($field, $row['setting_value'], $fields[$field]);
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Defaults. A login screen that cannot be styled still has to be usable.
     }
     return $out;

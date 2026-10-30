@@ -128,15 +128,17 @@
                 lease && lease.has_assets ? t('f_company_locked') : '') : '')
             + field(t('f_supplier'), '<select name="supplier_id">' + opts(o.suppliers, lease ? lease.supplier_id : '', t('none')) + '</select>')
             + field(t('f_cost_centre'), '<select name="cost_centre_id">' + opts(ccList(o.cost_centres), lease ? lease.cost_centre_id : '', t('none')) + '</select>')
-            + field(t('f_contract'), '<select name="contract_id">' + opts(o.contracts, lease ? lease.contract_id : '', t('none')) + '</select>', t('f_contract_hint'))
+            // GH #217: no contract picker while Contracts is switched off - and no contract_id sent, so a linked one is kept.
+            + (CFG.contracts !== false ? field(t('f_contract'), '<select name="contract_id">' + opts(o.contracts, lease ? lease.contract_id : '', t('none')) + '</select>', t('f_contract_hint')) : '')
             + field(t('f_notice_days'), '<input type="number" name="notice_days" min="0" max="3650" value="' + esc(lease && lease.notice_days !== null ? lease.notice_days : '') + '">', t('f_notice_hint'))
             + field(t('f_notes'), '<textarea name="notes" rows="3">' + esc(lease ? lease.notes || '' : '') + '</textarea>');
         var w = modal(lease ? t('edit_lease') : t('add_lease'), body, async function (w) {
             var payload = {
                 name: val(w, 'name'), reference: val(w, 'reference'),
                 supplier_id: val(w, 'supplier_id') || null, cost_centre_id: val(w, 'cost_centre_id') || null,
-                contract_id: val(w, 'contract_id') || null, notice_days: val(w, 'notice_days'), notes: val(w, 'notes')
+                notice_days: val(w, 'notice_days'), notes: val(w, 'notes')
             };
+            if (w.querySelector('[name=contract_id]')) payload.contract_id = val(w, 'contract_id') || null;   // GH #217
             if (w.querySelector('[name=company_id]')) payload.company_id = parseInt(val(w, 'company_id'), 10);
             if (lease) payload.id = lease.id;
             var r = await post('save.php', payload);
@@ -149,7 +151,8 @@
             try {
                 var x = await get('options.php', { company_id: co.value });
                 w.querySelector('[name=cost_centre_id]').innerHTML = opts(ccList(x.cost_centres), '', t('none'));
-                w.querySelector('[name=contract_id]').innerHTML = opts(x.contracts, '', t('none'));
+                var ctSel = w.querySelector('[name=contract_id]');   // GH #217: absent while Contracts is off
+                if (ctSel) ctSel.innerHTML = opts(x.contracts, '', t('none'));
             } catch (e) { fail(e); }
         });
     }
@@ -369,7 +372,7 @@
             [t('f_supplier'), esc(l.supplier_name || '')],
             CFG.multi ? [t('f_company'), esc(l.company_name)] : null,
             [t('f_cost_centre'), esc(l.cost_centre_label || '')],
-            [t('f_contract'), l.contract_id ? '<a href="' + BASE + 'contracts/view.php?id=' + l.contract_id + '">' + esc(l.contract_label) + '</a>' : ''],
+            CFG.contracts !== false ? [t('f_contract'), l.contract_id ? '<a href="' + BASE + 'contracts/view.php?id=' + l.contract_id + '">' + esc(l.contract_label) + '</a>' : ''] : null,   // GH #217
             [t('f_notice_days'), l.notice_days !== null ? esc(t('days_n', { n: l.notice_days })) : '']
         ].filter(Boolean);
         var html = '<div class="ls-card ls-hero"><div class="ls-hero-top"><div><h1>' + esc(l.name) + '</h1>'

@@ -172,6 +172,14 @@ try {
         }
     }
 
+    // GH #217: nothing to judge while SLA is switched off for the install. Logged as a
+    // skip in both histories; switching back on decides what happens to what was missed.
+    if (!moduleIsEnabled($conn, 'sla')) {
+        sla_cron_log_finish($conn, $runId, 'ok', [], 'Skipped: ' . moduleDisabledMessage('sla'));   // no 'skipped' in its ENUM
+        cronModuleSwitchedOff($conn, 'sla', 'sla_breach', $trigger);
+        exit(0);
+    }
+
     // ---- Run the actual check ----
     $jobRunId = JobRun::start($conn, 'sla_breach', $trigger);
     $summary = sla_run_breach_check($conn);

@@ -83,7 +83,7 @@ $p = searchParseQuery('05145-8841815', 3);
 ok("a hyphenated value SPLITS into the tokens MySQL indexed",
    $p['expr'] === '+05145* +8841815*');
 ok("...and is NOT glued into one token that was never indexed",
-   strpos($p['expr'], '051458841815') === false);
+   !str_contains($p['expr'], '051458841815'));
 
 ok("a hyphenated WORD splits the same way",
    searchParseQuery('pre-flight', 3)['expr'] === '+pre* +flight*');
@@ -118,16 +118,16 @@ ok("an empty query yields an empty expression", searchParseQuery('   ', 3)['expr
 section('2. Scope becomes SQL — and only here');
 
 [$sql, $args] = searchScopeToSql(['tenant_id' => 4, 'include_default' => false], 'sd');
-ok("a company scope filters on tenant_id",      strpos($sql, 'sd.tenant_id = ?') !== false);
-ok("...and always lets 'shared' rows through",  strpos($sql, "sd.tenant_scope = 'shared'") !== false);
-ok("...but NOT 'default' when not in the default company", strpos($sql, "'default'") === false);
+ok("a company scope filters on tenant_id",      str_contains($sql, 'sd.tenant_id = ?'));
+ok("...and always lets 'shared' rows through",  str_contains($sql, "sd.tenant_scope = 'shared'"));
+ok("...but NOT 'default' when not in the default company", !str_contains($sql, "'default'"));
 ok("...binding the id rather than inlining it", $args === [4]);
 
 [$sql2] = searchScopeToSql(['tenant_id' => 1, 'include_default' => true], 'sd');
-ok("'default' rows ARE visible from the default company", strpos($sql2, "sd.tenant_scope = 'default'") !== false);
+ok("'default' rows ARE visible from the default company", str_contains($sql2, "sd.tenant_scope = 'default'"));
 
 [$sql3] = searchScopeToSql(['include_internal' => false], 'sd');
-ok("excluding internal notes appears in the SQL", strpos($sql3, 'sd.is_internal = 0') !== false);
+ok("excluding internal notes appears in the SQL", str_contains($sql3, 'sd.is_internal = 0'));
 
 [$sql4, $args4] = searchScopeToSql(['source_types' => ['note','email']], 'sd');
 ok("a source-type filter is parameterised", substr_count($sql4, '?') === 2 && $args4 === ['note','email']);
@@ -137,15 +137,15 @@ ok("a source-type filter is parameterised", substr_count($sql4, '?') === 2 && $a
 // a caller that forgot to say.
 [$sql5, $args5] = searchScopeToSql([], 'sd');
 ok("an unspecified scope FAILS CLOSED — internal notes hidden by default",
-   strpos($sql5, 'sd.is_internal = 0') !== false);
+   str_contains($sql5, 'sd.is_internal = 0'));
 ok("...and applies no company filter when none was asked for",
-   strpos($sql5, 'tenant') === false && $args5 === []);
+   !str_contains($sql5, 'tenant') && $args5 === []);
 
 // CONTROL — the tenant clause really is driven by the scope, not always present.
 [$sqlT] = searchScopeToSql(['tenant_id' => 7, 'include_internal' => true], 'sd');
 [$sqlN] = searchScopeToSql(['tenant_id' => null, 'include_internal' => true], 'sd');
 ok("CONTROL — a tenant clause appears with an id and vanishes without one",
-   strpos($sqlT, 'tenant_id') !== false && $sqlN === '');
+   str_contains($sqlT, 'tenant_id') && $sqlN === '');
 
 // ===========================================================================
 section('3. Live search against the real corpus');
@@ -167,7 +167,16 @@ $T = '_test_search';   // reserved: nothing else writes it
 // ⚠️ Real ticket ids, because the foreign key correctly refuses invented ones.
 // That refusal is the cascade guard working, so the test borrows rather than
 // fabricates — and only ever writes corpus rows, never touching the tickets.
-$ids = $conn->query("SELECT id FROM tickets ORDER BY id DESC LIMIT 2")->fetchAll(PDO::FETCH_COLUMN);
+// ⚠️ Ticket B must REALLY be in company 4: since the October 2026 security fix,
+// search judges a ticket's rows by the ticket's live company, not only the copy
+// in the corpus (a moved ticket used to stay findable from its old company). A
+// borrowed ticket from another company would - correctly - be hidden from 4.
+$b4 = $conn->query("SELECT id FROM tickets WHERE tenant_id = 4 ORDER BY id DESC LIMIT 1")->fetchColumn();
+$ids = $b4 === false ? [] : [
+    (int)$conn->query("SELECT id FROM tickets WHERE id <> " . (int)$b4 . " AND (tenant_id IS NULL OR tenant_id <> 4) ORDER BY id DESC LIMIT 1")->fetchColumn(),
+    (int)$b4,
+];
+$ids = array_values(array_filter($ids));
 if (count($ids) < 2) {
     echo "  SKIP  needs at least two tickets in the database to exercise grouping.\n";
     echo "\n" . str_repeat('=', 60) . "\n";
@@ -294,7 +303,7 @@ try {
     $ticketBhits = [];
     foreach ($r['results'] as $g) if ($g['ticket_id'] === $ticketB) $ticketBhits = $g['hits'];
     $bodies = implode(' ', array_column($ticketBhits, 'snippet'));
-    ok("an exclusion removes the matching DOCUMENT", strpos($bodies, 'swells') === false);
+    ok("an exclusion removes the matching DOCUMENT", !str_contains($bodies, 'swells'));
     ok("...but the ticket survives on its other matching document", count($ticketBhits) >= 1);
 
     $r = searchCorpusQuery($conn, 'guidance -swelling', $all);

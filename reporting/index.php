@@ -129,7 +129,7 @@ $translationNamespaces = ['common', 'reporting'];
     </style>
     <!-- Mobile layer LAST, after this page's own <style> block, or a rule at
          equal specificity loses on document order (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="reporting" data-mobile-page="rep-landing">
     <?php include 'includes/header.php'; ?>
@@ -175,6 +175,7 @@ $translationNamespaces = ['common', 'reporting'];
                     <p><?php echo htmlspecialchars(t('reporting.landing.tickets_desc')); ?></p>
                 </a>
 
+                <?php if (moduleIsEnabled(connectToDatabase(), 'assets')): // GH #217: device data - not while Assets is switched off ?>
                 <a href="intune/" class="report-card">
                     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -184,9 +185,10 @@ $translationNamespaces = ['common', 'reporting'];
                     <h3><?php echo htmlspecialchars(t('reporting.landing.intune_title')); ?></h3>
                     <p><?php echo htmlspecialchars(t('reporting.landing.intune_desc')); ?></p>
                 </a>
+                <?php endif; ?>
             </div>
         </div>
     </div>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

@@ -22,14 +22,16 @@ if (!isset($_GET['code'])) {
 $authCode = $_GET['code'];
 $state = $_GET['state'] ?? '';
 
-// Parse state: format "google_mailbox_ID_randomhex"
-$mailboxId = null;
-if (preg_match('/^google_mailbox_(\d+)_/', $state, $matches)) {
-    $mailboxId = (int)$matches[1];
-}
+// 🔴 The state must be one api/tickets/mailbox_oauth_start.php issued to the
+// analyst signed in here, unused and in date - see auth/oauth_callback.php, which
+// had the same hole. The mailbox id comes from what was issued, never the URL.
+require_once __DIR__ . '/../includes/mailbox_oauth_state.php';
+session_start();
+$mailboxId = preg_match('/^google_mailbox_\d+_/', (string)$state) ? mailboxOAuthConsumeState((string)$state) : null;
+session_write_close();
 
 if (!$mailboxId) {
-    die('Missing mailbox ID in state parameter.');
+    die('Security check failed: this sign-in was not started from Tickets &rarr; Settings &rarr; Mailboxes in this browser, or it took too long. Please start it again from there.');
 }
 
 try {

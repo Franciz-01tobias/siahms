@@ -67,7 +67,7 @@ function lmsCtSettings(PDO $conn): array
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
             if ($r['setting_value'] !== null && $r['setting_value'] !== '') $s[$r['setting_key']] = (string)$r['setting_value'];
         }
-    } catch (Throwable $e) {}
+    } catch (Throwable) {}
     return $s;
 }
 
@@ -515,7 +515,7 @@ function lmsCtParseDrafts(string $content, string $skill, string $difficulty, st
 {
     require_once __DIR__ . '/../../api/cmdb/_ai_helpers.php';   // parseClaudeJson()
     try { $draft = parseClaudeJson(trim($content)); }
-    catch (Exception $e) { $draft = null; }   // a refusal or prose reply - said plainly below
+    catch (Exception) { $draft = null; }   // a refusal or prose reply - said plainly below
     if (!$draft || empty($draft['questions']) || !is_array($draft['questions'])) {
         throw new RuntimeException('The AI did not return any usable questions. Try again, or reword the skill.');
     }

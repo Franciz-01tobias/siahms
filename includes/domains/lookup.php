@@ -63,6 +63,9 @@ function domainHttpGet(string $url, string $accept = 'application/json', int $ti
         CURLOPT_USERAGENT      => DOMAIN_HTTP_UA,
     ]);
     if (function_exists('sslApplyCurl')) sslApplyCurl($ch);
+    // Tests set this to an array to see every address Domains calls - how
+    // tests/domains-dns-failures.php proves "this server only" calls nothing (GH #203).
+    if (isset($GLOBALS['DOMAIN_HTTP_TRACE']) && is_array($GLOBALS['DOMAIN_HTTP_TRACE'])) $GLOBALS['DOMAIN_HTTP_TRACE'][] = $url;
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
@@ -93,7 +96,7 @@ function domainRdapBootstrap(PDO $conn): array
             if ($k === 'domain_rdap_bootstrap') $cached = json_decode((string)$v, true);
             if ($k === 'domain_rdap_bootstrap_at') $cachedAt = (int)$v;
         }
-    } catch (Throwable $e) {}
+    } catch (Throwable) {}
 
     if (is_array($cached) && $cached && (time() - $cachedAt) < 7 * 86400) {
         return $map = $cached;
@@ -117,7 +120,7 @@ function domainRdapBootstrap(PDO $conn): array
                                     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_datetime = UTC_TIMESTAMP()")
                          ->execute([$k, $v]);
                 }
-            } catch (Throwable $e) {}
+            } catch (Throwable) {}
             return $map = $fresh;
         }
     }
@@ -372,7 +375,7 @@ function domainWhoisServer(PDO $conn, string $tld): ?string
     try {
         $v = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'domain_whois_servers'")->fetchColumn();
         $map = $v ? (json_decode((string)$v, true) ?: []) : [];
-    } catch (Throwable $e) {}
+    } catch (Throwable) {}
     if (isset($map[$tld])) return $mem[$tld] = ($map[$tld] ?: null);
 
     $reply = domainWhoisQuery('whois.iana.org', $tld);
@@ -383,7 +386,7 @@ function domainWhoisServer(PDO $conn, string $tld): ?string
         $conn->prepare("INSERT INTO system_settings (setting_key, setting_value, updated_datetime) VALUES ('domain_whois_servers', ?, UTC_TIMESTAMP())
                         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_datetime = UTC_TIMESTAMP()")
              ->execute([json_encode($map)]);
-    } catch (Throwable $e) {}
+    } catch (Throwable) {}
     return $mem[$tld] = $server;
 }
 
@@ -395,6 +398,8 @@ function domainWhoisServer(PDO $conn, string $tld): ?string
  */
 function domainWhoisQuery(string $server, string $query): ?string
 {
+    // The same trace as domainHttpGet() (GH #203): WHOIS is port 43, not HTTP, so it needs its own line.
+    if (isset($GLOBALS['DOMAIN_HTTP_TRACE']) && is_array($GLOBALS['DOMAIN_HTTP_TRACE'])) $GLOBALS['DOMAIN_HTTP_TRACE'][] = "whois://$server/$query";
     $f = @fsockopen($server, 43, $errno, $errstr, 8);
     if (!$f) return null;
     stream_set_timeout($f, 10);
@@ -510,5 +515,5 @@ function domainTransferLockNotApplicable(string $name): bool
 function domainTldPublishesAllStatuses(string $name): bool
 {
     $tld = strtolower(domainTld(trim($name)));
-    return $tld !== '' && strpos($name, '.') !== false && strlen($tld) > 2 && strpos($tld, 'xn--') !== 0;
+    return $tld !== '' && str_contains($name, '.') && strlen($tld) > 2 && !str_starts_with($tld, 'xn--');
 }

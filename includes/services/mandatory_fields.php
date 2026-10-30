@@ -172,7 +172,7 @@ final class MandatoryFieldsService
                 if ($hasTeams === null) {
                     try {
                         $hasTeams = (int) $conn->query("SELECT COUNT(*) FROM teams WHERE is_active = 1 OR is_active IS NULL")->fetchColumn() > 0;
-                    } catch (Throwable $e) {
+                    } catch (Throwable) {
                         $hasTeams = false;
                     }
                 }

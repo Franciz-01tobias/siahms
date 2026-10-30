@@ -379,7 +379,7 @@ class TaskRecurrence
             $v = $conn->prepare("SELECT title FROM task_recurrence_versions WHERE recurrence_id = ? AND title IS NOT NULL ORDER BY version_no DESC LIMIT 1");
             $v->execute([$recurrenceId]);
             return (string)($v->fetchColumn() ?: ('#' . $recurrenceId));
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return '#' . $recurrenceId;
         }
     }
@@ -622,7 +622,7 @@ class TaskRecurrence
                     AND (scheduled_date = ? OR (scheduled_date IS NULL AND due_date = ?)) LIMIT 1"
             );
             $s->execute([$recurrenceId, $due, $due]);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // Before Database Verification has added scheduled_date.
             $s = $conn->prepare("SELECT 1 FROM tasks WHERE recurrence_id = ? AND parent_task_id IS NULL AND due_date = ? LIMIT 1");
             $s->execute([$recurrenceId, $due]);
@@ -633,7 +633,7 @@ class TaskRecurrence
             $r = $conn->prepare("SELECT 1 FROM task_removed_records WHERE recurrence_id = ? AND (scheduled_date = ? OR (scheduled_date IS NULL AND due_date = ?)) LIMIT 1");
             $r->execute([$recurrenceId, $due, $due]);
             return (bool)$r->fetchColumn();
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;
         }
     }
@@ -714,7 +714,7 @@ class TaskRecurrence
             $conn->query("SELECT period_mode, due_offset_mode, due_offset_days FROM task_recurrences LIMIT 0");
             $conn->query("SELECT period_start, period_end, original_due_date FROM tasks LIMIT 0");
             return $has = true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $has = false;
         }
     }
@@ -1028,7 +1028,7 @@ class TaskRecurrence
                      SELECT document_id, 'task', ?, linked_by_id, UTC_TIMESTAMP()
                        FROM document_links WHERE parent_type = 'task' AND parent_id = ?"
                 )->execute([$newId, $sourceTaskId]);
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 // An install without the documents tables still gets its task.
             }
         }

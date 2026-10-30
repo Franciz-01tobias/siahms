@@ -59,8 +59,8 @@ check('CAN see the shared (tenant NULL) article', in_array($shared, $got, true))
 check('CANNOT see Dream Holidays\' own INTERNAL article', !in_array($intern, $got, true),
       'LEAK: internal article served to the public');
 $ctx = kbBuildContext($r['articles']);
-check('"hunter2" is not in the AI prompt', strpos($ctx, 'hunter2') === false);
-check('"s3cr3t" is not in the AI prompt', strpos($ctx, 's3cr3t') === false);
+check('"hunter2" is not in the AI prompt', !str_contains($ctx, 'hunter2'));
+check('"s3cr3t" is not in the AI prompt', !str_contains($ctx, 's3cr3t'));
 
 // --- The mirror image ---
 echo "\n=== anonymous visitor on the ED MOZLEY widget ===\n";

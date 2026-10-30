@@ -62,9 +62,17 @@ if (!defined('SSL_CA_BUNDLE')) {
     define('SSL_CA_BUNDLE', sslResolveCaBundle());
 }
 
-// Error reporting (set to 0 in production)
+// Error reporting. Errors are always LOGGED, and never shown to visitors - a
+// warning printed into a page names server paths, and before sign-in that is
+// shown to anybody. This file shipped with display_errors on. Reported privately,
+// October 2026. To see errors on a development box, add this to db_config.php
+// (outside the repository, so it is never committed):
+//     define('FREEITSM_DISPLAY_ERRORS', true);
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('log_errors', '1');
+// The command line (cron, tests, scripts) shows them: its output goes only to
+// whoever ran it, and a silent failing script is its own problem.
+ini_set('display_errors', (PHP_SAPI === 'cli' || (defined('FREEITSM_DISPLAY_ERRORS') && FREEITSM_DISPLAY_ERRORS)) ? '1' : '0');
 
 /**
  * BASE_URL — absolute URL path prefix for the app's deployment root.

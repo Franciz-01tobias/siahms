@@ -106,7 +106,7 @@ try {
         if ($text === '{' || (is_array($t) && in_array($t[0], [T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES], true))) $depth++;
         if ($text === '}') { $depth--; if ($depth === 0) break; }
     }
-    is_('the import function was found', strpos($src, 'function saveEmailToDatabase') === 0, true);
+    is_('the import function was found', str_starts_with($src, 'function saveEmailToDatabase'), true);
     eval($src);
 
     $conn->prepare("INSERT INTO emails (exchange_message_id, subject, from_address, ticket_id, is_initial, direction, mailbox_id, processed_datetime)

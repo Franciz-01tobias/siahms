@@ -45,7 +45,7 @@ function i18nGuardedInit(string $prefix): void
             $GLOBALS['i18nGuardedReady'] = class_exists('I18n');
             if (!headers_sent()) header('Vary: Accept-Language');
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $GLOBALS['i18nGuardedReady'] = false;   // English it is
     }
     // pageTitle() for the <title> (GH #173). Loaded on its own, outside the try:
@@ -69,7 +69,7 @@ function tr(string $key, string $english, array $params = []): string
             $out = I18n::t($full, $params);
             // I18n::t() returns the key itself when it cannot resolve one.
             if ($out !== '' && $out !== $full) return $out;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // fall through to English
         }
     }
@@ -106,7 +106,7 @@ function trLocale(): string
 {
     if ($GLOBALS['i18nGuardedReady']) {
         try { return htmlspecialchars(I18n::getLocale(), ENT_QUOTES, 'UTF-8'); }
-        catch (Throwable $e) { /* fall through */ }
+        catch (Throwable) { /* fall through */ }
     }
     return 'en';
 }

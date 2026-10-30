@@ -47,19 +47,19 @@ try {
 
     if (!empty($ticketNumber)) {
         $conditions[] = "t.ticket_number LIKE ?";
-        $params[] = '%' . $ticketNumber . '%';
+        $params[] = likeContainsPattern($ticketNumber);
     }
 
     if (!empty($email)) {
         $conditions[] = "(e.from_address LIKE ? OR e.to_recipients LIKE ?)";
-        $params[] = '%' . $email . '%';
-        $params[] = '%' . $email . '%';
+        $params[] = likeContainsPattern($email);
+        $params[] = likeContainsPattern($email);
     }
 
     if (!empty($subject)) {
         $conditions[] = "(t.subject LIKE ? OR e.subject LIKE ?)";
-        $params[] = '%' . $subject . '%';
-        $params[] = '%' . $subject . '%';
+        $params[] = likeContainsPattern($subject);
+        $params[] = likeContainsPattern($subject);
     }
 
     $whereClause = implode(' OR ', $conditions);

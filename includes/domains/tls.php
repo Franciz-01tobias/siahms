@@ -43,6 +43,8 @@ function domainTlsCertificate(string $host, int $port = 443, int $timeout = 8): 
         'SNI_enabled'       => true,
         'peer_name'         => $host,
     ]]);
+    // The same trace as domainHttpGet() (GH #203): a test sees every connection Domains makes.
+    if (isset($GLOBALS['DOMAIN_HTTP_TRACE']) && is_array($GLOBALS['DOMAIN_HTTP_TRACE'])) $GLOBALS['DOMAIN_HTTP_TRACE'][] = "tls://$host:$port";
     $s = @stream_socket_client("ssl://$host:$port", $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $ctx);
     if (!$s) {
         $out['error'] = $errstr !== '' ? $errstr : 'No HTTPS answer on port ' . $port;
@@ -100,7 +102,7 @@ function domainTlsNameMatches(string $host, array $sans): bool
         if (strncmp($n, '*.', 2) === 0) {
             $suffix = substr($n, 1);                 // ".example.com"
             $rest = substr($host, 0, -strlen($suffix));
-            if (substr($host, -strlen($suffix)) === $suffix && $rest !== '' && strpos($rest, '.') === false) return true;
+            if (substr($host, -strlen($suffix)) === $suffix && $rest !== '' && !str_contains($rest, '.')) return true;
         }
     }
     return false;

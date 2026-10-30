@@ -26,7 +26,7 @@ function domainCustomerReady(PDO $conn): bool
     static $ok = null;
     if ($ok !== null) return $ok;
     try { $conn->query("SELECT customer_user_id FROM domains LIMIT 0"); return $ok = true; }
-    catch (Throwable $e) { return $ok = false; }
+    catch (Throwable) { return $ok = false; }
 }
 
 /** Has Database Verification added the #162 columns (customer_supplier_id,
@@ -36,7 +36,7 @@ function domainPartiesReady(PDO $conn): bool
     static $ok = null;
     if ($ok !== null) return $ok;
     try { $conn->query("SELECT customer_supplier_id, customer_contact_id, tech_analyst_id FROM domains LIMIT 0"); return $ok = true; }
-    catch (Throwable $e) { return $ok = false; }
+    catch (Throwable) { return $ok = false; }
 }
 
 /**

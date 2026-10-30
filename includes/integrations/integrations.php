@@ -44,7 +44,7 @@ function integrationsSchemaReady(PDO $conn): bool
         $conn->query("SELECT 1 FROM integration_connections LIMIT 1");
         $conn->query("SELECT 1 FROM integration_links LIMIT 1");
         return $ready = true;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return $ready = false;
     }
 }
@@ -150,6 +150,40 @@ function integrationsAvailableProviders(): array
             'name'        => 'Apache Tika',
             'blurb'       => 'system.integrations.tika_blurb',
             'page'        => 'tika.php',   // its own page; see provider.php
+            'credential_fields' => [],
+        ],
+        // Zabbix — monitoring problems become incidents (contributed by Carl
+        // Steynvaard of Open Resilience, Oct 2026). A "monitoring" kind: nothing
+        // is sent TO it, it calls in; one token, so it reads as a state like Tika.
+        'zabbix' => [
+            'key'         => 'zabbix',
+            'kind'        => 'monitoring',
+            'name'        => 'Zabbix',
+            'blurb'       => 'system.integrations.zabbix_blurb',
+            'page'        => 'zabbix.php',   // its own page; see provider.php
+            'credential_fields' => [],
+        ],
+        // 3CX — the phone system (contributed by Carl Steynvaard of Open
+        // Resilience, Oct 2026). A "telephony" kind: like Zabbix it calls in,
+        // with one token, so it reads as a state rather than a count.
+        'threecx' => [
+            'key'         => 'threecx',
+            'kind'        => 'telephony',
+            'name'        => '3CX',
+            'blurb'       => 'system.integrations.threecx_blurb',
+            'page'        => 'threecx.php',   // its own page; see provider.php
+            'credential_fields' => [],
+        ],
+        // Microsoft Teams channel alerts (contributed by Carl Steynvaard of
+        // Open Resilience, Oct 2026). An "alerts" kind: it only posts, and each
+        // channel is one connection, so the card counts them. The Teams chat
+        // BOT is a messaging channel under Tickets → Settings → Messaging.
+        'msteams' => [
+            'key'         => 'msteams',
+            'kind'        => 'alerts',
+            'name'        => 'Microsoft Teams',
+            'blurb'       => 'system.integrations.msteams_blurb',
+            'page'        => 'msteams.php',   // its own page; see provider.php
             'credential_fields' => [],
         ],
         'slack' => [
@@ -308,7 +342,7 @@ function integrationsDecodeCredentials($stored): array
     if ($stored === null || $stored === '') return [];
     try {
         $plain = decryptValue($stored);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
     $decoded = json_decode((string) $plain, true);
@@ -328,7 +362,7 @@ function integrationsLoadConnection(PDO $conn, $connectionId): ?array
         $stmt = $conn->prepare("SELECT * FROM integration_connections WHERE id = ?");
         $stmt->execute([(int) $connectionId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
     if (!$row) return null;
@@ -337,7 +371,7 @@ function integrationsLoadConnection(PDO $conn, $connectionId): ?array
     // decryptValue returns the value unchanged without the ENC: prefix, so
     // pre-encryption rows still work (migration-safe).
     if (!empty($row['webhook_secret'])) {
-        try { $row['webhook_secret'] = decryptValue($row['webhook_secret']); } catch (Exception $e) { /* leave */ }
+        try { $row['webhook_secret'] = decryptValue($row['webhook_secret']); } catch (Exception) { /* leave */ }
     }
     $row['is_active'] = (bool) ($row['is_active'] ?? 1);
     return $row;
@@ -375,7 +409,7 @@ function integrationsListConnections(PDO $conn, bool $activeOnly = false): array
     $sql .= " ORDER BY name";
     try {
         $rows = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
     foreach ($rows as &$r) {
@@ -461,7 +495,7 @@ function integrationsEntityTenantId(PDO $conn, string $entityType, int $entityId
         $stmt = $conn->prepare("SELECT tenant_id FROM `$table` WHERE id = ?");
         $stmt->execute([$entityId]);
         $v = $stmt->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
     return ($v === false || $v === null) ? null : (int) $v;
@@ -486,7 +520,7 @@ function integrationsLinksFor(PDO $conn, string $entityType, int $entityId): arr
         );
         $stmt->execute([$entityType, $entityId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
 }
@@ -508,7 +542,7 @@ function integrationsAlreadyLinked(PDO $conn, int $connectionId, string $entityT
         );
         $stmt->execute([$connectionId, $entityType, $entityId]);
         return (bool) $stmt->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return false;
     }
 }
@@ -678,7 +712,7 @@ function integrationsEscalate(PDO $conn, array $opts): array
                 try {
                     $conn->prepare("UPDATE integration_links SET last_error = ? WHERE id = ?")
                          ->execute([mb_substr($msg, 0, 500), $linkRow['id']]);
-                } catch (Exception $e) { /* cosmetic */ }
+                } catch (Exception) { /* cosmetic */ }
             }
         }
     }
@@ -973,7 +1007,7 @@ function integrationsMapSchemaReady(PDO $conn): bool
     try {
         $conn->query("SELECT 1 FROM integration_field_maps LIMIT 1");
         return $ready = true;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return $ready = false;
     }
 }
@@ -998,7 +1032,7 @@ function integrationsLoadMaps(PDO $conn, int $connectionId): array
             $out[$r['map_type']][(string)$r['local_key']] = (string)$r['external_key'];
         }
         return $out;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
 }
@@ -1149,7 +1183,7 @@ function integrationsEntityRouting(PDO $conn, string $entityType, int $entityId)
         $stmt = $conn->prepare("SELECT tenant_id, department_id, ticket_type_id, priority_id FROM tickets WHERE id = ?");
         $stmt->execute([$entityId]);
         $r = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return $empty;
     }
     if (!$r) return $empty;
@@ -1176,7 +1210,7 @@ function integrationsCommentSchemaReady(PDO $conn): bool
     try {
         $conn->query("SELECT 1 FROM integration_comment_map LIMIT 1");
         return $ready = true;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return $ready = false;
     }
 }
@@ -1267,7 +1301,7 @@ function integrationsKnownCommentIds(PDO $conn, int $linkId): array
         $stmt = $conn->prepare("SELECT external_comment_id FROM integration_comment_map WHERE link_id = ?");
         $stmt->execute([$linkId]);
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
 }
@@ -1292,7 +1326,7 @@ function integrationsRecordOutboundComment(PDO $conn, int $linkId, string $exter
                 (link_id, direction, external_comment_id, local_note_id, created_datetime)
              VALUES (?, 'out', ?, ?, UTC_TIMESTAMP())"
         )->execute([$linkId, $externalCommentId, $localNoteId ?: null]);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Duplicate key or a missing table — neither is worth failing a send for.
     }
 }
@@ -1362,7 +1396,7 @@ function integrationsApplyCommentEvent(PDO $conn, array $connection, array $link
             (string)($event['author_identity'] ?? '') ?: null,
             (string)($event['author_name'] ?? '') ?: null,
         ]);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Lost the race (or the row was already there) — the other writer owns it.
         return 'already_imported';
     }

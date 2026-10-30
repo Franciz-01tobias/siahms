@@ -39,6 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') ctpFail('method', 405);
 try {
     $in   = json_decode(file_get_contents('php://input'), true) ?: [];
     $conn = connectToDatabase();
+    // GH #217: a test link answers nothing while the LMS is switched off.
+    if (!moduleIsEnabled($conn, 'lms')) ctpFail('module_disabled', 403);
     $s    = lmsCtFindSitting($conn, (string)($in['t'] ?? ''));
     // One answer for "no such link" and "cancelled": which links exist is not
     // something a guesser gets to learn.

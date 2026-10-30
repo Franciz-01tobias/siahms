@@ -20,7 +20,7 @@ return [
     'label'  => 'LMS',
 
     'umbrella' => [
-        'cap'       => Cap::LMS_MANAGE,
+        'cap'       => capKey(Cap::LMS_MANAGE),
         'grant'     => 'Manage courses, learning groups and assignments, and view everyone\'s progress',
         'sensitive' => false,
     ],
@@ -31,7 +31,7 @@ return [
             // capability as the rest of LMS management — a learner has no business here,
             // and until now could reach this page simply by typing its URL.
             'id'        => 'ai',
-            'cap'       => Cap::LMS_MANAGE,
+            'cap'       => capKey(Cap::LMS_MANAGE),
             'label_key' => 'lms.settings.tab_ai',
             'grant'     => 'Manage courses, learning groups and assignments, and view everyone\'s progress',
         ],
@@ -46,7 +46,7 @@ return [
             // (api/lms/reminder_settings.php, behind this same capability), which
             // is how the AI panel on this page works too.
             'id'        => 'reminders',
-            'cap'       => Cap::LMS_MANAGE,
+            'cap'       => capKey(Cap::LMS_MANAGE),
             'label_key' => 'lms.settings.tab_reminders',
             'grant'     => 'Manage courses, learning groups and assignments, and view everyone\'s progress',
         ],
@@ -55,7 +55,7 @@ return [
             // behind one grant. Sensitive because it reads candidates' details and
             // scores. Own endpoint (api/lms/tests.php), so no 'setting_keys'.
             'id'        => 'tests',
-            'cap'       => Cap::LMS_TESTS,
+            'cap'       => capKey(Cap::LMS_TESTS),
             'label_key' => 'lms.settings.tab_tests',
             'grant'     => 'Build competency tests, send them to candidates and read their results',
             'sensitive' => true,

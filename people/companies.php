@@ -90,6 +90,6 @@ $path_prefix = '../';
         });
     })();
     </script>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=83"></script>
 </body>
 </html>

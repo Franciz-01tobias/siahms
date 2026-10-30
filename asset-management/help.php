@@ -126,8 +126,18 @@ $translationNamespaces = ['common', 'asset-management'];
             <a href="#leases" class="help-nav-link" data-section="leases">
                 <span class="help-nav-num">19</span> Leases
             </a>
+            <a href="#cmdb-link" class="help-nav-link" data-section="cmdb-link">
+                <span class="help-nav-num">20</span> Configuration item
+            </a>
+            <a href="#hyperv" class="help-nav-link" data-section="hyperv">
+                <span class="help-nav-num">21</span> Hyper-V
+            </a>
+            <a href="#retired" class="help-nav-link" data-section="retired">
+                <span class="help-nav-num">22</span>
+                <?php echo htmlspecialchars(t('asset-management.help.retired.nav')); ?>
+            </a>
             <a href="#tips" class="help-nav-link" data-section="tips">
-                <span class="help-nav-num">20</span>
+                <span class="help-nav-num">23</span>
                 <?php echo htmlspecialchars(t('asset-management.help.nav_tips')); ?>
             </a>
         </div>
@@ -210,6 +220,26 @@ $translationNamespaces = ['common', 'asset-management'];
                         <div><strong>Software tab</strong> &mdash; All installed applications and system components with publisher and version. Toggle between Applications, Components, and All.</div>
                     </div>
                     <p class="help-note">Type and Status are editable inline &mdash; click the dropdown in the info grid to change them. Changes are recorded in the history.</p>
+                    <?php /* GH #200: per-type layouts. */ ?>
+                    <h4 id="asset-layouts"><?php echo htmlspecialchars(t('asset-management.help.layout_heading')); ?></h4>
+                    <p><?php echo t('asset-management.help.layout_body'); ?></p>
+                    <p class="help-note"><?php echo t('asset-management.help.layout_hidden'); ?></p>
+                    <?php /* GH #200 Part B: inventory freshness. */ ?>
+                    <h4 id="inventory-freshness"><?php echo htmlspecialchars(t('asset-management.help.freshness_heading')); ?></h4>
+                    <p><?php echo t('asset-management.help.freshness_body'); ?></p>
+                    <p class="help-note"><?php echo t('asset-management.help.freshness_agent'); ?></p>
+                    <?php /* GH #200 part C: connected assets. */ ?>
+                    <h4 id="connected-assets"><?php echo htmlspecialchars(t('asset-management.help.connected_heading')); ?></h4>
+                    <p><?php echo t('asset-management.help.connected_body'); ?></p>
+                    <p class="help-note"><?php echo t('asset-management.help.connected_rules'); ?></p>
+                    <?php /* GH #200 part D: review, merge, protected values, names. */ ?>
+                    <h4 id="asset-review"><?php echo htmlspecialchars(t('asset-management.help.review_heading')); ?></h4>
+                    <p><?php echo t('asset-management.help.review_body'); ?></p>
+                    <p class="help-note"><?php echo t('asset-management.help.merge_body'); ?></p>
+                    <h4 id="protected-values"><?php echo htmlspecialchars(t('asset-management.help.protect_heading')); ?></h4>
+                    <p><?php echo t('asset-management.help.protect_body'); ?></p>
+                    <h4 id="name-mappings"><?php echo htmlspecialchars(t('asset-management.help.names_heading')); ?></h4>
+                    <p><?php echo t('asset-management.help.names_body'); ?></p>
                 </div>
 
                 <!-- Section 3: Table View -->
@@ -515,7 +545,13 @@ $translationNamespaces = ['common', 'asset-management'];
                         <div class="help-step">
                             <div class="help-step-num">3</div>
                             <div>
-                                <strong>Browse the results</strong> &mdash; the Servers tab shows summary cards (total VMs, vCPU, memory, storage) and a searchable, sortable table of every VM. Click any row to see the full detail &mdash; disks, NICs, guest OS, VMware Tools, and the raw JSON from vCenter.
+                                <strong>Browse the results</strong> &mdash; the Servers tab shows summary cards (total VMs, vCPU, memory, storage, hosts, clusters) and a searchable, sortable table of every VM. Click any row to see the full detail &mdash; disks, NICs, guest OS, VMware Tools, and the raw JSON from vCenter.
+                            </div>
+                        </div>
+                        <div class="help-step">
+                            <div class="help-step-num">4</div>
+                            <div>
+                                <strong>Hosts and clusters</strong> &mdash; click the <em>Hosts</em> or <em>Clusters</em> card to see every source's clusters and the hosts in them, with the VMs on each. Click a host to list only its VMs (the <em>Host:</em> chip by the filters clears it). Hosts come from Hyper-V, Proxmox nodes and the ESXi hosts named on vCenter VMs. Cloud Director never shows its hosts to a tenant, so only its virtual data centres are listed, and they are not counted.
                             </div>
                         </div>
                     </div>
@@ -779,9 +815,81 @@ $translationNamespaces = ['common', 'asset-management'];
                     <p class="help-note">On a multi-company install a lease belongs to one company, and only that company's assets, contracts and cost centres can go on it. An asset can be out on one lease at a time, and one that is out on a lease cannot move to another company until it is returned.</p>
                 </div>
 
-<div class="help-section" id="tips">
+                <!-- Section 20: the configuration item this asset is (GH #201) -->
+                <div class="help-section" id="cmdb-link">
                     <div class="help-section-header">
                         <span class="help-section-num">20</span>
+                        <h3>Configuration item</h3>
+                    </div>
+                    <p>A server is often two records: the <strong>asset</strong> says what the box is, and a <strong>configuration item</strong> in the CMDB says what it does - what runs on it and what breaks if it fails. The <strong>Configuration item</strong> card on Key info links the two: <em>these are the same piece of equipment</em>.</p>
+                    <div class="help-steps">
+                        <div class="help-step">
+                            <div class="help-step-num">1</div>
+                            <div><strong>Link</strong> searches the CMDB for configuration items in the asset's company. Pick one and the card shows its name and class, with a link into the CMDB. The configuration item shows this asset the same way, with its details read live from here.</div>
+                        </div>
+                        <div class="help-step">
+                            <div class="help-step-num">2</div>
+                            <div><strong>If this failed</strong> - the card repeats what the configuration item's own impact analysis says: how many things would be affected, with <strong>Show</strong> to see them in the CMDB and <strong>Open as diagram</strong> for Network Mapper users.</div>
+                        </div>
+                        <div class="help-step">
+                            <div class="help-step-num">3</div>
+                            <div>One asset has one configuration item, and one configuration item has one asset. <strong>Replace</strong> swaps it - if someone changed the link while you were looking, you are asked to look again. <strong>Unlink</strong> ends it; neither record is deleted. <strong>Link history</strong> keeps every link, with who and when.</div>
+                        </div>
+                    </div>
+                    <div class="help-cards">
+                        <div class="help-card row"><div><strong>Merging two assets</strong><p>The link moves to the asset you keep. If both were linked, to different configuration items, the merge window shows both and asks which link to keep; <strong>Merge</strong> stays greyed out until you tick that you understand the other one ends. Neither configuration item is changed.</p></div></div>
+                        <div class="help-card row"><div><strong>Create linked CI</strong><p>Map an asset type to a CMDB class in <strong>Settings &rarr; Asset types</strong> (<em>CMDB class</em>) and its unlinked assets offer <strong>Create linked CI</strong>: it asks for a name and anything the class requires, and makes the configuration item and the link together. Items of that class that already have the asset's name are shown first, with <em>Link this one instead</em> - a name is never treated as proof.</p></div></div>
+                        <div class="help-card row"><div><strong>Not on every type</strong><p>A monitor or a mouse will never be a configuration item. Untick <strong>Configuration item</strong> in the type's layout (<strong>Settings &rarr; Asset types &rarr; Layout</strong>) to hide the card on that type.</p></div></div>
+                        <div class="help-card row"><div><strong>Who can link</strong><p>You need to be able to change both Assets and the CMDB. Someone without the CMDB sees only that the asset is linked to a <em>restricted</em> configuration item - no name. Existing <em>Link to something else</em> custom fields that point at configuration items are separate and stay as they are.</p></div></div>
+                    </div>
+                </div>
+
+                <!-- Section 21: Hyper-V and Failover Clusters (GH #199) -->
+                <div class="help-section" id="hyperv">
+                    <div class="help-section-header">
+                        <span class="help-section-num">21</span>
+                        <h3>Hyper-V</h3>
+                    </div>
+                    <p>Your Hyper-V hosts, Failover Clusters and virtual machines can appear in <strong>Servers</strong>. A read-only PowerShell collector, <code>scripts/Invoke-HyperVInventory.ps1</code>, runs as a scheduled task on one of your Windows servers and <em>sends</em> what it reads - FreeITSM never connects to your hosts.</p>
+                    <div class="help-steps">
+                        <div class="help-step">
+                            <div class="help-step-num">1</div>
+                            <div><strong>Settings &rarr; Hyper-V &rarr; Add</strong> a connection: its name, its company, and how often the collector will report. Saving shows the collector's <strong>key once</strong> - copy it - and the command to schedule.</div>
+                        </div>
+                        <div class="help-step">
+                            <div class="help-step-num">2</div>
+                            <div>On the Windows server, run the command with <code>-TestAccess</code> first: it shows which reads the account is allowed and sends nothing. <code>-OutputFile</code> writes a report without sending it.</div>
+                        </div>
+                        <div class="help-step">
+                            <div class="help-step-num">3</div>
+                            <div>Schedule it. <strong>Servers</strong> then shows each connection as <em>On time</em>, <em>Late</em> or <em>Overdue</em>, the VMs with their host and cluster, and - under <strong>Hosts and clusters</strong> (the <em>Hosts</em> card) - every node, its state and how it is identified.</div>
+                        </div>
+                    </div>
+                    <div class="help-cards">
+                        <div class="help-card row"><div><strong>Nothing disappears on a bad read</strong><p>A host the collector could not read keeps its VMs, marked <em>Not confirmed since</em>. A VM missing from a complete report is <em>Not seen since</em>, never deleted - unless you set <em>Remove VMs not seen for</em> on the connection.</p></div></div>
+                        <div class="help-card row"><div><strong>Identity changes</strong><p>A renamed, migrated or failed-over VM stays the same record. One imported as a copy comes back with a new identity: FreeITSM asks you on the connection whether it is the <em>same machine</em> - it never decides by name.</p></div></div>
+                        <div class="help-card row"><div><strong>Background jobs</strong><p>Each connection appears on System &rarr; Background jobs as <em>Hyper-V reports</em>, overdue when the collector stops.</p></div></div>
+                        <div class="help-card row"><div><strong>Into the CMDB</strong><p><strong>CMDB</strong> on a connection maps the estate onto your own CMDB classes and relationship types, shows what it would do, and - once switched on - keeps CIs and the relationships it made in step after every report. A same-name CI is never bound without you; owners, properties and relationships people drew are never touched.</p></div></div>
+                    </div>
+                </div>
+
+<div class="help-section" id="retired">
+                    <div class="help-section-header">
+                        <span class="help-section-num">22</span>
+                        <h3><?php echo htmlspecialchars(t('asset-management.help.retired.heading')); ?></h3>
+                    </div>
+                    <p><?php echo t('asset-management.help.retired.intro'); ?></p>
+                    <div class="help-list">
+                        <div><?php echo t('asset-management.help.retired.p1'); ?></div>
+                        <div><?php echo t('asset-management.help.retired.p2'); ?></div>
+                        <div><?php echo t('asset-management.help.retired.p3'); ?></div>
+                        <div><?php echo t('asset-management.help.retired.p4'); ?></div>
+                    </div>
+                </div>
+
+<div class="help-section" id="tips">
+                    <div class="help-section-header">
+                        <span class="help-section-num">23</span>
                         <h3><?php echo htmlspecialchars(t('asset-management.help.nav_tips')); ?></h3>
                     </div>
                     <div class="help-cards">

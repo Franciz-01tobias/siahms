@@ -7,6 +7,9 @@ session_start();
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -24,8 +27,9 @@ if (empty($currentPassword) || empty($newPassword) || empty($confirmPassword)) {
     exit;
 }
 
-if (strlen($newPassword) < 8) {
-    echo json_encode(['success' => false, 'error' => 'New password must be at least 8 characters']);
+require_once __DIR__ . '/../../includes/password_policy.php';   // the one rule for a new password
+if ($why = passwordPolicyError($newPassword)) {
+    echo json_encode(['success' => false, 'error' => $why]);
     exit;
 }
 
@@ -46,6 +50,12 @@ try {
 
     if (!$analyst || !password_verify($currentPassword, $analyst['password_hash'])) {
         echo json_encode(['success' => false, 'error' => 'Current password is incorrect']);
+        exit;
+    }
+    // Only now, with the current password proved: checked any earlier, "must be
+    // different" would tell someone holding the session whether a guess was it.
+    if ($why = passwordPolicyError($newPassword, $analyst['password_hash'])) {
+        echo json_encode(['success' => false, 'error' => $why]);
         exit;
     }
 

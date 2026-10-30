@@ -29,12 +29,12 @@ $translationNamespaces = ['common', 'tasks'];
     <title><?php echo htmlspecialchars(pageTitle('tasks', t('tasks.nav.timeline'))); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=53">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=56">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>"<?php echo $tasksReadOnly ? ' class="module-read-only"' : ''; ?>>
     <?php include '../includes/header.php'; ?>
@@ -131,10 +131,10 @@ $translationNamespaces = ['common', 'tasks'];
 
     <script>window.API_BASE = '../../api/tasks/';</script>
     <script src="../../assets/js/tasks-priority.js?v=1"></script>
-    <script src="../../assets/js/tasks-ctx-menu.js?v=4"></script>
-    <script src="../../assets/js/safe-html.js?v=1"></script>
-    <script src="../../assets/js/tasks-quick-panel.js?v=2"></script>
-    <script src="../../assets/js/tasks-timeline.js?v=12"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/tasks-ctx-menu.js?v=5"></script>
+    <script src="../../assets/js/safe-html.js?v=4"></script>
+    <script src="../../assets/js/tasks-quick-panel.js?v=5"></script>
+    <script src="../../assets/js/tasks-timeline.js?v=13"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

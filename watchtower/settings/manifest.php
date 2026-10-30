@@ -28,20 +28,20 @@ return [
     'label'  => 'Watchtower',
 
     'umbrella' => [
-        'cap'   => Cap::WATCHTOWER_MANAGE,
+        'cap'   => capKey(Cap::WATCHTOWER_MANAGE),
         'grant' => 'Manage everything in Watchtower settings',
     ],
 
     'tabs' => [
         [
             'id'        => 'cards',
-            'cap'       => Cap::WATCHTOWER_CARDS,
+            'cap'       => capKey(Cap::WATCHTOWER_CARDS),
             'label_key' => 'watchtower.settings.tab_cards',
             'grant'     => 'Choose which cards appear on Watchtower',
         ],
         [
             'id'        => 'counts',
-            'cap'       => Cap::WATCHTOWER_COUNTS,
+            'cap'       => capKey(Cap::WATCHTOWER_COUNTS),
             'label_key' => 'watchtower.settings.tab_counts',
             'grant'     => 'Choose which statuses and priorities each Watchtower count includes',
         ],

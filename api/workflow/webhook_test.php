@@ -74,6 +74,7 @@ $sample = [
         'assigned_analyst_id' => null,
         'owner_id'            => null,
         'origin_id'           => null,
+        'assigned_team_id'    => null,   // ticket.created carries it (ticketDispatchCreated)
         'created_by'          => null,
         'requester_email'     => 'jane@example.com',
     ],
@@ -84,7 +85,19 @@ try {
     // whatever channel is being set up (discussion #62).
     require_once __DIR__ . '/../../includes/ticket_sensitivity.php';
     $notConf = ticketSensitivityReady($conn) ? " AND sensitivity <> 'confidential'" : '';
-    $realId = (int)($conn->query("SELECT id FROM tickets WHERE deleted_datetime IS NULL$notConf ORDER BY id DESC LIMIT 1")->fetchColumn() ?: 0);
+    // GH #209. The newest ticket the analyst could open anyway - in the
+    // workflow's company when the editor names one they can see, otherwise the
+    // company they have switched to. It was the newest on the whole install, so
+    // a test could send another company's ticket to the endpoint being set up.
+    require_once __DIR__ . '/../../includes/workflow_tenancy.php';
+    $aid = (int)$_SESSION['analyst_id'];
+    $forCompany = (int)($in['company_id'] ?? 0);
+    [$tSql, $tArgs] = ($forCompany > 0 && analystCanAccessTenant($conn, $aid, $forCompany))
+        ? tenantScopeSqlFor($conn, $forCompany, 'tenant_id')
+        : activeTenantFilter($conn, $aid, '');
+    $pick = $conn->prepare("SELECT id FROM tickets WHERE deleted_datetime IS NULL$notConf$tSql ORDER BY id DESC LIMIT 1");
+    $pick->execute($tArgs);
+    $realId = (int)($pick->fetchColumn() ?: 0);
     if ($realId) {
         $stmt = $conn->prepare(apiTicketSelect() . ' WHERE t.id = ? LIMIT 1');
         $stmt->execute([$realId]);
@@ -130,8 +143,11 @@ try {
     exit;
 }
 
-// 2) Send it synchronously over the identical transport used by the worker.
-$res = webhookHttpSend($req['url'], $req['headers'], $req['body'], 'POST');
+// 2) Send it synchronously over the identical transport used by the worker, with
+//    the same timeout - capped at 25s, as this one is a web request inside PHP's
+//    usual 30s limit.
+$res = webhookHttpSend($req['url'], $req['headers'], $req['body'], 'POST',
+    min(25, webhookDeliverySettings($conn)['timeout']));
 $delivered = ($res['body'] !== false && $res['error'] === '' && $res['status'] >= 200 && $res['status'] < 300);
 
 echo json_encode([

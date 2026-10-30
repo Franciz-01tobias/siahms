@@ -93,7 +93,7 @@ function mimeLeaves(string $raw): array {
     [$head, $body] = explode("\r\n\r\n", $raw, 2) + [1 => ''];
     $headers = [];
     foreach (preg_split('/\r\n(?![ \t])/', $head) as $h) {
-        if (strpos($h, ':') === false) continue;
+        if (!str_contains($h, ':')) continue;
         [$k, $v] = explode(':', $h, 2);
         $headers[strtolower(trim($k))] = trim($v);
     }
@@ -152,11 +152,11 @@ check($types === ['multipart/mixed', 'multipart/related', 'text/html', 'image/pn
     'attachment + inline image: mixed { related { html, image }, file } - got ' . implode(', ', $types));
 check(stripos($msg, "\r\nBcc:") === false, 'a content type carrying a line break cannot add a Bcc header');
 check($l[4][1] === $pdf, 'the attachment bytes come back identical');
-check(strpos($l[4][0]['content-disposition'], "filename*=UTF-8''R%C3%A9sum%C3%A9%20final.pdf") !== false,
+check(str_contains($l[4][0]['content-disposition'], "filename*=UTF-8''R%C3%A9sum%C3%A9%20final.pdf"),
     'a UTF-8 file name is carried in full (RFC 2231), quotes removed');
 check(($l[3][0]['content-id'] ?? '') === '<pic1>' && $l[3][1] === $png, 'the inline image carries its Content-ID and bytes');
-check(strpos($msg, "\r\nCc: c@example.test") !== false, 'the Cc header is written');
-check(strpos($msg, 'Subject: =?UTF-8?B?') !== false, 'a non-ASCII subject is encoded');
+check(str_contains($msg, "\r\nCc: c@example.test"), 'the Cc header is written');
+check(str_contains($msg, 'Subject: =?UTF-8?B?'), 'a non-ASCII subject is encoded');
 check(!preg_match('/^(Date|Message-ID):/mi', $msg), 'without envelope: no Date / Message-ID (the Gmail API adds its own)');
 $env = mimeBuildMessage(['from' => 'desk@example.test', 'to' => ['b@example.test'], 'subject' => 'Hi', 'html' => '<p>x</p>', 'envelope' => true]);
 check(preg_match('/^Date: [A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} \+0000\r$/m', $env)
@@ -321,8 +321,8 @@ if ($row) {
               ->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'))->format('d M Y H:i');
     $raw  = (new DateTime($row['received_datetime'], new DateTimeZone('UTC')))->format('d M Y H:i');
     check($want !== $raw, "positive control: UTC+7 changes the time ($raw UTC = $want local)");
-    check(strpos($body, 'On ' . $want . ',') !== false, "the thread says \"On $want\" (converted)");
-    check(strpos($body, 'On ' . $raw . ',') === false, "and not \"On $raw\" (the stored UTC digits)");
+    check(str_contains($body, 'On ' . $want . ','), "the thread says \"On $want\" (converted)");
+    check(!str_contains($body, 'On ' . $raw . ','), "and not \"On $raw\" (the stored UTC digits)");
 } else {
     echo "  SKIP  no email received between 01:00 and 15:59 UTC to test with\n";
 }

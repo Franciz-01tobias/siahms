@@ -37,7 +37,7 @@ function webhookEncryptionAvailable(): bool {
     static $ok = null;
     if ($ok === null) {
         try { getEncryptionKey(); $ok = true; }
-        catch (Exception $e) { $ok = false; }
+        catch (Exception) { $ok = false; }
     }
     return $ok;
 }
@@ -135,7 +135,7 @@ function webhookPayloadRetentionDays(PDO $conn): int {
         $v = $stmt->fetchColumn();
         if ($v === false || $v === null || $v === '') return WEBHOOK_RETENTION_DEFAULT;
         return (int)$v;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return WEBHOOK_RETENTION_DEFAULT;
     }
 }
@@ -162,6 +162,110 @@ function webhookPurgePayloads(PDO $conn): int {
     );
     $stmt->execute([$days]);
     return $stmt->rowCount();
+}
+
+// -----------------------------------------------------------------------------
+//  Delivery settings (System > Webhooks)
+//
+//  How many times a delivery is tried, how long each try waits for the endpoint,
+//  and what happens to a try the worker never finished. Each is a short list the
+//  page offers - the save endpoint refuses anything else - and each default is
+//  what FreeITSM did before the setting existed.
+//
+//  An INTERRUPTED delivery is one still marked 'delivering' long after any try
+//  could have finished: the worker was killed mid-send (time limit, restart,
+//  crash). Nobody knows whether the endpoint got it. Before these settings such
+//  a row stayed 'delivering' for ever - never retried, never replayable.
+// -----------------------------------------------------------------------------
+
+const WEBHOOK_ATTEMPTS_SETTING    = 'webhook_max_attempts';
+const WEBHOOK_ATTEMPTS_DEFAULT    = 6;
+const WEBHOOK_ATTEMPTS_ALLOWED    = [1, 3, 6, 10];
+const WEBHOOK_TIMEOUT_SETTING     = 'webhook_timeout_seconds';
+const WEBHOOK_TIMEOUT_DEFAULT     = 15;
+const WEBHOOK_TIMEOUT_ALLOWED     = [5, 10, 15, 30, 60];
+const WEBHOOK_INTERRUPTED_SETTING = 'webhook_interrupted_action';
+const WEBHOOK_INTERRUPTED_RETRY   = 'retry';   // count it as a failed try and retry on the normal schedule
+const WEBHOOK_INTERRUPTED_STOP    = 'stop';    // give up on it; an admin decides with Replay
+const WEBHOOK_INTERRUPTED_DEFAULT = WEBHOOK_INTERRUPTED_RETRY;
+// Far longer than the longest try (60s timeout + 5s connect) and the worker's own
+// 120s time limit, so a row this old in 'delivering' cannot still be in flight.
+const WEBHOOK_INTERRUPTED_AFTER_SECONDS = 600;
+
+/** @return array{max_attempts:int, timeout:int, interrupted:string} */
+function webhookDeliverySettings(PDO $conn): array {
+    $cfg = [
+        'max_attempts' => WEBHOOK_ATTEMPTS_DEFAULT,
+        'timeout'      => WEBHOOK_TIMEOUT_DEFAULT,
+        'interrupted'  => WEBHOOK_INTERRUPTED_DEFAULT,
+    ];
+    try {
+        $stmt = $conn->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?, ?, ?)");
+        $stmt->execute([WEBHOOK_ATTEMPTS_SETTING, WEBHOOK_TIMEOUT_SETTING, WEBHOOK_INTERRUPTED_SETTING]);
+        $rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    } catch (Exception) {
+        return $cfg;
+    }
+    // A value outside the offered list (hand-edited, or from a later version) falls
+    // back to the default rather than being trusted.
+    $n = (int)($rows[WEBHOOK_ATTEMPTS_SETTING] ?? 0);
+    if (in_array($n, WEBHOOK_ATTEMPTS_ALLOWED, true)) $cfg['max_attempts'] = $n;
+    $n = (int)($rows[WEBHOOK_TIMEOUT_SETTING] ?? 0);
+    if (in_array($n, WEBHOOK_TIMEOUT_ALLOWED, true)) $cfg['timeout'] = $n;
+    $v = (string)($rows[WEBHOOK_INTERRUPTED_SETTING] ?? '');
+    if (in_array($v, [WEBHOOK_INTERRUPTED_RETRY, WEBHOOK_INTERRUPTED_STOP], true)) $cfg['interrupted'] = $v;
+    return $cfg;
+}
+
+/**
+ * Settle every delivery an earlier worker run claimed and never finished.
+ * Returns how many were settled.
+ *
+ * 'retry' records the interrupted try as a failed attempt, so it is retried on
+ * the normal backoff and still goes dead at max_attempts - the endpoint may get
+ * it twice, which the X-FreeITSM-Delivery header lets a receiver detect. 'stop'
+ * marks it dead at once, where Replay can send it again by hand.
+ *
+ * @param string $action  WEBHOOK_INTERRUPTED_RETRY or WEBHOOK_INTERRUPTED_STOP
+ */
+function webhookRecoverInterrupted(PDO $conn, string $action): int {
+    $stuck = $conn->prepare(
+        "SELECT id, attempts, max_attempts FROM webhook_deliveries
+          WHERE status = 'delivering' AND updated_datetime < (UTC_TIMESTAMP() - INTERVAL ? SECOND)"
+    );
+    $stuck->execute([WEBHOOK_INTERRUPTED_AFTER_SECONDS]);
+
+    $error = 'Interrupted: the delivery worker stopped before the endpoint answered, so it may or may not have arrived.';
+    // WHERE status = 'delivering' again, so a row another worker settled in the
+    // meantime is left alone.
+    $retry = $conn->prepare(
+        "UPDATE webhook_deliveries
+            SET status='failed', attempts=?, last_status_code=NULL, last_error=?,
+                next_attempt_at = UTC_TIMESTAMP() + INTERVAL ? SECOND, updated_datetime=UTC_TIMESTAMP()
+          WHERE id=? AND status='delivering'"
+    );
+    $dead = $conn->prepare(
+        "UPDATE webhook_deliveries
+            SET status='dead', attempts=?, last_status_code=NULL, last_error=?,
+                next_attempt_at=NULL, updated_datetime=UTC_TIMESTAMP()
+          WHERE id=? AND status='delivering'"
+    );
+
+    $settled = 0;
+    foreach ($stuck->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $attemptNo = (int)$r['attempts'] + 1;
+        if ($action === WEBHOOK_INTERRUPTED_RETRY && $attemptNo < (int)$r['max_attempts']) {
+            $retry->execute([$attemptNo, $error, webhookBackoffSeconds($attemptNo), $r['id']]);
+            $settled += $retry->rowCount();
+        } else {
+            $dead->execute([$attemptNo, $error, $r['id']]);
+            if ($dead->rowCount() > 0) {
+                $settled++;
+                webhookScrubIfNoRetention($conn, (int)$r['id']);
+            }
+        }
+    }
+    return $settled;
 }
 
 /**
@@ -258,7 +362,7 @@ function webhookDiagnoseError(?string $err): ?array {
  * preset, url, method, headers (array of header lines), body (string), max_attempts.
  * Returns the new delivery id.
  *
- * @param array $d  the delivery: workflow_id, execution_id, preset, url, method, headers, body, max_attempts (default 6)
+ * @param array $d  the delivery: workflow_id, execution_id, preset, url, method, headers, body, max_attempts (default: the System > Webhooks setting)
  */
 function webhookEnqueue(PDO $conn, array $d): int {
     $stmt = $conn->prepare(
@@ -279,7 +383,9 @@ function webhookEnqueue(PDO $conn, array $d): int {
         strtoupper($d['method'] ?? 'POST'),
         json_encode(array_values($d['headers'] ?? [])),
         (string)($d['body'] ?? ''),
-        (int)($d['max_attempts'] ?? 6),
+        // Fixed per row when queued, so changing the setting does not move the
+        // goalposts for a delivery that is already part-way through its retries.
+        (int)($d['max_attempts'] ?? webhookDeliverySettings($conn)['max_attempts']),
     ]);
     return (int)$conn->lastInsertId();
 }
@@ -294,9 +400,10 @@ function webhookEnqueue(PDO $conn, array $d): int {
  * @param array $headers  header lines, e.g. 'Content-Type: application/json'
  * @param string $body  the request body as sent
  * @param string $method  the HTTP method; '' means POST
+ * @param int $timeout  seconds to wait for the whole request; the connect wait is capped at 5
  * @return array{body:string|false,status:int,error:string,ms:int}
  */
-function webhookHttpSend(string $url, array $headers, string $body, string $method = 'POST'): array {
+function webhookHttpSend(string $url, array $headers, string $body, string $method = 'POST', int $timeout = WEBHOOK_TIMEOUT_DEFAULT): array {
     $start = microtime(true);
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -304,8 +411,8 @@ function webhookHttpSend(string $url, array $headers, string $body, string $meth
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_CONNECTTIMEOUT => min(5, $timeout),
+        CURLOPT_TIMEOUT        => $timeout,
     ]);
     // Webhooks always verify — they carry record data to third parties over the
     // public internet, so there is deliberately no off switch (see help-ssl.php).
@@ -322,15 +429,20 @@ function webhookHttpSend(string $url, array $headers, string $body, string $meth
  * Updates the row with the outcome and returns 'delivered' | 'failed' | 'dead'.
  *
  * @param array $row  the webhook_deliveries row, already claimed (status 'delivering')
+ * @param int $timeout  seconds to wait for the endpoint (the System > Webhooks setting)
  */
-function webhookAttemptDelivery(PDO $conn, array $row): string {
+function webhookAttemptDelivery(PDO $conn, array $row, int $timeout = WEBHOOK_TIMEOUT_DEFAULT): string {
     $headers = json_decode($row['request_headers'] ?: '[]', true) ?: [];
+    // The same on every try and on a Replay, so a receiver can drop a repeat - an
+    // interrupted try is retried without knowing whether the first one arrived.
+    // Added at send time, not stored: it is not part of what the HMAC signs.
+    $headers[] = 'X-FreeITSM-Delivery: ' . (int)$row['id'];
     $attemptNo = (int)$row['attempts'] + 1;
 
     // The stored URL is encrypted at rest — decrypt for the wire only.
     $url = webhookDecrypt($row['url']);
 
-    $res      = webhookHttpSend($url, $headers, (string)($row['request_body'] ?? ''), $row['method'] ?: 'POST');
+    $res      = webhookHttpSend($url, $headers, (string)($row['request_body'] ?? ''), $row['method'] ?: 'POST', $timeout);
     $respBody = $res['body'];
     $status   = $res['status'];
     $err      = $res['error'];
@@ -397,10 +509,20 @@ function webhookScrubIfNoRetention(PDO $conn, int $id): void {
  * Deliver up to $limit due rows. Claims each atomically (so overlapping worker
  * runs never double-send). Returns counts.
  *
+ * First settles any delivery an earlier run claimed and never finished (see
+ * webhookRecoverInterrupted). Then, with a $budgetSeconds, stops claiming new
+ * rows once one more full-length try might not fit: being killed by the time
+ * limit mid-send is exactly what leaves a row interrupted. What is left is due
+ * on the next run.
+ *
  * @param int $limit  the most due deliveries to attempt in this run
+ * @param int $budgetSeconds  stop starting new tries after this long; 0 = no limit
  */
-function webhookRunQueue(PDO $conn, int $limit = 50): array {
-    $counts = ['attempted' => 0, 'delivered' => 0, 'failed' => 0, 'dead' => 0];
+function webhookRunQueue(PDO $conn, int $limit = 50, int $budgetSeconds = 0): array {
+    $started = microtime(true);
+    $cfg     = webhookDeliverySettings($conn);
+    $counts  = ['attempted' => 0, 'delivered' => 0, 'failed' => 0, 'dead' => 0,
+                'interrupted' => webhookRecoverInterrupted($conn, $cfg['interrupted'])];
     $due = $conn->prepare(
         "SELECT id FROM webhook_deliveries
          WHERE status IN ('pending','failed') AND (next_attempt_at IS NULL OR next_attempt_at <= UTC_TIMESTAMP())
@@ -413,13 +535,14 @@ function webhookRunQueue(PDO $conn, int $limit = 50): array {
     $claim = $conn->prepare("UPDATE webhook_deliveries SET status='delivering', updated_datetime=UTC_TIMESTAMP() WHERE id=? AND status IN ('pending','failed')");
     $load  = $conn->prepare("SELECT * FROM webhook_deliveries WHERE id=?");
     foreach ($ids as $id) {
+        if ($budgetSeconds > 0 && (microtime(true) - $started) + $cfg['timeout'] + 5 > $budgetSeconds) break;
         $claim->execute([$id]);
         if ($claim->rowCount() === 0) continue; // another worker took it
         $load->execute([$id]);
         $row = $load->fetch(PDO::FETCH_ASSOC);
         if (!$row) continue;
         $counts['attempted']++;
-        $counts[webhookAttemptDelivery($conn, $row)]++;
+        $counts[webhookAttemptDelivery($conn, $row, $cfg['timeout'])]++;
     }
     return $counts;
 }
@@ -460,4 +583,46 @@ function webhookReplayBlockedReason(PDO $conn, int $id): ?string {
         return 'That delivery is still in flight — wait for it to finish before replaying it.';
     }
     return null;
+}
+
+/**
+ * Encrypt the url and secret of every send_webhook step in an action list - the
+ * one place this is done, for every route that saves actions.
+ *
+ * 🔴 Only the browser's workflow save did it. POST and PATCH /workflows stored
+ * them as given, and so did every form action list (form designer and REST), so a
+ * Slack or Teams URL - a bearer token in all but name - and a signing secret sat
+ * readable in the database and every backup. Reported privately, October 2026.
+ * Idempotent: an "ENC:" value is not encrypted again, so a GET-then-PATCH round
+ * trip of ciphertext is safe.
+ *
+ * @param array $actions  a list of {type, args}
+ */
+function webhookEncryptActions(array $actions): array {
+    foreach ($actions as $i => $a) {
+        if (!is_array($a) || ($a['type'] ?? '') !== 'send_webhook') continue;
+        foreach (['url', 'secret'] as $k) {
+            if (isset($a['args'][$k]) && $a['args'][$k] !== '') {
+                $actions[$i]['args'][$k] = webhookEncrypt((string)$a['args'][$k]);
+            }
+        }
+    }
+    return $actions;
+}
+
+/**
+ * The reverse, for an editor showing an action list to the person who owns it.
+ *
+ * @param array $actions  a list of {type, args}
+ */
+function webhookDecryptActions(array $actions): array {
+    foreach ($actions as $i => $a) {
+        if (!is_array($a) || ($a['type'] ?? '') !== 'send_webhook') continue;
+        foreach (['url', 'secret'] as $k) {
+            if (isset($a['args'][$k]) && $a['args'][$k] !== '') {
+                $actions[$i]['args'][$k] = webhookDecrypt((string)$a['args'][$k]);
+            }
+        }
+    }
+    return $actions;
 }

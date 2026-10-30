@@ -17,6 +17,9 @@ require_once '../../includes/uploads.php';   // uploadStoreBytes() — see F1
 
 header('Content-Type: application/json');
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 // Check if user is logged in
 if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
@@ -70,21 +73,21 @@ try {
     }
 
     // Determine provider + auth mode
-    $provider = $mailbox['provider'] ?? 'microsoft';
+    $provider = MailboxProvider::fromMailbox($mailbox);
     $authMode = $mailbox['auth_mode'] ?? 'delegated';
 
     // Point every Graph call at the right mailbox for this request: delegated reads
     // /me (whoever signed in); app-only reads the specific /users/<target_mailbox>.
     mailboxResolveGraphBase($mailbox);
 
-    if ($provider === 'imap') {
+    if ($provider === MailboxProvider::Imap) {
         // Basic IMAP: no OAuth / stored token — the connection authenticates with the
         // stored username + password each time. Use a placeholder token so the shared
         // downstream guards (which expect a truthy access token) pass; IMAP never makes
         // a Graph/Gmail call.
         require_once dirname(dirname(__DIR__)) . '/includes/mailbox_imap.php';
         $accessToken = 'imap-session';
-    } elseif ($provider === 'microsoft' && $authMode === 'app_only') {
+    } elseif ($provider === MailboxProvider::Microsoft && $authMode === 'app_only') {
         // App-only (client credentials): no interactive sign-in / stored token needed —
         // the app authenticates itself and reads the exact target mailbox.
         try {
@@ -118,7 +121,7 @@ try {
         }
 
         try {
-            if ($provider === 'google') {
+            if ($provider === MailboxProvider::Google) {
                 require_once dirname(dirname(__DIR__)) . '/includes/gmail.php';
                 $accessToken = gmailGetValidAccessToken($conn, $mailbox, $tokenData);
             } else {
@@ -142,7 +145,7 @@ try {
         // for mailboxes that signed in before we recorded it, then block only on a
         // CONFIRMED mismatch. A target that matches any owned alias passes; the genuine
         // "wrong account" / "changed address" cases (issue #26) get caught.
-        if ($provider === 'microsoft') {
+        if ($provider === MailboxProvider::Microsoft) {
             $mailbox = mailboxBackfillIdentity($conn, $mailbox, $accessToken);
             if ($mismatchError = mailboxIdentityMismatch($mailbox)) {
                 failMailboxCheck($conn, $mailboxId, $mismatchError);
@@ -155,9 +158,9 @@ try {
     }
 
     // Fetch emails — branch by provider
-    if ($provider === 'imap') {
+    if ($provider === MailboxProvider::Imap) {
         $emails = imapGetEmails($mailbox);
-    } elseif ($provider === 'google') {
+    } elseif ($provider === MailboxProvider::Google) {
         $emails = gmailGetEmails($accessToken, $mailbox);
     } else {
         $emails = getEmails($accessToken, $mailbox);
@@ -820,16 +823,16 @@ function markEmailAsRead($accessToken, $messageId) {
  * @param mixed $messageId  the provider's message id - the IMAP UID for a basic mailbox
  * @param mixed $action  'delete', 'move_to_deleted', 'mark_read' or 'move_to_folder'
  * @param mixed $folderName  the folder for 'move_to_folder'; without one the email is deleted instead (Microsoft)
- * @param mixed $provider  'microsoft', 'google' or 'imap'
+ * @param MailboxProvider $provider  where the mailbox's mail comes from
  * @param mixed $mailbox  the target_mailboxes row; needed only for IMAP
  */
-function handleEmailAfterProcessing($accessToken, $messageId, $action, $folderName = null, $provider = 'microsoft', $mailbox = null) {
-    if ($provider === 'imap') {
+function handleEmailAfterProcessing($accessToken, $messageId, $action, $folderName = null, MailboxProvider $provider = MailboxProvider::Microsoft, $mailbox = null) {
+    if ($provider === MailboxProvider::Imap) {
         // $messageId is the IMAP UID for basic mailboxes.
         return imapHandleAfterProcessing($mailbox, (int) $messageId, $action, $folderName);
     }
 
-    if ($provider === 'google') {
+    if ($provider === MailboxProvider::Google) {
         switch ($action) {
             case 'mark_read':
                 gmailMarkAsRead($accessToken, $messageId);

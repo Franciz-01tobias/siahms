@@ -7,6 +7,19 @@
  *        require_once 'includes/functions.php'; (from root folder)
  */
 
+// PHP 8.1 or newer, or a plain message instead of a parse error - for anything
+// that loads this before config.php. includes/php_version_guard.php.
+require_once __DIR__ . '/php_version_guard.php';
+
+// Where a mailbox's mail comes from - used across Tickets, Workflow and the portal.
+// TRAP: loaded with require, never written into this file: this file must stay
+// readable by old PHP so the guard above can speak, and an enum is PHP 8.1.
+require_once __DIR__ . '/mailbox_provider.php';
+
+// Which modules are switched off for the whole install (GH #217) - asked by
+// analystCanAccessModule() below, so every page and endpoint gate honours it.
+require_once __DIR__ . '/module_availability.php';
+
 // Session hardening helpers. Pulled in here rather than added to each of the ten
 // files that establish or change an identity, because every one of them already
 // includes this file — one require instead of ten, and a new sign-in path gets
@@ -33,6 +46,10 @@ require_once __DIR__ . '/request_guard.php';
 // at the end of login — otherwise typing a URL walks straight past it, which would
 // make the seeded-credentials fix cosmetic. See the file.
 require_once __DIR__ . '/password_gate.php';
+
+// Signs out a deactivated or deleted analyst on their next request, rather than
+// leaving every endpoint that only checks "signed in" open to them. See the file.
+require_once __DIR__ . '/analyst_active_gate.php';
 
 // ⚠️ Stop announcing the exact PHP build on every single response.
 //
@@ -78,7 +95,7 @@ function connectToDatabase() {
  */
 function getModuleRegistry(): array {
     $keys = ['watchtower','tickets','assets','knowledge','changes','problems','calendar',
-             'morning-checks','reporting','software','forms','contracts','domains','people','service-status','files',
+             'morning-checks','reporting','software','forms','contracts','domains','people','starters','service-status','files',
              'war-room','wiki','lms','process-mapper','checklists','tasks','projects','cmdb','network-mapper','workflow'];
     $out = [];
     foreach ($keys as $k) {
@@ -207,6 +224,11 @@ function requireModuleWriteJson(string $moduleKey, ?PDO $conn = null): void {
     if (!$ok) {
         http_response_code(403);
         header('Content-Type: application/json');
+        // Switched off for the install (GH #217) - not read-only, so not that message.
+        if (isset($conn) && !moduleIsEnabled($conn, $moduleKey)) {
+            echo json_encode(['success' => false, 'error' => moduleDisabledMessage($moduleKey), 'module_disabled' => $moduleKey]);
+            exit;
+        }
         echo json_encode(['success' => false, 'error' => function_exists('t') ? t('common.module_read_only') : 'You have read-only access to this module.', 'code' => 'read_only']);
         exit;
     }
@@ -323,6 +345,24 @@ function getAnalystAllowedModules($conn, $analyst_id) {
 }
 
 /**
+ * A LIKE pattern for "contains this text", for a search box.
+ *
+ * TRAP: an apostrophe or quote typed in a search must match ANY kind of one.
+ * Email subjects are full of typographic quotes - Gmail and Outlook send
+ * "We’re" with U+2019 - while a keyboard types the straight ', so a plain
+ * '%' . $term . '%' never finds them (the ticket table, 2026-10-27). Each quote
+ * becomes `_` (any one character). The user's own % and _ are escaped first, so
+ * they mean themselves rather than wildcards.
+ *
+ * @param string $term  what was typed, trimmed
+ */
+function likeContainsPattern(string $term): string {
+    $escaped = addcslashes($term, '\\%_');
+    $quotes  = ["'", "\u{2019}", "\u{2018}", "\u{02BC}", '`', "\u{00B4}", '"', "\u{201C}", "\u{201D}"];
+    return '%' . str_replace($quotes, '_', $escaped) . '%';
+}
+
+/**
  * Is this analyst an administrator? Admins are the only accounts allowed into the
  * System module (analyst/team/company management, SSO, security, DB verify, etc.).
  * Authoritative DB check — use this for server-side enforcement (no session lag).
@@ -361,24 +401,69 @@ function requesterIsActive(PDO $conn, int $userId): bool {
 }
 
 /**
- * Cosmetic (UI-layer) admin check for pages: "should this analyst see System?".
- * Reads $_SESSION['is_admin']; if absent (e.g. a session created before this
- * upgrade) it self-heals by looking the flag up once and caching it in the
- * session, so no login-path changes are needed and no admin is ever locked out.
- * Requires a writable session (not read_and_close). For hard enforcement on APIs
- * use requireAdminJson() instead, which re-checks the DB every call.
+ * The modules the signed-in analyst may use NOW - from the database (cached for
+ * the request by getAnalystAllowedModules()), never the copy taken at sign-in.
+ * Null = every module; [] = none, which is also the answer when nobody is signed
+ * in or the lookup fails (fail closed).
+ *
+ * 🔴 $_SESSION['allowed_modules'] is written once, at sign-in. The document
+ * endpoints and global search gated on it, so an analyst whose access to, say,
+ * Contracts was removed kept downloading, attaching and finding its documents,
+ * and seeing its records in search, until they signed out. The module pages
+ * themselves re-read the grants. Reported privately, October 2026.
+ * TRAP: never gate anything on $_SESSION['allowed_modules']; call this.
+ */
+function analystAllowedModulesNow(): ?array {
+    $id = (int) ($_SESSION['analyst_id'] ?? 0);
+    if ($id <= 0) return [];
+    try {
+        $conn = connectToDatabase();
+        return modulesWithoutSwitchedOff($conn, getAnalystAllowedModules($conn, $id));
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * An allowed-modules answer (null = all, or a list) with the modules switched off
+ * for the install taken out (GH #217). getAnalystAllowedModules() itself is left
+ * as the GRANTS - System -> Modules shows those, and an all-modules analyst is
+ * still "all modules" there - so anything deciding what an analyst may OPEN from
+ * that list goes through here.
+ *
+ * @param array|null $allowed  getAnalystAllowedModules()'s answer
+ * @return array|null  null only when nothing is switched off
+ */
+function modulesWithoutSwitchedOff(PDO $conn, ?array $allowed): ?array {
+    $off = disabledModules($conn);
+    if (!$off) return $allowed;
+    $base = $allowed ?? array_keys(getModuleRegistry());
+    return array_values(array_diff($base, $off));
+}
+
+/**
+ * Is the signed-in analyst an administrator? Asks the database every request
+ * (analystIsAdmin() caches within one), so demoting or deactivating somebody takes
+ * effect on their very next click.
+ *
+ * 🔴 It used to read a copy of the flag cached in the session at sign-in, and was
+ * documented as "cosmetic, for pages" - but endpoints had come to rely on it as a
+ * gate: the Slack channel settings, test_channel.php, approving catalogue requests
+ * as an administrator, editing manager lines. A demoted admin whose session was
+ * still open kept all of those. Reported privately, October 2026.
+ *
+ * $_SESSION['is_admin'] is still written when the session is writable, for older
+ * code that reads it directly - but nothing should decide anything from it.
  */
 function sessionIsAdmin(): bool {
     if (!isset($_SESSION['analyst_id'])) return false;
-    if (!array_key_exists('is_admin', $_SESSION)) {
-        try {
-            $conn = connectToDatabase();
-            $_SESSION['is_admin'] = analystIsAdmin($conn, (int) $_SESSION['analyst_id']) ? 1 : 0;
-        } catch (Throwable $e) {
-            return false; // fail closed
-        }
+    try {
+        $isAdmin = analystIsAdmin(connectToDatabase(), (int) $_SESSION['analyst_id']);
+    } catch (Throwable $e) {
+        return false; // fail closed
     }
-    return !empty($_SESSION['is_admin']);
+    if (session_status() === PHP_SESSION_ACTIVE) $_SESSION['is_admin'] = $isAdmin ? 1 : 0;
+    return $isAdmin;
 }
 
 /**
@@ -409,6 +494,10 @@ function requireAdminJson(PDO $conn): void {
 function analystCanAccessModule(PDO $conn, int $analystId, string $moduleKey): bool {
     if ($analystId <= 0) return false;
     if ($moduleKey === 'system') return analystIsAdmin($conn, $analystId);
+    // A module switched off for the install is off for everyone, administrators
+    // and all-modules analysts included (GH #217). Asked here, the one question
+    // every page, endpoint and cross-module button already asks.
+    if (!moduleIsEnabled($conn, $moduleKey)) return false;
     $allowed = getAnalystAllowedModules($conn, $analystId); // null = all modules
     if ($allowed === null) return true;
     return in_array($moduleKey, $allowed, true);
@@ -453,14 +542,26 @@ function requireModuleAccess(string $moduleKey, ?PDO $conn = null): void {
  * "Any of these modules" is the honest gate. Use it sparingly: if an endpoint belongs to
  * ONE module, use requireModuleAccessJson().
  *
+ * TRAP: pass $owner when the endpoint's DATA belongs to one module. "Any of these"
+ * otherwise outlives that module being switched off for the install (GH #217):
+ * Knowledge's articles answered anyone with Tickets after Knowledge was switched
+ * off. A shared lookup (cost centres, analysts, settings) has no owner and passes none.
+ *
  * @param array<int,string> $moduleKeys  the module keys that may use the endpoint, e.g. ['knowledge', 'tickets']
+ * @param string|null $owner  the module whose data this is, refused while it is switched off; null for a shared lookup
  */
-function requireAnyModuleAccessJson(array $moduleKeys, ?PDO $conn = null): void {
+function requireAnyModuleAccessJson(array $moduleKeys, ?PDO $conn = null, ?string $owner = null): void {
     if (!isset($_SESSION['analyst_id'])) {
         http_response_code(401);
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'error' => 'Not authenticated']);
         exit;
+    }
+    if ($owner !== null) {
+        try {
+            if ($conn === null) $conn = connectToDatabase();
+            requireModuleOnJson($conn, $owner);
+        } catch (Throwable $e) { /* the access check below fails closed on its own */ }
     }
     $ok = false;
     try {
@@ -505,7 +606,12 @@ function requireModuleAccessJson(string $moduleKey, ?PDO $conn = null): void {
     if (!$ok) {
         http_response_code(403);
         header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'error' => 'You do not have access to this module']);
+        // Switched off for the install (GH #217) is not a permissions problem, and
+        // saying "no access" would send an administrator hunting through grants.
+        $off = isset($conn) && !moduleIsEnabled($conn, $moduleKey);
+        echo json_encode($off
+            ? ['success' => false, 'error' => moduleDisabledMessage($moduleKey), 'module_disabled' => $moduleKey]
+            : ['success' => false, 'error' => 'You do not have access to this module']);
         exit;
     }
 }
@@ -522,8 +628,9 @@ function sessionIsFormApproverOnly(): bool
     if ($memo !== null) return $memo;
     $memo = false;
     $aid = (int)($_SESSION['analyst_id'] ?? 0);
-    $allowed = $_SESSION['allowed_modules'] ?? null;
+    $allowed = analystAllowedModulesNow();
     if ($aid <= 0 || $allowed === null || in_array('forms', $allowed, true)) return $memo;   // null = every module
+    if (!portalModuleOn('forms')) return $memo;   // no approver door into a switched-off Forms (GH #217)
     try {
         $st = connectToDatabase()->prepare(
             "SELECT 1 FROM forms WHERE approver_id = ? AND requires_approval = 1
@@ -531,6 +638,13 @@ function sessionIsFormApproverOnly(): bool
         );
         $st->execute([$aid, $aid]);
         $memo = (bool)$st->fetchColumn();
+        // GH #220: a member of a team that approves gets the same door. The one
+        // definition lives in catalogue_approvals.php (catalogueApproverCanEnter()).
+        if (!$memo) {
+            require_once __DIR__ . '/catalogue_approvals.php';
+            $conn = connectToDatabase();
+            $memo = catalogueTeamApprovalAvailable($conn) && catalogueAnalystApprovesAsTeam($conn, $aid);
+        }
     } catch (Throwable $e) { /* no door rather than a broken page */ }
     return $memo;
 }

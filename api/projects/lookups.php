@@ -25,6 +25,22 @@ projectApiRun(function () use ($conn, $analystId) {
     $roles = [];
     try { $roles = $conn->query("SELECT id, name, description FROM project_roles WHERE is_active = 1 ORDER BY display_order, name")->fetchAll(PDO::FETCH_ASSOC); } catch (Throwable $e) {}
     $teams = $conn->query("SELECT id, name FROM teams ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+    // GH #210: which companies each analyst, and each team, gives access to - so
+    // the People picker and the project manager list offer only those who can
+    // see the project's company. The server refuses anyone else anyway.
+    $analystCompanies = null; $teamCompanies = null;
+    if (isMultiTenant($conn)) {
+        $all = array_map(fn($t) => (int)$t['id'], getAllTenants($conn));
+        $analystCompanies = [];
+        foreach ($analysts as $a) $analystCompanies[(int)$a['id']] = getAccessibleTenantIds($conn, (int)$a['id']);
+        $teamCompanies = [];
+        try {
+            foreach ($conn->query("SELECT id, can_access_all_tenants FROM teams") as $t) $teamCompanies[(int)$t['id']] = (int)$t['can_access_all_tenants'] === 1 ? $all : [];
+            foreach ($conn->query("SELECT team_id, tenant_id FROM team_tenant_access") as $r) {
+                if (isset($teamCompanies[(int)$r['team_id']]) && !in_array((int)$r['tenant_id'], $teamCompanies[(int)$r['team_id']], true)) $teamCompanies[(int)$r['team_id']][] = (int)$r['tenant_id'];
+            }
+        } catch (Throwable $e) { $teamCompanies = null; }   // not migrated: offer every team, the server decides
+    }
     $colours = [];
     foreach (projectColours() as $k => $c) $colours[] = ['key' => $k, 'from' => $c[0], 'to' => $c[1]];
     projectApiOk([
@@ -32,6 +48,9 @@ projectApiRun(function () use ($conn, $analystId) {
         'companies'       => $companies,
         'active_company'  => isMultiTenant($conn) ? getActiveTenantId($conn, $analystId) : null,
         'multi_company'   => isMultiTenant($conn),
+        'default_company' => isMultiTenant($conn) ? getDefaultTenantId($conn) : null,
+        'analyst_companies' => $analystCompanies,   // {analyst id: [company ids]}, null on a single-company install
+        'team_companies'    => $teamCompanies,      // {team id: [company ids]}
         'default_method'  => projectSetting($conn, 'project_default_method'),
         'roles'           => $roles,
         'teams'           => $teams,

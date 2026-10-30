@@ -125,7 +125,7 @@ foreach ([
 ] as $endpoint => $label) {
     $u = aiAzureChatUrl(['azure_endpoint' => $endpoint, 'azure_deployment' => 'gpt-4o', 'azure_api_version' => '2024-02-01']);
     ok("normalises an endpoint pasted $label", substr_count($u, '/openai/') === 1
-        && strpos($u, '.com/openai/deployments/gpt-4o/') !== false, $u);
+        && str_contains($u, '.com/openai/deployments/gpt-4o/'), $u);
 }
 
 // GH #171: the portal's whole "Target URI", or a Foundry project address, pasted
@@ -152,14 +152,14 @@ ok('CONTROL - a missing deployment is named as the deployment, not the API versi
     stripos($why, 'no deployment called "d"') !== false, $why);
 
 ok('falls back to a default api-version when none is given',
-    strpos(aiAzureChatUrl(['azure_endpoint' => 'https://x.openai.azure.com', 'azure_deployment' => 'd']),
-           'api-version=' . AI_AZURE_DEFAULT_API_VERSION) !== false);
+    str_contains(aiAzureChatUrl(['azure_endpoint' => 'https://x.openai.azure.com', 'azure_deployment' => 'd']),
+           'api-version=' . AI_AZURE_DEFAULT_API_VERSION));
 
 // A deployment name is chosen by the customer and can contain anything a name
 // can. Encoding it is not decoration — an unencoded space breaks the request line.
 ok('escapes a deployment name with a space in it',
-    strpos(aiAzureChatUrl(['azure_endpoint' => 'https://x.openai.azure.com', 'azure_deployment' => 'my gpt', 'azure_api_version' => 'v']),
-           '/deployments/my%20gpt/') !== false);
+    str_contains(aiAzureChatUrl(['azure_endpoint' => 'https://x.openai.azure.com', 'azure_deployment' => 'my gpt', 'azure_api_version' => 'v']),
+           '/deployments/my%20gpt/'));
 
 // ── 2. Configuration errors name the RIGHT field ────────────────────────────
 section('2. A missing field is named as the field the administrator can see');
@@ -307,11 +307,11 @@ ok('v1: still the api-key header', !empty($log[0]['has_api_key_header']) && empt
 // ── 5. The registry ─────────────────────────────────────────────────────────
 section('5. Wiring');
 
-ok('azure is an accepted provider', in_array('azure', AI_PROVIDER_VALID, true));
+ok('azure is an accepted provider', AiProvider::tryFrom('azure') === AiProvider::Azure);
 require_once 'includes/ai_settings.php';
 $keys = aiSettingsKeys('tickets_reply_cleanup');
 foreach (['azure_endpoint', 'azure_deployment', 'azure_api_version'] as $f) {
-    ok("a settings key exists for $f", isset($keys[$f]) && strpos($keys[$f], 'tickets_reply_cleanup_') === 0);
+    ok("a settings key exists for $f", isset($keys[$f]) && str_starts_with($keys[$f], 'tickets_reply_cleanup_'));
 }
 
 reset_log();

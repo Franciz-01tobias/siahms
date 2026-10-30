@@ -444,7 +444,7 @@ $hostIsLocal = (bool)preg_match('/^(localhost|127\.0\.0\.1)(:\d+)?$/i', $labelHo
                                     $subVal = $a['asset_type_name'] ?? '';
                                     break;
                                 default:
-                                    if (strpos($fk, 'cf_') === 0) {
+                                    if (str_starts_with($fk, 'cf_')) {
                                         $subVal = $customValues[(int)$a['id']][$fk] ?? '';
                                     }
                                     break;

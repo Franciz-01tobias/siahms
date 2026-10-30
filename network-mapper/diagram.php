@@ -32,6 +32,9 @@ if ($diagramId <= 0) {
 $current_page = 'diagrams';
 $path_prefix = '../';
 $translationNamespaces = ['common', 'network-mapper'];
+// GH #217: every node is a CMDB object - with CMDB switched off (or not granted) there
+// is no palette, no picker, no properties and no link into it.
+$nmCmdb = analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'cmdb');
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -1387,7 +1390,7 @@ $translationNamespaces = ['common', 'network-mapper'];
     <!-- Mobile layer LAST, after this page's own <style>, or every rule that
          targets the same selector at the same specificity loses on document
          order (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="network-mapper" data-mobile-page="nm-diagram">
     <?php include 'includes/header.php'; ?>
@@ -1499,7 +1502,9 @@ $translationNamespaces = ['common', 'network-mapper'];
                     <div class="nm-detail-section">
                         <div class="nm-detail-field"><span class="nm-detail-label"><?php echo htmlspecialchars(t('network-mapper.detail.class')); ?></span><span class="nm-detail-value" id="ndClassValue">&mdash;</span></div>
                         <div class="nm-detail-field" id="ndPlannedRow" style="display:none;"><span class="nm-detail-label"><?php echo htmlspecialchars(t('network-mapper.detail.status')); ?></span><span class="nm-detail-value"><span class="nm-detail-planned-pill"><?php echo htmlspecialchars(t('network-mapper.detail.planned_pill')); ?></span> <?php echo htmlspecialchars(t('network-mapper.detail.planned_future')); ?></span></div>
+                        <?php if ($nmCmdb): // GH #217 ?>
                         <div class="nm-detail-field"><span class="nm-detail-label"><?php echo htmlspecialchars(t('network-mapper.detail.cmdb')); ?></span><span class="nm-detail-value"><a id="ndCmdbLink" href="#" target="_blank"><?php echo htmlspecialchars(t('network-mapper.detail.cmdb_open')); ?></a></span></div>
+                        <?php endif; ?>
                         <div class="nm-detail-field">
                             <span class="nm-detail-label"><?php echo htmlspecialchars(t('network-mapper.detail.icon')); ?></span>
                             <span class="nm-detail-value nm-detail-icon-row">
@@ -1519,7 +1524,9 @@ $translationNamespaces = ['common', 'network-mapper'];
                      properties scroll above. Sits outside .nm-detail-body so
                      the body's overflow-y: auto only scrolls the content. -->
                 <div class="nm-detail-footer">
+                    <?php if ($nmCmdb): // GH #217: related objects come from the CMDB ?>
                     <button class="nm-btn" id="ndAddRelatedBtn" onclick="NM.openRelatedModal()"><?php echo htmlspecialchars(t('network-mapper.detail.add_related')); ?></button>
+                    <?php endif; ?>
                 </div>
             </aside>
         </div>
@@ -1657,9 +1664,10 @@ $translationNamespaces = ['common', 'network-mapper'];
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/i18n.js?v=3"></script>
     <script src="../assets/js/vendor/html2canvas.min.js"></script>
-    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
     <script src="../assets/js/network-mapper-icons.js"></script>
-    <script src="../assets/js/network-mapper.js?v=5"></script>
+    <script>window.NM_CMDB = <?php echo $nmCmdb ? 'true' : 'false'; ?>; window.NM_CMDB_OFF = <?php echo json_encode(moduleIsEnabled(connectToDatabase(), 'cmdb') ? '' : moduleDisabledMessage('cmdb')); ?>;   // GH #217</script>
+    <script src="../assets/js/network-mapper.js?v=6"></script>
     <script>
         NM.init(<?php echo $diagramId; ?>);
 
@@ -1711,6 +1719,6 @@ $translationNamespaces = ['common', 'network-mapper'];
     </script>
     <!-- After network-mapper.js, so mobile.js can read/wrap the globals it
          exposes rather than edit it (Techniques §1). -->
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

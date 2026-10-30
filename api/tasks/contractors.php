@@ -15,7 +15,7 @@ if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
 }
-requireAnyModuleAccessJson(['tasks', 'projects']);
+requireAnyModuleAccessJson(['tasks', 'projects'], null, 'tasks');   // owner: GH #217
 
 try {
     $conn = connectToDatabase();

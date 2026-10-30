@@ -51,9 +51,9 @@ function req(string $url, array $o = []): array {
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     return [$code, $body];
 }
-$refused = fn(array $r, string $why) => $r[0] === 403 && strpos($r[1], '"csrf_' . $why . '"') !== false;
+$refused = fn(array $r, string $why) => $r[0] === 403 && str_contains($r[1], '"csrf_' . $why . '"');
 // "Reached" = the endpoint itself answered: a real status, not a 404 or a CSRF refusal.
-$reached = fn(array $r) => in_array($r[0], [200, 401], true) && strpos($r[1], 'csrf_') === false;
+$reached = fn(array $r) => in_array($r[0], [200, 401], true) && !str_contains($r[1], 'csrf_');
 
 echo "\nCSRF protection (S4)\n" . str_repeat('=', 70) . "\n";
 [$probe] = req($base . 'favicon.svg', ['method' => 'GET']);
@@ -93,7 +93,7 @@ ok('POSITIVE CONTROL: with ?_csrf= it is let through', $reached(req($stream . '&
 
 echo "\nPages get the token:\n";
 [$c, $html] = req($base . 'people/help.php', ['session' => 'signed', 'method' => 'GET']);
-ok('a page carries the meta tag with this session\'s token', strpos($html, '<meta name="csrf-token" content="' . $tok . '">') !== false);
+ok('a page carries the meta tag with this session\'s token', str_contains($html, '<meta name="csrf-token" content="' . $tok . '">'));
 ok('...and loads csrf.js before anything else in <head>', (bool)preg_match('/<head[^>]*><meta name="csrf-token"[^>]*><script src="[^"]*csrf\.js/i', $html));
 
 echo "\nThe exempt list points at real files:\n";

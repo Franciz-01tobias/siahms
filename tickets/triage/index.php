@@ -82,7 +82,7 @@ $translationNamespaces = ['common', 'tickets'];
         .triage-email-summary { font-size: 12px; color: var(--text-muted); background: var(--surface-2); border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; }
         .freemail-note { font-size: 12px; color: var(--warning-text); margin-bottom: 12px; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="tickets-triage">
     <?php include '../includes/header.php'; ?>
@@ -318,6 +318,6 @@ $translationNamespaces = ['common', 'tickets'];
         loadTriage();
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

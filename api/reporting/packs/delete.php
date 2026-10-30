@@ -5,6 +5,9 @@
  */
 session_start(['read_and_close' => true]);
 require_once __DIR__ . '/../../../includes/report_packs/api_common.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 if (!isset($_SESSION['analyst_id'])) rpFail('Not authenticated', 401);
 requireModuleAccessJson('reporting');
 

@@ -65,6 +65,18 @@ if (!$apiKeyRow) {
     exit;
 }
 
+// 🔴 The key must belong to an analyst who may use Watchtower NOW. It did not
+// check the owner was still active, or had the module - and these keys live in the
+// same table as the software inventory agents' keys, which are deployed onto
+// machines, so an agent's key opened the whole dashboard; one with no analyst saw
+// every company. Reported privately, October 2026.
+$keyOwner = (int)($apiKeyRow['analyst_id'] ?? 0);
+if ($keyOwner <= 0 || !analystCanAccessModule($conn, $keyOwner, 'watchtower')) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Invalid authorization key']);
+    exit;
+}
+
 $apikeyId = (int)$apiKeyRow['id'];
 
 // --------------------------------------------------

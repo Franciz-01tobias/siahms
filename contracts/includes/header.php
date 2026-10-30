@@ -35,7 +35,7 @@ if (isset($_SESSION['analyst_id'])) {
         if ($__prefRow && $__prefRow['preference_value'] === 'hover') {
             $contractsSidebarMode = 'hover';
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Non-fatal — fall through with the 'always' default.
     }
 }

@@ -16,6 +16,11 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccess('tickets');
+// GH #217: duty rota switched off for the install - back to the inbox.
+if (!moduleIsEnabled(connectToDatabase(), 'rota')) {
+    header('Location: ' . BASE_URL . 'tickets/');
+    exit;
+}
 
 $current_page = 'rota';
 
@@ -32,7 +37,7 @@ $translationNamespaces = ['common', 'tickets'];
     <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/rota.css?v=4">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -132,7 +137,7 @@ $translationNamespaces = ['common', 'tickets'];
         </button>
     </div>
 
-    <script src="../assets/js/rota.js?v=7"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/rota.js?v=8"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

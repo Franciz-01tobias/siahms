@@ -38,6 +38,7 @@ require_once __DIR__ . '/../encryption.php';   // decryptValue() for the embeddi
 require_once __DIR__ . '/../knowledge/audience.php';
 require_once __DIR__ . '/../knowledge/audit.php';   // every write leaves a history row
 require_once __DIR__ . '/../tenancy.php';
+require_once __DIR__ . '/../knowledge/visibility.php';   // knowledgeCanRead(), knowledgeFolderIsReadable()
 require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 
 class KnowledgeService
@@ -86,7 +87,7 @@ class KnowledgeService
      *
      * @param mixed $raw  the folder_id from the request; '', null or 0 means the root
      */
-    private static function resolveFolderId(PDO $conn, $raw): ?int
+    private static function resolveFolderId(PDO $conn, ActorContext $ctx, $raw): ?int
     {
         if ($raw === '' || $raw === null) return null;
         $id = (int)$raw;
@@ -94,10 +95,14 @@ class KnowledgeService
         try {
             $st = $conn->prepare("SELECT 1 FROM knowledge_folders WHERE id = ?");
             $st->execute([$id]);
-            if (!$st->fetchColumn()) {
+            // A folder you cannot read is, to you, not a folder - the same words
+            // as one that does not exist, so an id gives nothing away. Filing an
+            // article into it used to be allowed (report item 8, October 2026).
+            $viewer = self::viewerFor($conn, $ctx);
+            if (!$st->fetchColumn() || ($viewer && !knowledgeFolderIsReadable($conn, $viewer, $id))) {
                 throw new ServiceError('validation', 'invalid_field', "'folder_id' is not a known folder.");
             }
-        } catch (PDOException $e) {
+        } catch (PDOException) {
             // Table absent (pre-Database-Verify): no folders exist, so the only
             // honest answer is the root.
             return null;
@@ -138,18 +143,43 @@ class KnowledgeService
      */
     private static function assertCanAccessArticle(PDO $conn, ActorContext $ctx, int $articleId): void
     {
-        $scope = $ctx->companyScope;
-        if (!is_array($scope)) return;                     // all companies
-
         $stmt = $conn->prepare("SELECT tenant_id FROM knowledge_articles WHERE id = ?");
         $stmt->execute([$articleId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) return;                                  // loadArticleRow raises the 404
-        if ($row['tenant_id'] === null) return;             // shared with everyone
 
-        if (!in_array((int)$row['tenant_id'], array_map('intval', $scope), true)) {
+        $scope = $ctx->companyScope;
+        if (is_array($scope) && $row['tenant_id'] !== null   // null = shared with everyone
+            && !in_array((int)$row['tenant_id'], array_map('intval', $scope), true)) {
             throw new ServiceError('forbidden', 'forbidden', 'That article belongs to a company you do not have access to.');
         }
+
+        // 🔴 And the article must be one this actor may READ. The company check
+        // alone let an analyst who was denied an article - by its folder or its
+        // own access list - edit, move, archive, restore or purge it by id. The
+        // folder drag-and-drop already checked both ends; these paths did not.
+        // Reported privately, October 2026. Same words as a missing article.
+        $viewer = self::viewerFor($conn, $ctx);
+        if ($viewer && !knowledgeCanRead($conn, $viewer, $articleId, ['lifecycle' => 'any'])) {
+            throw new ServiceError('not_found', 'not_found', 'Article not found.');
+        }
+    }
+
+    /**
+     * Who is acting, as Knowledge's read rules see them: this analyst (for the
+     * access lists), across the companies the context already allows - the same
+     * scope the company check above uses. Null for the system actor: internal
+     * callers are not restricted.
+     *
+     * TRAP: not KnowledgeViewer::forAnalyst(). That reads the analyst's ACTIVE
+     *   company from the header switcher, which is right for a LIST and wrong for
+     *   a write by id: an administrator switched to company A could no longer edit
+     *   an article in company B they can perfectly well reach.
+     */
+    private static function viewerFor(PDO $conn, ActorContext $ctx): ?KnowledgeViewer
+    {
+        if ($ctx->actorId <= 0) return null;
+        return KnowledgeViewer::forApiKey($conn, ['analyst_id' => $ctx->actorId, 'company_scope' => $ctx->companyScope]);
     }
 
     // ======================================================================
@@ -219,7 +249,7 @@ class KnowledgeService
             // an article to the root every time it saves a title.
             if (array_key_exists('folder_id', $in)) {
                 $updates[] = 'folder_id = ?';
-                $args[]    = self::resolveFolderId($conn, $in['folder_id']);
+                $args[]    = self::resolveFolderId($conn, $ctx, $in['folder_id']);
             }
 
             $saveAsVersion = !empty($in['save_as_version']);
@@ -296,7 +326,7 @@ class KnowledgeService
                      tenant_id, audience, folder_id)
                  VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(), ?, 0, ?, ?, ?)"
             )->execute([$title, $bodyHtml, $ctx->actorId, $ownerId, $nextReview, $isPublished, $tenantId, $audience,
-                        self::resolveFolderId($conn, $in['folder_id'] ?? null)]);
+                        self::resolveFolderId($conn, $ctx, $in['folder_id'] ?? null)]);
             $articleId = (int)$conn->lastInsertId();
 
             if (isset($in['tags']) && is_array($in['tags'])) {
@@ -528,7 +558,7 @@ class KnowledgeService
                     return true;
                 }
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // Embedding is a bonus, never a blocker — same as the UI.
         }
         return false;

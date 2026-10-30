@@ -88,7 +88,7 @@ function jobSetting(PDO $conn, string $key): string
         $s->execute([$key]);
         $v = $s->fetchColumn();
         return $v === false || $v === null ? '' : (string)$v;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return '';
     }
 }
@@ -181,12 +181,65 @@ function jobRegistry(): array
             'sources' => fn(PDO $c) => jobSourceKeys($c, 'provider:', "SELECT id FROM auth_providers WHERE enabled = 1 AND sync_enabled = 1 AND protocol IN ('ldap','carddav')"),
         ],
     ];
+    // GH #217. A job whose module is switched off for the install is not needed:
+    // it skips by design, and health must not call that overdue.
+    $jobModules = [
+        'lms_reminders' => 'lms', 'domains' => 'domains', 'task_recurrence' => 'tasks',
+        'webhook_deliveries' => 'workflow', 'proxmox_sync' => 'assets', 'vcloud_sync' => 'assets',
+        'sla_breach' => 'sla',   // a Tickets feature (slice 2)
+    ];
     foreach ($jobs as $k => &$j) {
         $j['key']         = $k;
         $j['name_key']    = 'reporting.jobs.name_' . $k;
         $j['affects_key'] = 'reporting.jobs.affects_' . $k;
+        if (isset($jobModules[$k])) {
+            $needed = $j['needed'];
+            $module = $jobModules[$k];
+            $j['needed'] = fn(PDO $c) => moduleIsEnabled($c, $module) && $needed($c);
+        }
     }
     unset($j);
+    return $jobs;
+}
+
+/**
+ * Every job health judges: the scheduled jobs above, plus one entry per active PUSHED source
+ * (GH #199) - a Hyper-V connection whose collector should have reported by now. A pushed
+ * source has no command for FreeITSM to run; it is healthy when its reports arrive on time,
+ * so each entry carries its own interval and grace from the connection, its own name, and
+ * 'pushed' => true. Its runs are recorded with trigger 'push' when a report arrives
+ * (VirtualEstateService::submit()), and the freshness rule counts those as scheduled runs.
+ *
+ * TRAP: anything that lists or looks up jobs must use this, not jobRegistry(), or a pushed
+ *   connection is invisible on System -> Background jobs and in the REST health address.
+ *
+ * @return array<string,array> keyed by job, the scheduled ones first
+ */
+function jobRegistryAll(PDO $conn): array
+{
+    $jobs = jobRegistry();
+    // GH #217. Hyper-V collectors report into Assets; with Assets switched off they
+    // are refused, so they are not jobs to judge.
+    if (!moduleIsEnabled($conn, 'assets')) return $jobs;
+    try {
+        $rows = $conn->query("SELECT id, name, expected_interval_minutes, grace_minutes FROM virt_connections WHERE is_active = 1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        if (jobLookupMissingTable($e)) return $jobs;   // the virtual estate has never been set up here
+        throw new JobHealthUnknown('pushed sources', 0, $e);
+    }
+    foreach ($rows as $r) {
+        $key = 'virt_push_' . (int)$r['id'];
+        $jobs[$key] = [
+            'key' => $key, 'pushed' => true, 'connection_id' => (int)$r['id'],
+            'name' => 'Hyper-V reports: ' . $r['name'],
+            'affects' => 'What Assets -> Servers shows for this estate goes stale, and nothing marks VMs that have gone.',
+            'name_key' => 'reporting.jobs.name_virt_push', 'affects_key' => 'reporting.jobs.affects_virt_push',
+            'name_params' => ['name' => $r['name']],
+            'command' => 'scripts/Invoke-HyperVInventory.ps1 (a scheduled task on your Windows management server)', 'web' => false,
+            'interval' => max(1, (int)$r['expected_interval_minutes']), 'grace' => max(0, (int)$r['grace_minutes']), 'max_runtime' => 5,
+            'needed' => fn(PDO $c) => true,   // listed only while the connection is switched on
+        ];
+    }
     return $jobs;
 }
 

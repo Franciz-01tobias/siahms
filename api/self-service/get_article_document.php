@@ -30,6 +30,8 @@ $documentId = (int) ($_GET['id'] ?? 0);
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'knowledge');
     // A requester marked as left keeps nothing, even with a portal tab still
     // open - the same rule the portal's pages apply (self-service/includes/auth.php).
     if (!requesterIsActive($conn, $userId)) {

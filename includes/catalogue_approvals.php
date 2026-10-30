@@ -44,62 +44,390 @@ if (!class_exists('WorkflowEngine')) {
  * that auto-raise a ticket for the requester. An analyst filling a form internally has
  * no portal requester to raise one for, so it is never gated.
  *
- * A form flagged `requires_approval` but with no approver is treated as UNCONFIGURED —
- * it must never strand a request with nobody able to clear it. Returns the approver id
- * to gate on, or null for "let it through as normal".
+ * Two ways to decide (GH #220): a named person (approver_id, the original) or a TEAM
+ * (approval_team_id), where approvals_required different members must approve. A form
+ * flagged `requires_approval` with neither is treated as UNCONFIGURED - it must never
+ * strand a request with nobody able to clear it. Returns what to snapshot onto the
+ * submission, or null for "let it through as normal".
  *
- * @param array $form  the forms row being submitted - only requires_approval and approver_id are read
+ * @param array $form  the forms row being submitted
  * @param ?int $portalUserId  users.id of the portal requester; null when an analyst filled the form internally
+ * @return ?array{approver_id:?int, approval_team_id:?int, approvals_required:?int, rejections_required:?int, approval_exclude_requester:int}
  */
-function catalogueApprovalGate(array $form, ?int $portalUserId): ?int {
+function catalogueApprovalGate(array $form, ?int $portalUserId): ?array {
     if ($portalUserId === null) return null;
     if (empty($form['requires_approval'])) return null;
+    $teamId = (int)($form['approval_team_id'] ?? 0);
+    if ($teamId > 0) {
+        return [
+            'approver_id'                => null,
+            'approval_team_id'           => $teamId,
+            'approvals_required'         => max(1, (int)($form['approvals_required'] ?? 1)),
+            'rejections_required'        => max(1, (int)($form['rejections_required'] ?? 1)),
+            'approval_exclude_requester' => 1,   // always, in team mode - four eyes
+        ];
+    }
     if (empty($form['approver_id'])) return null;
-    return (int) $form['approver_id'];
+    return [
+        'approver_id'                => (int) $form['approver_id'],
+        'approval_team_id'           => null,
+        'approvals_required'         => null,
+        'rejections_required'        => null,
+        'approval_exclude_requester' => !empty($form['approval_exclude_requester']) ? 1 : 0,
+    ];
+}
+
+/**
+ * Are the group-approval columns there (GH #220)? Before Database Verification they
+ * are not, and every form is then a named-person form, exactly as before.
+ */
+function catalogueTeamApprovalAvailable(PDO $conn): bool {
+    static $known = null;
+    if ($known !== null) return $known;
+    try {
+        $q = $conn->query(
+            "SELECT (SELECT COUNT(*) FROM information_schema.columns
+                      WHERE table_schema = DATABASE() AND table_name = 'form_submissions' AND column_name = 'approval_round')
+                  + (SELECT COUNT(*) FROM information_schema.tables
+                      WHERE table_schema = DATABASE() AND table_name = 'form_submission_votes')"
+        );
+        $known = (int)$q->fetchColumn() === 2;
+    } catch (Throwable $e) {
+        $known = false;
+    }
+    return $known;
+}
+
+/**
+ * How a request is decided, from its SNAPSHOT - never from the form, so editing the
+ * form never reroutes or lowers the bar for a request already waiting.
+ *
+ * @param array $sub  the form_submissions row
+ * @return array{mode:string, team_id:?int, approver_id:?int, approvals_required:int, rejections_required:int, exclude_requester:bool, round:int}
+ */
+function catalogueApprovalPolicy(array $sub): array {
+    $teamId = (int)($sub['approval_team_id'] ?? 0);
+    return [
+        'mode'                => $teamId > 0 ? 'team' : 'person',
+        'team_id'             => $teamId > 0 ? $teamId : null,
+        'approver_id'         => !empty($sub['approver_id']) ? (int)$sub['approver_id'] : null,
+        'approvals_required'  => $teamId > 0 ? max(1, (int)($sub['approvals_required'] ?? 1)) : 1,
+        'rejections_required' => $teamId > 0 ? max(1, (int)($sub['rejections_required'] ?? 1)) : 1,
+        'exclude_requester'   => $teamId > 0 || !empty($sub['approval_exclude_requester']),
+        'round'               => max(1, (int)($sub['approval_round'] ?? 1)),
+    ];
+}
+
+/**
+ * Is this analyst the person who made the request? The requester is a portal account
+ * (users) and the approver a staff account (analysts), so the two are the same person
+ * when they share an email address - a member of staff requesting through the portal.
+ * Compared ignoring case; an empty address on either side never matches.
+ *
+ * @param int $analystId  the would-be approver
+ * @param array $sub  the form_submissions row (submitted_by_user_id)
+ */
+function catalogueAnalystIsRequester(PDO $conn, int $analystId, array $sub): bool {
+    $userId = (int)($sub['submitted_by_user_id'] ?? 0);
+    if ($userId <= 0 || $analystId <= 0) return false;
+    $st = $conn->prepare(
+        "SELECT LOWER(TRIM(a.email)) AS ae, LOWER(TRIM(u.email)) AS ue
+           FROM analysts a, users u WHERE a.id = ? AND u.id = ?"
+    );
+    $st->execute([$analystId, $userId]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    return $r && (string)$r['ae'] !== '' && $r['ae'] === $r['ue'];
+}
+
+/**
+ * The people who may vote on a team-approved request right now: active members of the
+ * (active) team, less the requester. Asked at every vote, so somebody who has left the
+ * team since the request arrived cannot vote, and somebody who has joined can.
+ *
+ * @param array $sub  the form_submissions row
+ * @return int[] analysts.id
+ */
+function catalogueEligibleMembers(PDO $conn, array $sub): array {
+    $teamId = (int)($sub['approval_team_id'] ?? 0);
+    if ($teamId <= 0) return [];
+    $st = $conn->prepare(
+        "SELECT a.id
+           FROM analyst_teams at
+           JOIN teams t    ON t.id = at.team_id AND t.is_active = 1
+           JOIN analysts a ON a.id = at.analyst_id AND COALESCE(a.is_active, 1) = 1
+          WHERE at.team_id = ?"
+    );
+    $st->execute([$teamId]);
+    $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    return array_values(array_filter($ids, fn($id) => !catalogueAnalystIsRequester($conn, $id, $sub)));
+}
+
+/**
+ * Where a request stands: the votes of its current round, the counts, who could still
+ * vote, and whether it is STUCK - neither outcome can be reached any more (the team has
+ * emptied, too few independent members, or the votes have split with nobody left).
+ * A stuck request is never waved through: an administrator moves or overrides it.
+ *
+ * @param array $sub  the form_submissions row
+ */
+function catalogueApprovalProgress(PDO $conn, array $sub): array {
+    $p = catalogueApprovalPolicy($sub);
+    $out = ['mode' => $p['mode'], 'approvals_required' => $p['approvals_required'],
+            'rejections_required' => $p['rejections_required'], 'approvals' => 0, 'rejections' => 0,
+            'votes' => [], 'waiting_on' => [], 'stuck' => false, 'stuck_reason' => null];
+    if ($p['mode'] === 'person') {
+        if ($p['approver_id'] === null) {
+            $out['stuck'] = true; $out['stuck_reason'] = 'no_approver';
+        } elseif ($p['exclude_requester'] && catalogueAnalystIsRequester($conn, $p['approver_id'], $sub)) {
+            $out['stuck'] = true; $out['stuck_reason'] = 'approver_is_requester';
+        }
+        return $out;
+    }
+    if (catalogueTeamApprovalAvailable($conn)) {
+        $st = $conn->prepare(
+            "SELECT v.analyst_id, v.decision, v.comment, v.was_member, v.voted_datetime, a.full_name
+               FROM form_submission_votes v LEFT JOIN analysts a ON a.id = v.analyst_id
+              WHERE v.submission_id = ? AND v.approval_round = ? ORDER BY v.voted_datetime, v.id"
+        );
+        $st->execute([(int)$sub['id'], $p['round']]);
+        $out['votes'] = $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+    $voted = [];
+    foreach ($out['votes'] as $v) {
+        $voted[(int)$v['analyst_id']] = true;
+        if ($v['decision'] === 'approved') $out['approvals']++; else $out['rejections']++;
+    }
+    $out['waiting_on'] = array_values(array_filter(catalogueEligibleMembers($conn, $sub), fn($id) => !isset($voted[$id])));
+    if (($sub['approval_status'] ?? '') === 'pending') {
+        $left = count($out['waiting_on']);
+        if ($out['approvals'] + $left < $p['approvals_required'] && $out['rejections'] + $left < $p['rejections_required']) {
+            $out['stuck'] = true;
+            $out['stuck_reason'] = $left === 0 && !$out['votes'] ? 'no_members' : 'not_enough_members';
+        }
+    }
+    return $out;
 }
 
 /**
  * Approve or reject a pending catalogue request.
  *
- * @param int $actorId  analysts.id of the person deciding - must be the request's approver unless an admin
+ * NAMED PERSON (the original): the request's approver, or an administrator, decides it
+ * outright. With approval_exclude_requester on, the approver may not decide a request
+ * they made themselves.
+ *
+ * TEAM (GH #220): each call is ONE member's vote. It is recorded, and the request is
+ * decided only when approvals_required different members have approved, or
+ * rejections_required have rejected - then, exactly once, the ticket or the form's
+ * own "when approved" list runs. A vote needs to be from a current, active member who
+ * is not the requester; a rejection needs a reason. An administrator's click is not a
+ * vote: catalogueApprovalOverride() is the separate, reasoned way round.
+ *
+ * TRAP: the whole decision runs holding the submission's row lock (SELECT ... FOR
+ * UPDATE). Two final votes landing together would otherwise both see "one short",
+ * both tip it, and raise two tickets; now the second waits, then sees it decided.
+ *
+ * @param int $actorId  analysts.id of the person deciding
  * @param int $submissionId  form_submissions.id of the pending request
  * @param string $decision 'approved' or 'rejected'
- * @param string $comment  the approver's optional note, trimmed; empty is stored as NULL
- * @return array { decision, ticket_id, ticket_number }
+ * @param string $comment  the note, trimmed; empty is stored as NULL. Required to reject in team mode.
+ * @return array { decision ('approved' / 'rejected', or 'recorded' for a vote that did not decide it), ticket_id, ticket_number, progress? }
  */
 function catalogueApprovalDecide(PDO $conn, int $actorId, int $submissionId, string $decision, string $comment = ''): array {
     $decision = strtolower(trim($decision));
     if (!in_array($decision, ['approved', 'rejected'], true)) {
         throw new Exception('Decision must be approve or reject');
     }
+    $comment = trim($comment);
 
+    $conn->beginTransaction();
+    try {
+        $sub = catalogueLockSubmission($conn, $submissionId);
+        $policy = catalogueApprovalPolicy($sub);
+
+        if ($policy['mode'] === 'team') {
+            if (!in_array($actorId, catalogueEligibleMembers($conn, $sub), true)) {
+                throw new Exception(catalogueAnalystIsRequester($conn, $actorId, $sub)
+                    ? 'You cannot approve a request you made yourself'
+                    : 'Only current members of the approving team can decide this request');
+            }
+            if ($decision === 'rejected' && $comment === '') {
+                throw new Exception('Give a reason for rejecting this request');
+            }
+            try {
+                $conn->prepare(
+                    "INSERT INTO form_submission_votes (submission_id, approval_round, analyst_id, decision, comment, was_member, voted_datetime)
+                     VALUES (?, ?, ?, ?, ?, 1, UTC_TIMESTAMP())"
+                )->execute([$submissionId, $policy['round'], $actorId, $decision, $comment !== '' ? $comment : null]);
+            } catch (PDOException $e) {
+                if ($e->getCode() === '23000') throw new Exception('You have already decided this request');
+                throw $e;
+            }
+            $progress = catalogueApprovalProgress($conn, $sub);
+            $final = $progress['approvals'] >= $policy['approvals_required'] ? 'approved'
+                   : ($progress['rejections'] >= $policy['rejections_required'] ? 'rejected' : null);
+            if ($final === null) {
+                $conn->commit();
+                return ['decision' => 'recorded', 'ticket_id' => null, 'ticket_number' => null, 'progress' => $progress];
+            }
+            $decision = $final;
+        } else {
+            // Only the assigned approver - or an administrator - may decide. The
+            // requester was told this specific person would sign it off.
+            $isAdmin = function_exists('sessionIsAdmin') ? sessionIsAdmin() : false;
+            if ($policy['approver_id'] !== $actorId && !$isAdmin) {
+                throw new Exception('Only the assigned approver can decide this request');
+            }
+            // GH #220: the form may say the requester cannot approve their own
+            // request - administrators included, or the rule would mean nothing.
+            if ($policy['exclude_requester'] && catalogueAnalystIsRequester($conn, $actorId, $sub)) {
+                throw new Exception('You cannot approve a request you made yourself');
+            }
+        }
+
+        $done = catalogueFinishDecision($conn, $sub, $decision, $actorId, $comment);
+        $conn->commit();
+    } catch (Exception $e) {
+        if ($conn->inTransaction()) $conn->rollBack();
+        throw $e;
+    }
+
+    return catalogueAfterDecision($conn, $sub, $decision, $comment, $done);
+}
+
+/**
+ * An administrator decides a team-approved request WITHOUT the votes - for a request
+ * that is stuck, or urgent. It needs a reason, is recorded as an override (never as
+ * votes), and then runs exactly what a decision would.
+ *
+ * @param int $actorId  the administrator
+ * @param string $decision 'approved' or 'rejected'
+ * @param string $reason  why - required
+ */
+function catalogueApprovalOverride(PDO $conn, int $actorId, int $submissionId, string $decision, string $reason): array {
+    $decision = strtolower(trim($decision));
+    $reason = trim($reason);
+    if (!in_array($decision, ['approved', 'rejected'], true)) throw new Exception('Decision must be approve or reject');
+    if (!(function_exists('sessionIsAdmin') && sessionIsAdmin())) throw new Exception('Only an administrator can override an approval');
+    if ($reason === '') throw new Exception('Give a reason for the override');
+
+    $conn->beginTransaction();
+    try {
+        $sub = catalogueLockSubmission($conn, $submissionId);
+        if (catalogueApprovalPolicy($sub)['mode'] !== 'team') {
+            throw new Exception('Override is for team approvals - decide this request directly');
+        }
+        catalogueApprovalEvent($conn, $submissionId, $actorId, 'override_' . $decision, null, $reason);
+        $done = catalogueFinishDecision($conn, $sub, $decision, $actorId, 'Override: ' . $reason);
+        $conn->commit();
+    } catch (Exception $e) {
+        if ($conn->inTransaction()) $conn->rollBack();
+        throw $e;
+    }
+    return catalogueAfterDecision($conn, $sub, $decision, 'Override: ' . $reason, $done);
+}
+
+/**
+ * An administrator moves a waiting request to another team or person - the way out for
+ * a stuck one. It needs a reason and is recorded. Votes already cast stay on record but
+ * stop counting: a new round starts, so the new approvers decide it afresh.
+ *
+ * @param int $actorId  the administrator
+ * @param array $to  ['team_id' => n, 'approvals_required' => n, 'rejections_required' => n] or ['approver_id' => n]
+ * @param string $reason  why - required
+ */
+function catalogueApprovalMove(PDO $conn, int $actorId, int $submissionId, array $to, string $reason): void {
+    $reason = trim($reason);
+    if (!(function_exists('sessionIsAdmin') && sessionIsAdmin())) throw new Exception('Only an administrator can move a request');
+    if ($reason === '') throw new Exception('Give a reason for moving the request');
+    $teamId = (int)($to['team_id'] ?? 0);
+    $approverId = (int)($to['approver_id'] ?? 0);
+    if (($teamId > 0) === ($approverId > 0)) throw new Exception('Choose a team or a person to move the request to');
+
+    $conn->beginTransaction();
+    try {
+        $sub = catalogueLockSubmission($conn, $submissionId);
+        $from = catalogueRoutingLabel($conn, $sub);
+        if ($teamId > 0) {
+            $t = $conn->prepare("SELECT name FROM teams WHERE id = ? AND is_active = 1");
+            $t->execute([$teamId]);
+            if ($t->fetchColumn() === false) throw new Exception('That team was not found');
+            $conn->prepare(
+                "UPDATE form_submissions SET approval_team_id = ?, approver_id = NULL, approvals_required = ?,
+                        rejections_required = ?, approval_exclude_requester = 1, approval_round = approval_round + 1
+                  WHERE id = ?"
+            )->execute([$teamId, max(1, (int)($to['approvals_required'] ?? $sub['approvals_required'] ?? 1)),
+                        max(1, (int)($to['rejections_required'] ?? $sub['rejections_required'] ?? 1)), $submissionId]);
+        } else {
+            $a = $conn->prepare("SELECT id FROM analysts WHERE id = ? AND COALESCE(is_active, 1) = 1");
+            $a->execute([$approverId]);
+            if ($a->fetchColumn() === false) throw new Exception('That person was not found');
+            $conn->prepare(
+                "UPDATE form_submissions SET approver_id = ?, approval_team_id = NULL, approvals_required = NULL,
+                        rejections_required = NULL, approval_round = approval_round + 1
+                  WHERE id = ?"
+            )->execute([$approverId, $submissionId]);
+        }
+        $after = catalogueLockSubmission($conn, $submissionId);
+        catalogueApprovalEvent($conn, $submissionId, $actorId, 'moved', $from . ' -> ' . catalogueRoutingLabel($conn, $after), $reason);
+        $conn->commit();
+    } catch (Exception $e) {
+        if ($conn->inTransaction()) $conn->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Load a pending request and hold its row lock for the rest of the transaction.
+ *
+ * @param int $submissionId  form_submissions.id
+ */
+function catalogueLockSubmission(PDO $conn, int $submissionId): array {
     $stmt = $conn->prepare(
         "SELECT s.*, f.title AS form_title
            FROM form_submissions s
            JOIN forms f ON f.id = s.form_id
-          WHERE s.id = ?"
+          WHERE s.id = ? FOR UPDATE"
     );
     $stmt->execute([$submissionId]);
     $sub = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$sub)                                   throw new Exception('That request was not found');
-    if ($sub['approval_status'] !== 'pending')   throw new Exception('That request is not awaiting approval');
+    if (!$sub)                                 throw new Exception('That request was not found');
+    if ($sub['approval_status'] !== 'pending') throw new Exception('That request is not awaiting approval');
+    return $sub;
+}
 
-    // Only the assigned approver — or an administrator — may decide. The requester was
-    // told this specific person would sign it off; letting anyone clear it would make
-    // the gate meaningless.
-    $isAdmin = function_exists('sessionIsAdmin') ? sessionIsAdmin() : false;
-    $approverIds = [];
-    if (!empty($sub['approver_ids'])) {
-        $decoded = json_decode((string)$sub['approver_ids'], true);
-        if (is_array($decoded)) $approverIds = array_map('intval', $decoded);
+/** "Team: Finance (2 approvals)" or "Priya Shah" - what a request is waiting on, for the record. */
+function catalogueRoutingLabel(PDO $conn, array $sub): string {
+    $p = catalogueApprovalPolicy($sub);
+    if ($p['mode'] === 'team') {
+        $t = $conn->prepare("SELECT name FROM teams WHERE id = ?");
+        $t->execute([$p['team_id']]);
+        return 'Team: ' . ($t->fetchColumn() ?: '#' . $p['team_id']) . ' (' . $p['approvals_required'] . ' approval' . ($p['approvals_required'] === 1 ? '' : 's') . ')';
     }
-    if (!$approverIds) $approverIds = [(int)$sub['approver_id']];
-    if (!in_array($actorId, $approverIds, true) && !$isAdmin) {
-        throw new Exception('Only the assigned approver can decide this request');
-    }
+    $a = $conn->prepare("SELECT full_name FROM analysts WHERE id = ?");
+    $a->execute([(int)$p['approver_id']]);
+    return (string)($a->fetchColumn() ?: 'nobody');
+}
 
-    $comment = trim($comment);
+/** Record an administrator's action on a request (override, move). */
+function catalogueApprovalEvent(PDO $conn, int $submissionId, int $actorId, string $action, ?string $detail, string $reason): void {
+    $conn->prepare(
+        "INSERT INTO form_submission_approval_events (submission_id, analyst_id, action, detail, reason, event_datetime)
+         VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
+    )->execute([$submissionId, $actorId ?: null, $action, $detail, $reason]);
+}
 
+/**
+ * The decision itself, inside the caller's transaction: raise the ticket (unless the
+ * form's own list owns that) and stamp the submission. Shared by a named approver's
+ * decision, a team's deciding vote and an override, so they cannot drift apart.
+ *
+ * @param array $sub  the locked form_submissions row
+ * @param string $decision 'approved' or 'rejected'
+ * @param int $actorId  who decided (the last voter, for a team)
+ * @param string $comment  the note stamped on the submission
+ * @return array{ticket_id:?int, ticket_number:?string, list:?array}
+ */
+function catalogueFinishDecision(PDO $conn, array $sub, string $decision, int $actorId, string $comment): array {
     // Does this form configure its own actions for this decision (#95)?
     //
     // 🔑 NULL means never configured, and the pre-#95 behaviour stands: approving
@@ -111,39 +439,47 @@ function catalogueApprovalDecide(PDO $conn, int $actorId, int $submissionId, str
     $decisionList = $formLists[$decision] ?? null;
     $listOwnsTheTicket = ($decision === 'approved' && $decisionList !== null);
 
-    $conn->beginTransaction();
-    try {
-        $ticketId = null;
-        $ticketNumber = null;
-
-        if ($decision === 'approved') {
-            // When the form owns this, the ticket (if any) is raised by its own
-            // action list AFTER the commit — see below. Doing it here would put
-            // an email send inside a transaction, and a rolled-back email is
-            // still an email somebody received.
-            if (!$listOwnsTheTicket) {
-                [$ticketId, $ticketNumber] = catalogueCreateTicketFromSubmission($conn, $sub);
-            }
-            $conn->prepare(
-                "UPDATE form_submissions
-                    SET approval_status = 'approved', approval_decided_by_id = ?,
-                        approval_decided_datetime = UTC_TIMESTAMP(), approval_comment = ?, ticket_id = ?
-                  WHERE id = ?"
-            )->execute([$actorId ?: null, $comment !== '' ? $comment : null, $ticketId, $submissionId]);
-        } else {
-            $conn->prepare(
-                "UPDATE form_submissions
-                    SET approval_status = 'rejected', approval_decided_by_id = ?,
-                        approval_decided_datetime = UTC_TIMESTAMP(), approval_comment = ?
-                  WHERE id = ?"
-            )->execute([$actorId ?: null, $comment !== '' ? $comment : null, $submissionId]);
+    $ticketId = null;
+    $ticketNumber = null;
+    if ($decision === 'approved') {
+        // When the form owns this, the ticket (if any) is raised by its own
+        // action list AFTER the commit — see catalogueAfterDecision(). Doing it
+        // here would put an email send inside a transaction, and a rolled-back
+        // email is still an email somebody received.
+        if (!$listOwnsTheTicket) {
+            [$ticketId, $ticketNumber] = catalogueCreateTicketFromSubmission($conn, $sub);
         }
-
-        $conn->commit();
-    } catch (Exception $e) {
-        if ($conn->inTransaction()) $conn->rollBack();
-        throw $e;
+        $conn->prepare(
+            "UPDATE form_submissions
+                SET approval_status = 'approved', approval_decided_by_id = ?,
+                    approval_decided_datetime = UTC_TIMESTAMP(), approval_comment = ?, ticket_id = ?
+              WHERE id = ?"
+        )->execute([$actorId ?: null, $comment !== '' ? $comment : null, $ticketId, (int)$sub['id']]);
+    } else {
+        $conn->prepare(
+            "UPDATE form_submissions
+                SET approval_status = 'rejected', approval_decided_by_id = ?,
+                    approval_decided_datetime = UTC_TIMESTAMP(), approval_comment = ?
+              WHERE id = ?"
+        )->execute([$actorId ?: null, $comment !== '' ? $comment : null, (int)$sub['id']]);
     }
+    return ['ticket_id' => $ticketId, 'ticket_number' => $ticketNumber, 'list' => $decisionList];
+}
+
+/**
+ * After the commit: tell the requester the outcome and run the form's own list for
+ * the decision. Best-effort - a failure here never undoes a decision.
+ *
+ * @param array $sub  the form_submissions row
+ * @param string $decision 'approved' or 'rejected'
+ * @param string $comment  the decision's note
+ * @param array $done  catalogueFinishDecision()'s result
+ */
+function catalogueAfterDecision(PDO $conn, array $sub, string $decision, string $comment, array $done): array {
+    $submissionId = (int)$sub['id'];
+    $ticketId     = $done['ticket_id'];
+    $ticketNumber = $done['ticket_number'];
+    $decisionList = $done['list'];
 
     // Tell the requester the outcome — best-effort, after commit, never fails a decision.
     if (class_exists('WorkflowEngine')) {
@@ -167,7 +503,7 @@ function catalogueApprovalDecide(PDO $conn, int $actorId, int $submissionId, str
                     'fields' => $answers['fields'],
                 ],
             ]);
-        } catch (Exception $e) { /* notification is a bonus, not the mechanism */ }
+        } catch (Exception) { /* notification is a bonus, not the mechanism */ }
     }
 
     // The form's own list for this decision. After the commit, so nothing it does
@@ -222,7 +558,8 @@ function catalogueApprovalDecide(PDO $conn, int $actorId, int $submissionId, str
  * @param array $sub  the form_submissions row plus form_title, as loaded by catalogueApprovalDecide()
  * @param array $overrides  optional ticket settings that win over the submission: subject, body_html,
  *     status_id, priority_id, department_id, ticket_type_id, assigned_analyst_id, assigned_team_id,
- *     from_email/from_name (requester when the submission has no account), audit_note
+ *     mailbox_id (the mailbox replies go from), from_email/from_name (requester when the submission
+ *     has no account), audit_note
  * @return array [int ticketId, string ticketNumber]
  */
 function catalogueCreateTicketFromSubmission(PDO $conn, array $sub, array $overrides = []): array {
@@ -303,20 +640,25 @@ function catalogueCreateTicketFromSubmission(PDO $conn, array $sub, array $overr
     // straight into a team's queue — "guest Wi-Fi requests go to Infrastructure"
     // — without naming a person. Null unless the rule set one.
     $teamId       = isset($overrides['assigned_team_id'])    && $overrides['assigned_team_id']    ? (int)$overrides['assigned_team_id']    : null;
+    // GH #216. The mailbox on the opening message is the one every reply goes
+    // from; with none, the ticket cannot be emailed. Checked by the caller.
+    $mailboxId    = isset($overrides['mailbox_id'])          && $overrides['mailbox_id']          ? (int)$overrides['mailbox_id']          : null;
 
     // TRAP: the install's numbering, never a number made here - see
     //   messagingGenerateTicketNumber() for what went wrong when it was.
     $ticketNumber = TicketNumbering::next($conn, $typeId, $tenantId !== null ? (int)$tenantId : null);
 
+    // owner_id with assigned_analyst_id, as every path that creates or assigns a
+    // ticket sets both: the Owner field reads owner_id (GH #216).
     $conn->prepare(
         "INSERT INTO tickets (ticket_number, subject, status_id, priority_id,
                               department_id, ticket_type_id, assigned_team_id,
-                              assigned_analyst_id,
+                              assigned_analyst_id, owner_id,
                               user_id, tenant_id, created_datetime, updated_datetime)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
     )->execute([
         $ticketNumber, $subject, $statusId, $priorityId,
-        $departmentId, $typeId, $teamId, $analystId,
+        $departmentId, $typeId, $teamId, $analystId, $analystId,
         $userId, $tenantId,
     ]);
     $ticketId = (int)$conn->lastInsertId();
@@ -327,9 +669,9 @@ function catalogueCreateTicketFromSubmission(PDO $conn, array $sub, array $overr
 
     $conn->prepare(
         "INSERT INTO emails (subject, from_address, from_name, to_recipients, received_datetime,
-             body_preview, body_content, body_type, has_attachments, importance, is_read, ticket_id, is_initial, direction)
-         VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), ?, ?, 'html', 0, 'normal', 0, ?, 1, 'Portal')"
-    )->execute([$subject, $fromEmail, $fromName, $fromEmail, $bodyPreview, $bodyHtml, $ticketId]);
+             body_preview, body_content, body_type, has_attachments, importance, is_read, ticket_id, is_initial, direction, mailbox_id)
+         VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), ?, ?, 'html', 0, 'normal', 0, ?, 1, 'Portal', ?)"
+    )->execute([$subject, $fromEmail, $fromName, $fromEmail, $bodyPreview, $bodyHtml, $ticketId, $mailboxId]);
 
     // Provenance. Without this a ticket raised from a form is indistinguishable
     // from one somebody typed, and the first question asked about a surprising
@@ -385,7 +727,30 @@ function catalogueRaiseTicketFromSubmissionId(PDO $conn, int $submissionId, arra
     $sub = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$sub) throw new Exception('That submission no longer exists');
 
+    // 🔴 Never past an approval. A workflow rule "on catalogue_request.submitted,
+    // create a ticket" reached this while the request was still pending - raising
+    // the ticket the approver had not yet agreed to - and a rule on .rejected raised
+    // one for a request that was refused. The help said that could not happen.
+    // Reported privately, October 2026. And a ticket already raised (by the
+    // approval itself, or a rule on .approved) is returned, not raised twice.
+    $status = (string)($sub['approval_status'] ?? 'not_required');
+    if ($status === 'pending' || $status === 'rejected') {
+        throw new Exception($status === 'pending'
+            ? 'That request is still awaiting approval, so no ticket was raised'
+            : 'That request was rejected, so no ticket was raised');
+    }
+    if (!empty($sub['ticket_id'])) {
+        $tn = $conn->prepare("SELECT ticket_number FROM tickets WHERE id = ?");
+        $tn->execute([(int)$sub['ticket_id']]);
+        $num = $tn->fetchColumn();
+        if ($num !== false) return ['ticket_id' => (int)$sub['ticket_id'], 'ticket_number' => (string)$num];
+    }
+
     [$ticketId, $ticketNumber] = catalogueCreateTicketFromSubmission($conn, $sub, $overrides);
+    if (!empty($sub['id'])) {
+        $conn->prepare("UPDATE form_submissions SET ticket_id = ? WHERE id = ? AND ticket_id IS NULL")
+             ->execute([$ticketId, (int)$sub['id']]);
+    }
     return ['ticket_id' => $ticketId, 'ticket_number' => $ticketNumber];
 }
 
@@ -582,6 +947,7 @@ function catalogueSubmissionBodyHtml(PDO $conn, int $submissionId, string $formT
  */
 function catalogueApproverCanEnter(PDO $conn, int $analystId): bool {
     if ($analystId <= 0) return false;
+    if (!moduleIsEnabled($conn, 'forms')) return false;   // GH #217: not into a switched-off Forms
     if (analystCanAccessModule($conn, $analystId, 'forms')) return true;
     try {
         $st = $conn->prepare(
@@ -589,58 +955,161 @@ function catalogueApproverCanEnter(PDO $conn, int $analystId): bool {
              UNION SELECT 1 FROM form_submissions WHERE approver_id = ? LIMIT 1"
         );
         $st->execute([$analystId, $analystId]);
-        return (bool)$st->fetchColumn();
-    } catch (Throwable $e) {
+        if ($st->fetchColumn()) return true;
+        // GH #220: a member of a team that approves - on a form, or on a request
+        // still waiting - has the same door, and nothing more.
+        return catalogueTeamApprovalAvailable($conn) && catalogueAnalystApprovesAsTeam($conn, $analystId);
+    } catch (Throwable) {
         return false;
     }
 }
 
+/**
+ * Is this analyst in a team that approves catalogue requests (GH #220)? The door to
+ * the approvals inbox, for somebody without the Forms module.
+ *
+ * @param int $analystId  the analyst
+ */
+function catalogueAnalystApprovesAsTeam(PDO $conn, int $analystId): bool {
+    $st = $conn->prepare(
+        "SELECT 1 FROM analyst_teams at JOIN teams t ON t.id = at.team_id AND t.is_active = 1
+          WHERE at.analyst_id = ?
+            AND (EXISTS (SELECT 1 FROM forms f WHERE f.approval_team_id = at.team_id AND f.requires_approval = 1)
+              OR EXISTS (SELECT 1 FROM form_submissions s WHERE s.approval_team_id = at.team_id AND s.approval_status = 'pending'))
+          LIMIT 1"
+    );
+    $st->execute([$analystId]);
+    return (bool)$st->fetchColumn();
+}
+
+/**
+ * The approvals inbox: "mine" (waiting on me), "all" (every pending request - Forms
+ * users only, checked by the endpoint) and "decided" (what I decided, or voted on).
+ *
+ * "Mine" (GH #220) is a named-person request whose approver I am, or a team request I
+ * can still vote on: I am a current member, not the requester, and have not voted this
+ * round. Each item carries its progress (catalogueApprovalProgress()) and the
+ * administrator's actions on it, so the card can show "1 of 2 approvals", who decided
+ * what, and a request that is stuck.
+ *
+ * @param int $analystId  the analyst the inbox is for
+ * @param string $filter  'mine', 'all' or 'decided'
+ */
 function catalogueApprovalsList(PDO $conn, int $analystId, string $filter = 'mine'): array {
+    $team = catalogueTeamApprovalAvailable($conn);
+    $teamCols = $team
+        ? ", s.approval_team_id, s.approvals_required, s.rejections_required, s.approval_exclude_requester, s.approval_round,
+             tm.name AS approval_team_name"
+        : '';
+    $teamJoin = $team ? ' LEFT JOIN teams tm ON tm.id = s.approval_team_id ' : '';
     $base =
-        "SELECT s.id, s.form_id, f.title AS form_title, s.submitted_date,
-                s.approval_status, s.approver_id, s.approver_ids, s.approval_decided_datetime, s.approval_comment,
+        "SELECT s.id, s.form_id, f.title AS form_title, s.submitted_date, s.submitted_by_user_id,
+                s.approval_status, s.approver_id, s.approval_decided_datetime, s.approval_comment,
                 s.ticket_id, t.ticket_number,
                 u.display_name AS requester_name, u.username AS requester_username,
-                ap.full_name AS approver_name
+                ap.full_name AS approver_name, dc.full_name AS decided_by_name{$teamCols}
            FROM form_submissions s
            JOIN forms f       ON f.id = s.form_id
            LEFT JOIN users u  ON u.id = s.submitted_by_user_id
            LEFT JOIN analysts ap ON ap.id = s.approver_id
-           LEFT JOIN tickets t   ON t.id = s.ticket_id ";
+           LEFT JOIN analysts dc ON dc.id = s.approval_decided_by_id
+           LEFT JOIN tickets t   ON t.id = s.ticket_id {$teamJoin}";
+
+    $myTeams = $team ? catalogueAnalystTeamIds($conn, $analystId) : [];
+    $teamIn = $myTeams ? implode(',', array_map('intval', $myTeams)) : '0';
+    $minePerson = $team ? "s.approver_id = ? AND s.approval_team_id IS NULL" : "s.approver_id = ?";
+    $mineSql = "s.approval_status = 'pending' AND (($minePerson)" . ($team ? " OR s.approval_team_id IN ($teamIn)" : '') . ")";
+    $decidedSql = "(s.approval_status IN ('approved','rejected') AND s.approval_decided_by_id = ?)"
+        . ($team ? " OR s.id IN (SELECT submission_id FROM form_submission_votes WHERE analyst_id = ?)" : '');
+    $decidedArgs = $team ? [$analystId, $analystId] : [$analystId];
 
     if ($filter === 'all') {
         $where = "WHERE s.approval_status = 'pending' ORDER BY s.submitted_date ASC";
         $params = [];
     } elseif ($filter === 'decided') {
-        $where = "WHERE s.approval_status IN ('approved','rejected') AND s.approval_decided_by_id = ?
-                  ORDER BY s.approval_decided_datetime DESC LIMIT 100";
-        $params = [$analystId];
+        $where = "WHERE $decidedSql ORDER BY COALESCE(s.approval_decided_datetime, s.submitted_date) DESC LIMIT 100";
+        $params = $decidedArgs;
     } else { // mine
-        $where = "WHERE s.approval_status = 'pending'
-                    AND (s.approver_id = ? OR JSON_CONTAINS(COALESCE(s.approver_ids, '[]'), CAST(? AS JSON)))
-                  ORDER BY s.submitted_date ASC";
-        $params = [$analystId, (string)$analystId];
+        $where = "WHERE $mineSql ORDER BY s.submitted_date ASC";
+        $params = [$analystId];
     }
 
     $stmt = $conn->prepare($base . $where);
     $stmt->execute($params);
     $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Attach each request's answers so the card can show what was asked for. Pending
-    // queues are short by nature (someone is waiting on each one), so the per-row fetch
-    // is fine here.
-    foreach ($items as &$it) {
+    $isAdmin = function_exists('sessionIsAdmin') ? sessionIsAdmin() : false;
+    $mineCount = 0;
+    $out = [];
+    foreach ($items as $it) {
+        $it['progress'] = catalogueApprovalProgress($conn, $it);
+        $policy = catalogueApprovalPolicy($it);
+        $pending = $it['approval_status'] === 'pending';
+        $it['mode'] = $policy['mode'];
+        $it['can_vote'] = $pending && $policy['mode'] === 'team' && in_array($analystId, $it['progress']['waiting_on'], true);
+        $it['can_decide'] = $pending && $policy['mode'] === 'person'
+            && ($policy['approver_id'] === $analystId || $isAdmin)
+            && !($policy['exclude_requester'] && catalogueAnalystIsRequester($conn, $analystId, $it));
+        $it['can_override'] = $pending && $isAdmin && $policy['mode'] === 'team';
+        $it['can_move'] = $pending && $isAdmin;
+        $it['events'] = $team ? catalogueApprovalEvents($conn, (int)$it['id']) : [];
+        // "Mine" lists only what I can act on: a team request I have voted on, or am
+        // excluded from as its requester, is not waiting on me.
+        if ($filter === 'mine' && $policy['mode'] === 'team' && !$it['can_vote']) continue;
         $it['answers'] = catalogueSubmissionAnswers($conn, (int)$it['id']);
+        $out[] = $it;
     }
-    unset($it);
+
+    // "Mine" is counted the same way it is listed, so the tab never promises more than it shows.
+    if ($filter === 'mine') {
+        $mineCount = count($out);
+    } else {
+        $st = $conn->prepare("SELECT s.* FROM form_submissions s WHERE $mineSql");
+        $st->execute([$analystId]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (catalogueApprovalPolicy($row)['mode'] === 'person'
+                || in_array($analystId, catalogueApprovalProgress($conn, $row)['waiting_on'], true)) {
+                $mineCount++;
+            }
+        }
+    }
 
     $counts = [
-        'mine'    => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions WHERE approval_status='pending' AND (approver_id = ? OR JSON_CONTAINS(COALESCE(approver_ids, '[]'), CAST(? AS JSON)))", [$analystId, (string)$analystId]),
+        'mine'    => $mineCount,
         'all'     => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions WHERE approval_status='pending'", []),
-        'decided' => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions WHERE approval_status IN ('approved','rejected') AND approval_decided_by_id = ?", [$analystId]),
+        'decided' => (int)catalogueScalar($conn, "SELECT COUNT(*) FROM form_submissions s WHERE $decidedSql", $decidedArgs),
     ];
 
-    return ['items' => $items, 'counts' => $counts];
+    return ['items' => $out, 'counts' => $counts];
+}
+
+/**
+ * The active teams an analyst is in (GH #220).
+ *
+ * @param int $analystId  the analyst
+ * @return int[]
+ */
+function catalogueAnalystTeamIds(PDO $conn, int $analystId): array {
+    $st = $conn->prepare(
+        "SELECT at.team_id FROM analyst_teams at JOIN teams t ON t.id = at.team_id AND t.is_active = 1 WHERE at.analyst_id = ?"
+    );
+    $st->execute([$analystId]);
+    return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * An administrator's overrides and moves on a request (GH #220), oldest first.
+ *
+ * @param int $submissionId  form_submissions.id
+ */
+function catalogueApprovalEvents(PDO $conn, int $submissionId): array {
+    $st = $conn->prepare(
+        "SELECT e.action, e.detail, e.reason, e.event_datetime, a.full_name
+           FROM form_submission_approval_events e LEFT JOIN analysts a ON a.id = e.analyst_id
+          WHERE e.submission_id = ? ORDER BY e.event_datetime, e.id"
+    );
+    $st->execute([$submissionId]);
+    return $st->fetchAll(PDO::FETCH_ASSOC);
 }
 
 /**

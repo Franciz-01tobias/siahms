@@ -38,7 +38,7 @@ try {
     }
 
     $channel = loadMessagingChannel($conn, $channelId);
-    if (!$channel || ($channel['provider'] ?? '') !== 'slack') {
+    if (!$channel || MessagingProviderKind::tryFrom((string)($channel['provider'] ?? '')) !== MessagingProviderKind::Slack) {
         echo json_encode(['success' => false, 'error' => 'Slack channel not found']);
         exit;
     }

@@ -210,7 +210,7 @@ function recentTrailWrite(string $type, int $id, ?PDO $conn = null): void
         if (random_int(1, 10) === 1) {
             recentTrailPrune($conn, $analystId);
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Deliberately silent. See the note above.
     }
 }
@@ -236,7 +236,7 @@ function recentTrailShouldRecord(): bool
     // choosing. Recording one would put a record in the trail that nobody ever
     // looked at, which is worse than missing one they did.
     $purpose = strtolower(($_SERVER['HTTP_SEC_PURPOSE'] ?? '') . ' ' . ($_SERVER['HTTP_PURPOSE'] ?? ''));
-    if (strpos($purpose, 'prefetch') !== false || strpos($purpose, 'prerender') !== false) {
+    if (str_contains($purpose, 'prefetch') || str_contains($purpose, 'prerender')) {
         return false;
     }
     return true;
@@ -420,7 +420,7 @@ function recentTrailLabels(PDO $conn, int $analystId, array $rows): array
             foreach (recentTrailLabelsForType($conn, $analystId, $type, array_keys($ids)) as $id => $label) {
                 $out[$type . ':' . $id] = $label;
             }
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // A type whose table is missing on this install contributes nothing,
             // rather than emptying the whole drawer.
         }

@@ -23,7 +23,20 @@ $navLabel = function ($key, $fallback) {
 };
 
 require_once $path_prefix . 'includes/waffle-menu.php';
+
+// What opening a task from the Table, Calendar or Timeline shows (GH #219): the
+// quick look (the default, and what those views always did) or the full task.
+// A per-analyst preference, read by assets/js/tasks-quick-panel.js.
+$tasksOpenPanel = 'quick';
+try {
+    $__p = connectToDatabase()->prepare(
+        "SELECT preference_value FROM user_preferences WHERE analyst_id = ? AND preference_key = 'tasks_open_panel'"
+    );
+    $__p->execute([(int) $_SESSION['analyst_id']]);
+    if ($__p->fetchColumn() === 'full') $tasksOpenPanel = 'full';
+} catch (Throwable $e) { /* no preferences row yet: the quick look */ }
 ?>
+<script>window.TASKS_OPEN_PANEL = <?php echo json_encode($tasksOpenPanel); ?>;</script>
 
 <div class="header tasks-header">
     <div class="waffle-menu-container">

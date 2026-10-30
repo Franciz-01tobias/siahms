@@ -355,7 +355,7 @@ function i18nVerifySelfTest(): int
     file_put_contents("$dir/notab.tsv", "a.greeting\tHola {name}, tienes {n} tickets\na.blank\n");
     $r = i18nVerifyChunk($enP, "$dir/notab.tsv");
     $sawTab = false;
-    foreach ($r['errors'] as $e) if (strpos($e, 'no tab') !== false) $sawTab = true;
+    foreach ($r['errors'] as $e) if (str_contains($e, 'no tab')) $sawTab = true;
     printf("  %-4s %-34s %s\n", $sawTab ? 'ok' : 'BAD', 'a key with no tab at all',
         $sawTab ? 'reported, not silently dropped' : 'NOT REPORTED');
     $sawTab ? $pass++ : $fail++;

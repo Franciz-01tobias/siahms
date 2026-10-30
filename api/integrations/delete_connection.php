@@ -17,6 +17,9 @@ require_once '../../config.php';
 require_once '../../includes/admin_api_guard.php';
 require_once '../../includes/integrations/integrations.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 $in = json_decode(file_get_contents('php://input'), true);

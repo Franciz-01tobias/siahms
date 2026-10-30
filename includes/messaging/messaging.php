@@ -17,6 +17,7 @@
  */
 
 require_once __DIR__ . '/MessagingProvider.php';
+require_once __DIR__ . '/MessagingProviderKind.php';
 require_once __DIR__ . '/TwilioProvider.php';
 require_once __DIR__ . '/MetaCloudProvider.php';
 require_once __DIR__ . '/SlackProvider.php';
@@ -39,24 +40,7 @@ if (!defined('MESSAGING_WINDOW_SECONDS')) {
  */
 function messagingProvider(array $channel): MessagingProvider
 {
-    switch ($channel['provider'] ?? 'twilio') {
-        case 'twilio':
-            return new TwilioProvider($channel);
-        case 'meta':
-            return new MetaCloudProvider($channel);
-        case 'freeitsm':
-            return new FreeitsmProvider($channel);
-        case 'slack':
-            return new SlackProvider($channel);
-        case 'telegram':
-            return new TelegramProvider($channel);
-        case 'teams':
-            return new TeamsProvider($channel);
-        case 'mattermost':
-            return new MattermostProvider($channel);
-        default:
-            throw new Exception('Unknown messaging provider: ' . ($channel['provider'] ?? '?'));
-    }
+    return MessagingProviderKind::fromChannel($channel)->create($channel);
 }
 
 /**
@@ -72,7 +56,7 @@ function loadMessagingChannel(PDO $conn, $channelId): ?array
         $stmt = $conn->prepare("SELECT * FROM messaging_channels WHERE id = ?");
         $stmt->execute([(int) $channelId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
     if (!$row) {
@@ -84,7 +68,7 @@ function loadMessagingChannel(PDO $conn, $channelId): ?array
     // empty rows still work (migration-safe).
     foreach (['verify_token', 'relay_secret'] as $secretCol) {
         if (isset($row[$secretCol]) && $row[$secretCol] !== null && $row[$secretCol] !== '') {
-            try { $row[$secretCol] = decryptValue($row[$secretCol]); } catch (Exception $e) { /* leave as-is */ }
+            try { $row[$secretCol] = decryptValue($row[$secretCol]); } catch (Exception) { /* leave as-is */ }
         }
     }
     $row['is_active'] = (bool) ($row['is_active'] ?? 1);
@@ -103,7 +87,7 @@ function messagingDecodeCredentials($stored): array
     }
     try {
         $plain = decryptValue($stored);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
     $decoded = json_decode((string) $plain, true);
@@ -124,7 +108,7 @@ function messagingPublicBaseUrl(PDO $conn): string
         if ($configured !== '') {
             return rtrim($configured, '/');
         }
-    } catch (Exception $e) { /* table missing → derive from request */ }
+    } catch (Exception) { /* table missing → derive from request */ }
 
     // ⚠️ Deliberately NOT requestIsHttps() (GH #152): this is the address shown
     // for the provider to call, and api/messaging/webhook.php rebuilds it the same
@@ -221,9 +205,9 @@ function messagingOutboundMediaToken(int $attachmentId, int $expires): string
 function messagingMediaCategory(string $mime): string
 {
     $mime = strtolower(trim(explode(';', $mime)[0]));
-    if (strpos($mime, 'image/') === 0) return 'image';
-    if (strpos($mime, 'video/') === 0) return 'video';
-    if (strpos($mime, 'audio/') === 0) return 'audio';
+    if (str_starts_with($mime, 'image/')) return 'image';
+    if (str_starts_with($mime, 'video/')) return 'video';
+    if (str_starts_with($mime, 'audio/')) return 'audio';
     return 'document';
 }
 
@@ -301,7 +285,7 @@ function messagingNormaliseLocale(string $raw): string
         return 'en';
     }
     // Our one locale whose key isn't a bare lowercase tag.
-    if ($lower === 'pt' || strpos($lower, 'pt-br') === 0) {
+    if ($lower === 'pt' || str_starts_with($lower, 'pt-br')) {
         return 'pt-BR';
     }
     // Telegram (and browsers) may send the old generic "no" for Norwegian;
@@ -338,7 +322,7 @@ function messagingExtForMime(string $mime): string
         return $map[$mime];
     }
     // Fallback: the subtype, stripped to something filesystem-safe.
-    $sub = strpos($mime, '/') !== false ? substr($mime, strpos($mime, '/') + 1) : $mime;
+    $sub = str_contains($mime, '/') ? substr($mime, strpos($mime, '/') + 1) : $mime;
     $sub = preg_replace('/[^a-z0-9]+/', '', $sub);
     return $sub !== '' ? substr($sub, 0, 8) : 'bin';
 }
@@ -505,7 +489,7 @@ function messagingAdminMayAdministerChannel(PDO $conn, int $channelId): bool
         $stmt = $conn->prepare("SELECT provider FROM messaging_channels WHERE id = ?");
         $stmt->execute([$channelId]);
         return ((string) $stmt->fetchColumn()) === 'slack';
-    } catch (Exception $e) {
+    } catch (Exception) {
         return false;
     }
 }

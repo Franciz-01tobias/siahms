@@ -407,7 +407,7 @@ $translationNamespaces = ['common', 'reporting'];
     </style>
     <!-- Mobile layer LAST, after this page's own <style> block, or a rule at
          equal specificity loses on document order (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="reporting" data-mobile-page="rep-logs">
     <?php include '../includes/header.php'; ?>
@@ -664,7 +664,7 @@ $translationNamespaces = ['common', 'reporting'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Every datetime in FreeITSM is stored UTC and rendered in the analyst's
@@ -927,6 +927,6 @@ $translationNamespaces = ['common', 'reporting'];
             if (e.target === this) closeJsonModal();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

@@ -5,10 +5,13 @@
 session_start();
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/ticket_workspace.php';   // TicketWorkspaceMode (PR #211)
+require_once '../../includes/ticket_list.php';        // TicketListExport (PR #213)
 require_once '../../includes/i18n.php';
 require_once '../../includes/theme.php';
 require_once '../../includes/timezone.php';
 require_once '../../includes/ai_settings_panel.php';
+require_once '../../includes/messaging/MessagingProviderKind.php';   // the Messaging tab's provider badges
 I18n::initFromSession();
 Tz::init();
 
@@ -28,6 +31,21 @@ requireModuleAccess('tickets');
 $settingsManifest = settingsManifestFor('tickets');
 $conn             = connectToDatabase();
 $visibleTabs      = settingsVisibleTabs($conn, (int) $_SESSION['analyst_id'], $settingsManifest);
+// GH #217 slice 2: Tickets features switched off for the install. SLA keeps its tab
+// for the calendars alone (web chat's opening hours use them); the rest lose theirs.
+$slaOff = !moduleIsEnabled($conn, 'sla');
+$featureTabsOff = array_merge(
+    moduleIsEnabled($conn, 'csat') ? [] : ['csat'],
+    moduleIsEnabled($conn, 'time-tracking') ? [] : ['time-tracking'],
+    moduleIsEnabled($conn, 'rota') ? [] : ['rota', 'rota-locations']
+);
+if ($featureTabsOff) {
+    $visibleTabs = array_values(array_filter($visibleTabs, fn($tab) => !in_array($tab['id'], $featureTabsOff, true)));
+}
+// GH #217: no Checklists tab while Checklists is switched off for the install.
+if (!moduleIsEnabled($conn, 'checklists')) {
+    $visibleTabs = array_values(array_filter($visibleTabs, fn($tab) => $tab['id'] !== 'checklists'));
+}
 $activeTabId      = settingsFirstTabId($visibleTabs);
 
 // SOP checklists (PR #141) — resolved server-side so the tab opens on the value
@@ -140,9 +158,12 @@ function renderOversizeFields(string $px, bool $withLimits): void
     <!-- Reply templates are rich text, so this page needs the same editor the reply
          box uses. Loaded for every tab because the tab bar is server-rendered and
          there is no navigation event to lazy-load on. -->
-    <script src="../../assets/js/tinymce/tinymce.min.js"></script>
+    <script src="../../assets/js/tinymce/tinymce.min.js?v=8.10.0"></script>
     <style>
         /* Page-specific overrides for settings page */
+
+        /* SLA switched off for the install (GH #217): its columns and fields go. */
+        body.sla-off .sla-only { display: none; }
 
         /* Pin the header WITHOUT making it (or <body>) a positioned or flex
          * element:
@@ -664,9 +685,9 @@ function renderOversizeFields(string $px, bool $withLimits): void
          data-mobile-shell="own" opts OUT of LAYER 2's flex body — this page
          deliberately keeps <body> unstyled (see the .settings-shell comment
          above) and builds its own scroll shell one level down. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
-<body data-mobile-page="settings" data-mobile-shell="own">
+<body data-mobile-page="settings" data-mobile-shell="own"<?php echo $slaOff ? ' class="sla-off"' : ''; ?>>
     <div class="settings-shell">
     <?php include '../includes/header.php'; ?>
 
@@ -675,7 +696,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
 
         <!-- Departments Tab -->
         <?php if (settingsTabVisible($visibleTabs, 'departments')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'departments' ? ' active' : ''; ?>" id="departments-tab" data-capability="<?php echo Cap::TICKETS_DEPARTMENTS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'departments' ? ' active' : ''; ?>" id="departments-tab" data-capability="<?php echo capKey(Cap::TICKETS_DEPARTMENTS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.departments')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('department')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -702,7 +723,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'ticket-types')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'ticket-types' ? ' active' : ''; ?>" id="ticket-types-tab" data-capability="<?php echo Cap::TICKETS_TICKET_TYPES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'ticket-types' ? ' active' : ''; ?>" id="ticket-types-tab" data-capability="<?php echo capKey(Cap::TICKETS_TICKET_TYPES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.ticket_types')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('ticket-type')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -728,7 +749,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'ticket-origins')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'ticket-origins' ? ' active' : ''; ?>" id="ticket-origins-tab" data-capability="<?php echo Cap::TICKETS_TICKET_ORIGINS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'ticket-origins' ? ' active' : ''; ?>" id="ticket-origins-tab" data-capability="<?php echo capKey(Cap::TICKETS_TICKET_ORIGINS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.ticket_origins')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('ticket-origin')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -754,7 +775,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'categories')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'categories' ? ' active' : ''; ?>" id="categories-tab" data-capability="<?php echo Cap::TICKETS_CATEGORIES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'categories' ? ' active' : ''; ?>" id="categories-tab" data-capability="<?php echo capKey(Cap::TICKETS_CATEGORIES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.categories')); ?></h2>
             </div>
@@ -875,7 +896,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
              SOP steps is closed (PR #141). Had been inside the Statuses tab's
              visibility check, so a role granted Checklists but not Statuses got
              the tab button and an empty panel. -->
-        <div class="tab-content<?php echo $activeTabId === 'checklists' ? ' active' : ''; ?>" id="checklists-tab" data-capability="<?php echo Cap::TICKETS_CHECKLISTS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'checklists' ? ' active' : ''; ?>" id="checklists-tab" data-capability="<?php echo capKey(Cap::TICKETS_CHECKLISTS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.checklists')); ?></h2>
             </div>
@@ -942,7 +963,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <!-- Mandatory fields: which ticket properties must be filled before a
              ticket may close, and what happens when they are not. Rendered from
              the stored values, so there is nothing to load - only to save. -->
-        <div class="tab-content<?php echo $activeTabId === 'mandatory-fields' ? ' active' : ''; ?>" id="mandatory-fields-tab" data-capability="<?php echo Cap::TICKETS_MANDATORY_FIELDS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'mandatory-fields' ? ' active' : ''; ?>" id="mandatory-fields-tab" data-capability="<?php echo capKey(Cap::TICKETS_MANDATORY_FIELDS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.mandatory_fields')); ?></h2>
             </div>
@@ -995,7 +1016,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
 
         <?php if (settingsTabVisible($visibleTabs, 'custom-fields')): ?>
         <!-- Custom fields (#179): the extra details each ticket type asks for. -->
-        <div class="tab-content<?php echo $activeTabId === 'custom-fields' ? ' active' : ''; ?>" id="custom-fields-tab" data-capability="<?php echo Cap::TICKETS_CUSTOM_FIELDS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'custom-fields' ? ' active' : ''; ?>" id="custom-fields-tab" data-capability="<?php echo capKey(Cap::TICKETS_CUSTOM_FIELDS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.custom_fields')); ?></h2>
                 <button class="add-btn" onclick="tfOpen(null)"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1031,7 +1052,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo Cap::TICKETS_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo capKey(Cap::TICKETS_STATUSES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.statuses')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('status')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1043,7 +1064,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
                         <th><?php echo htmlspecialchars(t('tickets.settings.columns.name')); ?></th>
                         <th><?php echo htmlspecialchars(t('tickets.settings.columns.colour')); ?></th>
                         <th><?php echo htmlspecialchars(t('tickets.settings.columns.closed')); ?></th>
-                        <th><?php echo htmlspecialchars(t('tickets.settings.cols.pause_sla')); ?></th>
+                        <th class="sla-only"><?php echo htmlspecialchars(t('tickets.settings.cols.pause_sla')); ?></th>
                         <th><?php echo htmlspecialchars(t('tickets.settings.columns.default')); ?></th>
                         <th><?php echo htmlspecialchars(t('tickets.settings.columns.order')); ?></th>
                         <th><?php echo htmlspecialchars(t('tickets.settings.columns.status')); ?></th>
@@ -1060,7 +1081,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'priorities')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="priorities-tab" data-capability="<?php echo Cap::TICKETS_PRIORITIES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="priorities-tab" data-capability="<?php echo capKey(Cap::TICKETS_PRIORITIES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.priorities')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('priority')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1087,7 +1108,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'sla')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'sla' ? ' active' : ''; ?>" id="sla-tab" data-capability="<?php echo Cap::TICKETS_SLA; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'sla' ? ' active' : ''; ?>" id="sla-tab" data-capability="<?php echo capKey(Cap::TICKETS_SLA); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.sla.heading')); ?></h2>
             </div>
@@ -1095,6 +1116,9 @@ function renderOversizeFields(string $px, bool $withLimits): void
                 <?php echo t('tickets.settings.sla.intro'); ?>
             </p>
 
+            <?php if ($slaOff): ?>
+            <div class="settings-group"><p style="margin:0;"><strong><?php echo htmlspecialchars(moduleDisabledMessage('sla')); ?></strong> Switch it back on in System &rarr; Modules &rarr; Availability. The business calendars below stay, because web chat uses them for its opening hours.</p></div>
+            <?php else: ?>
             <!-- ===== Global SLA settings ===== -->
             <div class="settings-group">
                 <h3><?php echo htmlspecialchars(t('tickets.settings.sla.global_heading')); ?></h3>
@@ -1185,6 +1209,8 @@ function renderOversizeFields(string $px, bool $withLimits): void
                 </table>
             </div>
 
+            <?php endif; ?>
+
             <!-- ===== Business Calendars ===== -->
             <div class="settings-group">
                 <div class="section-header">
@@ -1209,6 +1235,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
                 </table>
             </div>
 
+            <?php if (!$slaOff): ?>
             <!-- ===== Breach Notifications ===== -->
             <div class="settings-group">
                 <div class="section-header">
@@ -1269,6 +1296,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
                     </tbody>
                 </table>
             </div>
+            <?php endif; /* !$slaOff */ ?>
         </div>
 
         <!-- ===== Breach Notification rule modal ===== -->
@@ -1345,7 +1373,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'rota-locations')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'rota-locations' ? ' active' : ''; ?>" id="rota-locations-tab" data-capability="<?php echo Cap::TICKETS_ROTA_LOCATIONS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'rota-locations' ? ' active' : ''; ?>" id="rota-locations-tab" data-capability="<?php echo capKey(Cap::TICKETS_ROTA_LOCATIONS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.rota_locations')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('rota-location')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1372,7 +1400,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'mailboxes')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'mailboxes' ? ' active' : ''; ?>" id="mailboxes-tab" data-capability="<?php echo Cap::TICKETS_MAILBOXES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'mailboxes' ? ' active' : ''; ?>" id="mailboxes-tab" data-capability="<?php echo capKey(Cap::TICKETS_MAILBOXES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.mailboxes')); ?></h2>
                 <div>
@@ -1434,7 +1462,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'messaging')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'messaging' ? ' active' : ''; ?>" id="messaging-tab" data-capability="<?php echo Cap::TICKETS_MESSAGING; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'messaging' ? ' active' : ''; ?>" id="messaging-tab" data-capability="<?php echo capKey(Cap::TICKETS_MESSAGING); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.messaging.channels_heading')); ?></h2>
                 <button class="add-btn" onclick="openChannelModal()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1495,7 +1523,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'webchat')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'webchat' ? ' active' : ''; ?>" id="webchat-tab" data-capability="<?php echo Cap::TICKETS_WEBCHAT; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'webchat' ? ' active' : ''; ?>" id="webchat-tab" data-capability="<?php echo capKey(Cap::TICKETS_WEBCHAT); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.webchat.heading')); ?></h2>
                 <button class="add-btn" onclick="openWidgetModal()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1524,7 +1552,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'email-templates')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'email-templates' ? ' active' : ''; ?>" id="email-templates-tab" data-capability="<?php echo Cap::TICKETS_EMAIL_TEMPLATES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'email-templates' ? ' active' : ''; ?>" id="email-templates-tab" data-capability="<?php echo capKey(Cap::TICKETS_EMAIL_TEMPLATES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.email_templates')); ?></h2>
                 <button class="add-btn" onclick="openTemplateModal()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1603,7 +1631,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'indexing')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'indexing' ? ' active' : ''; ?>" id="indexing-tab" data-capability="<?php echo Cap::TICKETS_INDEXING; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'indexing' ? ' active' : ''; ?>" id="indexing-tab" data-capability="<?php echo capKey(Cap::TICKETS_INDEXING); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.indexing')); ?></h2>
             </div>
@@ -1640,7 +1668,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'merge-behaviour')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'merge-behaviour' ? ' active' : ''; ?>" id="merge-behaviour-tab" data-capability="<?php echo Cap::TICKETS_MERGE; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'merge-behaviour' ? ' active' : ''; ?>" id="merge-behaviour-tab" data-capability="<?php echo capKey(Cap::TICKETS_MERGE); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.merge_behaviour')); ?></h2>
             </div>
@@ -1707,7 +1735,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'reply-templates')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'reply-templates' ? ' active' : ''; ?>" id="reply-templates-tab" data-capability="<?php echo Cap::TICKETS_REPLY_TEMPLATES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'reply-templates' ? ' active' : ''; ?>" id="reply-templates-tab" data-capability="<?php echo capKey(Cap::TICKETS_REPLY_TEMPLATES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.reply_templates')); ?></h2>
                 <button class="add-btn" onclick="openReplyTemplateModal()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1733,7 +1761,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'rota')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'rota' ? ' active' : ''; ?>" id="rota-tab" data-capability="<?php echo Cap::TICKETS_ROTA; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'rota' ? ' active' : ''; ?>" id="rota-tab" data-capability="<?php echo capKey(Cap::TICKETS_ROTA); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.rota_shifts')); ?></h2>
                 <button class="add-btn" onclick="openRotaShiftModal()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -1766,13 +1794,13 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <!-- General Tab -->
         <?php endif; ?>
 
-        <?php if (settingsTabVisible($visibleTabs, 'general')): ?>
+        <?php if (settingsTabVisible($visibleTabs, 'numbering')): ?>
         <?php /* Ticket numbering (GH #71).
                  Ordered so the consequential decisions come first: what the
                  number LOOKS like, then what each counter counts, then the
                  renumbering tool last and clearly separated — it rewrites the
                  reference on every existing ticket. */ ?>
-        <div class="tab-content<?php echo $activeTabId === 'numbering' ? ' active' : ''; ?>" id="numbering-tab" data-capability="<?php echo Cap::TICKETS_NUMBERING; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'numbering' ? ' active' : ''; ?>" id="numbering-tab" data-capability="<?php echo capKey(Cap::TICKETS_NUMBERING); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.numbering.heading')); ?></h2>
             </div>
@@ -1865,8 +1893,10 @@ function renderOversizeFields(string $px, bool $withLimits): void
             </div>
             <div id="numRenumberOut" style="margin-top:16px;max-width:700px;"></div>
         </div>
+        <?php endif; ?>
 
-        <div class="tab-content<?php echo $activeTabId === 'general' ? ' active' : ''; ?>" id="general-tab" data-capability="<?php echo Cap::TICKETS_GENERAL; ?>">
+        <?php if (settingsTabVisible($visibleTabs, 'general')): ?>
+        <div class="tab-content<?php echo $activeTabId === 'general' ? ' active' : ''; ?>" id="general-tab" data-capability="<?php echo capKey(Cap::TICKETS_GENERAL); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.general_settings')); ?></h2>
             </div>
@@ -1885,6 +1915,32 @@ function renderOversizeFields(string $px, bool $withLimits): void
                         <input type="checkbox" id="reopenOnCustomerReply"> <?php echo htmlspecialchars(t('tickets.settings.general.reopen_toggle')); ?>
                     </label>
                     <small style="color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('tickets.settings.general.reopen_help')); ?></small>
+                </div>
+
+                <?php /* The ticket workspace (PR #211): which tickets may be laid out
+                         for working. Off by default, so an upgrade changes nothing;
+                         see includes/ticket_workspace.php. */ ?>
+                <div class="form-group">
+                    <label for="ticketWorkspaceMode"><?php echo htmlspecialchars(t('tickets.workspace.layout')); ?></label>
+                    <select id="ticketWorkspaceMode">
+                        <?php foreach (TicketWorkspaceMode::cases() as $workspaceMode): ?>
+                        <option value="<?php echo $workspaceMode->value; ?>"><?php echo htmlspecialchars(t('tickets.workspace.' . $workspaceMode->value)); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small style="color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('tickets.workspace.mode_help')); ?></small>
+                </div>
+
+                <?php /* Who may export the ticket table as CSV (PR #213). A bulk export
+                         of ticket data, so Administrators only unless changed; the
+                         endpoint checks it on every request. */ ?>
+                <div class="form-group">
+                    <label for="ticketListExport"><?php echo htmlspecialchars(t('tickets.queue.export_label')); ?></label>
+                    <select id="ticketListExport">
+                        <?php foreach (TicketListExport::cases() as $exportPolicy): ?>
+                        <option value="<?php echo $exportPolicy->value; ?>"><?php echo htmlspecialchars(t('tickets.queue.export_' . $exportPolicy->value)); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small style="color: var(--text-muted, #666);"><?php echo htmlspecialchars(t('tickets.queue.export_help')); ?></small>
                 </div>
 
                 <div class="form-group">
@@ -2041,7 +2097,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
 
         <!-- Privacy Tab -->
         <?php if (settingsTabVisible($visibleTabs, 'privacy')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'privacy' ? ' active' : ''; ?>" id="privacy-tab" data-capability="<?php echo Cap::TICKETS_PRIVACY; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'privacy' ? ' active' : ''; ?>" id="privacy-tab" data-capability="<?php echo capKey(Cap::TICKETS_PRIVACY); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.privacy')); ?></h2>
             </div>
@@ -2084,7 +2140,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
 
         <!-- Reply Cleanup Tab -->
         <?php if (settingsTabVisible($visibleTabs, 'reply-cleanup')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'reply-cleanup' ? ' active' : ''; ?>" id="reply-cleanup-tab" data-capability="<?php echo Cap::TICKETS_REPLY_CLEANUP; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'reply-cleanup' ? ' active' : ''; ?>" id="reply-cleanup-tab" data-capability="<?php echo capKey(Cap::TICKETS_REPLY_CLEANUP); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.reply_cleanup_ai')); ?></h2>
             </div>
@@ -2146,7 +2202,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'csat')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'csat' ? ' active' : ''; ?>" id="csat-tab" data-capability="<?php echo Cap::TICKETS_CSAT; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'csat' ? ' active' : ''; ?>" id="csat-tab" data-capability="<?php echo capKey(Cap::TICKETS_CSAT); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.csat')); ?></h2>
             </div>
@@ -2226,7 +2282,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         <!-- Time tracking (discussion #72). Two switches, because hiding the panel
              and closing the API are different decisions: an install can tidy its
              screens without breaking a billing export that nobody told it about. -->
-        <div class="tab-content<?php echo $activeTabId === 'time-tracking' ? ' active' : ''; ?>" id="time-tracking-tab" data-capability="<?php echo Cap::TICKETS_MANAGE; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'time-tracking' ? ' active' : ''; ?>" id="time-tracking-tab" data-capability="<?php echo capKey(Cap::TICKETS_MANAGE); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('tickets.settings.headings.time_tracking')); ?></h2>
             </div>
@@ -2620,9 +2676,10 @@ function renderOversizeFields(string $px, bool $withLimits): void
                     <div class="form-group" style="grid-column: span 2;">
                         <label for="mailboxProvider"><?php echo htmlspecialchars(t('tickets.settings.modals.mailbox.provider')); ?> *</label>
                         <select id="mailboxProvider" onchange="toggleProviderFields()">
-                            <option value="microsoft"><?php echo htmlspecialchars(t('tickets.settings.modals.mailbox.provider_microsoft')); ?></option>
-                            <option value="google"><?php echo htmlspecialchars(t('tickets.settings.modals.mailbox.provider_google')); ?></option>
-                            <option value="imap"><?php echo htmlspecialchars(t('tickets.settings.modals.mailbox.provider_imap')); ?></option>
+                            <?php // One option per MailboxProvider case (4.0) - the enum is the list. ?>
+                            <?php foreach (MailboxProvider::cases() as $mbp): ?>
+                            <option value="<?php echo htmlspecialchars($mbp->value); ?>"><?php echo htmlspecialchars(t('tickets.settings.modals.mailbox.provider_' . $mbp->value)); ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
 
@@ -2858,6 +2915,26 @@ function renderOversizeFields(string $px, bool $withLimits): void
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeMailboxModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
                 <button type="submit" form="mailboxForm" class="btn btn-primary"><?php echo htmlspecialchars(t('common.save')); ?></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete mailbox (GH #227): says what is still attached and where its emails go. -->
+    <div class="modal" id="mailboxDeleteModal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header" id="mailboxDeleteTitle"></div>
+            <div class="modal-body">
+                <div id="mailboxDeleteBody"></div>
+                <div class="form-group" id="mailboxDeleteMoveGroup" style="display: none; margin-top: 12px;">
+                    <label for="mailboxDeleteMoveTo"><?php echo htmlspecialchars(t('tickets.settings.modals.mailbox_delete.move_label')); ?></label>
+                    <select id="mailboxDeleteMoveTo" onchange="renderMailboxDeleteWarnings()"></select>
+                    <small style="color: var(--text-muted, #666); display: block; margin-top: 4px;"><?php echo htmlspecialchars(t('tickets.settings.modals.mailbox_delete.move_help')); ?></small>
+                </div>
+                <div id="mailboxDeleteWarnings"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeMailboxDeleteModal()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button type="button" class="btn btn-danger" id="mailboxDeleteConfirm" onclick="confirmMailboxDelete()" disabled style="background: var(--danger-accent, #d13438); border-color: var(--danger-accent, #d13438); color: #fff;"><?php echo htmlspecialchars(t('common.delete')); ?></button>
             </div>
         </div>
     </div>
@@ -3589,6 +3666,15 @@ function renderOversizeFields(string $px, bool $withLimits): void
     <script>
         const API_BASE = '../../api/tickets/';
         const API_SETTINGS = '../../api/settings/';
+        // value => {label, background, color, oauth}, from the MailboxProvider enum (4.0).
+        const MAILBOX_PROVIDERS = <?php echo json_encode(MailboxProvider::forJs(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        // value => {label, background, color}, from the MessagingProviderKind enum (4.0).
+        const MESSAGING_PROVIDERS = <?php echo json_encode(MessagingProviderKind::forJs(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        /** A messaging provider's badge; none saved is Twilio, as MessagingProviderKind::fromChannel() says. */
+        function messagingProviderBadge(provider) {
+            const p = MESSAGING_PROVIDERS[provider || 'twilio'] || { label: String(provider), background: '#eceff1', color: '#455a64' };
+            return `<span class="status-badge" style="background:${p.background};color:${p.color};">${escapeHtml(p.label)}</span>`;
+        }
         let currentTab = 'departments';
 
         let mailboxes = [];
@@ -3602,24 +3688,28 @@ function renderOversizeFields(string $px, bool $withLimits): void
             // loadTeams still runs — it populates the `teams` global the
             // Departments tab's team-assignment picker reads. Team and analyst
             // management moved to System → Teams / System → Analysts.
+            // A delegated settings role only gets the tabs it holds, so a
+            // loader whose tab is not on the page must not run - it would
+            // write into a missing element and throw.
+            const hasTab = id => !!document.getElementById(id + '-tab');
             loadTeams().then(() => {
-                loadDepartments();
+                if (hasTab('departments')) loadDepartments();
             });
-            loadTicketTypes();
-            loadTicketOrigins();
-            loadCustomFields();
-            loadTicketStatuses();
-            loadTicketPriorities();
-            loadRotaLocations();
-            loadMailboxes();
-            loadChannels();
-            loadWidgets();
-            loadMsgTemplates();
-            loadEmailTemplates();
-            loadReplyTemplates();
-            loadRotaShifts();
-            loadRotaWeekendSetting();
-            loadSlaTab();
+            if (hasTab('ticket-types')) loadTicketTypes();
+            if (hasTab('ticket-origins')) loadTicketOrigins();
+            if (hasTab('custom-fields')) loadCustomFields();
+            if (hasTab('statuses')) loadTicketStatuses();
+            if (hasTab('priorities')) loadTicketPriorities();
+            if (hasTab('rota-locations')) loadRotaLocations();
+            if (hasTab('mailboxes')) loadMailboxes();
+            if (hasTab('messaging')) loadChannels();
+            if (hasTab('webchat')) loadWidgets();
+            if (hasTab('messaging')) loadMsgTemplates();
+            if (hasTab('email-templates')) loadEmailTemplates();
+            if (hasTab('reply-templates')) loadReplyTemplates();
+            if (hasTab('rota')) loadRotaShifts();
+            if (hasTab('rota')) loadRotaWeekendSetting();
+            if (hasTab('sla')) loadSlaTab();
 
             // Auto-switch to mailboxes tab if OAuth success
             <?php if ($oauthSuccess && $oauthMailboxId): ?>
@@ -3938,7 +4028,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
                     <td><strong>${escapeHtml(s.name)}</strong></td>
                     <td>${swatch}</td>
                     <td>${closed}</td>
-                    <td>${pauseCell}</td>
+                    <td class="sla-only">${pauseCell}</td>
                     <td>${def}</td>
                     <td>${s.display_order}</td>
                     <td><span class="status-badge status-${s.is_active ? 'active' : 'inactive'}">${s.is_active ? 'Active' : 'Inactive'}</span></td>
@@ -4059,7 +4149,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             document.getElementById('itemDescriptionGroup').style.display = isColouredLookup ? 'none' : '';
             document.getElementById('itemColourGroup').style.display      = isColouredLookup ? '' : 'none';
             document.getElementById('itemClosedGroup').style.display      = isStatus ? '' : 'none';
-            document.getElementById('itemPausesSlaGroup').style.display   = isStatus ? '' : 'none';
+            document.getElementById('itemPausesSlaGroup').style.display   = isStatus && !document.body.classList.contains('sla-off') ? '' : 'none';   // GH #217
             document.getElementById('itemConfidentialGroup').style.display = type === 'department' ? '' : 'none';
             document.getElementById('itemDefaultGroup').style.display     = isColouredLookup ? '' : 'none';
         }
@@ -4591,7 +4681,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         }
 
         // Team assignment form submission
-        document.getElementById('teamAssignmentForm').addEventListener('submit', async function(e) {
+        document.getElementById('teamAssignmentForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const entityType = document.getElementById('assignmentEntityType').value;
@@ -4636,7 +4726,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         });
 
         // Handle form submission
-        document.getElementById('editForm').addEventListener('submit', async function(e) {
+        document.getElementById('editForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const type = document.getElementById('itemType').value;
@@ -4730,7 +4820,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Mailbox Functions
@@ -4800,15 +4890,9 @@ function renderOversizeFields(string $px, bool $withLimits): void
                 return;
             }
             tbody.innerHTML = list.map(c => {
-                const providerBadge = c.provider === 'meta'
-                    ? ' <span class="status-badge" style="background:#e3f2fd;color:#1565c0;">Meta</span>'
-                    : c.provider === 'telegram'
-                    ? ' <span class="status-badge" style="background:#e1f5fe;color:#0288d1;">Telegram</span>'
-                    : c.provider === 'teams'
-                    ? ' <span class="status-badge" style="background:#ede7f6;color:#4527a0;">Teams</span>'
-                    : c.provider === 'mattermost'
-                    ? ' <span class="status-badge" style="background:#e6f4ea;color:#1e7e34;">Mattermost</span>'
-                    : ' <span class="status-badge" style="background:#e8f5e9;color:#2e7d32;">Twilio</span>';
+                // From MessagingProviderKind (PHP), so every provider has a badge - until 4.0
+                // a Slack channel fell through this list and was badged "Twilio".
+                const providerBadge = ' ' + messagingProviderBadge(c.provider);
                 const activeBadge = c.is_active ? '' : ' <span class="status-badge status-inactive">Inactive</span>';
                 const credBadge = c.has_credentials
                     ? '<span class="status-badge status-active">Configured</span>'
@@ -5057,7 +5141,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             } catch (e) { showToast('Failed to delete channel', 'error'); }
         }
 
-        document.getElementById('channelForm').addEventListener('submit', async function(e) {
+        document.getElementById('channelForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
             const selectedProvider = document.getElementById('channelProvider').value;
             const payload = {
@@ -5272,7 +5356,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             } catch (e) { showToast('Failed to delete widget', 'error'); }
         }
 
-        document.getElementById('widgetForm').addEventListener('submit', async function(e) {
+        document.getElementById('widgetForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
             const payload = {
                 id: document.getElementById('widgetId').value || null,
@@ -5347,9 +5431,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
                 return;
             }
             tbody.innerHTML = list.map(tpl => {
-                const prov = tpl.provider === 'meta'
-                    ? '<span class="status-badge" style="background:#e3f2fd;color:#1565c0;">Meta</span>'
-                    : '<span class="status-badge" style="background:#e8f5e9;color:#2e7d32;">Twilio</span>';
+                const prov = messagingProviderBadge(tpl.provider);
                 const active = tpl.is_active ? '' : ' <span class="status-badge status-inactive">Inactive</span>';
                 const vars = tpl.var_count ? ` <span class="status-badge" style="background:#f3e5f5;color:#6a1b9a;">${tpl.var_count} var${tpl.var_count > 1 ? 's' : ''}</span>` : '';
                 const safeName = escapeHtml(tpl.name).replace(/'/g, "\\'");
@@ -5415,7 +5497,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             } catch (e) { showToast('Failed to delete template', 'error'); }
         }
 
-        document.getElementById('msgTemplateForm').addEventListener('submit', async function(e) {
+        document.getElementById('msgTemplateForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
             const payload = {
                 id: document.getElementById('msgTemplateId').value || null,
@@ -5596,14 +5678,10 @@ function renderOversizeFields(string $px, bool $withLimits): void
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                 </button>`;
 
-                let providerBadge;
-                if (mb.provider === 'google') {
-                    providerBadge = ' <span class="status-badge" style="background:#e8f5e9;color:#2e7d32;">Google</span>';
-                } else if (mb.provider === 'imap') {
-                    providerBadge = ' <span class="status-badge" style="background:#ede7f6;color:#5e35b1;">IMAP</span>';
-                } else {
-                    providerBadge = ' <span class="status-badge" style="background:#e3f2fd;color:#1565c0;">Microsoft</span>';
-                }
+                // Label and colours come from MailboxProvider (PHP) - never spelled out here.
+                // Unknown or missing is Microsoft, as MailboxProvider::fromMailbox() says.
+                const pv = MAILBOX_PROVIDERS[mb.provider] || MAILBOX_PROVIDERS.microsoft;
+                const providerBadge = ` <span class="status-badge" style="background:${pv.background};color:${pv.color};">${escapeHtml(pv.label)}</span>`;
 
                 // Multi-tenancy: show the routing target — pinned company, or shared intake.
                 let companyBadge = '';
@@ -6026,36 +6104,114 @@ function renderOversizeFields(string $px, bool $withLimits): void
             }
         }
 
+        // The delete dialog (GH #227). It asks the server what still uses the
+        // mailbox first, because a mailbox that ever received mail has emails
+        // pointing at it, and they must be moved or cleared before it can go.
+        let mailboxDeleteState = null;
+
         async function deleteMailbox(id, name) {
-            const ok = await showConfirm({
-                title: 'Delete mailbox',
-                message: `Are you sure you want to delete the mailbox "${name}"?`,
-                okLabel: 'Delete',
-                okClass: 'danger'
-            });
-            if (!ok) return;
+            const md = k => 'tickets.settings.modals.mailbox_delete.' + k;
+            mailboxDeleteState = null;
+            document.getElementById('mailboxDeleteTitle').textContent = t(md('title'), { name: name });
+            document.getElementById('mailboxDeleteBody').textContent = t(md('checking'));
+            document.getElementById('mailboxDeleteMoveGroup').style.display = 'none';
+            document.getElementById('mailboxDeleteWarnings').innerHTML = '';
+            document.getElementById('mailboxDeleteConfirm').disabled = true;
+            document.getElementById('mailboxDeleteModal').classList.add('active');
 
             try {
                 const response = await fetch(API_BASE + 'delete_mailbox.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: id })
+                    body: JSON.stringify({ id: id, preview: true })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    closeMailboxDeleteModal();
+                    showToast(t(md('error'), { error: data.error }), 'error');
+                    return;
+                }
+                mailboxDeleteState = { id: id, ...data };
+
+                const total = data.emails_on_tickets + data.emails_loose;
+                const body = document.getElementById('mailboxDeleteBody');
+                if (total === 0) {
+                    body.innerHTML = `<p>${escapeHtml(t(md('nothing')))}</p>`;
+                } else {
+                    const items = [];
+                    if (data.emails_on_tickets) items.push(t(md('on_tickets'), { count: data.emails_on_tickets }));
+                    if (data.emails_loose) items.push(t(md('loose'), { count: data.emails_loose }));
+                    body.innerHTML = `<p style="margin: 0;">${escapeHtml(t(md('intro')))}</p><ul style="margin: 6px 0 0 20px; padding: 0;">`
+                        + items.map(s => `<li>${escapeHtml(s)}</li>`).join('') + '</ul>';
+
+                    const sel = document.getElementById('mailboxDeleteMoveTo');
+                    sel.innerHTML = data.move_targets.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')
+                        + `<option value="">${escapeHtml(t(md('move_none')))}</option>`;
+                    document.getElementById('mailboxDeleteMoveGroup').style.display = '';
+                }
+                renderMailboxDeleteWarnings();
+                document.getElementById('mailboxDeleteConfirm').disabled = false;
+            } catch (error) {
+                console.error('Error:', error);
+                closeMailboxDeleteModal();
+                showToast(t(md('failed')), 'error');
+            }
+        }
+
+        // What the chosen option will cost, re-drawn when the dropdown changes.
+        function renderMailboxDeleteWarnings() {
+            const s = mailboxDeleteState;
+            if (!s) return;
+            const md = k => 'tickets.settings.modals.mailbox_delete.' + k;
+            const moving = (s.emails_on_tickets + s.emails_loose) > 0
+                && document.getElementById('mailboxDeleteMoveTo').value !== '';
+            const lines = [];
+            if (!moving && s.emails_on_tickets) lines.push(t(md('none_tickets')));
+            if (!moving && s.emails_loose) lines.push(t(md('none_loose'), { count: s.emails_loose }));
+            if (s.used_for_knowledge) lines.push(t(md('knowledge')));
+            const warn = lines.map(l => `<p style="color: var(--danger-text, #991b1b); background: var(--danger-bg, #fee2e2); padding: 8px 10px; border-radius: 4px; margin: 10px 0 0;">${escapeHtml(l)}</p>`).join('');
+            document.getElementById('mailboxDeleteWarnings').innerHTML = warn
+                + `<p style="color: var(--text-muted, #666); margin: 12px 0 0; font-size: 13px;">${escapeHtml(t(md('deactivate')))}</p>`;
+        }
+
+        function closeMailboxDeleteModal() {
+            document.getElementById('mailboxDeleteModal').classList.remove('active');
+            mailboxDeleteState = null;
+        }
+
+        async function confirmMailboxDelete() {
+            const s = mailboxDeleteState;
+            if (!s) return;
+            const md = k => 'tickets.settings.modals.mailbox_delete.' + k;
+            const moveTo = (s.emails_on_tickets + s.emails_loose) > 0
+                ? (parseInt(document.getElementById('mailboxDeleteMoveTo').value, 10) || null)
+                : null;
+            document.getElementById('mailboxDeleteConfirm').disabled = true;
+
+            try {
+                const response = await fetch(API_BASE + 'delete_mailbox.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: s.id, move_to: moveTo })
                 });
                 const data = await response.json();
 
                 if (data.success) {
-                    showToast('Mailbox deleted', 'success');
+                    closeMailboxDeleteModal();
+                    showToast(t(md('deleted')), 'success');
                     loadMailboxes();
                 } else {
-                    showToast('Error deleting mailbox: ' + data.error, 'error');
+                    document.getElementById('mailboxDeleteConfirm').disabled = false;
+                    showToast(t(md('error'), { error: data.error }), 'error');
                 }
             } catch (error) {
                 console.error('Error:', error);
-                showToast('Failed to delete mailbox', 'error');
+                document.getElementById('mailboxDeleteConfirm').disabled = false;
+                showToast(t(md('failed')), 'error');
             }
         }
 
-        function authenticateMailbox(id) {
+        async function authenticateMailbox(id) {
             const mailbox = mailboxes.find(m => m.id == id);
             if (!mailbox) {
                 showToast('Mailbox not found. ID: ' + id, 'error');
@@ -6064,9 +6220,25 @@ function renderOversizeFields(string $px, bool $withLimits): void
 
             const provider = mailbox.provider || 'microsoft';
 
+            // The state comes from the server, which remembers it for this session -
+            // the callback refuses any other (mailbox_oauth_start.php explains why).
+            let state;
+            try {
+                const res = await fetch(API_BASE + 'mailbox_oauth_start.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mailbox_id: id })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Could not start the sign-in');
+                state = data.state;
+            } catch (e) {
+                showToast(e.message, 'error');
+                return;
+            }
+
             if (provider === 'google') {
                 // Google OAuth flow
-                const state = 'google_mailbox_' + id + '_' + Math.random().toString(36).substring(2, 18);
                 const params = new URLSearchParams({
                     client_id: mailbox.azure_client_id,
                     redirect_uri: mailbox.oauth_redirect_uri,
@@ -6079,7 +6251,6 @@ function renderOversizeFields(string $px, bool $withLimits): void
                 window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
             } else {
                 // Microsoft OAuth flow
-                const state = 'mailbox_' + id + '_' + Math.random().toString(36).substring(2, 18);
                 const params = new URLSearchParams({
                     client_id: mailbox.azure_client_id,
                     response_type: 'code',
@@ -6227,7 +6398,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
         }
 
         // Mailbox form submission
-        document.getElementById('mailboxForm').addEventListener('submit', async function(e) {
+        document.getElementById('mailboxForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const formData = {
@@ -6652,11 +6823,11 @@ function renderOversizeFields(string $px, bool $withLimits): void
         // Load remaining settings on page load (analyst management moved to
         // System → Analysts).
         document.addEventListener('DOMContentLoaded', function() {
-            loadGeneralSettings();
+            if (document.getElementById('general-tab')) loadGeneralSettings();
             loadPrivacySettings();
             loadMergeSettings();
-            loadReplyCleanupSettings();
-            loadCsatSettings();
+            if (document.getElementById('reply-cleanup-tab')) loadReplyCleanupSettings();
+            if (document.getElementById('csat-tab')) loadCsatSettings();
         });
 
         // ============================
@@ -6702,7 +6873,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             }
         }
 
-        document.getElementById('csatSettingsForm').addEventListener('submit', async function(e) {
+        document.getElementById('csatSettingsForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
             const payload = {
                 mode:           document.querySelector('input[name="csatMode"]:checked')?.value || 'off',
@@ -6737,7 +6908,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             }
         });
 
-        document.getElementById('replyCleanupForm').addEventListener('submit', async function(e) {
+        document.getElementById('replyCleanupForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
             const payload = {
                 tone:                document.getElementById('rcTone').value,
@@ -6777,6 +6948,16 @@ function renderOversizeFields(string $px, bool $withLimits): void
                     const reopen = data.settings.reopen_on_customer_reply;
                     document.getElementById('reopenOnCustomerReply').checked =
                         (reopen === null || reopen === undefined || reopen === '') ? true : (reopen === '1');
+                    // The workspace (Off) and who may export the list (Administrators
+                    // only) when never saved - the same defaults the server falls
+                    // back to (PR #211, #213).
+                    const setSelect = (id, value, fallback) => {
+                        const sel = document.getElementById(id);
+                        sel.value = value;
+                        if (sel.value !== value) sel.value = fallback;
+                    };
+                    setSelect('ticketWorkspaceMode', data.settings.ticket_workspace_mode, 'off');
+                    setSelect('ticketListExport', data.settings.ticket_list_export, 'admins');
                     // Snooze wake hour (#933) — 09:00 when never saved, matching
                     // snoozeWakeHour() in includes/ticket_snooze.php.
                     // Long-message display (#104). Defaults mirror
@@ -7147,10 +7328,12 @@ function renderOversizeFields(string $px, bool $withLimits): void
             }
         }
 
-        document.getElementById('generalSettingsForm').addEventListener('submit', async function(e) {
+        document.getElementById('generalSettingsForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const settings = {
+                ticket_workspace_mode: document.getElementById('ticketWorkspaceMode').value,
+                ticket_list_export: document.getElementById('ticketListExport').value,
                 reopen_on_customer_reply: document.getElementById('reopenOnCustomerReply').checked ? '1' : '0',
                 snooze_wake_hour: document.getElementById('snoozeWakeHour').value,
                 ticket_collapse_enabled:       document.getElementById('collapseEnabled').checked ? '1' : '0',
@@ -7554,6 +7737,9 @@ function renderOversizeFields(string $px, bool $withLimits): void
             if (templateBodyEditor || !document.getElementById('templateBody')) return;
             const isDark = (document.documentElement.getAttribute('data-theme-mode') || 'light') === 'dark';
             tinymce.init({
+                // Plugins and skins load without the page's ?v=, so a browser could pair a new
+                // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+                cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
                 selector: '#templateBody',
                 license_key: 'gpl',
                 height: 300,
@@ -7711,6 +7897,9 @@ function renderOversizeFields(string $px, bool $withLimits): void
             if (replyTemplateEditor || !document.getElementById('replyTemplateBody')) return;
             const isDark = (document.documentElement.getAttribute('data-theme-mode') || 'light') === 'dark';
             tinymce.init({
+                // Plugins and skins load without the page's ?v=, so a browser could pair a new
+                // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+                cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
                 selector: '#replyTemplateBody',
                 license_key: 'gpl',
                 height: 300,
@@ -7898,7 +8087,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             });
         }
 
-        document.getElementById('templateForm').addEventListener('submit', async function(e) {
+        document.getElementById('templateForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const templateData = {
@@ -8035,7 +8224,7 @@ function renderOversizeFields(string $px, bool $withLimits): void
             document.getElementById('rotaShiftModal').classList.remove('active');
         }
 
-        document.getElementById('rotaShiftForm').addEventListener('submit', async function(e) {
+        document.getElementById('rotaShiftForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const shiftData = {
@@ -8147,6 +8336,8 @@ function renderOversizeFields(string $px, bool $withLimits): void
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error || 'load failed');
                 slaData = { settings: data.settings || {}, priorities: data.priorities || [], calendars: data.calendars || [] };
+                // SLA switched off for the install (GH #217): only the calendars are on the tab.
+                if (document.body.classList.contains('sla-off')) { renderSlaCalendars(); return; }
                 renderSlaGlobalSettings();
                 renderSlaTargets();
                 renderSlaCalendars();
@@ -9431,6 +9622,6 @@ function renderOversizeFields(string $px, bool $withLimits): void
     </script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

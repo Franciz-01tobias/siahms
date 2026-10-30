@@ -17,6 +17,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+// GH #217: refused while the sla feature is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'sla');
 
 try {
     $conn = connectToDatabase();

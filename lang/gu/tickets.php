@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'પ્રદાતા',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'બેઝિક IMAP / SMTP (username &amp; password)',
+                'provider_imap' => 'બેઝિક IMAP / SMTP (username & password)',
                 'display_name' => 'પ્રદર્શન નામ',
                 'display_name_placeholder' => 'દા.ત. Service Desk',
                 'target_mailbox' => 'લક્ષ્ય મેઈલબોક્સ',

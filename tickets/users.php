@@ -443,7 +443,7 @@ $translationNamespaces = ['common', 'tickets'];
             border-bottom: 1px solid var(--border, #e0e0e0);
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="tickets-users">
     <?php include 'includes/header.php'; ?>
@@ -684,12 +684,18 @@ $translationNamespaces = ['common', 'tickets'];
         // choice for the same reason.
         function renderUserPersonInfo(user) {
             const rows = [];
-            const add = (labelKey, value) => {
+            // dialHref: the Call link get_users.php built for a phone field ('' = none).
+            const add = (labelKey, value, dialHref) => {
                 if (value === null || value === undefined || value === '') return;
+                const call = dialHref
+                    ? ` <a class="phone-dial" style="margin-left:6px;font-size:12px;font-weight:600;white-space:nowrap" href="${escapeHtml(dialHref)}"`
+                      + (/^https:/i.test(dialHref) ? ' target="_blank" rel="noopener"' : '')
+                      + ` title="${escapeHtml(t('common.phone_dial.call_title', { number: String(value) }))}">${escapeHtml(t('common.phone_dial.call'))}</a>`
+                    : '';
                 rows.push(`
                     <div class="info-item">
                         <span class="info-label">${escapeHtml(t(labelKey))}</span>
-                        <span class="info-value">${escapeHtml(String(value))}</span>
+                        <span class="info-value">${escapeHtml(String(value))}${call}</span>
                     </div>`);
             };
 
@@ -705,8 +711,8 @@ $translationNamespaces = ['common', 'tickets'];
             add('tickets.users.info.job_title',   user.job_title);
             add('tickets.users.info.department',  user.department);
             add('tickets.users.info.office',      user.office);
-            add('tickets.users.info.phone',       user.phone);
-            add('tickets.users.info.mobile',      user.mobile);
+            add('tickets.users.info.phone',       user.phone, user.phone_dial);
+            add('tickets.users.info.mobile',      user.mobile, user.mobile_dial);
             add('tickets.users.info.employee_id', user.employee_id);
 
             // Resolved from the list this page already holds, which is tenant
@@ -873,7 +879,7 @@ $translationNamespaces = ['common', 'tickets'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Format date for display. Locale sourced from <html lang> so the date
@@ -1345,6 +1351,6 @@ $translationNamespaces = ['common', 'tickets'];
             results.classList.remove('open');
         });
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

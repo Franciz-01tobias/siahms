@@ -31,9 +31,11 @@ $multi = isMultiTenant(connectToDatabase());
 $sections = [
     'overview'   => 4,
     'adding'     => 5,
-    'grade'      => 4,
+    'subdomains' => 5,
+    'internal'   => 5,   // GH #203
+    'grade'      => 5,
     'email'      => 5,
-    'certs'      => 5,
+    'certs'      => 7,
     'lookalikes' => 3,
     'changes'    => 3,
     'alerts'     => 7,
@@ -74,7 +76,7 @@ $para = fn(string $k) => preg_replace(['/\*\*([^*]+)\*\*/', '/`([^`]+)`/'], ['<s
             --on-accent:    var(--dom-on-accent, #fff);
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="domains" data-mobile-page="domains-help">
     <?php include 'includes/header.php'; ?>
@@ -142,6 +144,6 @@ $para = fn(string $k) => preg_replace(['/\*\*([^*]+)\*\*/', '/`([^`]+)`/'], ['<s
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

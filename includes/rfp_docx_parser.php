@@ -23,6 +23,10 @@ function rfpExtractDocxText(string $filePath): string
     if (!file_exists($filePath)) {
         throw new RuntimeException("File not found: {$filePath}");
     }
+    // An Error, not an exception, without ext-zip - and callers catch exceptions (GH #207).
+    if (!class_exists('ZipArchive')) {
+        throw new RuntimeException("This server's PHP does not have the zip extension, which reading a .docx needs. Ask whoever runs FreeITSM to enable it.");
+    }
 
     $zip = new ZipArchive();
     $result = $zip->open($filePath);

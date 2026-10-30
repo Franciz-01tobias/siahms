@@ -169,7 +169,7 @@ try {
         }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="ai">
     <?php include '../includes/header.php'; ?>
@@ -287,6 +287,6 @@ try {
         btn.disabled = false;
     });
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

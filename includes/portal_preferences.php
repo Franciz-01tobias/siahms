@@ -36,7 +36,7 @@ function portalPrefGet(PDO $conn, int $userId, string $key, string $default = ''
         $st->execute([$userId, $key]);
         $v = $st->fetchColumn();
         return $v === false || $v === null ? $default : (string)$v;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Missing table on a part-upgraded install, or the database is
         // unreachable. Either way the honest answer is "they have not chosen",
         // which is what the default means.

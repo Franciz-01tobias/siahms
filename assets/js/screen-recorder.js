@@ -56,7 +56,7 @@
     function escapeHtml(text) {
         var d = document.createElement('div');
         d.textContent = text || '';
-        return d.innerHTML;
+        return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     /** Formats seconds as m:ss. */

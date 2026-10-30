@@ -97,7 +97,7 @@ function knowledgeAuditView(PDO $conn, int $articleId, ?int $analyst, ?int $user
         );
         $st->execute([$articleId, $analyst, $user]);
         if ($st->fetchColumn()) return;
-    } catch (PDOException $e) {
+    } catch (PDOException) {
         // Cannot tell whether it is already recorded; recording a possible
         // duplicate beats losing the row.
     }
@@ -141,7 +141,7 @@ function knowledgeAuditHistory(PDO $conn, string $type, int $id, int $limit = 20
                 $s->execute([$uid]);
             }
             $v = $s->fetchColumn();
-        } catch (PDOException $e) { $v = false; }
+        } catch (PDOException) { $v = false; }
         return $names[$key] = ($v === false || $v === null || $v === '') ? '(deleted)' : (string)$v;
     };
 

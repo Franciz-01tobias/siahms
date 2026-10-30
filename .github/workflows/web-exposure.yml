@@ -34,3 +34,17 @@ jobs:
       # is the same kind of check: files only, no database, no web server.
       - name: no .htaccess breaks Apache with PHP-FPM
         run: php tests/htaccess-php-guard.php
+
+      # A link on another site can make a signed-in browser send a GET, and the
+      # CSRF check only covers the other methods - so an endpoint that writes must
+      # refuse a GET (includes/csrf.php, csrfRequireWriteMethod). Same job: files only.
+      - name: no endpoint changes data on a GET
+        run: php tests/get-must-not-write.php
+
+      # GH #207: the official image installed only pdo_mysql, so LDAP, SCORM
+      # upload and .docx reading could not work in it. Every extension the code
+      # uses must be installed by the Dockerfile or excluded with a reason in
+      # docker/php-extensions.txt. Same job: files only (the image checks itself
+      # at build time).
+      - name: every PHP extension the code uses is in the Docker image
+        run: php tests/docker-php-extensions.php

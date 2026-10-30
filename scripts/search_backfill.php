@@ -26,7 +26,7 @@ $args  = array_slice($argv, 1);
 $opt   = function (string $name, $default = null) use ($args) {
     foreach ($args as $a) {
         if ($a === "--$name") return true;
-        if (strpos($a, "--$name=") === 0) return substr($a, strlen($name) + 3);
+        if (str_starts_with($a, "--$name=")) return substr($a, strlen($name) + 3);
     }
     return $default;
 };

@@ -122,7 +122,7 @@ abstract class IssueTrackerProvider
         foreach ($externalIds as $id) {
             try {
                 $out[$id] = $this->fetchIssue($id);
-            } catch (Exception $e) {
+            } catch (Exception) {
                 // Skipped deliberately — see the docblock.
             }
         }

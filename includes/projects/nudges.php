@@ -56,7 +56,7 @@ function projectAlertsOverdueDigest(PDO $conn, ?int $projectId = null): int
     foreach (projectNudgeProjects($conn, array_keys($byProject)) as $pid => $p) {
         try {
             $claim->execute(['project_overdue:' . $pid, $mode . ':' . $period]);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $fired;   // no ledger: firing without one would repeat every run
         }
         if ($claim->rowCount() !== 1) continue;
@@ -95,7 +95,7 @@ function projectAlertsStalled(PDO $conn, ?int $projectId = null): int
             if ($rows) $approvers = projectProposalApprovers($conn);
             foreach ($rows as $r) $waiting[] = ['proposal', (int)$r['id'], (int)$r['id'], $r['name'], $r['since'], $approvers];
         }
-    } catch (Throwable $e) { /* before Verification */ }
+    } catch (Throwable) { /* before Verification */ }
 
     // Change requests not decided (control.php) - to whoever may decide them.
     try {
@@ -112,7 +112,7 @@ function projectAlertsStalled(PDO $conn, ?int $projectId = null): int
                               projectNudgeDeciders($conn, $p, $r['raised_by_id'] !== null ? (int)$r['raised_by_id'] : null)];
             }
         }
-    } catch (Throwable $e) { /* before Verification */ }
+    } catch (Throwable) { /* before Verification */ }
 
     // Gate sign-offs nobody has given (gatecheck.php) - to the person named.
     try {
@@ -123,7 +123,7 @@ function projectAlertsStalled(PDO $conn, ?int $projectId = null): int
                                  AND s.status <> 'closed' AND p.status IN ('proposed', 'active', 'on_hold')
                                  AND i.created_datetime >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL $max DAY)$one")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $r) $waiting[] = ['signoff', (int)$r['id'], (int)$r['project_id'], $r['title'] . ' (' . $r['stage_name'] . ')', $r['since'], [(int)$r['analyst_id']]];
-    } catch (Throwable $e) { /* before Verification */ }
+    } catch (Throwable) { /* before Verification */ }
 
     // Reports still drafts (reports) - to the project manager, who approves them.
     try {
@@ -132,7 +132,7 @@ function projectAlertsStalled(PDO $conn, ?int $projectId = null): int
                                WHERE r.status = 'draft' AND p.owner_analyst_id IS NOT NULL AND p.status IN ('proposed', 'active', 'on_hold')
                                  AND r.created_datetime >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL $max DAY)$one")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $r) $waiting[] = ['report', (int)$r['id'], (int)$r['project_id'], $r['title'], $r['since'], [(int)$r['owner_analyst_id']]];
-    } catch (Throwable $e) { /* before Verification */ }
+    } catch (Throwable) { /* before Verification */ }
 
     if (!$waiting) return 0;
     $projects = projectNudgeProjects($conn, array_unique(array_column($waiting, 2)));
@@ -147,7 +147,7 @@ function projectAlertsStalled(PDO $conn, ?int $projectId = null): int
         if (!$notify) continue;
         try {
             $claim->execute(['project_stall:' . $kind . ':' . $id, (string)$round]);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $fired;
         }
         if ($claim->rowCount() !== 1) continue;

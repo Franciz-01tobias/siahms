@@ -26,7 +26,7 @@ return [
     'label'  => 'Tasks',
 
     'umbrella' => [
-        'cap'   => Cap::TASKS_MANAGE,
+        'cap'   => capKey(Cap::TASKS_MANAGE),
         'grant' => 'Manage everything in Tasks settings',
     ],
 
@@ -34,26 +34,26 @@ return [
         [
             // Also governs reordering the Kanban board's columns — see the note above.
             'id'        => 'statuses',
-            'cap'       => Cap::TASKS_STATUSES,
+            'cap'       => capKey(Cap::TASKS_STATUSES),
             'label_key' => 'tasks.settings.tab_statuses',
             'grant'     => 'Manage task statuses, and the order of the board\'s columns',
         ],
         [
             'id'        => 'priorities',
-            'cap'       => Cap::TASKS_PRIORITIES,
+            'cap'       => capKey(Cap::TASKS_PRIORITIES),
             'label_key' => 'tasks.settings.tab_priorities',
             'grant'     => 'Manage task priorities',
         ],
         [
             'id'           => 'calendar',
-            'cap'          => Cap::TASKS_CALENDAR,
+            'cap'          => capKey(Cap::TASKS_CALENDAR),
             'label_key'    => 'tasks.settings.tab_calendar',
             'grant'        => 'Configure how tasks appear on the calendar',
             'setting_keys' => ['tasks_calendar_span_mode'],
         ],
         [
             'id'           => 'card',
-            'cap'          => Cap::TASKS_CARD,
+            'cap'          => capKey(Cap::TASKS_CARD),
             'label_key'    => 'tasks.settings.tab_card',
             'grant'        => 'Configure what appears on a task card',
             'setting_keys' => ['tasks_card_fields'],
@@ -64,7 +64,7 @@ return [
             // thing that distinguishes them — which is why it is a setting rather than
             // two separate features.
             'id'           => 'time',
-            'cap'          => Cap::TASKS_TIME,
+            'cap'          => capKey(Cap::TASKS_TIME),
             'label_key'    => 'tasks.settings.tab_time',
             'grant'        => 'Configure where time is recorded on tasks',
             'setting_keys' => ['tasks_time_scope'],
@@ -75,7 +75,7 @@ return [
             // tag off the tags capability. What sits behind THIS is the one
             // administrative choice: whether each person gets a tick of their own.
             'id'           => 'involved',
-            'cap'          => Cap::TASKS_INVOLVED,
+            'cap'          => capKey(Cap::TASKS_INVOLVED),
             'label_key'    => 'tasks.settings.tab_involved',
             'grant'        => 'Configure whether people on a task tick off their own part',
             'setting_keys' => ['tasks_collaborator_completion'],
@@ -86,7 +86,7 @@ return [
             // would confuse some teams, so it is offered rather than imposed - the
             // same shape as time recording.
             'id'           => 'checklists',
-            'cap'          => Cap::TASKS_CHECKLISTS,
+            'cap'          => capKey(Cap::TASKS_CHECKLISTS),
             'label_key'    => 'tasks.settings.tab_checklists',
             'grant'        => 'Switch checklists, forms and procedures on tasks on or off',
             'setting_keys' => ['tasks_checklists_enabled', 'tasks_forms_enabled', 'tasks_procedures_enabled'],
@@ -97,7 +97,7 @@ return [
             // and whether running the evidence report needs its own permission. Sensitive:
             // these decide what an audit trail allows.
             'id'           => 'evidence',
-            'cap'          => Cap::TASKS_EVIDENCE,
+            'cap'          => capKey(Cap::TASKS_EVIDENCE),
             'label_key'    => 'tasks.settings.tab_evidence',
             'grant'        => 'Configure repeating task evidence: deleting occurrences, changing finished checklists, who runs the report',
             'sensitive'    => true,
@@ -108,7 +108,7 @@ return [
             // Deleting tags and configuring them. Creating one inline from the board is
             // everyday work and deliberately stays on plain module access.
             'id'           => 'tags',
-            'cap'          => Cap::TASKS_TAGS,
+            'cap'          => capKey(Cap::TASKS_TAGS),
             'label_key'    => 'tasks.settings.tab_tags',
             'grant'        => 'Delete tags and configure how tagging behaves',
             'setting_keys' => ['tasks_tag_settings'],
@@ -124,14 +124,14 @@ return [
     // "Who can run the evidence report" is set to the permission.
     'actions' => [
         [
-            'cap'      => Cap::TASKS_EVIDENCE_REPORT,
+            'cap'      => capKey(Cap::TASKS_EVIDENCE_REPORT),
             'grant'    => 'Run the evidence report for a repeating task, and export it (print and CSV)',
             'restrict' => ['setting' => 'tasks_evidence_report_access', 'value' => 'permission'],
         ],
         [
             // GH #190 decision 4: task access alone never reveals form answers. This grants
             // exactly those on the occurrences you can see - nothing else in Forms.
-            'cap'      => Cap::TASKS_FORM_ANSWERS,
+            'cap'      => capKey(Cap::TASKS_FORM_ANSWERS),
             'grant'    => 'Read the form answers on tasks you can see, without access to the Forms module',
             'restrict' => null,
         ],

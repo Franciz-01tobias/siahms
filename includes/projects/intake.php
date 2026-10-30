@@ -36,7 +36,7 @@ function projectIntakeReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT approval_status, estimated_cost, form_submission_id FROM projects LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -149,9 +149,11 @@ function projectProposalApprovalColumn(PDO $conn): string
  *
  * @param array $a  the action's settings: name, summary, business_case, goal, estimated_cost, methodology, priority, owner_analyst_id ...
  * @param array $payload  the workflow event payload - submission.id and submission.email are read
+ * @param ?int $forTenant  the company a company's own workflow is for (GH #209): the project goes there,
+ *     and a requester from another company is refused. null = decided by the requester, as before
  * @return array{project_id:int, code:string, name:string, approval:?string}
  */
-function projectCreateFromAction(PDO $conn, array $a, array $payload): array
+function projectCreateFromAction(PDO $conn, array $a, array $payload, ?int $forTenant = null): array
 {
     require_once __DIR__ . '/../services/projects.php';
     require_once __DIR__ . '/budget.php';
@@ -177,6 +179,12 @@ function projectCreateFromAction(PDO $conn, array $a, array $payload): array
         $byAnalyst = (int)$sub['submitted_by'];
     }
     if (!$byEmail && !empty($payload['submission']['email'])) $byEmail = (string)$payload['submission']['email'];
+    if ($forTenant !== null) {
+        if ($tenantId !== null && $tenantId !== $forTenant) {
+            throw new Exception('The requester belongs to another company. This workflow only acts for its own company.');
+        }
+        $tenantId = $forTenant;
+    }
 
     $name = trim((string)($a['name'] ?? ''));
     if ($name === '') $name = trim(($sub['form_title'] ?? 'Proposal') . ($byName || $byEmail ? ' - ' . ($byName ?: $byEmail) : ''));

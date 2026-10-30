@@ -74,7 +74,7 @@ echo "=== GET /knowledge/articles ===\n";
 [$code, $d] = api('knowledge/articles?per_page=100', $key);
 check('200', $code === 200, "HTTP $code " . json_encode($d));
 $titles = array_column($d['data'] ?? [], 'title');
-$zz = array_values(array_filter($titles, function ($t) { return strpos($t, 'ZZ-API-') === 0; }));
+$zz = array_values(array_filter($titles, function ($t) { return str_starts_with($t, 'ZZ-API-'); }));
 check('sees its own company', in_array('ZZ-API-DREAM', $zz), implode(',', $zz));
 check('sees SHARED articles (the NULL trap)', in_array('ZZ-API-SHARED', $zz),
       'shared vanished — apiKeyTenantFilter semantics leaked in: ' . implode(',', $zz));
@@ -104,7 +104,7 @@ check('refused', $code === 404, "HTTP $code");
 echo "\n=== ?company= and ?audience= filters ===\n";
 [$code, $d] = api('knowledge/articles?company=shared&per_page=100', $key);
 $titles = array_column($d['data'] ?? [], 'title');
-check('?company=shared returns only shared', in_array('ZZ-API-SHARED', $titles) && !in_array('ZZ-API-DREAM', $titles), implode(',', array_filter($titles, function($t){return strpos($t,'ZZ-API-')===0;})));
+check('?company=shared returns only shared', in_array('ZZ-API-SHARED', $titles) && !in_array('ZZ-API-DREAM', $titles), implode(',', array_filter($titles, function($t){return str_starts_with($t,'ZZ-API-');})));
 [$code, $d] = api('knowledge/articles?company=' . $ed, $key);
 check('?company=<one I cannot access> is 403', $code === 403, "HTTP $code " . json_encode($d));
 [$code, $d] = api('knowledge/articles?audience=nonsense', $key);

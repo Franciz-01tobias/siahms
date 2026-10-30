@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Surveillez cette page.</strong> Dès que le worker s\'exécute, le statut ci-dessus passe au vert et les livraisons apparaissent ci-dessous. Les notes de configuration complètes (Windows &amp; Linux, vérification de signature) sont dans <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">le wiki Workflows</a>.',
         'fact_worker' => 'Script du worker',
         'fact_retry' => 'Planification des relances',
-        'fact_retry_val' => '1 min &middot; 5 min &middot; 15 min &middot; 1 h &middot; 6 h, puis échec',
         'fact_retention' => 'Conservation du journal',
         'fact_queued' => 'En file d\'attente',
         'days' => '{n} jours',

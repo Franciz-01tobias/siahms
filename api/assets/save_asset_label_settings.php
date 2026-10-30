@@ -16,6 +16,9 @@ require_once '../../includes/capabilities.php';
 require_once '../../includes/uploads.php';
 require_once '../../includes/branding.php';
 require_once '../../includes/asset_labels.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 I18n::initFromSession();   // the field names it returns are shown to the reader
 
 header('Content-Type: application/json');

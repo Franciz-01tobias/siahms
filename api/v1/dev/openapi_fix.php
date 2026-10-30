@@ -50,7 +50,7 @@ function oaf_infer($v) {
     if (is_float($v))  return ['type' => 'number'];
     if (is_string($v)) return ['type' => 'string', 'nullable' => true];
     if (is_array($v)) {
-        $isList = $v === [] || array_keys($v) === range(0, count($v)-1);
+        $isList = array_is_list($v);
         if ($isList) { $s = ['type' => 'array']; if (isset($v[0])) $s['items'] = oaf_infer($v[0]); return $s; }
         $props = []; foreach ($v as $k => $vv) $props[$k] = oaf_infer($vv);
         return ['type' => 'object', 'nullable' => true, 'properties' => $props];
@@ -87,7 +87,7 @@ function oaf_patch(&$node, $data, &$schemas, $depth = 0) {
             : (is_int($data) ? 'integer'
             : (is_float($data) ? 'number'
             : (is_string($data) ? 'string'
-            : (is_array($data) && ($data === [] || array_keys($data) === range(0, count($data)-1)) ? 'array' : 'object'))));
+            : (is_array($data) && array_is_list($data) ? 'array' : 'object'))));
         $patches++;
     }
     if ($node['type'] === 'array' && is_array($data)) {

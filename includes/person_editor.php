@@ -207,7 +207,7 @@ function personEditorRender(): void
         const T = <?php echo json_encode($js, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;
         const PERSON_FIELDS = <?php echo json_encode(array_values(array_filter(USER_PERSON_FIELDS, fn($f) => isset($fieldDefs[$f])))); ?>;
         const $ = id => document.getElementById(id);
-        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         const fmt = (s, p) => String(s).replace(/\{(\w+)\}/g, (_, k) => (p && k in p) ? p[k] : '{' + k + '}');
         const toast = (msg, type, ms) => { if (typeof window.showToast === 'function') window.showToast(msg, type, ms); };
 

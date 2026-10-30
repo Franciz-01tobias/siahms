@@ -37,6 +37,7 @@
 require_once __DIR__ . '/../service_context.php';
 require_once __DIR__ . '/../tenancy.php';
 require_once __DIR__ . '/../typed_fields.php';
+require_once __DIR__ . '/asset_ci_links.php';
 require_once dirname(__DIR__, 2) . '/workflow/includes/engine.php';
 
 class CmdbService
@@ -140,12 +141,62 @@ class CmdbService
     }
 
     /**
+     * Create a CI inside a transaction the CALLER owns, without announcing it - for a
+     * caller that must create something else in the same transaction (GH #201: a CI and its
+     * asset link, both or neither). Call announceCreated() after the caller commits, so a
+     * rolled-back create never fires the workflow event for a CI that does not exist.
+     *
+     * @param array $in  as createObject()
+     */
+    public static function createInTransaction(PDO $conn, ActorContext $ctx, array $in): int
+    {
+        if (!$conn->inTransaction()) {
+            throw new LogicException('createInTransaction() needs the caller\'s transaction.');
+        }
+        return self::createObject($conn, $ctx, $in, false);
+    }
+
+    /** Fire cmdb.object.created for a CI made by createInTransaction(), once its transaction has committed. */
+    public static function announceCreated(PDO $conn, int $objectId): void
+    {
+        $row = self::loadObjectRow($conn, $objectId);
+        try {
+            WorkflowEngine::dispatch('cmdb.object.created', [
+                'object' => ['id' => $objectId, 'name' => $row['name'], 'class_id' => (int)$row['class_id'], 'is_planned' => (int)($row['is_planned'] ?? 0)],
+            ]);
+        } catch (Exception $wfEx) {
+            error_log('Workflow dispatch error in cmdb service (object.created): ' . $wfEx->getMessage());
+        }
+    }
+
+    /**
+     * The properties a class requires on create, for a form that has to ask for them
+     * (GH #201's Create linked CI): key, label, type, dropdown options, a reference's class.
+     *
+     * @param int $classId  the cmdb_classes id
+     */
+    public static function requiredProperties(PDO $conn, int $classId): array
+    {
+        $out = [];
+        foreach (self::classDefs($conn, $classId) as $key => $d) {
+            if (!$d['required']) { continue; }
+            $out[] = ['key' => $key, 'label' => $d['label'], 'type' => $d['type'],
+                'options' => $d['type'] === 'dropdown' ? self::propertyOptionValues($conn, $d['id']) : [],
+                'ref_class_id' => $d['ref_target']];
+        }
+        return $out;
+    }
+
+    /**
      * Creates a CI: validates the name, class, parent, company and properties, inserts it
      * with its property values and fires the cmdb.object.created workflow event.
      *
+     * Inside a transaction the caller already holds, it neither begins nor commits one.
+     *
      * @param array $in  name, class_id or class_key, parent_id, is_planned, tenant_id or company_id, properties or property_values
+     * @param bool $announce  false to leave the workflow event to the caller (createInTransaction())
      */
-    private static function createObject(PDO $conn, ActorContext $ctx, array $in): int
+    private static function createObject(PDO $conn, ActorContext $ctx, array $in, bool $announce = true): int
     {
         $name = trim((string)($in['name'] ?? ''));
         if ($name === '') {
@@ -195,7 +246,8 @@ class CmdbService
         self::checkRequired($conn, $classId, $values, true);
         self::assertObjectRefsInCompany($conn, $ctx, $classId, $values, $storeTenant);
 
-        $conn->beginTransaction();
+        $own = !$conn->inTransaction();
+        if ($own) $conn->beginTransaction();
         try {
             $conn->prepare(
                 "INSERT INTO cmdb_objects (class_id, name, parent_id, is_planned, tenant_id, created_datetime, updated_datetime)
@@ -203,12 +255,15 @@ class CmdbService
             )->execute([$classId, $name, $parentId, $isPlanned, $storeTenant]);
             $objectId = (int)$conn->lastInsertId();
             self::writeProperties($conn, $objectId, $classId, $values);
-            $conn->commit();
+            if ($own) $conn->commit();
         } catch (Exception $e) {
-            if ($conn->inTransaction()) $conn->rollBack();
+            if ($own && $conn->inTransaction()) $conn->rollBack();
             throw $e;
         }
 
+        if (!$announce) {
+            return $objectId;
+        }
         try {
             WorkflowEngine::dispatch('cmdb.object.created', [
                 'object' => ['id' => $objectId, 'name' => $name, 'class_id' => $classId, 'is_planned' => $isPlanned],
@@ -298,6 +353,14 @@ class CmdbService
 
         $conn->beginTransaction();
         try {
+            // GH #201: a linked asset is kept; its link ends here, with the CI's name kept on
+            // the row. Before the deletes below, so the name and class can still be read.
+            AssetCiLinkService::ciDeleted($conn, $ctx, $ids);
+            // GH #199 Part B: a discovered object's CI deleted by a person - its binding ends and
+            // the object waits for a decision rather than being recreated on the next report.
+            require_once __DIR__ . '/virtual_estate_cmdb.php';
+            VirtualEstateCmdbService::ciDeleted($conn, $ctx, $ids);
+            self::clearAssetRefFields($conn, $ctx, $ids);
             $conn->prepare("UPDATE cmdb_object_properties SET value_object_id = NULL WHERE value_object_id IN ($ph)")->execute($ids);
             $conn->prepare("DELETE FROM cmdb_object_properties WHERE object_id IN ($ph)")->execute($ids);
             // Network Mapper: null connector provenance, then remove diagram nodes/connectors.
@@ -413,6 +476,38 @@ class CmdbService
     // ======================================================================
     //  Internals
     // ======================================================================
+
+    /**
+     * Asset custom fields of type "Link to something else -> configuration item" that point
+     * at CIs being deleted. They used to keep the dead id and show as "#88" (found mapping
+     * GH #201). Cleared in the delete's transaction, with a history line on each asset that
+     * stores the id, not the name - as every other link-field history row does.
+     *
+     * @param int[] $ids  the CIs being deleted
+     */
+    private static function clearAssetRefFields(PDO $conn, ActorContext $ctx, array $ids): void
+    {
+        try {
+            $fields = $conn->query("SELECT id, field_key, config FROM asset_fields WHERE field_type = 'ref'")->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException) {
+            return;   // flexible asset fields not set up on this install
+        }
+        $byId = [];
+        foreach ($fields as $f) {
+            if ((json_decode((string)$f['config'], true)['ref_kind'] ?? '') === 'cmdb_object') { $byId[(int)$f['id']] = $f['field_key']; }
+        }
+        if (!$byId) { return; }
+        $fph = implode(',', array_fill(0, count($byId), '?'));
+        $oph = implode(',', array_fill(0, count($ids), '?'));
+        $args = array_merge(array_keys($byId), array_map('intval', $ids));
+        $st = $conn->prepare("SELECT asset_id, field_id, value_ref_id FROM asset_field_values WHERE field_id IN ($fph) AND value_ref_id IN ($oph)");
+        $st->execute($args);
+        $hist = $conn->prepare('INSERT INTO asset_history (asset_id, analyst_id, field_name, old_value, new_value, created_datetime) VALUES (?, ?, ?, ?, NULL, UTC_TIMESTAMP())');
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $v) {
+            $hist->execute([(int)$v['asset_id'], $ctx->actorId > 0 ? $ctx->actorId : null, 'field:' . $byId[(int)$v['field_id']], (string)$v['value_ref_id']]);
+        }
+        $conn->prepare("DELETE FROM asset_field_values WHERE field_id IN ($fph) AND value_ref_id IN ($oph)")->execute($args);
+    }
 
     /**
      * The company id a CI effectively belongs to (NULL stored = Default's).

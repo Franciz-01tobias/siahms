@@ -240,6 +240,9 @@
        max-width:768px rules stop matching → the big centred desktop modal).
        Set at ID specificity so nothing overrides it. */
     #noteModal .form-textarea { flex: 1; min-height: 0; resize: none; font-size: 16px; }
+    /* The note box is a contenteditable div since GH #224; its fixed desktop
+       height would stop it filling the sheet. */
+    #noteModal .note-editor { height: auto; }
 
     /* Same anti-zoom for every other modal field on mobile. */
     .modal-content .form-input,
@@ -16352,22 +16355,222 @@
 }
 
 @media (max-width: 768px) {
-    /* 45d - the viewer on a phone: full screen over the list, its own bar
-       with Back (files-viewer.js openPhone). Only ever created on a phone. */
-    body[data-mobile-page="files-desktop"] .fdm-viewer {
+    /* 45d - the viewer on a phone: full screen over the page, its own bar
+       with Back (files-viewer.js openPhone). Only ever created on a phone.
+       Not scoped to the Files page: a ticket note's image opens in the same
+       viewer (FilesViewer.openUrl, GH #226), so its Back and title are styled
+       here too rather than relying on 45b's Files-only list rules. */
+    .fdm-viewer {
         /* Above the header too (LAYER 1 lifts it): the viewer is full screen and
            carries its own Back, so nothing may sit on top of that bar. */
         position: fixed; inset: 0; z-index: 300000; display: flex; flex-direction: column; background: var(--surface);
     }
-    body[data-mobile-page="files-desktop"] .fdm-viewer-bar {
+    .fdm-viewer-bar {
         display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-shrink: 0;
         padding-top: calc(6px + env(safe-area-inset-top)); border-bottom: 1px solid var(--border);
     }
-    body[data-mobile-page="files-desktop"] .fdm-viewer-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-bar { flex-wrap: wrap; }
-    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-name { display: none; }
-    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-btn { min-height: 40px; min-width: 40px; }
-    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-paper { padding: 20px 16px; min-height: 0; }
-    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-paperstage { padding: 8px; }
-    body[data-mobile-page="files-desktop"] .fdm-viewer .fdv-pdf { padding: 8px; }
+    .fdm-viewer .fdm-title { flex: 1; min-width: 0; font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fdm-viewer .fdm-back {
+        flex: 0 0 auto; width: 44px; height: 44px; border: 0; border-radius: 8px;
+        background: transparent; color: var(--text); display: flex; align-items: center; justify-content: center;
+    }
+    .fdm-viewer .fdm-back svg { width: 20px; height: 20px; }
+    .fdm-viewer-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    .fdm-viewer .fdv-bar { flex-wrap: wrap; }
+    .fdm-viewer .fdv-name { display: none; }
+    .fdm-viewer .fdv-btn { min-height: 40px; min-width: 40px; }
+    .fdm-viewer .fdv-paper { padding: 20px 16px; min-height: 0; }
+    .fdm-viewer .fdv-paperstage { padding: 8px; }
+    .fdm-viewer .fdv-pdf { padding: 8px; }
+}
+
+@media (max-width: 768px) {
+    /* ====================================================================
+       LAYER 46 - Grouped lists (GH #208)
+       --------------------------------------------------------------------
+       assets/js/grouped-list.js, first used by System -> Analysts. Its tree
+       and tabs already fit a phone: the tab bar is the shared settings
+       `.tabs`, which the settings rule `body[data-mobile-page="settings"] .tabs`
+       already scrolls sideways, and each
+       group's table scrolls like every settings table. Two things do not:
+
+         jump nav   a 220px sticky side list beside the content. On a phone
+                    it becomes the dropdown the script always renders
+                    (.gl-jump-select), sticky at the top of the scroller.
+         toolbar    the search box takes the whole first line, so the
+                    dropdowns wrap under it instead of beside a squashed box.
+
+       46a jump nav   46b toolbar
+       ==================================================================== */
+
+    /* 46a - one column; the side list becomes a dropdown. */
+    .gl-jump { flex-direction: column; gap: 12px; }
+    .gl-jump-nav { display: none; }
+    .gl-jump-select {
+        display: block; position: sticky; top: 0; z-index: 5; width: 100%; min-height: 42px;
+        padding: 8px; font-size: 16px; border: 1px solid var(--border); border-radius: 6px;
+        background: var(--surface); color: var(--text);
+    }
+    .gl-jump-section.gl-depth-2 { margin-left: 0; }
+    .gl-node .gl-node { margin-left: 4px; }
+    .gl-body { padding: 0 6px 8px; }
+    .gl-head { min-height: 44px; }
+    .gl-mini { min-height: 40px; }
+
+    /* 46b - the Analysts toolbar: search on its own line, fields at 16px (§3). */
+    body[data-mobile-page="settings"] .av-search { flex: 1 1 100%; min-width: 0; }
+    body[data-mobile-page="settings"] .av-search,
+    body[data-mobile-page="settings"] .av-field select { font-size: 16px; min-height: 42px; }
+    body[data-mobile-page="settings"] .av-menu { min-width: 0; width: calc(100vw - 48px); }
+}
+
+/* ==========================================================================
+   LAYER 47 - A sidebar as a sheet: ONE helper (mobile.js LAYER 47)
+   Domains 41d's bar and sheet, as generic classes: .m-fbar (the Filters bar
+   pinned to the bottom) and .m-fsheet (the full-screen sheet it opens). The
+   page keeps its last row clear of the bar with --m-bar-h-<key>.
+   ========================================================================== */
+@media (max-width: 768px) {
+    .m-fbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1200;
+        display: flex;
+        padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+        background: var(--surface, #fff);
+        border-top: 1px solid var(--border, #ddd);
+    }
+    .m-fbar-btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        background: var(--surface, #fff);
+        color: var(--text, #1e293b);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .m-fbar-btn svg { width: 18px; height: 18px; flex: 0 0 auto; }
+    .m-fbar-view {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+        color: var(--accent, #0078d4);
+    }
+    .m-fbar-badge {
+        flex: 0 0 auto;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10px;
+        background: var(--accent, #0078d4);
+        color: var(--on-accent, #fff);
+        font-size: 12px;
+        line-height: 20px;
+        text-align: center;
+    }
+    .m-fbar-badge[hidden] { display: none; }
+    .m-fsheet {
+        position: fixed;
+        inset: 0;
+        z-index: 1300;          /* over the bar that opens it */
+        display: none;
+        flex-direction: column;
+        background: var(--surface, #fff);
+    }
+    .m-fsheet.is-open { display: flex; }
+    .m-fsheet-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px;
+        padding-top: calc(12px + env(safe-area-inset-top));
+        border-bottom: 1px solid var(--border-soft, #e2e8f0);
+    }
+    .m-fsheet-title { font-size: 16px; font-weight: 600; color: var(--text, #1e293b); }
+    .m-fsheet-close {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text, #1e293b);
+        cursor: pointer;
+    }
+    .m-fsheet-close svg { width: 22px; height: 22px; }
+    .m-fsheet-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .m-fsheet-foot {
+        flex: 0 0 auto;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--border-soft, #e2e8f0);
+    }
+    .m-fsheet-done {
+        width: 100%;
+        min-height: 46px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent, #0078d4);
+        color: var(--on-accent, #fff);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    /* ---- 25h. Tasks: the sidebar lives in the sheet ----------------------
+       tasks.css hides .tasks-sidebar below 600px; in the sheet it is the
+       whole content, at full width. Sections the page hides itself (group,
+       sort and subtasks in the list; project, contractor and tag when unused)
+       keep their own inline display:none. */
+    body[data-mobile-page="tasks-board"] .m-fsheet .tasks-sidebar {
+        display: block;
+        width: auto;
+        min-width: 0;
+        border: 0;
+        padding: 14px 16px 8px;
+        overflow: visible;
+        height: auto;
+        background: transparent;
+    }
+    body[data-mobile-page="tasks-board"] .m-fsheet .sidebar-section { margin-bottom: 18px; }
+    body[data-mobile-page="tasks-board"] .m-fsheet .sidebar-label { display: block; font-size: 12px; margin-bottom: 8px; }
+    body[data-mobile-page="tasks-board"] .m-fsheet .view-toggle { display: flex; width: 100%; }
+    body[data-mobile-page="tasks-board"] .m-fsheet .view-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 44px;
+        font-size: 14px;
+        justify-content: center;
+    }
+    body[data-mobile-page="tasks-board"] .m-fsheet .filter-btn { min-height: 44px; font-size: 15px; }
+    body[data-mobile-page="tasks-board"] .m-fsheet .search-input,
+    body[data-mobile-page="tasks-board"] .m-fsheet .sidebar-select {
+        font-size: 16px;        /* under 16px iOS zooms the page on focus (25f) */
+        min-height: 44px;
+    }
+    body[data-mobile-page="tasks-board"] .m-fsheet .sidebar-check { font-size: 15px; min-height: 36px; display: flex; align-items: center; gap: 10px; }
+    body[data-mobile-page="tasks-board"] .tasks-container--views > .tasks-main {
+        padding-bottom: var(--m-bar-h-tasks, 64px);
+    }
 }

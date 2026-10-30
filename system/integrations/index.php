@@ -72,6 +72,29 @@ foreach ($providers as $pk => $pmeta) {
     try { $counts[$pk] = tikaConfigured($conn) ? 1 : 0; }
     catch (Exception $e) { $counts[$pk] = 0; }
 }
+
+// Monitoring (Zabbix) is the same shape: one token, made or not.
+require_once dirname(__DIR__, 2) . '/includes/integrations/zabbix.php';
+foreach ($providers as $pk => $pmeta) {
+    if (($pmeta['kind'] ?? 'tracker') !== 'monitoring') continue;
+    try { $counts[$pk] = zabbixConfigured($conn) ? 1 : 0; }
+    catch (Exception $e) { $counts[$pk] = 0; }
+}
+
+// Teams channel alerts: one connection per channel with an address.
+require_once dirname(__DIR__, 2) . '/includes/integrations/msteams.php';
+foreach ($providers as $pk => $pmeta) {
+    if (($pmeta['kind'] ?? 'tracker') !== 'alerts') continue;
+    $counts[$pk] = msteamsChannelCount($conn);
+}
+
+// Telephony (3CX) too: one token, made or not.
+require_once dirname(__DIR__, 2) . '/includes/integrations/threecx.php';
+foreach ($providers as $pk => $pmeta) {
+    if (($pmeta['kind'] ?? 'tracker') !== 'telephony') continue;
+    try { $counts[$pk] = threecxConfigured($conn) ? 1 : 0; }
+    catch (Exception $e) { $counts[$pk] = 0; }
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -121,7 +144,7 @@ foreach ($providers as $pk => $pmeta) {
         .provider-count.is-none { background: var(--surface-2); color: var(--text-faint); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="integrations">
     <?php include '../includes/header.php'; ?>
@@ -151,8 +174,8 @@ foreach ($providers as $pk => $pmeta) {
                     <span class="provider-count <?php echo $n === 0 ? 'is-none' : ''; ?>">
                         <?php
                         // "3 connections" is the tracker/messaging shape. An
-                        // extractor is one endpoint, so it reads as a state.
-                        if (($meta['kind'] ?? 'tracker') === 'extractor') {
+                        // extractor (or a monitoring feed, or a phone system) is one endpoint, so it reads as a state.
+                        if (in_array($meta['kind'] ?? 'tracker', ['extractor', 'monitoring', 'telephony'], true)) {
                             echo htmlspecialchars($n > 0
                                 ? t('system.integrations.configured')
                                 : t('system.integrations.not_configured'));
@@ -167,6 +190,6 @@ foreach ($providers as $pk => $pmeta) {
             <?php endforeach; ?>
         </div>
     </div>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

@@ -127,7 +127,7 @@ class AssetTagsService
         foreach (['{YYYY}', '{YY}', '{MM}', '{DD}', '{COMPANY}'] as $token) {
             $rest = str_replace($token, '', $rest);
         }
-        if (strpos($rest, '{') !== false || strpos($rest, '}') !== false) {
+        if (str_contains($rest, '{') || str_contains($rest, '}')) {
             $problems[] = 'Only these tokens can be used: {#####}, {YYYY}, {YY}, {MM}, {DD} and {COMPANY}.';
         }
         if (!preg_match('/^[A-Za-z0-9_\-\.\/]*$/', $rest)) {
@@ -191,7 +191,7 @@ class AssetTagsService
             $st = $conn->prepare("SELECT next_value FROM asset_tag_counters WHERE counter_key = ?");
             $st->execute([self::counterKey($conn, $cfg, $tenantId)]);
             $last = $st->fetchColumn();
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $last = false;   // table not created yet (before Database Verification)
         }
         // The column holds the LAST number issued, as ticket_number_counters does.
@@ -431,7 +431,7 @@ class AssetTagsService
                     "INSERT INTO asset_history (asset_id, analyst_id, field_name, old_value, new_value, created_datetime)
                      VALUES (?, ?, 'Asset tag', ?, ?, UTC_TIMESTAMP())"
                 )->execute([$assetId, $ctx->actorId > 0 ? $ctx->actorId : null, $old === '' ? null : $old, $tag === '' ? null : $tag]);
-            } catch (Throwable $e) { /* history is best-effort, as it always was here */ }
+            } catch (Throwable) { /* history is best-effort, as it always was here */ }
             return ['asset_tag' => $tag, 'unchanged' => false];
         });
     }

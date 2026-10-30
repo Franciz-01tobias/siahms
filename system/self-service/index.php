@@ -106,7 +106,7 @@ requireModuleAccess('system');
            Remove showed with no logo to remove. */
         .ssp-logo-row [hidden] { display: none !important; }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="self-service">
     <?php include '../includes/header.php'; ?>
@@ -230,7 +230,7 @@ requireModuleAccess('system');
     const SSP_PATTERNS = <?php echo json_encode(SELF_SERVICE_PATTERNS); ?>;
     let sspPattern = '';
 
-    const sspEsc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+    const sspEsc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
 
     function sspRenderPatterns() {
         const box = document.getElementById('sspPatterns');
@@ -421,6 +421,6 @@ requireModuleAccess('system');
         sspLoad();
     });
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

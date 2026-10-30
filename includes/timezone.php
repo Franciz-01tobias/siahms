@@ -55,7 +55,7 @@ class Tz {
                         self::$zone = $value;
                     }
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 // Server default stands
             }
         }
@@ -123,7 +123,7 @@ function fmt_local(?string $utc, string $format = 'Y-m-d H:i'): string {
         $dt = new DateTime($utc, new DateTimeZone('UTC'));
         $dt->setTimezone(new DateTimeZone(Tz::current()));
         return $dt->format($format);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return (string)$utc;
     }
 }
@@ -238,7 +238,7 @@ class DateFmt {
                     self::apply($row['preference_key'], $row['preference_value']);
                 }
             }
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // Defaults stand
         }
     }
@@ -377,7 +377,7 @@ class DateFmt {
         // A day number beside the month selects the in-date month form for the
         // languages that inflect (see months()). "March 2026" on a calendar
         // header stays nominative; "5 March 2026" does not.
-        $withDay     = strpos($template, 'D') !== false;
+        $withDay     = str_contains($template, 'D');
         $months      = self::months(false, $withDay);
         $monthsShort = self::months(true);
         $hour24      = (int)$dt->format('G');
@@ -441,7 +441,7 @@ function _fmt_dt(?string $utc): ?DateTime {
         $dt = new DateTime($utc, new DateTimeZone('UTC'));
         $dt->setTimezone(new DateTimeZone(Tz::current()));
         return $dt;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return null;
     }
 }

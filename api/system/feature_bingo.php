@@ -52,7 +52,7 @@ try {
     }
     if (!$ids) throw new Exception('No such card');
 
-    if (strpos($action, 'dismiss') === 0) {
+    if (str_starts_with($action, 'dismiss')) {
         $st = $conn->prepare("INSERT IGNORE INTO feature_bingo_dismissed (card_id, dismissed_by_analyst_id, dismissed_datetime) VALUES (?, ?, UTC_TIMESTAMP())");
         foreach ($ids as $id) $st->execute([$id, (int)$_SESSION['analyst_id']]);
     } else {

@@ -309,7 +309,7 @@ function apiKnowledgeArticlesGet(PDO $conn, array $apiKey, array $params, array 
 function apiKnowledgeArticlesCreate(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         $res = KnowledgeService::saveArticle($conn, ActorContext::fromApiKey($apiKey), $body);
-        apiRespond(apiSerializeArticle($conn, apiLoadArticle($conn, $res['id']), true), 201);
+        apiRespond(apiSerializeArticle($conn, apiLoadArticle($conn, $res['id'], $apiKey), true), 201);
     } catch (ServiceError $e) { apiFailFromService($e); }
 }
 
@@ -319,7 +319,7 @@ function apiKnowledgeArticlesCreate(PDO $conn, array $apiKey, array $params, arr
 function apiKnowledgeArticlesUpdate(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         $res = KnowledgeService::saveArticle($conn, ActorContext::fromApiKey($apiKey), array_merge($body, ['id' => (int)$params[0]]));
-        apiRespond(apiSerializeArticle($conn, apiLoadArticle($conn, $res['id']), true));
+        apiRespond(apiSerializeArticle($conn, apiLoadArticle($conn, $res['id'], $apiKey), true));
     } catch (ServiceError $e) { apiFailFromService($e); }
 }
 
@@ -340,7 +340,7 @@ function apiKnowledgeArticlesDelete(PDO $conn, array $apiKey, array $params, arr
 function apiKnowledgeArticlesRestore(PDO $conn, array $apiKey, array $params, array $body): void {
     try {
         KnowledgeService::restoreArticle($conn, ActorContext::fromApiKey($apiKey), (int)$params[0]);
-        apiRespond(apiSerializeArticle($conn, apiLoadArticle($conn, $params[0]), true));
+        apiRespond(apiSerializeArticle($conn, apiLoadArticle($conn, $params[0], $apiKey), true));
     } catch (ServiceError $e) { apiFailFromService($e); }
 }
 

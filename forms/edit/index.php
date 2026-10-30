@@ -49,6 +49,25 @@ $translationNamespaces = ['common', 'forms'];
 // disagree about what the same feature can do.
 require_once '../../workflow/includes/engine.php';
 $formActionDefs = WorkflowEngine::availableActions();
+// GH #217. Only switched-on modules' actions are offered - except the ones this form
+// already uses, so a form with an action on a switched-off module still opens, shows
+// what it was, and saves. Mirrors workflow/editor.php.
+try {
+    $keepActions = [];
+    $editId = (int)($_GET['id'] ?? 0);
+    if ($editId > 0) {
+        $own = $edConn->prepare('SELECT submission_actions FROM forms WHERE id = ?');
+        $own->execute([$editId]);
+        foreach ((json_decode((string)$own->fetchColumn(), true) ?: []) as $list) {
+            if (is_array($list)) $keepActions = array_merge($keepActions, array_column($list, 'type'));
+        }
+    }
+    $allActions = $formActionDefs;
+    $formActionDefs = WorkflowEngine::withoutSwitchedOff($edConn, $formActionDefs, true);
+    foreach ($keepActions as $k) {
+        if (is_string($k) && isset($allActions[$k])) $formActionDefs[$k] = $allActions[$k];
+    }
+} catch (Throwable $e) { /* the full list - the engine still refuses a switched-off module */ }
 
 // Values for every `lookup` argument, resolved once so the dropdowns work
 // without a round trip. Mirrors workflow/editor.php's own export.
@@ -463,7 +482,7 @@ foreach ($formActionDefs as $def) {
     <!-- Mobile layer. Linked AFTER this page's inline <style> on purpose: the
          mobile rules must win on equal specificity, and a link placed above it
          would silently lose to the desktop block below (the load-order trap). -->
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include '../includes/header.php'; ?>
@@ -2547,7 +2566,7 @@ foreach ($formActionDefs as $def) {
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // ===== AI Assist (streaming SSE) =====
@@ -2637,7 +2656,7 @@ foreach ($formActionDefs as $def) {
         function escHtml(s) {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         function closeAiModal() {
             if (aiAbortController) { aiAbortController.abort(); aiAbortController = null; }
@@ -3010,6 +3029,6 @@ foreach ($formActionDefs as $def) {
     </div>
     <!-- Mobile layer. Adds the views hamburger and the module drawer on a phone.
          Loaded last so it can wrap the page's own globals rather than edit them. -->
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=83"></script>
 </body>
 </html>

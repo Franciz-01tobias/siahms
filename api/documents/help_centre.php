@@ -29,7 +29,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 $analystId = (int) $_SESSION['analyst_id'];
-$allowed   = $_SESSION['allowed_modules'] ?? null;
+$allowed   = analystAllowedModulesNow();   // the grants now, not at sign-in
 
 $in         = json_decode(file_get_contents('php://input'), true) ?: $_POST;
 $documentId = (int) ($in['document_id'] ?? 0);

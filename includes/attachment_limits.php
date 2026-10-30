@@ -55,7 +55,7 @@ function attachmentSetting(?PDO $conn, string $key, string $default): string
             $r = $st->fetchColumn();
             $v = ($r === false || $r === null || $r === '') ? null : (string)$r;
         }
-    } catch (Throwable $e) { /* no table yet: defaults */ }
+    } catch (Throwable) { /* no table yet: defaults */ }
     return $cache[$key] = ($v ?? $default);
 }
 
@@ -337,7 +337,7 @@ function oversizeReplySkipReason(PDO $conn, int $mailboxId, string $from, string
                                  AND processing_log LIKE '%\"step\":\"oversize_reply\"%\"result\":\"sent\"%'");
         $st->execute([$mailboxId, $from]);
         if ((int)$st->fetchColumn() > 0) return 'already replied to this sender in the last hour';
-    } catch (Throwable $e) { /* no log table yet: allow */ }
+    } catch (Throwable) { /* no log table yet: allow */ }
     return null;
 }
 

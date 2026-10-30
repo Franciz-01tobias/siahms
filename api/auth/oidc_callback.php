@@ -70,7 +70,8 @@ if (isset($_POST['action']) && $_POST['action'] === 'confirm_portal_proceed') {
             (array)($pending['claims'] ?? [])
         );
     } catch (Exception $e) {
-        ssoBail('Sign-in failed: ' . $e->getMessage());
+        require_once __DIR__ . '/../../includes/db_errors.php';
+        ssoBail('Sign-in failed: ' . dbSafeClientMessage($e, 'a server error. The details are in the server log.'));
     }
 }
 
@@ -316,7 +317,8 @@ try {
     exit;
 
 } catch (Exception $e) {
-    ssoBail('Sign-in failed: ' . $e->getMessage());
+    require_once __DIR__ . '/../../includes/db_errors.php';
+    ssoBail('Sign-in failed: ' . dbSafeClientMessage($e, 'a server error. The details are in the server log.'));
 }
 
 // --------------------------------------------------------------------------

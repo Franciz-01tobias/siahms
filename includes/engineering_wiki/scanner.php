@@ -215,7 +215,7 @@ final class EwScanner
     {
         $d = ['kind' => 'php', 'doc' => null, 'functions' => [], 'classes' => [], 'includes' => [], 'calls' => [], 'sql' => [],
               'traps' => [], 'inputs' => [], 'guards' => [], 'scripts' => [], 'session' => [], 'lines' => substr_count($src, "\n") + 1];
-        try { $tokens = token_get_all($src); } catch (Throwable $e) { return $d; }
+        try { $tokens = token_get_all($src); } catch (Throwable) { return $d; }
         $n = count($tokens);
         $sig = function (int $i, int $dir) use ($tokens, $n) {     // next/previous significant token index
             for ($k = $i + $dir; $k >= 0 && $k < $n; $k += $dir) {
@@ -277,9 +277,9 @@ final class EwScanner
                 if (stripos($t[1], 'TRAP:') !== false) {
                     // A // trap usually runs on over the next // lines - take the whole run.
                     $text = $t[1]; $k = $i + 1;
-                    if ($tid === T_COMMENT && strpos(ltrim($t[1]), '//') === 0) {
+                    if ($tid === T_COMMENT && str_starts_with(ltrim($t[1]), '//')) {
                         while ($k + 1 < $n && $id($tokens[$k]) === T_WHITESPACE && substr_count($tokens[$k][1], "\n") <= 1
-                               && $id($tokens[$k + 1]) === T_COMMENT && strpos(ltrim($tokens[$k + 1][1]), '//') === 0) {
+                               && $id($tokens[$k + 1]) === T_COMMENT && str_starts_with(ltrim($tokens[$k + 1][1]), '//')) {
                             $text .= "\n" . $tokens[$k + 1][1]; $k += 2;
                         }
                     }
@@ -564,7 +564,7 @@ final class EwScanner
             return null;   // a variable or a function we cannot evaluate - leave it out rather than guess
         }
         if ($s === '') return null;
-        if (strpos($s, '@DIR@') === 0) {
+        if (str_starts_with($s, '@DIR@')) {
             $s = substr($s, 5);
             $path = $s;
         } else {
@@ -646,7 +646,7 @@ final class EwScanner
         // A one-line comment can carry its tags on the same line ("/** Summary. @return int */").
         // Split them off - only in one-liners, so prose like "add @param lines" in a longer
         // comment is never mistaken for a tag.
-        if (strpos(trim($raw), "\n") === false) {
+        if (!str_contains(trim($raw), "\n")) {
             $raw = preg_replace('/(\S)\s+(@(?:param|return|reads|writes|see|wiki|input|output|throws)\b)/', "\$1\n\$2", $raw);
         }
         $lines = array_map(fn($l) => preg_replace('/^\s*\*( ?)/', '', rtrim($l)), explode("\n", $raw));
@@ -733,15 +733,15 @@ final class EwScanner
             $t = trim($l);
             if ($inBlock) {
                 $block[] = $l;
-                if (strpos($t, '*/') !== false) { $inBlock = false; $buf = ['block', implode("\n", $block)]; }
+                if (str_contains($t, '*/')) { $inBlock = false; $buf = ['block', implode("\n", $block)]; }
                 continue;
             }
-            if (strpos($t, '/*') === 0) {
+            if (str_starts_with($t, '/*')) {
                 $block = [$l];
                 if (strpos($t, '*/', 2) !== false) $buf = ['block', $l]; else $inBlock = true;
                 continue;
             }
-            if (strpos($t, '//') === 0) { if (($buf[0] ?? '') !== 'line') $buf = ['line', []]; $buf[1][] = $t; continue; }
+            if (str_starts_with($t, '//')) { if (($buf[0] ?? '') !== 'line') $buf = ['line', []]; $buf[1][] = $t; continue; }
             if ($t === '') { $buf = []; continue; }
             $name = null; $params = '';
             if (preg_match('/^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(([^)]*)\)?/', $t, $m)) { $name = $m[1]; $params = $m[2]; }
@@ -809,7 +809,7 @@ final class EwScanner
             }
             foreach ($d['calls'] as [$callee, $caller]) {
                 $key = strtolower($callee);
-                if (strpos($callee, '::') !== false) { [$cls, $m] = explode('::', $callee, 2); if (!isset($classIndex[$cls])) continue; $key = $cls . '::' . strtolower($m); }
+                if (str_contains($callee, '::')) { [$cls, $m] = explode('::', $callee, 2); if (!isset($classIndex[$cls])) continue; $key = $cls . '::' . strtolower($m); }
                 elseif (!isset($fnIndex[$key])) continue;
                 $callers[$key][$rel . '|' . ($caller ?? '')] = ['file' => $rel, 'fn' => $caller];
             }
@@ -1056,7 +1056,7 @@ final class EwScanner
     private function standardParam(array $p, string $file): string
     {
         $type = ltrim($p['type'], '?\\');   // "?int" and "\PDO" read as int / PDO
-        $api = strpos($file, 'api/v1/') === 0;
+        $api = str_starts_with($file, 'api/v1/');
         $m = null;
         switch ($p['name']) {
             case '$conn':      if ($type === 'PDO' || $type === '') $m = 'The database connection.'; break;
@@ -1099,7 +1099,7 @@ final class EwScanner
     private function filePage(string $rel, array $d, array $includedBy, array $jsCallers, array $usedBy, array $tableSet, array $fnIndex): string
     {
         $md = '# ' . $rel . "\n\n";
-        $isApi = strpos($rel, 'api/') === 0 && $d['kind'] === 'php';
+        $isApi = str_starts_with($rel, 'api/') && $d['kind'] === 'php';
         $md .= '> ' . ($d['kind'] === 'js' ? 'JavaScript' : ($isApi ? 'API endpoint' : 'PHP')) . ' - ' . $d['lines'] . " lines\n\n";
         $md .= $this->docMd($d['doc']);
         if ($d['doc']) foreach ($this->tagRows($d['doc'], ['see']) as [, $v]) $md .= '- See: ' . $this->seeLink($v) . "\n";
@@ -1168,7 +1168,7 @@ final class EwScanner
     private function guardText(string $rel, array $d): string
     {
         if (basename($rel)[0] === '_') return 'Helper - included by other endpoints, not called directly';
-        if (strpos($rel, 'api/v1/') === 0) return 'REST API key';
+        if (str_starts_with($rel, 'api/v1/')) return 'REST API key';
         $g = $this->guardsOf($d, '');
         $seen = [$rel => true];
         $queue = $d['includes'];
@@ -1303,7 +1303,7 @@ final class EwScanner
             ksort($byFile, SORT_NATURAL);
             foreach ($byFile as $f => $fns) {
                 $fns = array_values(array_unique(array_filter($fns)));
-                $md .= '- ' . $this->fileLink($f) . ($fns ? ' - in ' . implode(', ', array_map(fn($x) => strpos($x, '::') === false && isset($fnIndex[strtolower($x)]) ? $this->fnLink($x) : $this->code($x), $fns)) : '') . "\n";
+                $md .= '- ' . $this->fileLink($f) . ($fns ? ' - in ' . implode(', ', array_map(fn($x) => !str_contains($x, '::') && isset($fnIndex[strtolower($x)]) ? $this->fnLink($x) : $this->code($x), $fns)) : '') . "\n";
             }
             $md .= "\n";
         } else {
@@ -1395,7 +1395,7 @@ final class EwScanner
     {
         $php = count(array_filter($files, fn($d) => $d['kind'] === 'php'));
         $js = count($files) - $php;
-        $api = count(array_filter(array_keys($files), fn($f) => strpos($f, 'api/') === 0 && substr($f, -4) === '.php'));
+        $api = count(array_filter(array_keys($files), fn($f) => str_starts_with($f, 'api/') && substr($f, -4) === '.php'));
         $traps = array_sum(array_map(fn($d) => count($d['traps']), $files));
         return "# Code map\n\nWritten by the scanner from FreeITSM's own code - do not edit these pages, they are rebuilt on every scan. The *why* lives in the [Handbook](/handbook/start.md).\n\n"
             . "| | |\n|---|--:|\n"
@@ -1490,7 +1490,7 @@ final class EwScanner
     {
         $md = "# API endpoints\n\nEvery PHP file under `api/`, with how it is protected and what it is for. *Public* means the scanner found no sign-in check: right for sign-in pages, webhooks and token links, worth a look for anything else.\n\n";
         $byDir = [];
-        foreach ($files as $rel => $d) if (strpos($rel, 'api/') === 0 && $d['kind'] === 'php') $byDir[dirname($rel)][$rel] = $d;
+        foreach ($files as $rel => $d) if (str_starts_with($rel, 'api/') && $d['kind'] === 'php') $byDir[dirname($rel)][$rel] = $d;
         ksort($byDir, SORT_NATURAL);
         foreach ($byDir as $dir => $eps) {
             $md .= '## ' . $dir . "\n\n| Endpoint | Protected by | What it does | Called from |\n|---|---|---|---|\n";

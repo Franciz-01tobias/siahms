@@ -54,7 +54,7 @@ $translationNamespaces = ['common', 'workflow'];
     <!-- Mobile layer LAST, after this page's own stylesheet AND its inline
          <style> block, or a rule at equal specificity loses on document order
          (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="workflow" data-mobile-page="wf-help">
     <?php include 'includes/header.php'; ?>
@@ -145,6 +145,7 @@ $translationNamespaces = ['common', 'workflow'];
             <table>
                 <tr><th>Format</th><th>Best for</th><th>What it sends</th></tr>
                 <tr><td><strong>Slack / Teams / Discord</strong></td><td>Chat notifications</td><td>A templated <code>message</code> wrapped in that platform&rsquo;s exact chat-message JSON, so it lands as a proper formatted message with zero work on your side.</td></tr>
+                <tr><td><strong>Microsoft Teams (Workflows card)</strong></td><td>Teams channels</td><td>Your <code>message</code> as an Adaptive Card with an <strong>Open in FreeITSM</strong> button on <code>{{link}}</code> - the ticket, or FreeITSM&rsquo;s front page. Use it with a Teams <em>Workflows</em> address (the channel &rsaquo; &hellip; &rsaquo; Workflows &rsaquo; &ldquo;Post to a channel when a webhook request is received&rdquo;): Microsoft switched the old connector webhooks off in May 2026. System &rsaquo; Integrations &rsaquo; Microsoft Teams builds these workflows for you.</td></tr>
                 <tr><td><strong>Custom</strong></td><td>Any other endpoint</td><td>A raw JSON <code>body</code> you write yourself, interpolating event fields with <code>{{&hellip;}}</code> placeholders. Match any target&rsquo;s exact contract.</td></tr>
                 <tr><td><strong>Full record</strong></td><td>Data sync / automation platforms</td><td>The <em>entire object as JSON</em>, in exactly the shape the REST API returns for that record (see next section).</td></tr>
             </table>
@@ -218,11 +219,19 @@ $event = json_decode($body, true);   // trusted from here</code></pre>
                 </div>
             <p>Networks fail. Receivers go down or rate-limit you. A naive &ldquo;POST and hope&rdquo; would silently lose those events &mdash; FreeITSM doesn&rsquo;t. Every send is <strong>queued</strong> and handed to a background worker, which gives you:</p>
             <ul>
-                <li><strong>Retries with backoff</strong> &mdash; a failed delivery is retried on an increasing delay (1m &rarr; 5m &rarr; 15m &rarr; 1h &rarr; 6h), not hammered.</li>
-                <li><strong>Dead-letter</strong> &mdash; after the retry budget is spent, the delivery is parked as <em>failed</em> rather than lost or retried forever.</li>
+                <li><strong>Retries with backoff</strong> &mdash; a failed delivery is retried on an increasing delay (1m &rarr; 5m &rarr; 15m &rarr; 1h &rarr; 6h, then every 6h), not hammered.</li>
+                <li><strong>Dead-letter</strong> &mdash; after the last try (6 by default) the delivery is parked as <em>dead</em> rather than lost or retried forever.</li>
                 <li><strong>Replay</strong> &mdash; re-send any delivery by hand once the receiver is back.</li>
                 <li><strong>No blocking</strong> &mdash; because sending is asynchronous, a slow or dead endpoint <em>never</em> holds up the ticket (or whatever) that triggered it.</li>
             </ul>
+            <h4>Tries, timeout and cut-off sends</h4>
+            <p><strong>System &rarr; Webhooks &rarr; Delivery</strong> sets three things:</p>
+            <ul>
+                <li><strong>Tries before giving up</strong> &mdash; 1, 3, 6 (the default) or 10. A change applies to webhooks queued from then on.</li>
+                <li><strong>Wait for the endpoint to answer</strong> &mdash; 5 to 60 seconds, 15 by default. Raise it only for an endpoint known to be slow: the worker sends one at a time, so a long wait holds up the rest of the queue.</li>
+                <li><strong>If a send was cut off part-way</strong> &mdash; when the worker is stopped mid-send (a restart, a killed task) nobody knows whether the endpoint got it. After 10 minutes FreeITSM either <em>tries again</em> (the default; the endpoint may get it twice) or <em>stops</em> and marks it dead, for you to check and Replay.</li>
+            </ul>
+            <div class="help-note">Every send carries an <code>X-FreeITSM-Delivery</code> header whose number is the same on every try and on a Replay. A receiver you run yourself can use it to ignore a repeat. Slack, Teams and other chat tools cannot, so if a duplicate message would matter, choose <em>stop</em>.</div>
             <h4>The one-time setup</h4>
             <p>The background worker (<code>cron/webhook_deliveries.php</code>) has to be scheduled to run every minute &mdash; via Windows Task Scheduler, cron, or a hosted cron service hitting it over HTTP. <strong>System &rarr; Webhooks</strong> detects live whether it&rsquo;s running and, if not, shows the exact command for <em>your</em> install with a copy button. Until it runs, webhooks queue but don&rsquo;t leave the building.</p>
 
@@ -287,6 +296,7 @@ $event = json_decode($body, true);   // trusted from here</code></pre>
                 <tr><th>Symptom</th><th>Likely cause &amp; fix</th></tr>
                 <tr><td><em>&ldquo;unable to get local issuer certificate&rdquo;</em> / any SSL certificate error</td><td>Your server has no list of trusted certificate authorities, so it can&rsquo;t confirm it&rsquo;s really talking to Slack or Discord. Extremely common on a fresh Windows/WAMP install, and <strong>not a problem with your webhook</strong>. Full explanation and the five-minute fix: <a href="help-ssl.php" style="font-weight:600;">HTTPS certificate verification &rarr;</a></td></tr>
                 <tr><td>Nothing arrives, log shows deliveries <em>queued</em></td><td>The background worker isn&rsquo;t running. Check the red banner on <strong>System &rarr; Webhooks</strong> and schedule the command it shows.</td></tr>
+                <tr><td>Last error starts <em>&ldquo;Interrupted&rdquo;</em></td><td>The worker was stopped in the middle of that send, so it may or may not have arrived. Check the receiving end before you Replay it. If it keeps happening, look at what is stopping the scheduled task.</td></tr>
                 <tr><td>Delivery is <em>failed</em> / <em>retrying</em></td><td>Open it in the log &mdash; the response body and last error are captured. Usually a 4xx/5xx from the receiver (bad URL, auth, or payload shape). Fix and <strong>Replay</strong>.</td></tr>
                 <tr><td>&ldquo;the rendered body is not valid JSON&rdquo;</td><td>A Custom body didn&rsquo;t parse after variables were filled in &mdash; often an empty variable breaking quotes. Use <strong>Send test</strong> to see the rendered body, or switch to the Full-record preset.</td></tr>
                 <tr><td>Receiver rejects with 401</td><td>Signature mismatch &mdash; the secret on the action and on your receiver differ, or the receiver hashes something other than the raw body.</td></tr>
@@ -346,6 +356,6 @@ $event = json_decode($body, true);   // trusted from here</code></pre>
         });
     })();
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

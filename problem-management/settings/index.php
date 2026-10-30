@@ -51,7 +51,7 @@ $path_prefix = '../../';
         .pms-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
         .tab-content .table-action-btn svg { width: 15px; height: 15px; }
     </style>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=196">
     <?php echo Tz::scriptTag(); ?>
     <script src="<?php echo BASE_URL; ?>assets/js/tz.js?v=5"></script>
 </head>
@@ -65,7 +65,7 @@ $path_prefix = '../../';
         <?php renderSettingsTabBar($visibleTabs, $activeTabId, 'pmsTab'); ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="tab-statuses" data-capability="<?php echo Cap::PROBLEMS_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="tab-statuses" data-capability="<?php echo capKey(Cap::PROBLEMS_STATUSES); ?>">
             <div class="section-header"><h2>Statuses</h2><button class="add-btn" onclick="pmsOpen('status')">Add</button></div>
             <table><thead><tr><th>Name</th><th>Closed?</th><th>Default</th><th>Active</th><th>Actions</th></tr></thead>
             <tbody id="pmsStatusRows"><tr><td colspan="5">Loading…</td></tr></tbody></table>
@@ -74,7 +74,7 @@ $path_prefix = '../../';
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'priorities')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="tab-priorities" data-capability="<?php echo Cap::PROBLEMS_PRIORITIES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'priorities' ? ' active' : ''; ?>" id="tab-priorities" data-capability="<?php echo capKey(Cap::PROBLEMS_PRIORITIES); ?>">
             <div class="section-header"><h2>Priorities</h2><button class="add-btn" onclick="pmsOpen('priority')">Add</button></div>
             <table><thead><tr><th>Name</th><th>Default</th><th>Active</th><th>Actions</th></tr></thead>
             <tbody id="pmsPriorityRows"><tr><td colspan="4">Loading…</td></tr></tbody></table>
@@ -83,7 +83,7 @@ $path_prefix = '../../';
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'ai')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="tab-ai" data-capability="<?php echo Cap::PROBLEMS_AI; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'ai' ? ' active' : ''; ?>" id="tab-ai" data-capability="<?php echo capKey(Cap::PROBLEMS_AI); ?>">
             <h2 style="margin-top:0;">Problem AI</h2>
             <p style="color:var(--text-muted, #555);">Used by “Draft root cause” and “Detect problems”. Bring your own provider and key.</p>
             <?php renderAiSettingsPanel('problem_ai'); ?>
@@ -181,5 +181,5 @@ $path_prefix = '../../';
     pmsLoad();
     </script>
 </body>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=83"></script>
 </html>

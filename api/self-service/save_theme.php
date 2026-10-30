@@ -12,6 +12,9 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/theme.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['ss_user_id'])) {

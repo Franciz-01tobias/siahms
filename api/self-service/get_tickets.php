@@ -31,10 +31,7 @@ try {
                    ts.colour AS status_colour, ts.is_closed,
                    t.created_datetime, t.updated_datetime, $sensCol,
                    d.name as department_name,
-                   a.full_name as assigned_analyst_name,
-                   (SELECT LEFT(e.body_preview, 160) FROM emails e
-                     WHERE e.ticket_id = t.id
-                     ORDER BY e.received_datetime DESC LIMIT 1) AS preview
+                   a.full_name as assigned_analyst_name
             FROM tickets t
             LEFT JOIN ticket_statuses ts ON ts.id = t.status_id
             LEFT JOIN ticket_priorities tp ON tp.id = t.priority_id
@@ -53,6 +50,12 @@ try {
     $stmt = $conn->prepare($sql);
     $stmt->execute($params);
     $tickets = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // The newest message the requester may see - not simply the newest (privacy setting).
+    require_once '../../includes/portal_visibility.php';
+    $previews = portalVisiblePreviews($conn, array_column($tickets, 'id'));
+    foreach ($tickets as &$t) $t['preview'] = $previews[(int)$t['id']] ?? null;
+    unset($t);
 
     echo json_encode(['success' => true, 'tickets' => $tickets]);
 

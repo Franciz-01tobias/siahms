@@ -118,7 +118,11 @@ try {
         ORDER BY ss.display_order, ss.name"
     );
     $svcStmt->execute([':def_name' => $defaultImpact['name'], ':def_colour' => $defaultImpact['colour']]);
-    $services = $svcStmt->fetchAll(PDO::FETCH_ASSOC);
+    // GH #217: with Service Status switched off for the install there is no
+    // service list, no incidents and no maintenance to show - and the page is told,
+    // so it hides the panel rather than claiming "All systems operational".
+    $statusOn = moduleIsEnabled($conn, 'service-status');
+    $services = $statusOn ? $svcStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
     // Catalogue requests the user has submitted that carry an approval state (#928).
     // A pending request is NOT a ticket yet, so without this the requester has no way
@@ -126,7 +130,7 @@ try {
     // pre-upgrade install without the approval columns degrades to "no requests"
     // rather than a broken dashboard. Only gated submissions have a state to show.
     $requests = [];
-    try {
+    if (moduleIsEnabled($conn, 'forms')) try {   // GH #217
         $reqStmt = $conn->prepare(
             "SELECT s.id, s.approval_status, s.submitted_date, s.ticket_id,
                     f.title AS form_title, t.ticket_number
@@ -155,16 +159,17 @@ try {
         // switched this on, so the portal is unchanged until they do — the
         // check lives in there rather than here, because it must hold for
         // every caller rather than for the ones that remember.
-        'incidents' => ssPortalIncidents($conn),
+        'incidents' => $statusOn ? ssPortalIncidents($conn) : [],
         // Planned maintenance not yet started (3.2.0) - behind the same switch as
         // the incidents, so the portal is unchanged until an administrator opts in.
-        'planned' => ssPortalUpdatesEnabled($conn) ? array_map(fn($p) => [
+        'planned' => $statusOn && ssPortalUpdatesEnabled($conn) ? array_map(fn($p) => [
             'title' => $p['title'], 'comment' => $p['comment'], 'start' => $p['start'], 'end' => $p['end'],
             'services' => array_map(fn($s) => ['name' => $s['name'], 'impact' => $s['impact'], 'colour' => $s['colour']], $p['services']),
         ], statusPlannedList($conn, ['states' => ['scheduled'], 'limit' => 10])) : [],
         // Which level counts as "all clear" — the portal's "All systems operational"
         // banner tests against this instead of the literal name (GH #70).
-        'default_impact' => $defaultImpact
+        'default_impact' => $defaultImpact,
+        'service_status_on' => $statusOn,
     ]);
 
 } catch (Exception $e) {

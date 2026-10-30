@@ -15,6 +15,9 @@ require_once '../../includes/encryption.php';
 require_once '../../includes/messaging/messaging.php';
 require_once '../../includes/tenancy.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -29,7 +32,7 @@ if (!isset($_SESSION['analyst_id'])) {
 // exactly — an admin without tickets.messaging still cannot touch a WhatsApp
 // channel's credentials, which is the point of that capability.
 $rawIn = file_get_contents('php://input');
-$isSlackRequest = (json_decode($rawIn, true)['provider'] ?? '') === 'slack';
+$isSlackRequest = MessagingProviderKind::tryFrom((string)(json_decode($rawIn, true)['provider'] ?? '')) === MessagingProviderKind::Slack;
 if (!($isSlackRequest && sessionIsAdmin())) {
     requireModuleAccessJson('tickets');
     requireCapabilityJson(Cap::TICKETS_MESSAGING);
@@ -56,7 +59,8 @@ try {
 
     $id          = $data['id'] ?? null;
     $name        = trim((string) ($data['name'] ?? ''));
-    $provider    = $data['provider'] ?? 'twilio';
+    // The provider, as a MessagingProviderKind (4.0); null when the form sent an unknown one.
+    $kind        = MessagingProviderKind::tryFrom((string)($data['provider'] ?? 'twilio'));
     $channelType = $data['channel_type'] ?? 'whatsapp';
     $phone       = trim((string) ($data['phone_number'] ?? ''));
     $ingress     = ($data['ingress_mode'] ?? 'direct') === 'relay' ? 'relay' : 'direct';
@@ -67,24 +71,25 @@ try {
     if ($name === '') {
         throw new Exception('Name is required');
     }
-    if (!in_array($provider, ['twilio', 'meta', 'slack', 'telegram', 'teams', 'mattermost'], true)) {
+    // Web chat channels are made on Tickets -> Web chat, never here.
+    if ($kind === null || !$kind->isUserCreatable()) {
         throw new Exception('Unknown provider');
     }
     // Slack and Telegram are each always their own channel type; nothing else
     // may claim either type (same reasoning as the Slack-only rule below).
-    if ($provider === 'slack') {
+    if ($kind === MessagingProviderKind::Slack) {
         $channelType = 'slack';
     } elseif ($channelType === 'slack') {
         throw new Exception('Only the Slack provider can create a Slack channel');
-    } elseif ($provider === 'telegram') {
+    } elseif ($kind === MessagingProviderKind::Telegram) {
         $channelType = 'telegram';
     } elseif ($channelType === 'telegram') {
         throw new Exception('Only the Telegram provider can create a Telegram channel');
-    } elseif ($provider === 'teams') {
+    } elseif ($kind === MessagingProviderKind::Teams) {
         $channelType = 'teams';
     } elseif ($channelType === 'teams') {
         throw new Exception('Only the Teams provider can create a Teams channel');
-    } elseif ($provider === 'mattermost') {
+    } elseif ($kind === MessagingProviderKind::Mattermost) {
         $channelType = 'mattermost';
     } elseif ($channelType === 'mattermost') {
         throw new Exception('Only the Mattermost provider can create a Mattermost channel');
@@ -92,7 +97,7 @@ try {
 
     // Mattermost: the support channel id is the reply/filter target, not a secret.
     $mmChannelId = trim((string)($data['mm_channel_id'] ?? ''));
-    if ($provider === 'mattermost' && !preg_match('/^[a-z0-9]{26}$/', $mmChannelId)) {
+    if ($kind === MessagingProviderKind::Mattermost && !preg_match('/^[a-z0-9]{26}$/', $mmChannelId)) {
         throw new Exception('The Mattermost channel ID must be 26 letters and digits (copy it from the channel\'s details).');
     }
 
@@ -133,10 +138,10 @@ try {
 
     // Merge credentials: start from existing, overwrite only provided fields.
     $creds = $cur['credentials'] ?? [];
-    if ($provider === 'twilio') {
+    if ($kind === MessagingProviderKind::Twilio) {
         if (provided($data['account_sid'] ?? '')) $creds['account_sid'] = trim($data['account_sid']);
         if (provided($data['auth_token'] ?? ''))  $creds['auth_token']  = trim($data['auth_token']);
-    } elseif ($provider === 'slack') {
+    } elseif ($kind === MessagingProviderKind::Slack) {
         if (provided($data['bot_token'] ?? ''))      $creds['bot_token']      = trim($data['bot_token']);
         if (provided($data['signing_secret'] ?? '')) $creds['signing_secret'] = trim($data['signing_secret']);
         // Which Slack channel to listen to. NOT a secret, and blank must mean
@@ -149,13 +154,13 @@ try {
         } else {
             unset($creds['watch_channel']);
         }
-    } elseif ($provider === 'telegram') {
+    } elseif ($kind === MessagingProviderKind::Telegram) {
         if (provided($data['bot_token'] ?? '')) $creds['bot_token'] = trim($data['bot_token']);
-    } elseif ($provider === 'mattermost') {
+    } elseif ($kind === MessagingProviderKind::Mattermost) {
         $serverIn = rtrim(trim((string)($data['mm_server_url'] ?? '')), '/');
         if ($serverIn !== '') $creds['server_url'] = $serverIn; else unset($creds['server_url']);
         if (provided($data['mm_bot_token'] ?? '')) $creds['bot_token'] = trim($data['mm_bot_token']);
-    } elseif ($provider === 'teams') {
+    } elseif ($kind === MessagingProviderKind::Teams) {
         // Azure Bot App ID and tenant are identifiers; only the secret is write-only.
         $appIdIn = trim((string)($data['teams_app_id'] ?? ''));
         if ($appIdIn !== '') $creds['app_id'] = $appIdIn; else unset($creds['app_id']);
@@ -186,7 +191,7 @@ try {
     // TelegramProvider::verifyWebhook() refuses every message without one, and
     // checked against Telegram's own rule (1-256 of A-Z a-z 0-9 _ -) here, where
     // the admin can fix it, rather than at Connect time as a Telegram error.
-    if ($provider === 'telegram') {
+    if ($kind === MessagingProviderKind::Telegram) {
         if ($verifyPlain === '') {
             throw new Exception('A secret token is required for Telegram - type one or click Generate.');
         }
@@ -197,7 +202,7 @@ try {
             throw new Exception('The bot token is required - copy it from @BotFather.');
         }
     }
-    if ($provider === 'mattermost') {
+    if ($kind === MessagingProviderKind::Mattermost) {
         if ($verifyPlain === '') {
             throw new Exception('An outgoing webhook token is required for Mattermost - copy it from the webhook you created, or click Generate.');
         }
@@ -215,7 +220,7 @@ try {
     // TRAP: only write channel_ref for a provider that owns it here. Other
     //   providers keep their own value in it (Slack's workspace id), and a save
     //   that blanked it for them would quietly break a working channel.
-    $setRef = $provider === 'mattermost';
+    $setRef = $kind === MessagingProviderKind::Mattermost;
 
     if ($id) {
         $sql = "UPDATE messaging_channels SET
@@ -223,7 +228,7 @@ try {
                     credentials = ?, verify_token = ?, ingress_mode = ?,
                     relay_secret = ?, tenant_id = ?, is_active = ?" . ($setRef ? ", channel_ref = ?" : "") . "
                 WHERE id = ?";
-        $args = [$name, $channelType, $provider, $phone, $credsEncrypted, $verifyToken,
+        $args = [$name, $channelType, $kind->value, $phone, $credsEncrypted, $verifyToken,
                  $ingress, $relaySecret, $tenantId, $isActive];
         if ($setRef) $args[] = $mmChannelId;
         $args[] = (int) $id;
@@ -235,7 +240,7 @@ try {
                      verify_token, ingress_mode, relay_secret, tenant_id, is_active, channel_ref)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $conn->prepare($sql)->execute([
-            $name, $channelType, $provider, $phone, $credsEncrypted, $verifyToken,
+            $name, $channelType, $kind->value, $phone, $credsEncrypted, $verifyToken,
             $ingress, $relaySecret, $tenantId, $isActive, $setRef ? $mmChannelId : null,
         ]);
         echo json_encode(['success' => true, 'id' => (int) $conn->lastInsertId(), 'message' => 'Channel created']);

@@ -80,7 +80,7 @@ function failing(callable $fn): array {
 }
 function onlyStandIn(array $urls): bool {
     global $port;
-    foreach ($urls as $u) if (strpos($u, "http://127.0.0.1:$port/") !== 0) return false;
+    foreach ($urls as $u) if (!str_starts_with($u, "http://127.0.0.1:$port/")) return false;
     return true;
 }
 $say = ['system' => 'Test', 'user' => 'Say OK', 'max_tokens' => 16];
@@ -140,30 +140,30 @@ ok('the result goes back as a tool message', in_array('tool', $log[1]['roles'] ?
 [$msg, $urls] = failing(function () use ($ping, $BASE) {
     aiProviderChatTools(cfg('no-tools', $BASE), ['user' => 'Ping', 'max_rounds' => 2], $ping, function () { return 'pong'; });
 });
-ok('a model without tool support fails, with the server\'s own words', strpos($msg, 'does not support tools') !== false, $msg);
+ok('a model without tool support fails, with the server\'s own words', str_contains($msg, 'does not support tools'), $msg);
 ok('...explained as tool calling', stripos(aiExplainFailure(cfg('no-tools', $BASE), $msg), 'tool calling') !== false);
 ok('...and not retried anywhere else', count($urls) === 1 && onlyStandIn($urls), implode(', ', $urls));
 
 // ── 5. Failures name the cause, and never fall back ─────────────────────────
 section('5. Failures');
 [$msg, $urls] = failing(function () use ($say, $BASE) { aiProviderChat(cfg('missing', $BASE), $say); });
-ok('a model that is not on the server: 404 with its words', strpos($msg, 'not found') !== false && strpos($msg, '(HTTP 404)') !== false, $msg);
+ok('a model that is not on the server: 404 with its words', str_contains($msg, 'not found') && str_contains($msg, '(HTTP 404)'), $msg);
 ok('...explained as the model name', stripos(aiExplainFailure(cfg('missing', $BASE), $msg), 'does not have a model called "missing"') !== false);
 ok('...no fallback', onlyStandIn($urls));
 
 $noV1 = "http://127.0.0.1:$port";
 [$msg, $urls] = failing(function () use ($say, $noV1) { aiProviderChat(cfg('ok', $noV1), $say); });
-ok('a base URL without /v1: 404', strpos($msg, '(HTTP 404)') !== false, $msg);
-ok('...explained as the address, naming /v1', strpos(aiExplainFailure(cfg('ok', $noV1), $msg), '/v1') !== false);
+ok('a base URL without /v1: 404', str_contains($msg, '(HTTP 404)'), $msg);
+ok('...explained as the address, naming /v1', str_contains(aiExplainFailure(cfg('ok', $noV1), $msg), '/v1'));
 ok('...no fallback', onlyStandIn($urls));
 
 [$msg, $urls] = failing(function () use ($say, $BASE) { aiProviderChat(cfg('not-chat', $BASE), $say); });
-ok('a 200 that is not a chat completion is a failure, not an empty answer', strpos($msg, 'not with a chat completion') !== false, $msg);
+ok('a 200 that is not a chat completion is a failure, not an empty answer', str_contains($msg, 'not with a chat completion'), $msg);
 ok('...explained as not an OpenAI-compatible API', stripos(aiExplainFailure(cfg('not-chat', $BASE), $msg), 'not an OpenAI-compatible API') !== false);
 ok('...and not retried (one request)', count($urls) === 1, (string)count($urls));
 
 [$msg, $urls] = failing(function () use ($say, $BASE) { aiProviderChat(cfg('needs-key', $BASE), $say); });
-ok('a server that needs a key, sent none: 401', strpos($msg, '(HTTP 401)') !== false, $msg);
+ok('a server that needs a key, sent none: 401', str_contains($msg, '(HTTP 401)'), $msg);
 ok('...explained as a key', stripos(aiExplainFailure(cfg('needs-key', $BASE), $msg), 'API key') !== false);
 
 $dead = 'http://localhost:' . freePort() . '/v1';
@@ -172,7 +172,7 @@ echo "  (a refused connection is retried, as every provider's is - a few seconds
 ok('nothing listening: a network error', stripos($msg, 'Network error') !== false, $msg);
 $hint = aiExplainFailure(cfg('ok', $dead), $msg);
 ok('...explained: localhost is the FreeITSM server, in Docker the container', stripos($hint, 'Docker') !== false && stripos($hint, 'FreeITSM server') !== false, $hint);
-ok('...every attempt went to that address, none anywhere else', $urls && count(array_filter($urls, function ($u) use ($dead) { return strpos($u, $dead) !== 0; })) === 0, implode(', ', $urls));
+ok('...every attempt went to that address, none anywhere else', $urls && count(array_filter($urls, function ($u) use ($dead) { return !str_starts_with($u, $dead); })) === 0, implode(', ', $urls));
 
 $e = '';
 try { aiProviderChat(cfg('ok', ''), $say); } catch (Throwable $x) { $e = $x->getMessage(); }

@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Activé — désactivez pour la production (définissez display_errors sur 0 dans config.php)',
         'display_errors_disabled' => 'Désactivé',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 ou supérieur requis',
+        'php_version_too_low' => '{version} — PHP 8.1 ou supérieur requis',
         'php_version_eol' => '{version} — encore prise en charge, mais cette version n\'a plus reçu de mise à jour de sécurité depuis sa fin de vie. PHP 8.3 ou 8.4 recommandé.',
         'extension_loaded' => 'Chargée',
         'extension_not_loaded' => 'Non chargée — activez-la dans php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Configuré',
         'ca_ini_masked_broken' => 'Défini, mais pointe vers un fichier absent — corrigez le chemin ou commentez le paramètre dans php.ini.',
         'php_version_ok_masked' => 'Répond à l\'exigence',
-        'php_version_too_low_masked' => 'Trop ancienne — PHP 7.4 ou supérieur requis',
+        'php_version_too_low_masked' => 'Trop ancienne — PHP 8.1 ou supérieur requis',
         'php_version_eol_masked' => 'Prise en charge, mais cette version a atteint sa fin de vie et ne reçoit plus de mises à jour de sécurité. Connectez-vous en tant qu\'administrateur pour voir la version.',
     ],
     'locked' => [

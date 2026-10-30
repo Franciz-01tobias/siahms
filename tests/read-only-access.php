@@ -89,14 +89,14 @@ try {
             return [$status, $body];
         };
         [$c, $b] = $http('api/change-management/get.php?id=' . $id);
-        ok('HTTP: they can read the change', $c === 200 && strpos($b, '"success":true') !== false, substr($b, 0, 120));
+        ok('HTTP: they can read the change', $c === 200 && str_contains($b, '"success":true'), substr($b, 0, 120));
         [$c, $b] = $http('api/change-management/save.php', ['id' => $id, 'title' => 'ZZ-RO via http']);
-        ok('HTTP: a save is refused as read only', $c === 403 && strpos($b, '"code":"read_only"') !== false, substr($b, 0, 120));
+        ok('HTTP: a save is refused as read only', $c === 403 && str_contains($b, '"code":"read_only"'), substr($b, 0, 120));
         [$c, $b] = $http('api/change-management/save_comment.php', ['change_id' => $id, 'comment_text' => 'ZZ']);
         ok('HTTP: so is a comment', $c === 403);
         [$c, $b] = $http('change-management/?change_id=' . $id);
         ok('HTTP: the page marks itself read only and offers no New change',
-            strpos($b, 'class="module-read-only"') !== false && strpos($b, 'href="new/"') === false);
+            str_contains($b, 'class="module-read-only"') && !str_contains($b, 'href="new/"'));
         @unlink(session_save_path() . '/sess_' . $sess);
     } else {
         echo "  SKIP  HTTP checks (no base URL)\n";

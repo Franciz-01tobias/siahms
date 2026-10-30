@@ -46,7 +46,7 @@ $translationNamespaces = ['common', 'reporting'];
     </style>
     <!-- Mobile layer LAST, after this page's own <style> block, or a rule at
          equal specificity loses on document order (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="reporting" data-mobile-page="rep-help">
     <?php include 'includes/header.php'; ?>
@@ -155,7 +155,7 @@ $translationNamespaces = ['common', 'reporting'];
 
                     <h4><?php echo htmlspecialchars(t('reporting.help.packs_blocks_heading')); ?></h4>
                     <div class="help-defs">
-                        <?php foreach (['tickets', 'status', 'software', 'assets', 'projects', 'layout'] as $k): ?>
+                        <?php foreach (['tickets', 'status', 'software', 'assets', 'projects', 'changes', 'layout'] as $k): ?>
                         <div class="help-def">
                             <span class="help-def-term"><?php echo htmlspecialchars(t('reporting.help.packs_area_' . $k)); ?></span>
                             <div class="help-def-desc"><?php echo htmlspecialchars(t('reporting.help.packs_area_' . $k . '_body')); ?></div>
@@ -430,6 +430,6 @@ $translationNamespaces = ['common', 'reporting'];
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

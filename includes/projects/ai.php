@@ -293,7 +293,7 @@ function projectAiFacts(PDO $conn, array $project, int $analystId, int $days = 1
             foreach ($rows as $r) $line(sprintf('- %s%s: power %d, interest %d%s; kept informed: %s', $r['name'], $r['notes'] ? ' (' . $r['notes'] . ')' : '', (int)$r['power'], (int)$r['interest'],
                 $r['stance'] ? ', ' . strtoupper($r['stance']) : '', $r['keep_informed'] ?: 'not planned'));
         }
-    } catch (Throwable $e) { /* before the stakeholder columns */ }
+    } catch (Throwable) { /* before the stakeholder columns */ }
     // Other modules - only what this analyst may open
     if (analystCanAccessModule($conn, $analystId, 'changes')) {
         $ch = projectUnapprovedChanges($conn, $pid);
@@ -362,7 +362,7 @@ function projectAiAsk(PDO $conn, string $task, string $facts, int $maxTokens): a
 /** Is AI set up for Projects? */
 function projectAiReady(PDO $conn): bool
 {
-    try { return (aiSettingsLoad($conn, 'projects_ai')['api_key'] ?? '') !== ''; } catch (Throwable $e) { return false; }
+    try { return (aiSettingsLoad($conn, 'projects_ai')['api_key'] ?? '') !== ''; } catch (Throwable) { return false; }
 }
 
 /**

@@ -538,7 +538,7 @@ function htaccessGuardPhpDirectives(string $text): string
     $bad = htaccessUnguardedPhpDirectives($text);
     if (!$bad) return $text;
 
-    $nl    = strpos($text, "\r\n") !== false ? "\r\n" : "\n";
+    $nl    = str_contains($text, "\r\n") ? "\r\n" : "\n";
     $lines = preg_split('/\r\n|\n|\r/', $text);
     foreach ($bad as $n) {
         $line   = $lines[$n - 1];
@@ -928,7 +928,7 @@ function attachmentRejectPolicy(PDO $conn): string
         $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'attachment_rejected_behaviour'");
         $stmt->execute();
         $v = (string)$stmt->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         $v = '';   // table not migrated yet — fall through to the default
     }
     return $cached = ($v === ATTACHMENT_POLICY_DROP ? ATTACHMENT_POLICY_DROP : ATTACHMENT_POLICY_STORE);

@@ -25,6 +25,9 @@ require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/asset_disk_visibility.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 if (!isset($_SESSION['analyst_id'])) { echo json_encode(['success' => false, 'error' => 'Not authenticated']); exit; }
 requireModuleAccessJson('assets');

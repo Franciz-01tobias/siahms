@@ -3,7 +3,8 @@
  * External API: Device Manager Ingest
  *
  * Accepts a JSON POST with device manager data from the PowerShell
- * collection script and syncs the asset_devices table (delete + reinsert).
+ * collection script and syncs the asset_devices table through
+ * AssetInventoryService::agentReport(), which also records the outcome.
  *
  * Auth: Authorization header with API key (validated against apikeys table).
  */
@@ -67,6 +68,10 @@ try {
     exit;
 }
 
+// GH #217: an agent's report is refused while its module is switched off for the
+// install - the device is not recorded, and nothing is queued to arrive later.
+requireModuleOnJson($conn, 'assets');
+
 // --------------------------------------------------
 // Parse JSON payload (with UTF-8 normalization)
 // --------------------------------------------------
@@ -112,6 +117,13 @@ try {
     }
 
     $assetId = (int)$asset['id'];
+    // A retired asset (it has left the estate) keeps the devices it left with.
+    require_once __DIR__ . '/../../../../includes/asset_retirement.php';
+    if (assetIsRetired($conn, $assetId)) {
+        echo json_encode(['success' => true, 'asset_id' => $assetId, 'retired' => true,
+                          'message' => 'This asset is retired in FreeITSM: the device list was not applied.']);
+        exit;
+    }
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Failed to look up asset']);
@@ -119,67 +131,42 @@ try {
 }
 
 // --------------------------------------------------
-// Sync devices (delete + reinsert)
+// Sync devices - through the one inventory implementation (GH #200 Part B)
 // --------------------------------------------------
-$devicesSynced = 0;
+//
+// 🔴 AN EMPTY LIST FROM AN OLD AGENT IS "I DID NOT FIND OUT", NOT "THERE ARE NO DEVICES".
+// The wipe used to run unconditionally, so a report carrying no devices emptied the table
+// - 226 rows gone on a WMI blip, silently. An agent that sends report_version 2 says
+// whether it collected (an empty list is then real) or failed (collection_failures);
+// anything older keeps the list, and says so in devices_left_unchanged.
+require_once __DIR__ . '/../../../../includes/services/asset_inventory.php';
 
-$devicesLeftUnchanged = false;
+$v2 = (int)($data['report_version'] ?? 1) >= 2;
+$failures = is_array($data['collection_failures'] ?? null) ? $data['collection_failures'] : [];
 
 try {
-    // 🔴 AN EMPTY LIST IS "I DID NOT FIND OUT", NOT "THERE ARE NO DEVICES".
-    // The wipe used to run unconditionally while the insert was guarded, so a
-    // report carrying no devices emptied the table and left it empty — 226 rows
-    // gone on a WMI blip, silently, until the next good run. The agent happens
-    // to guard its own side (it only posts when it collected something), but
-    // anything else holding an API key could empty this with `{"devices":[]}`.
-    //
-    // A machine that can reach this endpoint has devices, so skipping the wipe
-    // costs at most one run of slightly stale data and saves the whole list.
-    // Named in the response rather than passed over in silence, because looking
-    // like a successful sync of nothing is the other half of the bug.
-    if (!(!empty($data['devices']) && is_array($data['devices']))) {
-        $devicesLeftUnchanged = true;
-    } else {
-        $conn->prepare("DELETE FROM asset_devices WHERE asset_id = ?")->execute([$assetId]);
-        $stmt = $conn->prepare("
-            INSERT INTO asset_devices (asset_id, device_class, device_name, status, manufacturer, driver_version, driver_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
-
-        foreach ($data['devices'] as $device) {
-            $deviceName = isset($device['device_name']) ? trim($device['device_name']) : '';
-            if ($deviceName === '') continue;
-
-            $stmt->execute([
-                $assetId,
-                isset($device['device_class']) ? mb_substr(trim($device['device_class']), 0, 100) : null,
-                mb_substr($deviceName, 0, 255),
-                isset($device['status']) ? mb_substr(trim($device['status']), 0, 20) : null,
-                isset($device['manufacturer']) && trim($device['manufacturer']) !== '' ? mb_substr(trim($device['manufacturer']), 0, 255) : null,
-                isset($device['driver_version']) && trim($device['driver_version']) !== '' ? mb_substr(trim($device['driver_version']), 0, 50) : null,
-                isset($device['driver_date']) && trim($device['driver_date']) !== '' ? $device['driver_date'] : null
-            ]);
-            $devicesSynced++;
-        }
-    }
-} catch (PDOException $e) {
+    $sections = AssetInventoryService::agentReport($conn, $assetId, [
+        'devices' => AssetInventoryService::agentState($data['devices'] ?? null, $v2, $failures['devices'] ?? null),
+    ]);
+} catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Failed to sync devices', 'detail' => $e->getMessage()]);
     exit;
 }
 
-// --------------------------------------------------
-// Success response
-// --------------------------------------------------
+$devices = $sections['devices'];
+$leftUnchanged = $devices['result'] !== 'applied';
+
 echo json_encode([
-    'status'        => 'ok',
+    'status'        => $devices['result'] === 'failed' ? 'partial' : 'ok',
     'hostname'      => $hostname,
     'asset_id'      => $assetId,
-    'devices_synced' => $devicesSynced,
+    'devices_synced' => $leftUnchanged ? 0 : (int)$devices['added'],
     // Said out loud, so "0 devices synced" cannot be mistaken for a machine
     // that genuinely has none. The existing device list was kept.
-    'devices_left_unchanged' => $devicesLeftUnchanged,
-    'message'       => $devicesLeftUnchanged
-        ? 'No devices in the report - the existing device list was left unchanged'
-        : 'Device manager data synchronized'
+    'devices_left_unchanged' => $leftUnchanged,
+    'sections'      => $sections,
+    'message'       => $devices['result'] === 'failed'
+        ? 'The agent could not collect Device Manager - the existing device list was left unchanged'
+        : ($leftUnchanged ? 'No devices in the report - the existing device list was left unchanged' : 'Device manager data synchronized')
 ]);

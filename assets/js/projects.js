@@ -266,6 +266,24 @@
      * template and company pickers; edit-only fields (status, health, tools, actual end) show only
      * when editing. onSaved is called after a successful save.
      */
+    /**
+     * GH #210. Can this analyst or team see the company? A picker offers only those
+     * who can - being on a project never lets anyone past its company. Always true
+     * with one company, or when the lookups do not say (the server decides).
+     *
+     * @param {object} L  the lookups
+     * @param {string} kind  'analyst' or 'team'
+     * @param {number|string} id  the analyst or team id
+     * @param {?number|string} tenantId  the project's company as stored; null = the Default company
+     */
+    function reachesCompany(L, kind, id, tenantId) {
+        if (!L.multi_company) return true;
+        const map = kind === 'team' ? L.team_companies : L.analyst_companies;
+        if (!map) return true;
+        const tid = (tenantId === null || tenantId === undefined || tenantId === '') ? L.default_company : tenantId;
+        return (map[id] || []).map(Number).includes(Number(tid));
+    }
+
     async function openProjectForm(project, onSaved) {
         const L = await lookups();
         setPalette(L.colours);
@@ -299,9 +317,15 @@
         $('pfSave').textContent = isEdit ? TC('save') : T('form.create');
         document.querySelectorAll('#prjFormModal .prj-edit-only').forEach(el => { el.hidden = !isEdit; });
 
-        $('pfOwner').innerHTML = '<option value="">' + esc(T('portfolio.nobody')) + '</option>'
-            + L.analysts.map(a => '<option value="' + a.id + '">' + esc(a.full_name) + '</option>').join('');
-        $('pfOwner').value = isEdit ? (project.owner_analyst_id || '') : String(window.PRJ_ME || '');
+        // GH #210: only people who can see the project's company - for a new one,
+        // whichever company is picked, so the list follows the Company dropdown.
+        // The current manager stays listed when editing, whoever it is.
+        const fillOwner = (tenantId, keep) => {
+            $('pfOwner').innerHTML = '<option value="">' + esc(T('portfolio.nobody')) + '</option>'
+                + L.analysts.filter(a => String(a.id) === String(keep) || reachesCompany(L, 'analyst', a.id, tenantId))
+                    .map(a => '<option value="' + a.id + '">' + esc(a.full_name) + '</option>').join('');
+            $('pfOwner').value = keep && [...$('pfOwner').options].some(o => o.value === String(keep)) ? String(keep) : '';
+        };
 
         const cw = $('pfCompanyWrap');
         if (L.multi_company && L.companies.length > 1 && !isEdit) {
@@ -310,6 +334,13 @@
             if (L.active_company) $('pfCompany').value = String(L.active_company);
         } else {
             cw.hidden = true;
+        }
+        if (isEdit) {
+            fillOwner(project.tenant_id, project.owner_analyst_id || '');
+        } else {
+            const newCompany = () => cw.hidden ? (L.multi_company ? L.active_company : null) : $('pfCompany').value;
+            fillOwner(newCompany(), String(window.PRJ_ME || ''));
+            $('pfCompany').onchange = () => fillOwner(newCompany(), $('pfOwner').value);
         }
 
         $('pfStatus').innerHTML = L.statuses.map(s => '<option value="' + s + '">' + esc(T('status.' + s)) + '</option>').join('');
@@ -520,6 +551,6 @@
     window.Prj = {
         T, TC, esc, api, lookups, icon, gradient, setPalette, ring, statusPill, healthBadge, priorityLabel, priorityChip, setPriorityLabels,
         fmtDate, daysTo, todayStr, targetPhrase, initials, timeboxWord, toast,
-        openModal, closeModal, openProjectForm, celebrate, templateMeta,
+        openModal, closeModal, openProjectForm, celebrate, templateMeta, reachesCompany,
     };
 })();

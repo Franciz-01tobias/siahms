@@ -67,7 +67,7 @@ function landingInstallDefault(PDO $conn): string
         $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $stmt->execute([LANDING_SETTING_KEY]);
         $value = $stmt->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         // A missing settings table must never stop somebody logging in.
         return 'analyst';
     }
@@ -160,7 +160,7 @@ function landingRefreshCookieFromPreference(PDO $conn, int $analystId): void
             // Explicitly saved as "use the install default" — clear any stale cookie.
             landingSetCookie(null);
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Ignored on purpose. See the docblock.
     }
 }

@@ -64,9 +64,9 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <script src="../assets/js/i18n.js?v=3"></script>
     <?php echo Money::scriptTag(); ?>
     <script src="../assets/js/money.js?v=1"></script>
-    <script src="../assets/js/tinymce/tinymce.min.js"></script>
+    <script src="../assets/js/tinymce/tinymce.min.js?v=8.10.0"></script>
     <!-- Mobile-friendly overrides (LAYER 17). Linked LAST so its @media rules win ties against knowledge.css. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -560,14 +560,15 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <!-- Link Copied Toast -->
 
     <!-- jsPDF for searchable PDF generation -->
-    <script src="../assets/js/vendor/jspdf.umd.min.js"></script>
+    <script src="../assets/js/vendor/jspdf.umd.min.js?v=4.2.1"></script>
     <script>window.API_BASE = '../api/knowledge/';</script>
     <script>window.KB_SHOW_DOMAINS = <?php echo $showDomains ? 'true' : 'false'; ?>; window.KB_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'projects') ? 'true' : 'false'; ?>; window.KB_BASE = <?php echo json_encode(BASE_URL); ?>;</script>
     <script src="../assets/js/domain-links.js?v=2"></script>
     <script src="../assets/js/project-links.js?v=1"></script>
-    <script src="../assets/js/knowledge.js?v=62"></script>
+    <script src="../assets/js/safe-html.js?v=4"></script>   <!-- article bodies are cleaned before display -->
+    <script src="../assets/js/knowledge.js?v=65"></script>
     <!-- Prism.js for code syntax highlighting when viewing articles -->
-    <script src="../assets/js/vendor/prism.min.js"></script>
+    <script src="../assets/js/vendor/prism.min.js?v=1.30.0"></script>
     <script src="../assets/js/vendor/prism-powershell.min.js"></script>
     <script src="../assets/js/vendor/prism-bash.min.js"></script>
     <script src="../assets/js/vendor/prism-batch.min.js"></script>
@@ -577,6 +578,6 @@ $sidebarHoverClass = $sidebarMode === 'hover' ? ' sidebar-hover' : '';
     <script src="../assets/js/vendor/prism-json.min.js"></script>
     <script src="../assets/js/vendor/prism-toolbar.min.js"></script>
     <script src="../assets/js/vendor/prism-copy-to-clipboard.min.js"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

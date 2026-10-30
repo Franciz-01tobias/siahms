@@ -73,6 +73,11 @@ try {
         'success'  => true,
         'mode'     => getModulePermissionMode($conn),
         'modules'  => $modules,
+        // Availability (GH #217): the switched-off modules, and the ones that never can be.
+        'disabled'  => disabledModules($conn),
+        'always_on' => MODULES_ALWAYS_ON,
+        // The Tickets features with their own switch (slice 2).
+        'features'  => array_map(fn($k, $n) => ['key' => $k, 'name' => $n], array_keys(TICKET_FEATURES), TICKET_FEATURES),
         'teams'    => $teams,
         'analysts' => $analysts,
     ]);

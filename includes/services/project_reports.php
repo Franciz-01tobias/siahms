@@ -35,7 +35,7 @@ class ProjectReportsService
     /** True when the project_reports table exists (after Database Verification). */
     public static function ready(PDO $conn): bool
     {
-        try { $conn->query("SELECT 1 FROM project_reports LIMIT 0"); return true; } catch (Throwable $e) { return false; }
+        try { $conn->query("SELECT 1 FROM project_reports LIMIT 0"); return true; } catch (Throwable) { return false; }
     }
 
     /** Reports (not briefings), newest first, with who wrote and approved them. */
@@ -217,7 +217,7 @@ class ProjectReportsService
         static $ready = null;
         if ($ready === null) {
             try { $conn->query("SELECT report_schedule, report_schedule_kind FROM projects LIMIT 0"); $conn->query("SELECT sent_datetime, sent_to FROM project_reports LIMIT 0"); $ready = true; }
-            catch (Throwable $e) { $ready = false; }
+            catch (Throwable) { $ready = false; }
         }
         return $ready;
     }

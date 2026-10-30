@@ -57,7 +57,9 @@ try {
     switch ($action) {
         case 'get':     handleGet($conn); break;
         case 'preview': handlePreview($conn, $_GET['model'] ?? ''); break;
-        case 'set':     handleSet($conn, $analystId, $input); break;
+        // Never on a GET: ?action=set from a link saved the empty input's default,
+        // "containers", over the whole install's model (csrf.php).
+        case 'set':     csrfRequireWriteMethod(); handleSet($conn, $analystId, $input); break;
         default:
             echo json_encode(['success' => false, 'error' => 'Invalid action']);
     }

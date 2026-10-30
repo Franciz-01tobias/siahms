@@ -55,7 +55,7 @@ final class TaskEvidence
         if (!$utc) return null;
         try {
             return (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone(self::tz())->format('Y-m-d');
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -66,7 +66,7 @@ final class TaskEvidence
         if (!$utc) return null;
         try {
             return (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone(self::tz())->format('Y-m-d H:i');
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $utc;
         }
     }
@@ -83,7 +83,7 @@ final class TaskEvidence
         try {
             $dt = new DateTime(substr($ymd, 0, 10) . ' 12:00:00');
             return class_exists('DateFmt') ? DateFmt::render($dt, DateFmt::DATE_TEMPLATES[DateFmt::dateKey()]) : $dt->format('Y-m-d');
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return (string)$ymd;
         }
     }
@@ -103,7 +103,7 @@ final class TaskEvidence
             return class_exists('DateFmt')
                 ? DateFmt::render($dt, DateFmt::DATE_TEMPLATES[DateFmt::dateKey()]) . ' ' . DateFmt::render($dt, DateFmt::TIME_TEMPLATES[DateFmt::timeKey()])
                 : $dt->format('Y-m-d H:i');
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return (string)$utc;
         }
     }
@@ -133,7 +133,7 @@ final class TaskEvidence
         try {
             foreach ($conn->query("SELECT id FROM task_recurrences")->fetchAll(PDO::FETCH_COLUMN) as $id) $ids[(int)$id] = true;
             foreach ($conn->query("SELECT DISTINCT recurrence_id FROM task_recurrence_versions")->fetchAll(PDO::FETCH_COLUMN) as $id) $ids[(int)$id] = true;
-        } catch (Throwable $e) { /* before Database Verification */ }
+        } catch (Throwable) { /* before Database Verification */ }
 
         $out = [];
         foreach (array_keys($ids) as $rid) {
@@ -153,7 +153,7 @@ final class TaskEvidence
     public static function seriesHeader(PDO $conn, int $rid): ?array
     {
         $one = function (string $sql, array $a) use ($conn) {
-            try { $s = $conn->prepare($sql); $s->execute($a); return $s->fetch(PDO::FETCH_ASSOC) ?: null; } catch (Throwable $e) { return null; }
+            try { $s = $conn->prepare($sql); $s->execute($a); return $s->fetch(PDO::FETCH_ASSOC) ?: null; } catch (Throwable) { return null; }
         };
         $rule   = $one("SELECT * FROM task_recurrences WHERE id = ?", [$rid]);
         $latest = $one("SELECT id, title, tenant_id, due_date, updated_datetime FROM tasks
@@ -200,7 +200,7 @@ final class TaskEvidence
         if (!$series) throw new InvalidArgumentException('No such repeating task.');
         $today = date('Y-m-d');
         $q = function (string $sql, array $a) use ($conn): array {
-            try { $s = $conn->prepare($sql); $s->execute($a); return $s->fetchAll(PDO::FETCH_ASSOC) ?: []; } catch (Throwable $e) { return []; }
+            try { $s = $conn->prepare($sql); $s->execute($a); return $s->fetchAll(PDO::FETCH_ASSOC) ?: []; } catch (Throwable) { return []; }
         };
 
         $versions = $q("SELECT * FROM task_recurrence_versions WHERE recurrence_id = ? ORDER BY version_no", [$rid]);
@@ -382,19 +382,19 @@ final class TaskEvidence
             $i = $conn->prepare("SELECT * FROM task_checklist_items WHERE task_checklist_id = ? ORDER BY sort_order, id");
             foreach ($lists as &$l) { $i->execute([(int)$l['id']]); $l['items'] = $i->fetchAll(PDO::FETCH_ASSOC); }
             unset($l);
-        } catch (Throwable $e) { /* none */ }
+        } catch (Throwable) { /* none */ }
         $steps = [];
         try {
             $s = $conn->prepare("SELECT * FROM task_checklist_item_events WHERE task_id = ? ORDER BY id");
             $s->execute([(int)$t['id']]);
             $steps = $s->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Throwable $e) { /* none */ }
+        } catch (Throwable) { /* none */ }
         $audit = [];
         try {
             $s = $conn->prepare("SELECT * FROM task_audit WHERE task_id = ? ORDER BY id");
             $s->execute([(int)$t['id']]);
             $audit = $s->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Throwable $e) { /* none */ }
+        } catch (Throwable) { /* none */ }
         return self::judge($t, $lists, $steps, $events, $audit, null);
     }
 
@@ -592,7 +592,7 @@ final class TaskEvidence
         }
         if (!$flags || !isset($flags['created_late'])) {
             $createdLocal = self::localDate($t['created_datetime'] ?? null);
-            if ($via && strpos($via, 'repeat') === 0 && $via !== 'repeat_completion' && $createdLocal && $begins && $createdLocal > $begins) {
+            if ($via && str_starts_with($via, 'repeat') && $via !== 'repeat_completion' && $createdLocal && $begins && $createdLocal > $begins) {
                 $flags['created_late'] = true;
             }
         }
@@ -721,7 +721,7 @@ final class TaskEvidence
                                     AND started_datetime >= ? AND started_datetime <= ? ORDER BY id");
             $s->execute([$fromUtc, $toUtc]);
             $runs = $s->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return ['code' => 'history_not_available', 'reason' => 'unreadable'] + $base;
         }
         if ($runId) {

@@ -78,7 +78,7 @@ try {
     $due = calendarSyncEventFromTask($task, 'due');
     ok('a due date is all day', $due['all_day'] === true);
     ok('…and says so in the title, so a deadline is not read as a booking',
-        strpos($due['subject'], 'Due:') === 0, $due['subject']);
+        str_starts_with($due['subject'], 'Due:'), $due['subject']);
     ok('…and starts on the due date', substr($due['start'], 0, 10) === '2026-09-10');
 
     // 🔴 THE ONE THAT BIT. An earlier version of this file asserted the end was

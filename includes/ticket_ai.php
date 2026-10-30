@@ -83,7 +83,7 @@ function ticketAiSettings(?PDO $conn = null): array
                 $defaults[$k] = (int)(bool)(int)$row['setting_value'];
             }
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Defaults — and the defaults are OFF, so a settings table we cannot
         // read can never start spending somebody's money.
     }

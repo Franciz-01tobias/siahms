@@ -34,7 +34,7 @@ function costCentreReady(PDO $conn, string $table): bool
     static $ok = [];
     if (isset($ok[$table])) return $ok[$table];
     try { $conn->query("SELECT cost_centre_id FROM `$table` LIMIT 0"); return $ok[$table] = true; }
-    catch (Throwable $e) { return $ok[$table] = false; }
+    catch (Throwable) { return $ok[$table] = false; }
 }
 
 /**
@@ -60,7 +60,7 @@ function costCentreOptions(PDO $conn, int $tenantId, ?int $keepId = null): array
         $st = $conn->prepare("SELECT id, code, name, is_active FROM cost_centres
                                WHERE tenant_id = ? AND (is_active = 1 OR id = ?) ORDER BY code");
         $st->execute([$tenantId, $keepId ?? 0]);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return [];   // before Database Verification
     }
     return array_map(fn($r) => ['id' => (int)$r['id'], 'code' => $r['code'], 'name' => $r['name'], 'is_active' => (bool)$r['is_active']],
@@ -173,7 +173,7 @@ function costCentreUsage(PDO $conn, int $id): array
             $st->execute([$id]);
             $n = (int)$st->fetchColumn();
             if ($n > 0) $out[$what] = $n;
-        } catch (Throwable $e) { /* not there before Database Verification */ }
+        } catch (Throwable) { /* not there before Database Verification */ }
     }
     return $out;
 }

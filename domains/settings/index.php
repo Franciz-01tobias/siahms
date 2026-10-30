@@ -18,6 +18,7 @@ I18n::initFromSession();
 Tz::init();
 
 require_once '../../includes/settings_manifest.php';
+require_once '../../includes/domains/scope.php';   // GH #203: DOMAIN_INTERNAL_INTERVALS
 requireModuleAccess('domains');
 
 $settingsManifest = settingsManifestFor('domains');
@@ -45,7 +46,7 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
     <script src="../../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
-    <link rel="stylesheet" href="../../assets/css/domains.css?v=7">
+    <link rel="stylesheet" href="../../assets/css/domains.css?v=8">
     <style>
         /* Full-width settings page. ⚠️ max-width alone is not enough: inbox.css's
            `.container { margin: 30px auto }` would keep the gutters. */
@@ -70,7 +71,7 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
         .st-list .action-btn svg { width: 16px; height: 16px; }
         @media (max-width: 900px) { .set-row { grid-template-columns: 1fr; gap: 8px; } }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="domains" data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -80,7 +81,7 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
         <?php else: renderSettingsTabBar($visibleTabs, $activeTabId); endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'statuses')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo Cap::DOMAINS_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'statuses' ? ' active' : ''; ?>" id="statuses-tab" data-capability="<?php echo capKey(Cap::DOMAINS_STATUSES); ?>">
             <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
                 <div><h2 style="margin:0;font-size:18px"><?php echo $tt('statuses_title'); ?></h2><div class="dom-hint" style="font-size:13px"><?php echo $tt('statuses_intro'); ?></div></div>
                 <button type="button" class="dom-btn primary" id="stAdd"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -91,8 +92,20 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
         </div>
         <?php endif; ?>
 
+        <?php if (settingsTabVisible($visibleTabs, 'cert-types')): ?>
+        <div class="tab-content<?php echo $activeTabId === 'cert-types' ? ' active' : ''; ?>" id="cert-types-tab" data-capability="<?php echo capKey(Cap::DOMAINS_CERT_TYPES); ?>">
+            <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <div><h2 style="margin:0;font-size:18px"><?php echo $tt('ct_title'); ?></h2><div class="dom-hint" style="font-size:13px"><?php echo $tt('ct_intro'); ?></div></div>
+                <button type="button" class="dom-btn primary" id="ctAdd"><?php echo htmlspecialchars(t('common.add')); ?></button>
+            </div>
+            <table class="st-list"><thead><tr>
+                <th><?php echo $tt('st_name'); ?></th><th><?php echo $tt('st_active'); ?></th><th><?php echo $tt('ct_in_use'); ?></th><th><?php echo $tt('st_order'); ?></th><th></th>
+            </tr></thead><tbody id="ctBody"></tbody></table>
+        </div>
+        <?php endif; ?>
+
         <?php if (settingsTabVisible($visibleTabs, 'alerts')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'alerts' ? ' active' : ''; ?>" id="alerts-tab" data-capability="<?php echo Cap::DOMAINS_ALERTS; ?>" data-settings-tab="alerts">
+        <div class="tab-content<?php echo $activeTabId === 'alerts' ? ' active' : ''; ?>" id="alerts-tab" data-capability="<?php echo capKey(Cap::DOMAINS_ALERTS); ?>" data-settings-tab="alerts">
             <h2 style="margin:0 0 4px;font-size:18px"><?php echo $tt('alerts_title'); ?></h2>
             <div class="set-box" id="alertsState"></div>
             <div class="set-row"><div><div class="lbl"><?php echo $tt('alerts_enabled'); ?></div><div class="desc"><?php echo $tt('alerts_enabled_desc'); ?></div></div>
@@ -142,7 +155,7 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'monitoring')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'monitoring' ? ' active' : ''; ?>" id="monitoring-tab" data-capability="<?php echo Cap::DOMAINS_MONITORING; ?>" data-settings-tab="monitoring">
+        <div class="tab-content<?php echo $activeTabId === 'monitoring' ? ' active' : ''; ?>" id="monitoring-tab" data-capability="<?php echo capKey(Cap::DOMAINS_MONITORING); ?>" data-settings-tab="monitoring">
             <h2 style="margin:0 0 4px;font-size:18px"><?php echo $tt('monitoring_title'); ?></h2>
             <div class="set-box" id="schedState"></div>
             <div class="set-row"><div><div class="lbl"><?php echo $tt('lookup_mode'); ?></div><div class="desc"><?php echo $tt('lookup_mode_desc'); ?></div></div>
@@ -161,8 +174,13 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
                 <div><select data-k="domain_dns_resolver">
                     <option value="auto"><?php echo $tt('rs_auto'); ?></option>
                     <option value="system"><?php echo $tt('rs_system'); ?></option>
+                    <option value="system_only"><?php echo $tt('rs_system_only'); ?></option>
                     <option value="google"><?php echo $tt('rs_google'); ?></option>
                     <option value="cloudflare"><?php echo $tt('rs_cloudflare'); ?></option></select><div class="dflt" data-d="domain_dns_resolver"></div></div></div>
+            <?php /* GH #203: internal domains are checked on their own interval (DNS only, through this server). */ ?>
+            <div class="set-row"><div><div class="lbl"><?php echo $tt('internal_interval'); ?></div><div class="desc"><?php echo $tt('internal_interval_desc'); ?></div></div>
+                <div><select data-k="domain_internal_interval">
+                    <?php foreach (DOMAIN_INTERNAL_INTERVALS as $m): ?><option value="<?php echo $m; ?>"><?php echo $tt('ii_' . $m); ?></option><?php endforeach; ?></select><div class="dflt" data-d="domain_internal_interval"></div></div></div>
             <div class="set-row"><div><div class="lbl"><?php echo $tt('ct'); ?></div><div class="desc"><?php echo $tt('ct_desc'); ?></div></div>
                 <div><label class="toggle-label"><span class="toggle-switch"><input type="checkbox" data-k="domain_ct_watch"><span class="toggle-slider"></span></span></label><div class="dflt" data-d="domain_ct_watch"></div></div></div>
             <div class="set-row"><div><div class="lbl"><?php echo $tt('lookalike'); ?></div><div class="desc"><?php echo $tt('lookalike_desc'); ?></div></div>
@@ -182,7 +200,7 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
             $ssLevels = [];
             try { $ssLevels = connectToDatabase()->query("SELECT id, name FROM service_impact_levels WHERE is_active = 1 ORDER BY severity_order, display_order, id")->fetchAll(PDO::FETCH_ASSOC); } catch (Throwable $e) {}
         ?>
-        <div class="tab-content<?php echo $activeTabId === 'service-status' ? ' active' : ''; ?>" id="service-status-tab" data-capability="<?php echo Cap::DOMAINS_SERVICE_STATUS; ?>" data-settings-tab="service-status">
+        <div class="tab-content<?php echo $activeTabId === 'service-status' ? ' active' : ''; ?>" id="service-status-tab" data-capability="<?php echo capKey(Cap::DOMAINS_SERVICE_STATUS); ?>" data-settings-tab="service-status">
             <h2 style="margin:0 0 4px;font-size:18px"><?php echo $tt('ss_title'); ?></h2>
             <div class="set-box"><?php echo $tt('ss_intro'); ?></div>
             <div class="set-row"><div><div class="lbl"><?php echo $tt('ss_mode'); ?></div><div class="desc"><?php echo $tt('ss_mode_desc'); ?></div></div>
@@ -209,7 +227,7 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
         <?php endif; ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'auth-codes')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'auth-codes' ? ' active' : ''; ?>" id="auth-codes-tab" data-capability="<?php echo Cap::DOMAINS_AUTH_CODES; ?>" data-settings-tab="auth-codes">
+        <div class="tab-content<?php echo $activeTabId === 'auth-codes' ? ' active' : ''; ?>" id="auth-codes-tab" data-capability="<?php echo capKey(Cap::DOMAINS_AUTH_CODES); ?>" data-settings-tab="auth-codes">
             <h2 style="margin:0 0 4px;font-size:18px"><?php echo $tt('codes_title'); ?></h2>
             <div class="set-box"><?php echo $tt('codes_intro'); ?></div>
             <div class="set-row"><div><div class="lbl"><?php echo $tt('code_audit'); ?></div><div class="desc"><?php echo $tt('code_audit_desc'); ?></div></div>
@@ -237,7 +255,22 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
         </div>
     </div>
 
-    <script src="../../assets/js/domains.js?v=2"></script>
+    <div class="modal" id="mCertType">
+        <div class="modal-content" style="max-width:480px">
+            <div class="modal-header" id="ctTitle"></div>
+            <div class="modal-body">
+                <div class="form-group"><label for="ctName"><?php echo $tt('st_name'); ?></label><input type="text" id="ctName" maxlength="100"></div>
+                <div class="form-group"><label for="ctOrder"><?php echo $tt('st_order'); ?></label><input type="number" id="ctOrder" value="0"></div>
+                <div class="form-group"><label class="toggle-label"><span class="toggle-switch"><input type="checkbox" id="ctActive" checked><span class="toggle-slider"></span></span> <?php echo $tt('st_active'); ?></label></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-close="mCertType"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button type="button" class="btn btn-primary" id="ctSave"><?php echo htmlspecialchars(t('common.save')); ?></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../assets/js/domains.js?v=3"></script>
     <script>
     (function () {
         'use strict';
@@ -367,9 +400,52 @@ $tt = fn(string $k) => htmlspecialchars(t('domains.settings.' . $k));
             });
         }
 
-        document.addEventListener('DOMContentLoaded', () => { loadSettings().catch(e => showToast(e.message, 'error')); loadStatuses().catch(() => {}); });
+        // ---- certificate types (the same shape as the statuses list) ------------
+        let certTypes = [], ctEditing = null;
+        async function loadCertTypes() {
+            const body = document.getElementById('ctBody'); if (!body) return;
+            const d = await api('cert_types.php');
+            certTypes = d.types || [];
+            if (!d.ready) { body.innerHTML = '<tr><td colspan="5" class="dom-hint">' + esc(T('settings.ct_not_ready')) + '</td></tr>'; return; }
+            body.innerHTML = certTypes.map(s => '<tr data-id="' + s.id + '"><td>' + esc(s.name) + '</td>'
+                + '<td>' + (s.is_active ? '<span class="status-badge status-active">' + esc(T('settings.on')) + '</span>' : '<span class="status-badge status-inactive">' + esc(T('settings.off')) + '</span>') + '</td>'
+                + '<td>' + s.in_use + '</td><td>' + s.display_order + '</td>'
+                + '<td><button type="button" class="action-btn ct-edit" title="' + esc(window.t('common.edit')) + '">' + SVG_EDIT + '</button>'
+                + '<button type="button" class="action-btn delete ct-del" title="' + esc(window.t('common.delete')) + '">' + SVG_DEL + '</button></td></tr>').join('');
+        }
+        function openCertType(s) {
+            ctEditing = s ? s.id : null;
+            document.getElementById('ctTitle').textContent = s ? T('settings.ct_edit') : T('settings.ct_add');
+            document.getElementById('ctName').value = s ? s.name : '';
+            document.getElementById('ctOrder').value = s ? s.display_order : (certTypes.length + 1);
+            document.getElementById('ctActive').checked = s ? s.is_active : true;
+            window.Dom.openModal('mCertType');
+        }
+        const ctBody = document.getElementById('ctBody');
+        if (ctBody) {
+            document.getElementById('ctAdd').addEventListener('click', () => openCertType(null));
+            // 🔴 closest(), never e.target.classList: the click lands on the svg.
+            ctBody.addEventListener('click', async e => {
+                const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+                const s = certTypes.find(x => String(x.id) === tr.dataset.id);
+                if (e.target.closest('.ct-edit')) openCertType(s);
+                if (e.target.closest('.ct-del')) {
+                    if (!(await showConfirm({ title: T('settings.ct_delete'), message: T('settings.ct_delete_body', { name: s.name }), okLabel: window.t('common.delete'), okClass: 'danger' }))) return;
+                    try { await api('cert_types.php', { action: 'delete', id: s.id }); await loadCertTypes(); } catch (err) { showToast(err.message, 'error'); }
+                }
+            });
+            document.getElementById('ctSave').addEventListener('click', async () => {
+                try {
+                    await api('cert_types.php', { action: 'save', id: ctEditing, name: document.getElementById('ctName').value,
+                        display_order: document.getElementById('ctOrder').value, is_active: document.getElementById('ctActive').checked ? 1 : 0 });
+                    window.Dom.closeModal('mCertType'); await loadCertTypes();
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => { loadSettings().catch(e => showToast(e.message, 'error')); loadStatuses().catch(() => {}); loadCertTypes().catch(() => {}); });
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

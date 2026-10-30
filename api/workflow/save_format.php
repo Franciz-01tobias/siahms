@@ -17,6 +17,9 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/rbac.php';
 require_once __DIR__ . '/../../workflow/includes/engine.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -64,7 +67,7 @@ if ($decoded === null && strtolower($template) !== 'null') {
 }
 // And it must actually use {{message}}, or the Message box in the editor would
 // be a field that silently does nothing.
-if (strpos($template, '{{message}}') === false) {
+if (!str_contains($template, '{{message}}')) {
     $fail('The body template must include {{message}} somewhere — that is the slot your workflow\'s message is placed into.');
 }
 // A bad regex would throw at match time in the editor's URL check.

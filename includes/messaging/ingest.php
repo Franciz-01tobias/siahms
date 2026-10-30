@@ -71,7 +71,8 @@ function ingestInboundMessage(PDO $conn, array $channel, array $msg): array
             'message_id'   => (string) ($msg['csat']['message_id'] ?? ''),
             'message_text' => (string) ($msg['csat']['message_text'] ?? ''),
         ];
-    } elseif (!$hasMedia && preg_match('/^[1-5]$/', $body)) {
+    } elseif (!$hasMedia && preg_match('/^[1-5]$/', $body) && moduleIsEnabled($conn, 'csat')) {
+        // GH #217: with CSAT switched off a bare digit is an ordinary message.
         $pending = csatPendingRequestForChat($conn, (int) $channel['id'], $from);
         if ($pending !== null) {
             $csatReply = ['response_id' => $pending, 'rating' => (int) $body, 'button' => false];
@@ -267,7 +268,7 @@ function ingestInboundMessage(PDO $conn, array $channel, array $msg): array
     try {
         $conn->prepare("UPDATE messaging_channels SET last_inbound_datetime = UTC_TIMESTAMP() WHERE id = ?")
              ->execute([(int) $channel['id']]);
-    } catch (Exception $e) { /* non-fatal */ }
+    } catch (Exception) { /* non-fatal */ }
 
     return ['status' => $isInitial ? 'created' : 'appended', 'ticket_id' => (int) $ticketId];
 }
@@ -293,17 +294,19 @@ function ingestInboundMessage(PDO $conn, array $channel, array $msg): array
 function findOpenChannelTicket(PDO $conn, string $from, string $channelType, string $replyAddress = '', ?int $channelId = null): ?int
 {
     $byThread = ($channelType === 'slack' && $replyAddress !== '');
-    // 🔴 Telegram: the conversation is (bot, chat), never the chat alone. A chat
-    // id is the person's Telegram user id, the SAME on every bot, so without this
-    // a message to company B's bot threaded into the person's open ticket from
-    // company A's bot - another company's ticket. (WhatsApp is left exactly as it
-    // was: its sender rule predates this and is not part of the Telegram change.)
+    // 🔴 The conversation is (channel, sender), never the sender alone - for EVERY
+    // channel type. A Telegram chat id is the person's user id, the same on every
+    // bot; a Mattermost user id is the same in every configuration on one server; and
+    // a phone number is the same whichever company's WhatsApp number it messages.
+    // Matched on the sender alone, a message to company B's channel threaded into the
+    // person's open ticket from company A's - another company's ticket.
     //
-    // TRAP: a new channel type whose sender id is not unique per channel must be
-    //   added here. Mattermost (PR #166) is one: a user id is the same in every
-    //   configuration on one server, so two companies' support channels would
-    //   share a person's thread - another company's ticket - without this.
-    $byBot = (in_array($channelType, ['telegram', 'mattermost', 'teams'], true) && $channelId !== null);
+    // Telegram, Mattermost and Teams were scoped one at a time; WhatsApp was left
+    // matching across every channel until it was reported privately, October 2026.
+    // Scoping all of them is what stops the next channel type repeating it.
+    // emails.channel_id has been written since the first messaging channel shipped,
+    // so open conversations keep threading.
+    $byBot = ($channelId !== null);
 
     $sql = "SELECT t.id
             FROM tickets t
@@ -385,7 +388,7 @@ function resolveSlackRequester(PDO $conn, array $channel, string $slackUserId): 
                 "UPDATE users SET display_name = ? WHERE id = ? AND display_name = ?"
             );
             $upd->execute([$displayName, $userId, $fallbackName]);
-        } catch (Exception $e) { /* cosmetic — never worth failing the ticket */ }
+        } catch (Exception) { /* cosmetic — never worth failing the ticket */ }
     }
 
     return [$userId, $displayName];
@@ -417,7 +420,7 @@ function messagingKnownPersonByEmail(PDO $conn, string $email, string $name): ?a
             $known = trim((string) ($row['display_name'] ?? ''));
             return [(int) $row['id'], $known !== '' ? $known : ($name !== '' ? $name : $email)];
         }
-    } catch (Exception $e) { /* the caller falls back to a contact of its own */ }
+    } catch (Exception) { /* the caller falls back to a contact of its own */ }
     return null;
 }
 
@@ -474,7 +477,7 @@ function resolveDirectoryRequester(PDO $conn, array $channel, array $msg, string
         try {
             $conn->prepare("UPDATE users SET display_name = ? WHERE id = ? AND display_name = ?")
                  ->execute([$name, $userId, $from]);
-        } catch (Exception $e) { /* cosmetic */ }
+        } catch (Exception) { /* cosmetic */ }
     }
     return [$userId, $label];
 }
@@ -525,7 +528,7 @@ function messagingIdentityLinksReady(PDO $conn): bool
     if ($ready === null) {
         try {
             $ready = (bool) $conn->query("SHOW COLUMNS FROM messaging_identity_links LIKE 'channel_id'")->fetch();
-        } catch (PDOException $e) {
+        } catch (PDOException) {
             $ready = false;
         }
     }
@@ -641,7 +644,7 @@ function messagingTelegramResolveIdentity(PDO $conn, array $channel, string $cha
             try {
                 $conn->prepare("UPDATE messaging_identity_links SET locale = ? WHERE channel_id = ? AND external_id = ?")
                      ->execute([$locale, $channelId, $chatId]);
-            } catch (Exception $e) { /* cosmetic - never worth failing ingest over */ }
+            } catch (Exception) { /* cosmetic - never worth failing ingest over */ }
         }
     }
 
@@ -814,7 +817,11 @@ function messagingRecordCsatReply(PDO $conn, array $channel, string $chatId, str
     require_once __DIR__ . '/../csat.php';
     require_once __DIR__ . '/../i18n.php';
 
-    $recorded = csatResponseBelongsToChat($conn, $reply['response_id'], (int) $channel['id'], $chatId)
+    // GH #217: CSAT switched off - a button press is swallowed: nothing recorded,
+    // no thanks, no edit to the question; Telegram's spinner is still stopped below.
+    $csatOn = moduleIsEnabled($conn, 'csat');
+    $recorded = $csatOn
+        && csatResponseBelongsToChat($conn, $reply['response_id'], (int) $channel['id'], $chatId)
         && csatRecordRating($conn, $reply['response_id'], $reply['rating']);
 
     $provider = null;
@@ -835,7 +842,7 @@ function messagingRecordCsatReply(PDO $conn, array $channel, string $chatId, str
         // recorded, or, on a second press of an old question, the first one.
         // Only for this chat's own survey; an unanswered (or not ours) one
         // keeps its buttons.
-        $stood = csatResponseBelongsToChat($conn, $reply['response_id'], (int) $channel['id'], $chatId)
+        $stood = $csatOn && csatResponseBelongsToChat($conn, $reply['response_id'], (int) $channel['id'], $chatId)
             ? csatStoredRating($conn, $reply['response_id'])
             : null;
         if ($stood !== null && ($reply['message_id'] ?? '') !== '') {
@@ -964,7 +971,7 @@ function getOrCreateChannelUser(PDO $conn, string $from, string $displayName, st
         $ins = $conn->prepare("INSERT INTO users (email, display_name, created_at) VALUES (?, ?, UTC_TIMESTAMP())");
         $ins->execute([$pseudoEmail, $displayName !== '' ? $displayName : $from]);
         return (int) $conn->lastInsertId();
-    } catch (Exception $e) {
+    } catch (Exception) {
         // users table shape differs / unavailable → leave the ticket requester unset.
         return null;
     }
@@ -983,7 +990,7 @@ function getChannelOriginId(PDO $conn, string $channelType): ?int
         $stmt->execute([$name]);
         $id = $stmt->fetchColumn();
         return $id ? (int) $id : null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
 }

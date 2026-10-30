@@ -128,7 +128,7 @@ $paT = fn(string $k) => t('system.photo_album.' . $k);
             .pa-stage { min-height: 240px; }
         }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="photo-album">
     <?php include '../includes/header.php'; ?>
@@ -267,7 +267,7 @@ $paT = fn(string $k) => t('system.photo_album.' . $k);
         const API = '../../api/system/photo_album.php';
         const $ = id => document.getElementById(id);
         const T = (k, p) => t('system.photo_album.' + k, p);
-        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         const toast = (m, k) => { if (typeof showToast === 'function') showToast(m, k); };
 
         // ══ The converter ═══════════════════════════════════════════════════
@@ -808,6 +808,6 @@ $paT = fn(string $k) => t('system.photo_album.' . $k);
         loadAlbum();
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

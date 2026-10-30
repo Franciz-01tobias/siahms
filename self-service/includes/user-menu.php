@@ -30,7 +30,7 @@ if (!$__hasAnalystAccount && !empty($ss_user_email)) {
         );
         $__aa->execute([$ss_user_email]);
         $__hasAnalystAccount = (bool)$__aa->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $__hasAnalystAccount = false;
     }
 }
@@ -508,7 +508,7 @@ const _mfaApi = '../api/myaccount/';
 function _ssEsc(text) {
     const div = document.createElement('div');
     div.textContent = text || '';
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* --- User Menu --- */

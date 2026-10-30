@@ -63,6 +63,8 @@ if (!$isCli) {
     }
 }
 $trigger = JobRun::scheduledTrigger();
+// GH #217: nothing to do while the module is switched off for the install.
+if (cronModuleSwitchedOff($conn, 'domains', 'domains', $trigger)) exit(0);
 
 // Never two at once: a slow run overlapping the next hour's would double the
 // registry and crt.sh traffic for no gain.

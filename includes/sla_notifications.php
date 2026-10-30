@@ -20,9 +20,18 @@ require_once __DIR__ . '/encryption.php';
 
 /**
  * Main cron entry. Returns a summary so the cron wrapper can log it.
+ *
+ * QUIET (GH #217): walks exactly the same tickets and triggers, but sends nothing -
+ * it records each warning and breach in both fire-once ledgers instead, so the next
+ * real run treats them as already announced. Run once when SLA is switched back on
+ * for the install and the administrator chose not to send what was missed while it
+ * was off; without it the first run after switching on would announce every ticket
+ * that crossed a line during the off period, all at once.
+ *
+ * @param bool $quiet  true to mark, not send - see above
  */
-function sla_run_breach_check(PDO $conn): array {
-    $summary = ['sent' => [], 'skipped' => [], 'errors' => []];
+function sla_run_breach_check(PDO $conn, bool $quiet = false): array {
+    $summary = ['sent' => [], 'skipped' => [], 'errors' => [], 'marked' => 0];
 
     // Settings sanity check — if SLA enforcement is off entirely, abort early.
     $settings = sla_load_settings($conn);
@@ -91,6 +100,15 @@ function sla_run_breach_check(PDO $conn): array {
                     //
                     // Free to compute: we're already holding this ticket's SLA
                     // state, so the emitter can't drift from what the emails think.
+                    if ($quiet) {
+                        sla_mark_workflow_event($conn, (int)$ticketId, $targetType, $trigger, $target);
+                        if (!sla_notification_already_sent($conn, (int)$ticketId, $targetType, $trigger)) {
+                            sla_mark_notification_sent($conn, (int)$ticketId, $targetType, $trigger, ['(not sent: SLA switched back on)']);
+                            $summary['marked']++;
+                        }
+                        continue;
+                    }
+
                     sla_emit_workflow_event($conn, (int)$ticketId, $targetType, $trigger, $target);
 
                     if (sla_notification_already_sent($conn, (int)$ticketId, $targetType, $trigger)) {
@@ -117,6 +135,32 @@ function sla_run_breach_check(PDO $conn): array {
     }
 
     return $summary;
+}
+
+/**
+ * Record an SLA workflow event as already fired, WITHOUT firing it - the quiet run
+ * above (GH #217). Same ledger, entity and fingerprint as sla_emit_workflow_event(),
+ * and the same rule as workflowEmitOnce(): nothing is recorded while no workflow is
+ * listening, so a workflow switched on later is not silenced by it.
+ *
+ * @param string $targetType  'response' or 'resolution'
+ * @param string $trigger  'warning' or 'breach'
+ * @param array $target  that target's state from sla_get_state()
+ */
+function sla_mark_workflow_event(PDO $conn, int $ticketId, string $targetType, string $trigger, array $target): void
+{
+    $event = $trigger === 'breach' ? 'sla.breached' : 'sla.warning';
+    try {
+        $listening = $conn->prepare("SELECT COUNT(*) FROM workflows WHERE trigger_event = ? AND is_active = 1");
+        $listening->execute([$event]);
+        if ((int)$listening->fetchColumn() === 0) return;
+        $conn->prepare(
+            "INSERT IGNORE INTO workflow_scheduled_emissions (trigger_event, entity_key, fingerprint, emitted_datetime)
+             VALUES (?, ?, ?, UTC_TIMESTAMP())"
+        )->execute([$event, 'ticket:' . $ticketId . ':' . $targetType, (string)($target['target_minutes'] ?? 0)]);
+    } catch (Exception $e) {
+        error_log('[sla quiet resume] ' . $e->getMessage());
+    }
 }
 
 /**

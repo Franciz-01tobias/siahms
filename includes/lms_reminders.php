@@ -82,7 +82,7 @@ function lmsReminderSettings(PDO $conn): array
                 $defaults[$r['setting_key']] = (string)$r['setting_value'];
             }
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Settings table unreachable — the caller gets the defaults, which means OFF.
     }
 
@@ -250,7 +250,7 @@ function lmsRemindersDue(PDO $conn, array $settings): array
             $sent[$s['learner_type'] . ':' . $s['learner_id'] . ':' . $s['course_id']
                   . ':' . $s['reminder_kind'] . ':' . $s['fingerprint']] = true;
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // No table yet — nothing has been sent, which is the right answer.
     }
 
@@ -340,7 +340,7 @@ function lmsReminderLinkFor(string $learnerType): string
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'public_base_url'");
         $st->execute();
         $base = trim((string)$st->fetchColumn());
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $base = '';
     }
     if ($base === '' && defined('BASE_URL')) $base = (string)BASE_URL;
@@ -409,7 +409,7 @@ function lmsRemindersRun(PDO $conn, bool $dryRun = false): array
         $ok  = false;
         try {
             $ok = ssSendSystemEmail($conn, (string)$row['email'], $msg['subject'], $msg['body'], 'training');
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $ok = false;
         }
 

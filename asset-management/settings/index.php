@@ -31,6 +31,8 @@ if (!empty($_GET['tab']) && settingsTabVisible($visibleTabs, (string) $_GET['tab
 }
 
 
+require_once __DIR__ . '/../../includes/services/asset_type_layout.php';
+
 /**
  * The shared icon library, for the asset-type icon picker (#1146).
  *
@@ -375,6 +377,20 @@ $translationNamespaces = ['common', 'asset-management'];
             text-transform: uppercase; color: var(--text-muted, #666);
         }
 
+        /* ── Asset type layout (GH #200) ─────────────────────────────── */
+        .atl-box { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; }
+        .atl-intro { font-size: 13px; color: var(--text-muted, #666); margin: 0 0 10px; line-height: 1.5; }
+        .atl-sub { font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+        .atl-note { font-size: 12px; color: var(--text-muted, #666); margin: 0 0 8px; }
+        /* Scoped to the row: `.modal .form-group label` makes every label a block. */
+        #itemLayoutRow .atl-opt { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; margin: 0; cursor: pointer; font-weight: normal; }
+        #itemLayoutRow .atl-opt input { margin-top: 3px; flex-shrink: 0; }
+        #itemLayoutRow .atl-tab-opt { display: flex; margin: 0; }
+        .atl-opt-name { display: block; font-size: 14px; }
+        .atl-opt-desc { display: block; font-size: 12px; color: var(--text-muted, #666); }
+        .atl-tab-opt { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: normal; margin: 0; }
+        #itemLayoutTabs .rl-list { max-width: none; }
+
         /* ── Asset type icon picker ────────────────────────────────── */
         .ic-picked { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .ic-preview { display: inline-flex; width: 24px; height: 24px; color: var(--accent, #0078d4); }
@@ -526,10 +542,43 @@ $translationNamespaces = ['common', 'asset-management'];
             .ho-preview-wrap { position: static; }
         }
 <?php echo handoverDocumentCss(); ?>
+        /* Manufacturer and model names (GH #200 part D). */
+        .nm-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 14px; }
+        .nm-add .form-input { max-width: 240px; }
+        .nm-add select.form-input { max-width: 160px; }
+        .nm-arrow { color: var(--text-dim, #888); }
+        .nm-table { width: 100%; max-width: 760px; }
+        /* Review (GH #200 part D). */
+        .rv-item { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto; gap: 8px 16px; align-items: center;
+                   padding: 12px 14px; border: 1px solid var(--border, #ddd); border-radius: 8px; margin-bottom: 10px; background: var(--surface, #fff); }
+        .rv-what { font-size: 13px; color: var(--text, #333); }
+        .rv-kind { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border, #ddd); color: var(--text-muted, #666); margin-right: 4px; }
+        .rv-meta { display: block; font-size: 12px; color: var(--text-dim, #888); margin-top: 2px; }
+        .rv-assets a { font-weight: 600; color: var(--accent, #0078d4); text-decoration: none; }
+        .rv-assets > div + div { margin-top: 6px; }
+        .rv-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+        .rv-status { font-size: 12px; color: var(--text-muted, #666); }
+        .rv-empty { padding: 24px; color: var(--text-dim, #888); }
+        .merge-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+        .merge-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 2px solid var(--border, #ddd); border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .merge-card:has(input:checked) { border-color: var(--accent, #0078d4); }
+        .merge-card input { align-self: flex-start; margin: 0 0 4px; }
+        .merge-ci:empty { display: none; }
+        .merge-ci { margin: 4px 0 12px; padding: 12px; border: 1px solid var(--border, #ddd); border-radius: 8px; font-size: 13px; }
+        .merge-ci-title { font-weight: 600; margin-bottom: 6px; }
+        .merge-ci label { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; cursor: pointer; }
+        .merge-ci .merge-ci-ack { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border, #ddd); }
+        .merge-card em { font-style: normal; font-size: 12px; color: var(--accent, #0078d4); margin-top: 4px; visibility: hidden; }
+        .merge-card:has(input:checked) em { visibility: visible; }
+        @media (max-width: 768px) {
+            .rv-item { grid-template-columns: 1fr; }
+            .rv-actions { justify-content: flex-start; }
+            .merge-choice { grid-template-columns: 1fr; }
+        }
     </style>
     <?php /* Mobile-friendly opt-in (#937). AFTER this page's own <style> so its
              @media rules win on ties. Every rule inside is gated at 768px. */ ?>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
     <script src="../../assets/js/qrcode.min.js"></script>
 </head>
 <?php /* The marker mobile.css LAYER 15e keys on. `.container` is far too common
@@ -570,7 +619,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'asset-types')): ?>
         <!-- Asset Types Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'asset-types' ? ' active' : ''; ?>" id="asset-types-tab" data-capability="<?php echo Cap::ASSETS_TYPES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'asset-types' ? ' active' : ''; ?>" id="asset-types-tab" data-capability="<?php echo capKey(Cap::ASSETS_TYPES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('asset-management.settings.tab_asset_types')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('asset-type')"><?php echo htmlspecialchars(t('asset-management.common.add')); ?></button>
@@ -592,6 +641,19 @@ $translationNamespaces = ['common', 'asset-management'];
                     <tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;"><?php echo htmlspecialchars(t('asset-management.common.loading')); ?></td></tr>
                 </tbody>
             </table>
+            <?php /* GH #200: how an asset says it holds details its type's layout hides.
+                     A setting because teams differ: one that chose its layouts deliberately
+                     finds the line noise, one that inherited them wants to be told. */ ?>
+            <h3 style="margin: 28px 0 6px; font-size: 15px;"><?php echo htmlspecialchars(t('asset-management.layout.notice_heading')); ?></h3>
+            <p class="settings-description"><?php echo htmlspecialchars(t('asset-management.layout.notice_intro')); ?></p>
+            <div class="form-group">
+                <label class="form-label" for="assetLayoutNotice"><?php echo htmlspecialchars(t('asset-management.layout.notice_label')); ?></label>
+                <select class="form-input" id="assetLayoutNotice" style="max-width: 340px;" onchange="saveLayoutNotice(this.value)">
+                    <option value="notice"><?php echo htmlspecialchars(t('asset-management.layout.notice_notice')); ?></option>
+                    <option value="link"><?php echo htmlspecialchars(t('asset-management.layout.notice_link')); ?></option>
+                </select>
+                <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.layout.notice_hint')); ?></div>
+            </div>
         </div>
 
         <?php endif; ?>
@@ -611,7 +673,7 @@ $translationNamespaces = ['common', 'asset-management'];
             Below the wizard: past runs, and the holding area for rows that could
             not be imported.
         */ ?>
-        <div class="tab-content<?php echo $activeTabId === 'import' ? ' active' : ''; ?>" id="import-tab" data-capability="<?php echo Cap::ASSETS_IMPORT; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'import' ? ' active' : ''; ?>" id="import-tab" data-capability="<?php echo capKey(Cap::ASSETS_IMPORT); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('asset-management.settings.tab_import')); ?></h2>
             </div>
@@ -742,7 +804,7 @@ $translationNamespaces = ['common', 'asset-management'];
                sense once you want to reuse a handful of fields, which is
                exactly when somebody comes looking for them.
         */ ?>
-        <div class="tab-content<?php echo $activeTabId === 'custom-fields' ? ' active' : ''; ?>" id="custom-fields-tab" data-capability="<?php echo Cap::ASSETS_FIELDS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'custom-fields' ? ' active' : ''; ?>" id="custom-fields-tab" data-capability="<?php echo capKey(Cap::ASSETS_FIELDS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('asset-management.settings.tab_custom_fields')); ?></h2>
             </div>
@@ -836,7 +898,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'asset-statuses')): ?>
         <!-- Asset Statuses Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'asset-statuses' ? ' active' : ''; ?>" id="asset-statuses-tab" data-capability="<?php echo Cap::ASSETS_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'asset-statuses' ? ' active' : ''; ?>" id="asset-statuses-tab" data-capability="<?php echo capKey(Cap::ASSETS_STATUSES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('asset-management.settings.tab_asset_statuses')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('asset-status')"><?php echo htmlspecialchars(t('asset-management.common.add')); ?></button>
@@ -864,7 +926,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'locations')): ?>
         <!-- Locations Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'locations' ? ' active' : ''; ?>" id="locations-tab" data-capability="<?php echo Cap::ASSETS_LOCATIONS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'locations' ? ' active' : ''; ?>" id="locations-tab" data-capability="<?php echo capKey(Cap::ASSETS_LOCATIONS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('asset-management.settings.tab_locations')); ?></h2>
                 <button class="add-btn" onclick="openAddLocation(null)"><?php echo htmlspecialchars(t('asset-management.common.add')); ?></button>
@@ -881,7 +943,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'suppliers')): ?>
         <!-- Suppliers Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'suppliers' ? ' active' : ''; ?>" id="suppliers-tab" data-capability="<?php echo Cap::ASSETS_SUPPLIERS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'suppliers' ? ' active' : ''; ?>" id="suppliers-tab" data-capability="<?php echo capKey(Cap::ASSETS_SUPPLIERS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('asset-management.settings.tab_suppliers')); ?></h2>
             </div>
@@ -911,7 +973,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'handover')): ?>
         <!-- Handover document designer (discussion #56) -->
-        <div class="tab-content<?php echo $activeTabId === 'handover' ? ' active' : ''; ?>" id="handover-tab" data-capability="<?php echo Cap::ASSETS_HANDOVER; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'handover' ? ' active' : ''; ?>" id="handover-tab" data-capability="<?php echo capKey(Cap::ASSETS_HANDOVER); ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -962,7 +1024,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'warranty')): ?>
         <!-- Expiry alerts tab: warranty AND lease, two blocks, one tab -->
-        <div class="tab-content<?php echo $activeTabId === 'warranty' ? ' active' : ''; ?>" id="warranty-tab" data-capability="<?php echo Cap::ASSETS_WARRANTY; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'warranty' ? ' active' : ''; ?>" id="warranty-tab" data-capability="<?php echo capKey(Cap::ASSETS_WARRANTY); ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1030,7 +1092,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'leasing')): ?>
         <!-- Leasing (3.5.0): the outcomes a leased asset can have -->
-        <div class="tab-content<?php echo $activeTabId === 'leasing' ? ' active' : ''; ?>" id="leasing-tab" data-capability="<?php echo Cap::ASSETS_LEASING; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'leasing' ? ' active' : ''; ?>" id="leasing-tab" data-capability="<?php echo capKey(Cap::ASSETS_LEASING); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('asset-management.leases.outcomes_heading')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('lease-outcome')"><?php echo htmlspecialchars(t('asset-management.common.add')); ?></button>
@@ -1055,7 +1117,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'vcenter')): ?>
         <!-- vCenter Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'vcenter' ? ' active' : ''; ?>" id="vcenter-tab" data-capability="<?php echo Cap::ASSETS_VCENTER; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'vcenter' ? ' active' : ''; ?>" id="vcenter-tab" data-capability="<?php echo capKey(Cap::ASSETS_VCENTER); ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1100,7 +1162,7 @@ $translationNamespaces = ['common', 'asset-management'];
 
         <?php if (settingsTabVisible($visibleTabs, 'asset-tags')): ?>
         <!-- Asset Tags Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'asset-tags' ? ' active' : ''; ?>" id="asset-tags-tab" data-capability="<?php echo Cap::ASSETS_TAGS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'asset-tags' ? ' active' : ''; ?>" id="asset-tags-tab" data-capability="<?php echo capKey(Cap::ASSETS_TAGS); ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1165,7 +1227,7 @@ $translationNamespaces = ['common', 'asset-management'];
         <?php endif; ?>
         <?php if (settingsTabVisible($visibleTabs, 'asset-labels')): ?>
         <!-- Asset Labels & QR Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'asset-labels' ? ' active' : ''; ?>" id="asset-labels-tab" data-capability="<?php echo Cap::ASSETS_LABELS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'asset-labels' ? ' active' : ''; ?>" id="asset-labels-tab" data-capability="<?php echo capKey(Cap::ASSETS_LABELS); ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1352,7 +1414,7 @@ $translationNamespaces = ['common', 'asset-management'];
         <?php endif; ?>
         <?php if (settingsTabVisible($visibleTabs, 'reconciliation')): ?>
         <!-- Discovery & Reconciliation Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'reconciliation' ? ' active' : ''; ?>" id="reconciliation-tab" data-capability="<?php echo Cap::ASSETS_RECONCILIATION; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'reconciliation' ? ' active' : ''; ?>" id="reconciliation-tab" data-capability="<?php echo capKey(Cap::ASSETS_RECONCILIATION); ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1372,17 +1434,66 @@ $translationNamespaces = ['common', 'asset-management'];
                             <textarea class="form-input" id="reconIgnoredSerials" rows="6" placeholder="<?php echo htmlspecialchars(t('asset-management.settings.ignored_serials_placeholder')); ?>" style="font-family: monospace; font-size: 12px;"></textarea>
                             <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.ignored_serials_hint')); ?></div>
                         </div>
+                        <?php /* GH #200 part D. A setting because teams differ: most want a correction to
+                                 stick, some want the tools to stay the authority. On by default. */ ?>
+                        <div class="form-group">
+                            <label class="form-label"><?php echo htmlspecialchars(t('asset-management.settings.protect_label')); ?></label>
+                            <label style="display:flex; gap:8px; align-items:flex-start; font-weight:normal;">
+                                <input type="checkbox" id="reconProtectOnEdit" checked style="margin-top:3px;">
+                                <span><?php echo htmlspecialchars(t('asset-management.settings.protect_check')); ?></span>
+                            </label>
+                            <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.protect_hint')); ?></div>
+                        </div>
+                        <?php /* GH #200 Part B. A setting because sources differ: a daily agent is stale
+                                 after a week, a monthly export after a month. 7 = Last seen and Watchtower. */ ?>
+                        <div class="form-group">
+                            <label class="form-label" for="reconStaleDays"><?php echo htmlspecialchars(t('asset-management.settings.stale_days_label')); ?></label>
+                            <input type="number" class="form-input" id="reconStaleDays" min="1" max="365" step="1" value="7" style="max-width: 120px;">
+                            <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.stale_days_hint')); ?></div>
+                        </div>
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary" id="reconSaveBtn"><?php echo htmlspecialchars(t('asset-management.common.save')); ?></button>
                         </div>
                     </form>
+
+                    <?php /* GH #200 part D: names shown one way. Its own list, saved as you add,
+                             because each row is a decision on its own, not part of the form above. */ ?>
+                    <h3 style="margin: 32px 0 6px; font-size: 15px;"><?php echo htmlspecialchars(t('asset-management.names.heading')); ?></h3>
+                    <p class="settings-description"><?php echo htmlspecialchars(t('asset-management.names.intro')); ?></p>
+                    <div class="nm-add">
+                        <select class="form-input" id="nmField" onchange="nmFillSuggestions()">
+                            <option value="manufacturer"><?php echo htmlspecialchars(t('asset-management.field.manufacturer')); ?></option>
+                            <option value="model"><?php echo htmlspecialchars(t('asset-management.field.model')); ?></option>
+                        </select>
+                        <input type="text" class="form-input" id="nmFrom" list="nmNames" maxlength="100" placeholder="<?php echo htmlspecialchars(t('asset-management.names.from_ph')); ?>">
+                        <span class="nm-arrow">&rarr;</span>
+                        <input type="text" class="form-input" id="nmTo" list="nmNames" maxlength="100" placeholder="<?php echo htmlspecialchars(t('asset-management.names.to_ph')); ?>">
+                        <button type="button" class="btn btn-primary" onclick="nmSave()"><?php echo htmlspecialchars(t('asset-management.common.add')); ?></button>
+                        <datalist id="nmNames"></datalist>
+                    </div>
+                    <div id="nmList"></div>
                 </div>
             </div>
         </div>
         <?php endif; ?>
+        <?php if (settingsTabVisible($visibleTabs, 'review')): ?>
+        <?php /* GH #200 part D: the cases matching refuses to guess about. */ ?>
+        <div class="tab-content<?php echo $activeTabId === 'review' ? ' active' : ''; ?>" id="review-tab" data-capability="<?php echo capKey(Cap::ASSETS_RECONCILIATION); ?>">
+            <div class="section-header">
+                <h2><?php echo htmlspecialchars(t('asset-management.review.heading')); ?></h2>
+                <select class="form-input" id="reviewWhich" style="max-width: 200px;" onchange="loadReviewList()">
+                    <option value="open"><?php echo htmlspecialchars(t('asset-management.review.which_open')); ?></option>
+                    <option value="decided"><?php echo htmlspecialchars(t('asset-management.review.which_decided')); ?></option>
+                </select>
+            </div>
+            <p class="settings-description" style="margin-bottom: 16px;"><?php echo htmlspecialchars(t('asset-management.review.intro')); ?></p>
+            <div id="reviewList"><div style="padding: 20px; color: #999;"><?php echo htmlspecialchars(t('asset-management.common.loading')); ?></div></div>
+        </div>
+
+        <?php endif; ?>
         <?php if (settingsTabVisible($visibleTabs, 'intune')): ?>
         <!-- InTune Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'proxmox' ? ' active' : ''; ?>" id="proxmox-tab" data-capability="<?php echo Cap::ASSETS_PROXMOX; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'proxmox' ? ' active' : ''; ?>" id="proxmox-tab" data-capability="<?php echo capKey(Cap::ASSETS_PROXMOX); ?>">
             <div class="settings-section">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                     <div>
@@ -1472,7 +1583,112 @@ $translationNamespaces = ['common', 'asset-management'];
             </div>
         </div>
 
-        <div class="tab-content<?php echo $activeTabId === 'vcloud' ? ' active' : ''; ?>" id="vcloud-tab" data-capability="<?php echo Cap::ASSETS_VCLOUD; ?>">
+        <?php /* GH #199: Hyper-V estates a collector pushes to. Script: hyperv.js. */ ?>
+        <?php if (settingsTabVisible($visibleTabs, 'hyperv')): ?>
+        <div class="tab-content<?php echo $activeTabId === 'hyperv' ? ' active' : ''; ?>" id="hyperv-tab" data-capability="<?php echo capKey(Cap::ASSETS_HYPERV); ?>">
+            <div class="settings-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <div>
+                        <h3 style="margin:0;"><?php echo htmlspecialchars(t('asset-management.hyperv.title')); ?></h3>
+                        <p style="color:var(--text-muted, #666); margin:4px 0 0; max-width:760px;"><?php echo htmlspecialchars(t('asset-management.hyperv.intro')); ?></p>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="hvOpenForm()"><?php echo htmlspecialchars(t('asset-management.hyperv.add')); ?></button>
+                </div>
+                <div class="table-responsive" style="margin-top:12px;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th><?php echo htmlspecialchars(t('asset-management.hyperv.col_name')); ?></th>
+                                <th class="hv-company-col"><?php echo htmlspecialchars(t('asset-management.hyperv.col_company')); ?></th>
+                                <th><?php echo htmlspecialchars(t('asset-management.hyperv.col_reports')); ?></th>
+                                <th><?php echo htmlspecialchars(t('asset-management.hyperv.col_estate')); ?></th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="hvList"><tr><td colspan="5" style="text-align:center;"><?php echo htmlspecialchars(t('common.loading')); ?></td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="settings-section" id="hvKeyPanel" style="display:none; margin-top:16px;">
+                <h3 style="margin-top:0;"><?php echo htmlspecialchars(t('asset-management.hyperv.key_title')); ?></h3>
+                <p class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.key_intro')); ?></p>
+                <div style="display:flex; gap:8px; align-items:center;"><code id="hvKey" style="word-break:break-all;"></code>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="hvCopy('hvKey')"><?php echo htmlspecialchars(t('asset-management.hyperv.key_copy')); ?></button></div>
+                <h4 style="margin:16px 0 6px;"><?php echo htmlspecialchars(t('asset-management.hyperv.command_title')); ?></h4>
+                <pre id="hvCommand" style="white-space:pre-wrap; word-break:break-all; padding:10px; background:var(--surface-hover, #f3f4f6); border-radius:6px; font-size:12px;"></pre>
+                <button type="button" class="btn btn-outline btn-sm" onclick="hvCopy('hvCommand')"><?php echo htmlspecialchars(t('asset-management.hyperv.key_copy')); ?></button>
+                <p class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.command_hint')); ?></p>
+            </div>
+
+            <?php /* GH #199 Part B: the connection's estate as CIs - mapping, preview, decisions. */ ?>
+            <div class="settings-section" id="hvCmdbPanel" style="display:none; margin-top:16px;"></div>
+
+            <div class="settings-section" id="hvReviewPanel" style="display:none; margin-top:16px;">
+                <h3 id="hvReviewTitle" style="margin-top:0;"></h3>
+                <p class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.reviews_intro')); ?></p>
+                <div id="hvReviewList"></div>
+            </div>
+
+            <div class="settings-section" style="margin-top:16px;">
+                <h3 style="margin-top:0;"><?php echo htmlspecialchars(t('asset-management.hyperv.setup_title')); ?></h3>
+                <ul style="margin:0; padding-left:20px; line-height:1.6; color:var(--text-muted, #555); font-size:13px;">
+                    <li><?php echo htmlspecialchars(t('asset-management.hyperv.setup_ps')); ?></li>
+                    <li><?php echo htmlspecialchars(t('asset-management.hyperv.setup_modules')); ?></li>
+                    <li><?php echo htmlspecialchars(t('asset-management.hyperv.setup_cluster')); ?></li>
+                    <li><?php echo htmlspecialchars(t('asset-management.hyperv.setup_hosts')); ?></li>
+                </ul>
+                <p style="font-size:13px;"><a href="https://github.com/edmozley/freeitsm/wiki/Hyper-V-Discovery" target="_blank" rel="noopener"><?php echo htmlspecialchars(t('asset-management.hyperv.setup_more')); ?></a></p>
+            </div>
+        </div>
+
+        <div class="modal" id="hvModal">
+            <div class="modal-content" style="max-width: 560px;">
+                <div class="modal-header" id="hvModalTitle"></div>
+                <div class="modal-body">
+                    <form id="hvForm" autocomplete="off" onsubmit="hvSave(event)">
+                        <input type="hidden" id="hvId">
+                        <div class="form-group">
+                            <label for="hvName"><?php echo htmlspecialchars(t('asset-management.hyperv.field_name')); ?> *</label>
+                            <input type="text" id="hvName" maxlength="150" required>
+                            <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.field_name_hint')); ?></div>
+                        </div>
+                        <div class="form-group" id="hvCompanyRow">
+                            <label for="hvCompany"><?php echo htmlspecialchars(t('asset-management.hyperv.field_company')); ?></label>
+                            <select id="hvCompany"></select>
+                            <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.field_company_hint')); ?></div>
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+                            <div class="form-group">
+                                <label for="hvInterval"><?php echo htmlspecialchars(t('asset-management.hyperv.field_interval')); ?></label>
+                                <input type="number" id="hvInterval" min="1" max="1440" value="15">
+                                <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.field_interval_hint')); ?></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="hvGrace"><?php echo htmlspecialchars(t('asset-management.hyperv.field_grace')); ?></label>
+                                <input type="number" id="hvGrace" min="0" max="1440" value="15">
+                                <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.field_grace_hint')); ?></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="hvRetention"><?php echo htmlspecialchars(t('asset-management.hyperv.field_retention')); ?></label>
+                            <input type="number" id="hvRetention" min="1" max="3650" placeholder="-">
+                            <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.hyperv.field_retention_hint')); ?></div>
+                        </div>
+                        <div class="form-group">
+                            <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="hvActive" checked> <?php echo htmlspecialchars(t('asset-management.hyperv.field_active')); ?></label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hvCloseForm()"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                    <button type="submit" form="hvForm" class="btn btn-primary"><?php echo htmlspecialchars(t('common.save')); ?></button>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <div class="tab-content<?php echo $activeTabId === 'vcloud' ? ' active' : ''; ?>" id="vcloud-tab" data-capability="<?php echo capKey(Cap::ASSETS_VCLOUD); ?>">
             <div class="settings-section">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                     <div>
@@ -1583,7 +1799,7 @@ $translationNamespaces = ['common', 'asset-management'];
             </div>
         </div>
 
-        <div class="tab-content<?php echo $activeTabId === 'intune' ? ' active' : ''; ?>" id="intune-tab" data-capability="<?php echo Cap::ASSETS_INTUNE; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'intune' ? ' active' : ''; ?>" id="intune-tab" data-capability="<?php echo capKey(Cap::ASSETS_INTUNE); ?>">
             <div class="settings-section">
                 <div class="settings-section-header">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1681,6 +1897,25 @@ $translationNamespaces = ['common', 'asset-management'];
     </div>
 
     <!-- Edit/Add Modal -->
+<?php if (settingsTabVisible($visibleTabs, 'review')): ?>
+    <?php /* GH #200 part D: at body level like the other dialogs, so no panel can sit above it. */ ?>
+    <div class="modal" id="mergeModal">
+        <div class="modal-content" style="max-width: 760px;">
+            <div class="modal-header"><span><?php echo htmlspecialchars(t('asset-management.review.merge_title')); ?></span></div>
+            <div class="modal-body">
+                <p class="settings-description" style="margin-top: 0;"><?php echo htmlspecialchars(t('asset-management.review.merge_intro')); ?></p>
+                <div id="mergeChoice" class="merge-choice"></div>
+                <?php /* GH #201: the configuration item links, and the choice when both assets have one. */ ?>
+                <div id="mergeCiLinks" class="merge-ci"></div>
+                <p class="form-hint"><?php echo htmlspecialchars(t('asset-management.review.merge_hint')); ?></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeMergeModal()"><?php echo htmlspecialchars(t('asset-management.common.cancel')); ?></button>
+                <button class="btn btn-primary" id="mergeConfirmBtn" onclick="confirmMerge()"><?php echo htmlspecialchars(t('asset-management.review.merge')); ?></button>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
     <div class="modal" id="editModal">
         <div class="modal-content">
             <div class="modal-header" id="modalTitle"><?php echo htmlspecialchars(t('asset-management.settings.add_item')); ?></div>
@@ -1694,6 +1929,14 @@ $translationNamespaces = ['common', 'asset-management'];
                 <div class="form-group" id="itemDescriptionRow">
                     <label for="itemDescription"><?php echo htmlspecialchars(t('asset-management.settings.col_description')); ?></label>
                     <textarea id="itemDescription"></textarea>
+                </div>
+                <?php /* Asset statuses only: an asset in a retired status has left the estate. */ ?>
+                <div class="form-group" id="itemRetiredRow" style="display:none;">
+                    <label class="toggle-label">
+                        <span class="toggle-switch"><input type="checkbox" id="itemRetired"><span class="toggle-slider"></span></span>
+                        <?php echo htmlspecialchars(t('asset-management.retired.status_tick')); ?>
+                    </label>
+                    <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.retired.status_tick_hint')); ?></div>
                 </div>
                 <?php /* Lease outcomes only (3.5.0). */ ?>
                 <div class="form-group" id="itemKindRow" style="display:none;">
@@ -1730,6 +1973,47 @@ $translationNamespaces = ['common', 'asset-management'];
                     </div>
                     <div class="ic-grid" id="itemIconGrid"></div>
                     <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.type_icon_hint')); ?></div>
+                </div>
+                <?php /* GH #201: the CMDB class "Create linked CI" makes for this type. Asset TYPES
+                         only. Mapping it never creates a CI by itself. */ ?>
+                <div class="form-group" id="itemCmdbRow" style="display:none;">
+                    <label for="itemCmdbClass"><?php echo htmlspecialchars(t('asset-management.settings.type_cmdb_class')); ?></label>
+                    <select id="itemCmdbClass"></select>
+                    <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.settings.type_cmdb_class_hint')); ?></div>
+                </div>
+                <?php /* Layout (GH #200). Asset TYPES only, like the icon picker. Which
+                         built-in Key info sections and tabs the type shows - presentation
+                         only, see includes/services/asset_type_layout.php. Saved with the
+                         type by Save, like every other field in this dialog. */ ?>
+                <div class="form-group" id="itemLayoutRow" style="display:none;">
+                    <label><?php echo htmlspecialchars(t('asset-management.layout.heading')); ?></label>
+                    <div class="atl-box">
+                        <p class="atl-intro"><?php echo htmlspecialchars(t('asset-management.layout.intro')); ?></p>
+                        <label for="itemLayoutPreset" class="atl-sub" style="display:block;margin-top:0;"><?php echo htmlspecialchars(t('asset-management.layout.start_from')); ?></label>
+                        <select id="itemLayoutPreset" onchange="atlApplyPreset(this.value); this.value = '';">
+                            <option value=""><?php echo htmlspecialchars(t('asset-management.layout.start_from_choose')); ?></option>
+                            <?php foreach (array_keys(AssetTypeLayout::PRESETS) as $p): ?>
+                            <option value="<?php echo $p; ?>"><?php echo htmlspecialchars(t('asset-management.layout.preset_' . $p)); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-hint"><?php echo htmlspecialchars(t('asset-management.layout.start_from_hint')); ?></div>
+
+                        <div class="atl-sub"><?php echo htmlspecialchars(t('asset-management.layout.sections_heading')); ?></div>
+                        <p class="atl-note"><?php echo htmlspecialchars(t('asset-management.layout.identity_note')); ?></p>
+                        <?php foreach (AssetTypeLayout::SECTIONS as $sec): ?>
+                        <label class="atl-opt">
+                            <input type="checkbox" data-atl-section="<?php echo $sec; ?>" checked>
+                            <span>
+                                <span class="atl-opt-name"><?php echo htmlspecialchars(t('asset-management.layout.section_' . $sec)); ?></span>
+                                <span class="atl-opt-desc"><?php echo htmlspecialchars(t('asset-management.layout.section_' . $sec . '_desc')); ?></span>
+                            </span>
+                        </label>
+                        <?php endforeach; ?>
+
+                        <div class="atl-sub"><?php echo htmlspecialchars(t('asset-management.layout.tabs_heading')); ?></div>
+                        <p class="atl-note"><?php echo htmlspecialchars(t('asset-management.layout.tabs_note')); ?></p>
+                        <div id="itemLayoutTabs"></div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="toggle-label">
@@ -2412,6 +2696,7 @@ $translationNamespaces = ['common', 'asset-management'];
             if (targetPanel) targetPanel.classList.add('active');
             if (tab === 'left-panel') loadSidebarMode();
             if (tab === 'asset-tags') updateLabelLivePreview();
+            if (tab === 'review') loadReviewList();
             try {
                 if (history.replaceState) {
                     history.replaceState(null, '', '?tab=' + encodeURIComponent(tab));
@@ -2465,6 +2750,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     // Default view that's every row, in a client view it's scoped.own.
                     allItems[type] = (data.scoped && data.scoped.is_default === false)
                         ? data.scoped.own : data[ep.key];
+                    if (type === 'asset-type' && Array.isArray(data.cmdb_classes)) cmdbClassesForTypes = data.cmdb_classes;
                     renderItems(type, data);
                 } else {
                     document.getElementById(ep.listId).innerHTML =
@@ -2481,7 +2767,7 @@ $translationNamespaces = ['common', 'asset-management'];
         function assetItemRow(type, item) {
             return `
                 <tr>
-                    <td><strong>${escapeHtml(item.name)}</strong></td>
+                    <td><strong>${escapeHtml(item.name)}</strong>${item.is_retired ? ' <span class="status-badge status-inactive">' + escapeHtml(window.t('asset-management.retired.badge')) + '</span>' : ''}</td>
                     <td>${item.kind ? escapeHtml(window.t('asset-management.leases.kind_' + item.kind)) + (item.is_default ? ' <span class="status-badge status-active">' + escapeHtml(window.t('asset-management.leases.default_badge')) + '</span>' : '') : escapeHtml(item.description || '-')}</td>
                     <td>${item.display_order}</td>
                     <td><span class="status-badge status-${item.is_active ? 'active' : 'inactive'}">${item.is_active ? window.t('asset-management.status.active') : window.t('asset-management.status.inactive')}</span></td>
@@ -2546,7 +2832,7 @@ $translationNamespaces = ['common', 'asset-management'];
                     : `<button class="action-btn" onclick="toggleHidden('${type}', ${g.id}, true)" title="Visible to this company — click to hide">${ASSET_EYE_SVG}</button>`;
                 return `
                     <tr style="${dim}">
-                        <td><strong>${escapeHtml(g.name)}</strong></td>
+                        <td><strong>${escapeHtml(g.name)}</strong>${g.is_retired ? ' <span class="status-badge status-inactive">' + escapeHtml(window.t('asset-management.retired.badge')) + '</span>' : ''}</td>
                         <td>${escapeHtml(g.description || '-')}</td>
                         <td>${g.display_order}</td>
                         <td>${statusCell}</td>
@@ -2580,6 +2866,21 @@ $translationNamespaces = ['common', 'asset-management'];
             }
         }
 
+        // GH #201: the CMDB class dropdown, filled from the active classes get_asset_types.php sent.
+        let cmdbClassesForTypes = [];
+        function cmdbClassSetup(type, classId) {
+            const row = document.getElementById('itemCmdbRow');
+            if (!row) return;
+            row.style.display = type === 'asset-type' ? '' : 'none';
+            if (type !== 'asset-type') return;
+            const sel = document.getElementById('itemCmdbClass');
+            const opts = [{ id: '', name: window.t('asset-management.settings.type_cmdb_class_none') }].concat(cmdbClassesForTypes);
+            // A mapped class since deactivated is still shown, so saving does not silently drop it.
+            if (classId && !cmdbClassesForTypes.some(c => Number(c.id) === Number(classId))) opts.push({ id: classId, name: '#' + classId });
+            sel.innerHTML = opts.map(c => `<option value="${escapeHtml(String(c.id))}">${escapeHtml(c.name)}</option>`).join('');
+            sel.value = classId ? String(classId) : '';
+        }
+
         function openAddModal(type) {
             const ep = endpoints[type];
             document.getElementById('modalTitle').textContent = window.t('asset-management.settings.add_kind', { kind: ep.label });
@@ -2590,7 +2891,10 @@ $translationNamespaces = ['common', 'asset-management'];
             document.getElementById('itemOrder').value = '0';
             document.getElementById('itemActive').checked = true;
             icSetup(type, null);
+            atlSetup(type, null);
+            cmdbClassSetup(type, null);
             leaseKindSetup(type, null);
+            retiredTickSetup(type, null);
             document.getElementById('editModal').classList.add('active');
         }
 
@@ -2607,7 +2911,10 @@ $translationNamespaces = ['common', 'asset-management'];
             document.getElementById('itemOrder').value = item.display_order || 0;
             document.getElementById('itemActive').checked = item.is_active;
             icSetup(type, item.icon_id || null);
+            atlSetup(type, item.layout || null);
+            cmdbClassSetup(type, item.cmdb_class_id || null);
             leaseKindSetup(type, item);
+            retiredTickSetup(type, item);
             document.getElementById('editModal').classList.add('active');
         }
 
@@ -2653,6 +2960,13 @@ $translationNamespaces = ['common', 'asset-management'];
                 // row is hidden and this stays empty.
                 icon_id: document.getElementById('itemIconId').value || null
             };
+            if (type === 'asset-type') {
+                payload.layout = atlCollect();
+                payload.cmdb_class_id = document.getElementById('itemCmdbClass').value || null;
+            }
+            if (type === 'asset-status') {
+                payload.is_retired = document.getElementById('itemRetired').checked ? 1 : 0;
+            }
             if (type === 'lease-outcome') {
                 payload.kind = document.getElementById('itemKind').value;
                 payload.is_default = document.getElementById('itemDefault').checked ? 1 : 0;
@@ -2804,6 +3118,13 @@ $translationNamespaces = ['common', 'asset-management'];
                     if (document.getElementById('reconIgnoredSerials')) {
                         document.getElementById('reconIgnoredSerials').value = data.settings.asset_reconciliation_ignored_serials || '';
                     }
+                    if (document.getElementById('reconProtectOnEdit')) {
+                        document.getElementById('reconProtectOnEdit').checked = data.settings.asset_protect_on_edit !== '0';
+                    }
+                    if (document.getElementById('reconStaleDays')) {
+                        const staleDays = parseInt(data.settings.asset_inventory_stale_days, 10);
+                        document.getElementById('reconStaleDays').value = (staleDays >= 1 && staleDays <= 365 ? staleDays : 7);
+                    }
 
                     // Warranty alert settings
                     document.getElementById('warrantySurface').value = data.settings.asset_warranty_surface || 'dashboard';
@@ -2925,7 +3246,9 @@ $translationNamespaces = ['common', 'asset-management'];
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         settings: {
-                            asset_reconciliation_ignored_serials: document.getElementById('reconIgnoredSerials').value.trim()
+                            asset_reconciliation_ignored_serials: document.getElementById('reconIgnoredSerials').value.trim(),
+                            asset_inventory_stale_days: String(Math.min(365, Math.max(1, parseInt(document.getElementById('reconStaleDays').value, 10) || 7))),
+                            asset_protect_on_edit: document.getElementById('reconProtectOnEdit').checked ? '1' : '0'
                         }
                     })
                 });
@@ -3566,7 +3889,7 @@ $translationNamespaces = ['common', 'asset-management'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -3583,6 +3906,13 @@ $translationNamespaces = ['common', 'asset-management'];
         /** Show the picker for asset types; hide it for anything else. */
         // Lease outcomes (3.5.0) use the shared modal with a "counts as" row in
         // place of the description.
+        /** Asset statuses only: the Retired tick (assets in it have left the estate). */
+        function retiredTickSetup(type, item) {
+            const isStatus = (type === 'asset-status');
+            document.getElementById('itemRetiredRow').style.display = isStatus ? '' : 'none';
+            document.getElementById('itemRetired').checked = !!(isStatus && item && item.is_retired);
+        }
+
         function leaseKindSetup(type, item) {
             const isOutcome = (type === 'lease-outcome');
             document.getElementById('itemKindRow').style.display = isOutcome ? '' : 'none';
@@ -3592,6 +3922,362 @@ $translationNamespaces = ['common', 'asset-management'];
                 document.getElementById('itemDefault').checked = !!(item && item.is_default);
             }
         }
+
+        // ════════════════════════════════════════════════════════════════
+        //  Asset type layout (GH #200)
+        //
+        //  Which built-in Key info sections and tabs a type shows. Presentation
+        //  only - see includes/services/asset_type_layout.php. The presets only
+        //  fill in the ticks; the order of the tabs is the ReorderList's.
+        // ════════════════════════════════════════════════════════════════
+
+        let atlTabs = null;   // the ReorderList of tabs, while the dialog is open
+
+        /** Show the editor for asset types, filled from the type's layout; hide it otherwise. */
+        function atlSetup(type, layout) {
+            const row = document.getElementById('itemLayoutRow');
+            if (!row) return;
+            const isType = (type === 'asset-type');
+            row.style.display = isType ? '' : 'none';
+            if (!isType) return;
+            const L = layout || window.ASSET_LAYOUT.defaults;
+            document.querySelectorAll('[data-atl-section]').forEach(cb => {
+                cb.checked = L.sections[cb.dataset.atlSection] !== false;
+            });
+            const shown = {};
+            L.tabs.forEach(t => { shown[t.key] = t.shown; });
+            atlTabs = ReorderList.mount(document.getElementById('itemLayoutTabs'), {
+                label: window.t('asset-management.layout.tabs_label'),
+                items: L.tabs.map(t => {
+                    const name = window.t('asset-management.layout.tab_' + t.key);
+                    return {
+                        key: t.key,
+                        label: name,
+                        html: `<label class="atl-tab-opt"><input type="checkbox" data-atl-tab="${escapeHtml(t.key)}" ${shown[t.key] !== false ? 'checked' : ''}> <span>${escapeHtml(name)}</span></label>`,
+                    };
+                }),
+            });
+        }
+
+        /** A preset ticks boxes - it never moves tabs, and nothing about it is remembered. */
+        function atlApplyPreset(key) {
+            const p = (window.ASSET_LAYOUT.presets || {})[key];
+            if (!p) return;
+            document.querySelectorAll('[data-atl-section]').forEach(cb => {
+                cb.checked = !p.hide_sections.includes(cb.dataset.atlSection);
+            });
+            document.querySelectorAll('[data-atl-tab]').forEach(cb => {
+                cb.checked = !p.hide_tabs.includes(cb.dataset.atlTab);
+            });
+        }
+
+        /** The layout as the dialog shows it, for save_asset_type.php. */
+        function atlCollect() {
+            const sections = {};
+            document.querySelectorAll('[data-atl-section]').forEach(cb => { sections[cb.dataset.atlSection] = cb.checked; });
+            const order = atlTabs ? atlTabs.getOrder() : window.ASSET_LAYOUT.defaults.tabs.map(t => t.key);
+            const tabs = order.map(key => {
+                const cb = document.querySelector('[data-atl-tab="' + key + '"]');
+                return { key: key, shown: cb ? cb.checked : true };
+            });
+            return { sections: sections, tabs: tabs };
+        }
+
+        /** The hidden-details setting: read with the page, saved on change. */
+        async function loadLayoutNotice() {
+            const sel = document.getElementById('assetLayoutNotice');
+            if (!sel) return;
+            try {
+                const res = await fetch(API_SETTINGS + 'get_system_settings.php');
+                const data = await res.json();
+                if (data.success) sel.value = data.settings.asset_layout_hidden_notice === 'link' ? 'link' : 'notice';
+            } catch (e) { /* the default stays selected */ }
+        }
+
+        async function saveLayoutNotice(value) {
+            try {
+                const res = await fetch(API_SETTINGS + 'save_system_settings.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings: { asset_layout_hidden_notice: value === 'link' ? 'link' : 'notice' } })
+                });
+                const data = await res.json();
+                if (data.success) showToast(window.t('asset-management.layout.notice_saved'), 'success');
+                else showToast(window.t('asset-management.toast.error', { error: data.error }), 'error');
+            } catch (e) {
+                showToast(window.t('asset-management.settings.save_settings_failed'), 'error');
+            }
+        }
+        loadLayoutNotice();
+
+        // ════════════════════════════════════════════════════════════════
+        //  Review (GH #200 part D) - the cases matching refuses to guess.
+        // ════════════════════════════════════════════════════════════════
+        let reviewItems = [];
+        let mergeItem = null;
+
+        function rvT(key, vars) { return window.t('asset-management.review.' + key, vars); }
+
+        async function loadReviewList() {
+            const box = document.getElementById('reviewList');
+            if (!box) return;
+            const which = document.getElementById('reviewWhich').value;
+            try {
+                const res = await fetch(API_BASE + 'review_list.php?which=' + encodeURIComponent(which));
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || '');
+                reviewItems = data.items;
+                renderReviewList(which);
+            } catch (e) {
+                box.innerHTML = `<div style="padding: 20px; color: #999;">${escapeHtml(rvT('load_error'))}</div>`;
+            }
+        }
+
+        function rvAsset(a, id) {
+            if (!a) return escapeHtml('#' + id);
+            const bits = [a.asset_tag, a.service_tag, [a.manufacturer, a.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+            return `<a href="../?asset_id=${Number(id)}" target="_blank" rel="noopener">${escapeHtml(a.hostname || ('#' + id))}</a>`
+                + (bits ? `<span class="rv-meta">${escapeHtml(bits)}</span>` : '');
+        }
+
+        function rvSentence(it) {
+            const d = it.detail || {};
+            const a = (it.asset && it.asset.hostname) || ('#' + it.asset_id);
+            const o = (it.other && it.other.hostname) || ('#' + it.other_asset_id);
+            const src = (it.source || '').replace(/^rest:/, '');
+            switch (it.kind) {
+                case 'shared_serial': return rvT('kind_shared_serial', { serial: d.serial || '' });
+                case 'hostname_reused': return rvT('kind_hostname_reused', { a: a, o: o });
+                case 'unmatched_peripheral': return rvT('kind_unmatched', { source: src, what: [d.name, d.model].filter(Boolean).join(' ') || rvT('a_device'), serial: d.serial || '', host: a });
+                case 'ambiguous_match': return rvT('kind_ambiguous', { source: src, serial: d.serial || '', host: a });
+            }
+            return it.kind;
+        }
+
+        function renderReviewList(which) {
+            const box = document.getElementById('reviewList');
+            if (!reviewItems.length) {
+                box.innerHTML = `<div class="rv-empty">${escapeHtml(rvT(which === 'decided' ? 'none_decided' : 'none_open'))}</div>`;
+                return;
+            }
+            box.innerHTML = reviewItems.map(it => {
+                const pair = it.kind === 'shared_serial' || it.kind === 'hostname_reused';
+                const assetsHtml = `<div class="rv-assets"><div>${rvAsset(it.asset, it.asset_id)}</div>${pair ? `<div>${rvAsset(it.other, it.other_asset_id)}</div>` : ''}</div>`;
+                let actions = '';
+                if (which === 'decided') {
+                    const by = it.resolved_by ? rvT('decided_by', { name: it.resolved_by }) : '';
+                    actions = `<span class="rv-status">${escapeHtml(rvT('status_' + it.status))}${by ? ' · ' + escapeHtml(by) : ''}</span>`
+                        + (it.status !== 'merged' ? ` <button class="btn btn-outline btn-sm" onclick="decideReview(${it.id}, 'open')">${escapeHtml(rvT('reopen'))}</button>` : '');
+                } else if (pair) {
+                    actions = `<button class="btn btn-primary btn-sm" onclick="openMergeModal(${it.id})">${escapeHtml(rvT('merge'))}</button>
+                        <button class="btn btn-outline btn-sm" onclick="decideReview(${it.id}, 'different')">${escapeHtml(rvT('different'))}</button>
+                        <button class="btn btn-outline btn-sm" onclick="decideReview(${it.id}, 'ignored')">${escapeHtml(rvT('ignore'))}</button>`;
+                } else {
+                    actions = (it.kind === 'unmatched_peripheral' ? `<button class="btn btn-primary btn-sm" onclick="decideReview(${it.id}, 'create')">${escapeHtml(rvT('create'))}</button> ` : '')
+                        + `<button class="btn btn-outline btn-sm" onclick="decideReview(${it.id}, 'ignored')">${escapeHtml(rvT('ignore'))}</button>`;
+                }
+                const found = it.first_seen_at ? fmtDateTime(parseUTCDate(it.first_seen_at)) : '';
+                return `<div class="rv-item">
+                    <div class="rv-what"><span class="rv-kind">${escapeHtml(rvT('label_' + it.kind))}</span> ${escapeHtml(rvSentence(it))}
+                        <span class="rv-meta">${escapeHtml(rvT('found', { when: found }))}</span></div>
+                    ${assetsHtml}
+                    <div class="rv-actions">${actions}</div>
+                </div>`;
+            }).join('');
+        }
+
+        async function decideReview(id, decision) {
+            try {
+                const res = await fetch(API_BASE + 'review_decide.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, decision: decision })
+                });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || rvT('load_error'), 'error'); return; }
+                showToast(rvT('done_' + decision), 'success');
+                loadReviewList();
+            } catch (e) {
+                showToast(rvT('load_error'), 'error');
+            }
+        }
+
+        function openMergeModal(id) {
+            mergeItem = reviewItems.find(i => i.id === id);
+            if (!mergeItem) return;
+            // Keep the one seen most recently; failing that, the older record.
+            const a = mergeItem.asset || {}, o = mergeItem.other || {};
+            const keepOther = (o.last_seen || '') > (a.last_seen || '');
+            const card = (asset, id, checked) => `<label class="merge-card">
+                <input type="radio" name="mergeKeep" value="${Number(id)}" ${checked ? 'checked' : ''}>
+                <strong>${escapeHtml(asset.hostname || ('#' + id))}</strong>
+                <span>${escapeHtml(rvT('field_serial'))}: ${escapeHtml(asset.service_tag || '-')}</span>
+                <span>${escapeHtml(rvT('field_tag'))}: ${escapeHtml(asset.asset_tag || '-')}</span>
+                <span>${escapeHtml([asset.manufacturer, asset.model].filter(Boolean).join(' ') || '-')}</span>
+                <span>${escapeHtml(rvT('field_last_seen'))}: ${escapeHtml(asset.last_seen ? fmtDateTime(parseUTCDate(asset.last_seen)) : rvT('never'))}</span>
+                <em>${escapeHtml(rvT('keep_this'))}</em>
+            </label>`;
+            document.getElementById('mergeChoice').innerHTML = card(a, mergeItem.asset_id, !keepOther) + card(o, mergeItem.other_asset_id, keepOther);
+            document.querySelectorAll('input[name="mergeKeep"]').forEach(r => r.addEventListener('change', renderMergeCiLinks));
+            document.getElementById('mergeModal').classList.add('active');
+            loadMergeCiLinks();
+        }
+
+        // GH #201: each asset's configuration item link. One linked: it moves to the kept
+        // asset. Both linked: the person chooses which link ends, and must say they understand
+        // before Merge is enabled. The merge request carries what was shown (seen) - if the
+        // links change meanwhile, the server refuses and this reloads.
+        let mergeCi = null;
+        async function loadMergeCiLinks() {
+            mergeCi = null;
+            const box = document.getElementById('mergeCiLinks');
+            box.innerHTML = '';
+            if (!mergeItem) return;
+            const forItem = mergeItem.id;
+            try {
+                const res = await fetch(API_BASE + 'ci_link.php?merge_preview=1&keep=' + Number(mergeItem.asset_id) + '&gone=' + Number(mergeItem.other_asset_id));
+                const data = await res.json();
+                if (!mergeItem || mergeItem.id !== forItem) return;
+                if (data.success) mergeCi = { byAsset: { [mergeItem.asset_id]: data.keep, [mergeItem.other_asset_id]: data.gone }, seen: data.seen || [], both: !!data.choice_needed };
+            } catch (e) { /* the server still refuses a merge that would need a choice */ }
+            renderMergeCiLinks();
+        }
+
+        function mergeCiName(l) {
+            if (!l) return '';
+            if (l.restricted) return rvT('ci_restricted');
+            return (l.name || ('#' + l.id)) + (l.class_name ? ' (' + l.class_name + ')' : '');
+        }
+
+        function renderMergeCiLinks() {
+            const box = document.getElementById('mergeCiLinks');
+            const btn = document.getElementById('mergeConfirmBtn');
+            btn.disabled = false;
+            if (!mergeItem || !mergeCi) { box.innerHTML = ''; return; }
+            const keep = Number((document.querySelector('input[name="mergeKeep"]:checked') || {}).value || 0);
+            const gone = keep === mergeItem.asset_id ? mergeItem.other_asset_id : mergeItem.asset_id;
+            const nameOf = id => ((id === mergeItem.asset_id ? mergeItem.asset : mergeItem.other) || {}).hostname || ('#' + id);
+            const lk = mergeCi.byAsset[keep], lg = mergeCi.byAsset[gone];
+            if (!lk && !lg) { box.innerHTML = ''; return; }
+            if (!mergeCi.both) {
+                const l = lk || lg;
+                box.innerHTML = `<div class="merge-ci-title">${escapeHtml(rvT('ci_heading'))}</div>`
+                    + escapeHtml(rvT(lk ? 'ci_kept_has' : 'ci_moves', { ci: mergeCiName(l), keep: nameOf(keep) }));
+                return;
+            }
+            const opt = (l, assetId, checked) => `<label><input type="radio" name="mergeCiKeep" value="${Number(l.link_id)}" ${checked ? 'checked' : ''}>
+                <span>${escapeHtml(rvT('ci_keep_link', { ci: mergeCiName(l), asset: nameOf(assetId) }))}</span></label>`;
+            box.innerHTML = `<div class="merge-ci-title">${escapeHtml(rvT('ci_both_heading'))}</div>
+                <div>${escapeHtml(rvT('ci_both_intro'))}</div>
+                ${opt(lk, keep, true)}${opt(lg, gone, false)}
+                <label class="merge-ci-ack"><input type="checkbox" id="mergeCiAck"><span>${escapeHtml(rvT('ci_ack'))}</span></label>`;
+            btn.disabled = true;
+            document.getElementById('mergeCiAck').addEventListener('change', e => { btn.disabled = !e.target.checked; });
+            box.querySelectorAll('input[name="mergeCiKeep"]').forEach(r => r.addEventListener('change', () => {
+                document.getElementById('mergeCiAck').checked = false; btn.disabled = true;
+            }));
+        }
+
+        function closeMergeModal() {
+            document.getElementById('mergeModal').classList.remove('active');
+            mergeItem = null;
+        }
+
+        async function confirmMerge() {
+            if (!mergeItem) return;
+            const keep = Number((document.querySelector('input[name="mergeKeep"]:checked') || {}).value || 0);
+            const gone = keep === mergeItem.asset_id ? mergeItem.other_asset_id : mergeItem.asset_id;
+            const keepName = (keep === mergeItem.asset_id ? mergeItem.asset : mergeItem.other) || {};
+            const goneName = (gone === mergeItem.asset_id ? mergeItem.asset : mergeItem.other) || {};
+            if (!confirm(rvT('merge_confirm', { gone: goneName.hostname || ('#' + gone), keep: keepName.hostname || ('#' + keep) }))) return;
+            const ciKeep = Number((document.querySelector('input[name="mergeCiKeep"]:checked') || {}).value || 0);
+            const btn = document.getElementById('mergeConfirmBtn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + 'review_merge.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Object.assign({ id: mergeItem.id, keep_asset_id: keep, merge_asset_id: gone },
+                        mergeCi ? { ci_links_seen: mergeCi.seen, ci_link_keep: ciKeep || null } : {}))
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast(data.error || rvT('load_error'), 'error');
+                    if (data.code === 'ci_link_changed' || data.code === 'ci_link_choice_required') loadMergeCiLinks();
+                    return;
+                }
+                closeMergeModal();
+                showToast(rvT('done_merged', { keep: keepName.hostname || ('#' + keep) }), 'success');
+                loadReviewList();
+            } catch (e) {
+                showToast(rvT('load_error'), 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        if (document.getElementById('review-tab') && document.getElementById('review-tab').classList.contains('active')) loadReviewList();
+
+        // ── Manufacturer and model names (GH #200 part D) ────────────────
+        let nmData = { mappings: [], names: { manufacturer: [], model: [] } };
+
+        async function nmLoad() {
+            const box = document.getElementById('nmList');
+            if (!box) return;
+            try {
+                const res = await fetch(API_BASE + 'name_mappings.php');
+                const data = await res.json();
+                if (!data.success) { box.innerHTML = `<p class="form-hint">${escapeHtml(data.error || '')}</p>`; return; }
+                nmData = data;
+                nmFillSuggestions();
+                nmRender();
+            } catch (e) { /* the section simply stays empty */ }
+        }
+
+        function nmFillSuggestions() {
+            const field = document.getElementById('nmField').value;
+            document.getElementById('nmNames').innerHTML = (nmData.names[field] || [])
+                .map(n => `<option value="${escapeHtml(n.name)}">${escapeHtml(window.t('asset-management.names.in_use', { n: n.n }))}</option>`).join('');
+        }
+
+        function nmRender() {
+            const box = document.getElementById('nmList');
+            if (!nmData.mappings.length) { box.innerHTML = `<p class="form-hint">${escapeHtml(window.t('asset-management.names.none'))}</p>`; return; }
+            box.innerHTML = `<table class="nm-table"><thead><tr>
+                <th>${escapeHtml(window.t('asset-management.names.col_field'))}</th>
+                <th>${escapeHtml(window.t('asset-management.names.col_from'))}</th>
+                <th>${escapeHtml(window.t('asset-management.names.col_to'))}</th><th></th></tr></thead><tbody>`
+                + nmData.mappings.map(m => `<tr>
+                    <td>${escapeHtml(window.t('asset-management.field.' + m.field))}</td>
+                    <td>${escapeHtml(m.from_value)}</td>
+                    <td><strong>${escapeHtml(m.to_value)}</strong></td>
+                    <td style="text-align:right;"><button type="button" class="btn btn-outline btn-sm" onclick="nmDelete(${Number(m.id)})">${escapeHtml(window.t('asset-management.common.delete'))}</button></td>
+                </tr>`).join('') + '</tbody></table>';
+        }
+
+        async function nmPost(body) {
+            const res = await fetch(API_BASE + 'name_mappings.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            return res.json();
+        }
+
+        async function nmSave() {
+            const body = { action: 'save', field: document.getElementById('nmField').value,
+                           from: document.getElementById('nmFrom').value, to: document.getElementById('nmTo').value };
+            try {
+                const data = await nmPost(body);
+                if (!data.success) { showToast(data.error || window.t('asset-management.settings.error_saving'), 'error'); return; }
+                document.getElementById('nmFrom').value = '';
+                showToast(window.t('asset-management.settings.saved_success'), 'success');
+                nmLoad();
+            } catch (e) { showToast(window.t('asset-management.settings.error_saving'), 'error'); }
+        }
+
+        async function nmDelete(id) {
+            try {
+                const data = await nmPost({ action: 'delete', id: id });
+                if (!data.success) { showToast(data.error || window.t('asset-management.settings.error_saving'), 'error'); return; }
+                nmLoad();
+            } catch (e) { showToast(window.t('asset-management.settings.error_saving'), 'error'); }
+        }
+        nmLoad();
 
         function icSetup(type, selectedId) {
             const row = document.getElementById('itemIconRow');
@@ -4834,6 +5520,9 @@ $translationNamespaces = ['common', 'asset-management'];
     <script src="../../assets/js/proxmox-settings.js?v=2"></script>
     <script src="../../assets/js/vcloud-settings.js?v=2"></script>
     <script src="../../assets/js/network-mapper-icons.js?v=3"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/reorder-list.js?v=1"></script>
+    <script>window.ASSET_LAYOUT = <?php echo json_encode(['defaults' => AssetTypeLayout::defaults(), 'presets' => AssetTypeLayout::PRESETS], JSON_HEX_TAG | JSON_HEX_AMP); ?>;</script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
+    <?php if (settingsTabVisible($visibleTabs, 'hyperv')): ?><script src="hyperv.js?v=3"></script><?php endif; ?>
 </body>
 </html>

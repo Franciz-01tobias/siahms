@@ -180,7 +180,7 @@ function userSignsInElsewhere(PDO $conn, $providerId): bool
         $st = $conn->prepare("SELECT protocol FROM auth_providers WHERE id = ?");
         $st->execute([$providerId]);
         $protocol = $st->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return true;
     }
     return strtolower((string)$protocol) !== 'carddav';
@@ -233,7 +233,7 @@ function userSourcesInScope(PDO $conn, string $tenantSql, array $tenantArgs): ar
             return ['id' => (int)$r['id'], 'name' => $r['name'],
                     'protocol' => $r['protocol'], 'people' => (int)$r['people']];
         }, $st->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return [];
     }
 }
@@ -267,7 +267,7 @@ function portalProfileSettingRaw(PDO $conn, string $key): ?string
         $st->execute([$key]);
         $v = $st->fetchColumn();
         return $v === false ? null : (string)$v;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return null;
     }
 }
@@ -419,4 +419,22 @@ function userManagerIsSafe(PDO $conn, int $userId, ?int $managerId): bool
         $at  = $row && $row['manager_id'] !== null ? (int)$row['manager_id'] : null;
     }
     return true;
+}
+
+/**
+ * The SET fragments that mark a person active or as having left: is_active, and
+ * deactivated_datetime stamped in the same statement so "who left this month" is
+ * answerable without a second write to miss. The one definition - the person
+ * screen (api/tickets/save_user.php) and Starters & leavers both use it.
+ *
+ * TRAP: on a person kept up to date from a directory (users.is_managed), the next
+ * sync switches is_active back on unless the account is disabled in the
+ * directory (includes/directory_sync.php). Callers that offer "left" to a
+ * managed person must say so.
+ *
+ * @return list<string>  SQL fragments with no placeholders
+ */
+function userActiveSets(bool $active): array
+{
+    return ['is_active = ' . ($active ? '1' : '0'), 'deactivated_datetime = ' . ($active ? 'NULL' : 'UTC_TIMESTAMP()')];
 }

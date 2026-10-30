@@ -75,7 +75,7 @@ check('the builder declares NO literal width list of its own',
     !preg_match('/const\s+FIELD_WIDTHS\s*=\s*\[/', $builderSrc),
     'a literal list reappeared in forms/edit/index.php — that is the third source again');
 check('the builder loads form-logic.js (or FormLogic is undefined at runtime)',
-    strpos($builderSrc, 'assets/js/form-logic.js') !== false,
+    str_contains($builderSrc, 'assets/js/form-logic.js'),
     'the builder reads FormLogic but never loads it');
 
 /* The default must be on the list, and it must be the widest — a default that
@@ -182,7 +182,7 @@ foreach ($surfaces as $name => $s) {
     // Defining it somewhere the page never loads would be the same bug again.
     if ($s['href'] !== null) {
         check("$name: actually loads {$s['css']}",
-            strpos($loader, $s['href']) !== false,
+            str_contains($loader, $s['href']),
             "{$s['loader']} does not reference {$s['href']}");
     }
 
@@ -221,7 +221,7 @@ foreach ([
     $load = (string)@file_get_contents($root . '/' . $loader);
 
     check("$name: takes its card width from the shared token",
-        strpos($src, 'var(--form-card-max') !== false,
+        str_contains($src, 'var(--form-card-max'),
         "$file should read var(--form-card-max), not carry its own number");
 
     /* A literal alongside the token is how this drifts back: somebody nudges one
@@ -231,7 +231,7 @@ foreach ([
         "$file still hard-codes a card width");
 
     check("$name: loads form-shared.css, where the token lives",
-        strpos($load, 'form-shared.css') !== false,
+        str_contains($load, 'form-shared.css'),
         "$loader does not load it, so the token would be undefined at runtime");
 }
 

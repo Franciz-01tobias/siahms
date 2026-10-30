@@ -35,6 +35,30 @@ $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $triggers   = WorkflowEngine::availableTriggers();
 $ops        = WorkflowEngine::availableOperators();
 $actionDefs = WorkflowEngine::availableActions();
+// GH #217. Only switched-on modules' triggers and actions are offered - except the
+// ones this workflow already uses, so a workflow on a switched-off module still
+// opens, shows what it was, and saves.
+try {
+    $edConn = connectToDatabase();
+    $keepTrigger = null;
+    $keepActions = [];
+    if ($id > 0) {
+        $own = $edConn->prepare('SELECT trigger_event, actions FROM workflows WHERE id = ?');
+        $own->execute([$id]);
+        if ($ownRow = $own->fetch(PDO::FETCH_ASSOC)) {
+            $keepTrigger = $ownRow['trigger_event'];
+            $keepActions = array_column(json_decode((string)$ownRow['actions'], true) ?: [], 'type');
+        }
+    }
+    $allTriggers = $triggers;
+    $allActions  = $actionDefs;
+    $triggers   = WorkflowEngine::withoutSwitchedOff($edConn, $triggers, false);
+    $actionDefs = WorkflowEngine::withoutSwitchedOff($edConn, $actionDefs, true);
+    if ($keepTrigger !== null && isset($allTriggers[$keepTrigger])) $triggers[$keepTrigger] = $allTriggers[$keepTrigger];
+    foreach ($keepActions as $k) {
+        if (isset($allActions[$k])) $actionDefs[$k] = $allActions[$k];
+    }
+} catch (Throwable $e) { /* the full lists - the engine still refuses a switched-off module */ }
 $fieldsByTrigger = [];
 $varsByTrigger   = [];
 $varPrefixesByTrigger = [];
@@ -82,6 +106,25 @@ foreach ($actionDefs as $actionKey => $def) {
         }
     }
 }
+
+// GH #209. Which company the workflow runs for - offered only once there are
+// companies. "All companies" only for someone who can see every company:
+// a shared workflow acts on all of them. A new workflow starts shared for
+// them and in the switched-to company for anyone else, as save.php does.
+$wfConn = connectToDatabase();
+$wfCompanyPicker = workflowTenancyActive($wfConn);
+$wfCompanies = [];
+$wfCanShare = true;
+$wfDefaultCompany = '';
+if ($wfCompanyPicker) {
+    $wfAid = (int)$_SESSION['analyst_id'];
+    $wfCanShare = analystHasAllTenantAccess($wfConn, $wfAid);
+    $wfMine = getAccessibleTenantIds($wfConn, $wfAid);
+    foreach (getAllTenants($wfConn) as $tn) {
+        if (in_array((int)$tn['id'], $wfMine, true)) $wfCompanies[] = ['id' => (int)$tn['id'], 'name' => (string)$tn['name']];
+    }
+    $wfDefaultCompany = $wfCanShare ? '' : (string)getActiveTenantId($wfConn, $wfAid);
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -94,7 +137,7 @@ foreach ($actionDefs as $actionKey => $def) {
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/workflow.css?v=11">
     <!-- Mobile layer LAST, after workflow.css (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../assets/js/tz.js?v=5"></script>
@@ -136,7 +179,7 @@ foreach ($actionDefs as $actionKey => $def) {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     <span><?php echo htmlspecialchars(t('workflow.editor.test_fire')); ?></span>
                 </button>
-                <button class="wf-tool-btn wf-tool-primary" onclick="WFE.save()">
+                <button class="wf-tool-btn wf-tool-primary" id="wfSaveBtn" onclick="WFE.save()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                     <span><?php echo htmlspecialchars(t('common.save')); ?></span>
                 </button>
@@ -176,6 +219,19 @@ foreach ($actionDefs as $actionKey => $def) {
                             <input type="checkbox" id="wfActive" checked> <?php echo htmlspecialchars(t('workflow.editor.active_label')); ?>
                         </label>
                     </div>
+                    <?php if ($wfCompanyPicker): ?>
+                    <div class="form-group">
+                        <label for="wfCompany"><?php echo htmlspecialchars(t('workflow.editor.company_label')); ?></label>
+                        <select id="wfCompany" class="form-input" data-default="<?php echo htmlspecialchars($wfDefaultCompany); ?>">
+                            <?php if ($wfCanShare): ?><option value=""><?php echo htmlspecialchars(t('workflow.editor.company_shared')); ?></option><?php endif; ?>
+                            <?php foreach ($wfCompanies as $c): ?>
+                            <option value="<?php echo (int)$c['id']; ?>"><?php echo htmlspecialchars($c['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small style="display:block; color:var(--text-muted, #666); margin-top:6px; line-height:1.5;"><?php echo htmlspecialchars(t('workflow.editor.company_help')); ?></small>
+                    </div>
+                    <?php endif; ?>
+                    <div class="wf-needs-config" id="wfReadOnly" style="display: none;"></div>
                     <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border, #e0e0e0);">
                     <h4 style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim, #888);">Recent runs</h4>
                     <div id="execList" style="font-size: 13px; color: var(--text-muted, #666);">
@@ -393,7 +449,7 @@ foreach ($actionDefs as $actionKey => $def) {
         };
     </script>
     <script src="../checklists/search_scoring.js?v=1"></script>
-    <script src="../assets/js/workflow-editor.js?v=19"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/workflow-editor.js?v=22"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

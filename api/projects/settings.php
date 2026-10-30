@@ -17,11 +17,11 @@ require_once __DIR__ . '/../../includes/i18n.php';
 I18n::initFromSession();
 
 $tabCaps = [
-    'general' => Cap::PROJECTS_GENERAL,
-    'health'  => Cap::PROJECTS_HEALTH,
-    'roles'   => Cap::PROJECTS_ROLES,
-    'raid'    => Cap::PROJECTS_RAID,
-    'budget'  => Cap::PROJECTS_BUDGET,
+    'general' => capKey(Cap::PROJECTS_GENERAL),
+    'health'  => capKey(Cap::PROJECTS_HEALTH),
+    'roles'   => capKey(Cap::PROJECTS_ROLES),
+    'raid'    => capKey(Cap::PROJECTS_RAID),
+    'budget'  => capKey(Cap::PROJECTS_BUDGET),
 ];
 
 /** The roles list with how many members hold each - for the Roles tab. */
@@ -60,7 +60,7 @@ function projectSettingsForScreen(PDO $conn): array
 projectApiRun(function () use ($conn, $analystId, $tabCaps) {
     $canWrite = [];
     foreach ($tabCaps as $tab => $cap) {
-        try { $canWrite[$tab] = analystHasCapability($conn, $analystId, $cap); } catch (Throwable $e) { $canWrite[$tab] = false; }
+        try { $canWrite[$tab] = analystHasCapability($conn, $analystId, Cap::from($cap)); } catch (Throwable $e) { $canWrite[$tab] = false; }
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -83,7 +83,7 @@ projectApiRun(function () use ($conn, $analystId, $tabCaps) {
 
     // Hourly rates (Budget tab): the default and each analyst's, from a date.
     // Never shown to anybody without the Budget permission - they are close to pay.
-    if (strpos($action, 'rate_') === 0) {
+    if (str_starts_with($action, 'rate_')) {
         if (empty($canWrite['budget'])) projectApiFail('You do not have permission to change hourly rates.', 403);
         require_once __DIR__ . '/../../includes/projects/budget.php';
         if ($action === 'rate_save') {
@@ -109,7 +109,7 @@ projectApiRun(function () use ($conn, $analystId, $tabCaps) {
         projectApiOk(['rates' => projectRatesForSettings($conn)]);
     }
 
-    if (strpos($action, 'role_') === 0) {
+    if (str_starts_with($action, 'role_')) {
         if (empty($canWrite['roles'])) projectApiFail('You do not have permission to change project roles.', 403);
         if ($action === 'role_save') {
             $name = trim((string)($in['name'] ?? ''));

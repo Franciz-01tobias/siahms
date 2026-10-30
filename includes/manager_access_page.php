@@ -298,7 +298,7 @@ function managerAccessRender(int $managerId, string $backUrl): void
         const MANAGER = <?php echo (int)$managerId; ?>;
         const T = <?php echo json_encode($T, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;
         const $ = id => document.getElementById(id);
-        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         const fmt = (s, p) => String(s).replace(/\{(\w+)\}/g, (_, k) => (p && k in p) ? p[k] : '{' + k + '}');
         const people = n => Number(n) === 1 ? T.people_one : fmt(T.people, { count: n });
         const toast = (m, k) => { if (typeof window.showToast === 'function') window.showToast(m, k); };

@@ -25,6 +25,7 @@ $defaultModuleColors = [
     'domains'        => ['#4d7c0f', '#3f6212'],
     // People (#153): a plum, apart from CMDB's pink and Tasks' violet.
     'people'         => ['#a21caf', '#86198f'],
+    'starters'       => ['#a16207', '#854d0e'],   // golden brown - starters, movers and leavers
     // Files: a deep navy, the colour of a desktop at night - apart from Tickets'
     // bright blue and LMS's royal blue.
     'files'          => ['#1e3a8a', '#172554'],
@@ -79,7 +80,7 @@ function getModuleColors() {
                 $colors[$moduleKey] = [trim($parts[0]), trim($parts[1])];
             }
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Fall back to defaults if DB unavailable
     }
 

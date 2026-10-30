@@ -68,7 +68,13 @@ final class LmsLearner
      */
     public static function user(int $id): ?self
     {
-        return $id > 0 ? new self(self::USER, $id) : null;
+        // GH #217: with the LMS switched off for the install there is no portal
+        // learner. Analysts are stopped by requireModuleAccessJson('lms'); portal
+        // users never pass that gate, so every portal path through here is the
+        // one place they can all be stopped - the Training tab, the dashboard
+        // card and the course endpoints alike.
+        if ($id <= 0 || !portalModuleOn('lms')) return null;
+        return new self(self::USER, $id);
     }
 
     /**
@@ -198,7 +204,7 @@ function lmsUserGroupsAvailable(PDO $conn): bool {
     try {
         $conn->query("SELECT 1 FROM knowledge_user_groups LIMIT 1");
         return $available = true;
-    } catch (PDOException $e) {
+    } catch (PDOException) {
         return $available = false;
     }
 }

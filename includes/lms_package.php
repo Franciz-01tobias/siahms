@@ -81,7 +81,7 @@ function lmsValidatePackage(ZipArchive $zip): array
         // Reject anything that tries to escape the destination directory, or that
         // hides a traversal inside an encoded/odd path. Note ZipArchive gives us
         // forward slashes, but a hand-crafted zip can contain backslashes.
-        if ($name === '' || strpos($name, "\0") !== false) {
+        if ($name === '' || str_contains($name, "\0")) {
             throw new Exception('The package contains an entry with an invalid name.');
         }
         $normalised = str_replace('\\', '/', $name);

@@ -34,6 +34,8 @@ if (!$articleId) {
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'knowledge');
 
     // The same one scope the list uses — see includes/knowledge/portal_reader.php.
     $userTenantId = portalUserTenantId($conn, $userId);

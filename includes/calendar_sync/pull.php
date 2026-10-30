@@ -53,7 +53,7 @@ function calendarAcceptDeletes(PDO $conn): bool
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $st->execute([CALENDAR_ACCEPT_DELETES]);
         return (string)$st->fetchColumn() === '1';
-    } catch (Exception $e) {
+    } catch (Exception) {
         return false;
     }
 }
@@ -123,15 +123,18 @@ function calendarSyncPullForAnalyst(PDO $conn, int $analystId): array
     $st->execute(array_merge([$analystId], $ids));
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) $mine[$row['remote_event_id']] = $row;
 
-    $st = $conn->prepare(
-        "SELECT s.*, 'task' AS _entity, tk.title AS _ref, tk.due_date,
-                tk.work_start_datetime, tk.work_end_datetime, tk.work_all_day
-           FROM calendar_sync_events s
-           JOIN tasks tk ON tk.id = s.task_id
-          WHERE s.analyst_id = ? AND s.remote_event_id IN ($in)"
-    );
-    $st->execute(array_merge([$analystId], $ids));
-    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) $mine[$row['remote_event_id']] = $row;
+    // GH #217: a task slot moved in Outlook does not reach a switched-off Tasks.
+    if (moduleIsEnabled($conn, 'tasks')) {
+        $st = $conn->prepare(
+            "SELECT s.*, 'task' AS _entity, tk.title AS _ref, tk.due_date,
+                    tk.work_start_datetime, tk.work_end_datetime, tk.work_all_day
+               FROM calendar_sync_events s
+               JOIN tasks tk ON tk.id = s.task_id
+              WHERE s.analyst_id = ? AND s.remote_event_id IN ($in)"
+        );
+        $st->execute(array_merge([$analystId], $ids));
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) $mine[$row['remote_event_id']] = $row;
+    }
 
     // ── Moves ───────────────────────────────────────────────────────────────
     foreach ($result['changed'] as $change) {
@@ -261,7 +264,7 @@ function calendarPullAudit(PDO $conn, int $ticketId, int $analystId, string $fie
             "INSERT INTO ticket_audit (ticket_id, analyst_id, field_name, old_value, new_value, created_datetime)
              VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
         )->execute([$ticketId, $analystId, $field, substr($old, 0, 500), substr($new, 0, 500)]);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // An audit we cannot write must not stop the change the analyst asked for.
     }
 }
@@ -397,7 +400,7 @@ function calendarNotifyUrl(PDO $conn): string
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $st->execute([CALENDAR_NOTIFY_URL]);
         $v = trim((string)$st->fetchColumn());
-    } catch (Exception $e) {
+    } catch (Exception) {
         return '';
     }
     // Graph refuses anything that is not HTTPS, so an http:// value here would
@@ -427,7 +430,7 @@ function calendarSyncEnsureSubscription(PDO $conn, int $analystId): string
     $canNotify = false;
     if ($connection) {
         try { $canNotify = calendarSyncProviderFor($connection)->supports(CalendarSyncProvider::CAP_NOTIFY); }
-        catch (Exception $e) { $canNotify = false; }
+        catch (Exception) { $canNotify = false; }
     }
 
     $wanted = $notifyUrl !== ''
@@ -448,7 +451,7 @@ function calendarSyncEnsureSubscription(PDO $conn, int $analystId): string
                 try {
                     $p = calendarSyncProviderFor($connection); $p->conn = $conn;
                     $p->deleteSubscription($subId);
-                } catch (Exception $e) {
+                } catch (Exception) {
                     // Already gone, or unreachable. Either way we forget it below:
                     // keeping a row we cannot act on means retrying for ever.
                 }
@@ -475,7 +478,7 @@ function calendarSyncEnsureSubscription(PDO $conn, int $analystId): string
                 calendarStoreSubscription($conn, $analystId, $res['id'], $res['expires'],
                                           $enrolment['subscription_secret']);
                 return 'renewed';
-            } catch (CalendarSubscriptionMissing $e) {
+            } catch (CalendarSubscriptionMissing) {
                 $subId = null;                       // lapsed — fall through and create
             }
         }

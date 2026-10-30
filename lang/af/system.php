@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Hou hierdie bladsy dop.</strong> Sodra die werker loop, word die status hierbo groen en verskyn afleweringe hieronder. Volledige opstelnotas (Windows &amp; Linux, handtekeningverifikasie) is in <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">die Werkvloeie-wiki</a>.',
         'fact_worker' => 'Werkerskrip',
         'fact_retry' => 'Herpogingskedule',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1h &middot; 6h, dan misluk',
         'fact_retention' => 'Logboekbewaring',
         'fact_queued' => 'Nou in die tou',
         'days' => '{n} dae',

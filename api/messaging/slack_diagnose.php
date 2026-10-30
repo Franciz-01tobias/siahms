@@ -84,7 +84,7 @@ function addCheck(string $key, string $label, string $status, string $detail, st
 
 try {
     $channel = loadMessagingChannel($conn, $id);
-    if (!$channel || ($channel['provider'] ?? '') !== 'slack') {
+    if (!$channel || MessagingProviderKind::tryFrom((string)($channel['provider'] ?? '')) !== MessagingProviderKind::Slack) {
         echo json_encode(['success' => false, 'error' => 'Slack channel not found']);
         exit;
     }

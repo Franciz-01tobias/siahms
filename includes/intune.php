@@ -7,6 +7,7 @@
  * CLI worker so syncs don't block the web request.
  */
 
+require_once __DIR__ . '/asset_retirement.php';   // retired assets are not renamed
 require_once __DIR__ . '/encryption.php';
 
 /**
@@ -167,7 +168,7 @@ function intuneIsoToMysql(?string $iso): ?string {
     if ($iso === null || $iso === '') return null;
     try {
         return (new DateTime($iso))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return null;
     }
 }
@@ -317,6 +318,7 @@ function intuneLinkDevicesToAssets(PDO $conn, ?int $companyId = null): array {
            JOIN assets a ON a.id = d.asset_id
           WHERE d.device_name IS NOT NULL AND d.device_name <> ''
             AND LOWER(LEFT(d.device_name, 50)) <> LOWER(COALESCE(a.hostname, ''))"
+          . assetNotRetiredSql($conn, 'a')   // a retired asset keeps the name it left with
     )->fetchAll(PDO::FETCH_ASSOC);
     foreach ($renamed as $row) {
         AssetsService::updateAssetHostname($conn, $ctx, (int)$row['asset_id'], (string)$row['device_name'], 'Intune');
@@ -372,11 +374,11 @@ function intuneLinkDevicesToAssets(PDO $conn, ?int $companyId = null): array {
 function intuneOsToDrive(?string $os): string {
     if ($os === null || $os === '') return 'System';
     $lc = strtolower($os);
-    if (strpos($lc, 'windows') !== false) return 'C:';
-    if (strpos($lc, 'macos') !== false || strpos($lc, 'mac os') !== false) return '/';
-    if (strpos($lc, 'linux') !== false) return '/';
-    if (strpos($lc, 'ios') !== false || strpos($lc, 'ipados') !== false) return 'Internal';
-    if (strpos($lc, 'android') !== false) return 'Internal';
+    if (str_contains($lc, 'windows')) return 'C:';
+    if (str_contains($lc, 'macos') || str_contains($lc, 'mac os')) return '/';
+    if (str_contains($lc, 'linux')) return '/';
+    if (str_contains($lc, 'ios') || str_contains($lc, 'ipados')) return 'Internal';
+    if (str_contains($lc, 'android')) return 'Internal';
     return 'System';
 }
 

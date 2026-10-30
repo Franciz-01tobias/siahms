@@ -67,6 +67,8 @@ if (!$isCli) {
     }
 }
 $trigger = JobRun::scheduledTrigger();
+// GH #217: nothing to do while the module is switched off for the install.
+if (cronModuleSwitchedOff($conn, 'lms', 'lms_reminders', $trigger)) exit(0);
 
 $settings = lmsReminderSettings($conn);
 if ($settings[LMS_REM_ENABLED] !== '1') {

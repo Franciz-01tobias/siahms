@@ -99,7 +99,7 @@ $httpExceptions = ['tests/azure-openai/mock.php', 'tests/ai-compatible/mock.php'
 foreach ($httpExceptions as $rel) {
     $mock = (string)@file_get_contents($root . '/' . $rel);
     check("the HTTP exception $rel is limited to php -S",
-        strpos($mock, "PHP_SAPI !== 'cli-server'") !== false,
+        str_contains($mock, "PHP_SAPI !== 'cli-server'"),
         'a stand-in endpoint should accept the built-in server and nothing else');
 }
 /* ⚠️ Asked of each file's HEAD, not its whole body. Asked of the whole body this
@@ -110,7 +110,7 @@ foreach ($httpExceptions as $rel) {
 $claimers = [];
 foreach ($scripts as $p) {
     if (in_array(str_replace('\\', '/', substr($p, strlen($root) + 1)), $httpExceptions, true)) continue;
-    if (strpos(substr((string)file_get_contents($p), 0, 1200), "!== 'cli-server'") !== false) {
+    if (str_contains(substr((string)file_get_contents($p), 0, 1200), "!== 'cli-server'")) {
         $claimers[] = substr($p, strlen($root) + 1);
     }
 }

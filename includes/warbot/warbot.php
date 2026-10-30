@@ -91,7 +91,12 @@ function warbotCommands(): array
 function warbotHelpText(): string
 {
     $items = [];
+    $tools = warbotTools();
     foreach (warbotCommands() as $name => $spec) {
+        // GH #217: a command whose tool's Tickets feature is switched off is not listed
+        // (/oncall while the duty rota is off); typed anyway, warbotRunTool() says why.
+        $feature = $tools[$spec['tool'] ?? '']['feature'] ?? null;
+        if ($feature !== null && !portalModuleOn($feature)) continue;
         $items[] = ['/' . $name . (isset($spec['hint']) ? ' ' . $spec['hint'] : ''), $spec['desc'] ?? ''];
     }
     $width = 0;

@@ -19,6 +19,15 @@ function dbVerifyInventoryUpgrade(PDO $conn): array
         $conn->exec('ALTER TABLE software_inventory_detail ' . implode(', ',$alter));
         $changes[]='Software observations are unique per host/application/source';
     }
+    // GH #200 Part B: a section can now be on record before it has ever succeeded (a failed
+    // first attempt), and the agent is no analyst - so these four relax to NULL. Relaxing
+    // NOT NULL cannot invalidate a row that already exists.
+    foreach ($conn->query('SHOW COLUMNS FROM asset_inventory_sections')->fetchAll(PDO::FETCH_ASSOC) as $col) {
+        if (in_array($col['Field'],['observed_at','imported_at','imported_by_id','fingerprint'],true) && $col['Null']==='NO') {
+            $conn->exec('ALTER TABLE asset_inventory_sections MODIFY `' . $col['Field'] . '` ' . strtoupper($col['Type']) . ' NULL');
+            $changes[]='asset_inventory_sections.' . $col['Field'] . ' may be empty until a section first succeeds';
+        }
+    }
     foreach ([['asset_inventory_sources','fk_inventory_source_asset','asset_id','assets'],
               ['asset_inventory_sections','fk_inventory_section_source','inventory_source_id','asset_inventory_sources']] as [$table,$name,$column,$parent]) {
         $find=$conn->prepare('SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND CONSTRAINT_NAME=?');

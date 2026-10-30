@@ -38,6 +38,18 @@ return [
         'check'    => ['rows', 'forms', 'requires_approval = 1 AND approver_id IS NOT NULL AND is_demo = 0'],
     ],
     [
+        'id'       => 'forms.approval_team',
+        'module'   => 'forms',
+        'tier'     => 'extra',
+        'category' => 'governance',
+        'title'    => 'Approval by a team',
+        'what'     => 'A catalogue form approved by a team instead of one person - any one member, or two or more different members, with the requester never voting on their own request.',
+        'why'      => 'One named approver is a bottleneck when they are away, and one person is not enough for a purchase or access that needs four eyes. A team covers absence and makes the second pair of eyes a rule.',
+        'done'     => 'At least one form requires approval from a team.',
+        'link'     => 'forms/',
+        'check'    => ['rows', 'forms', 'requires_approval = 1 AND approval_team_id IS NOT NULL AND is_demo = 0'],
+    ],
+    [
         'id'       => 'forms.submission_actions',
         'module'   => 'forms',
         'tier'     => 'recommended',

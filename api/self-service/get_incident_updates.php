@@ -35,6 +35,8 @@ try {
     }
 
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'service-status');
 
     // ⚠️ No "does this incident exist" check, deliberately. An incident with no
     // external updates and an incident that does not exist both come back

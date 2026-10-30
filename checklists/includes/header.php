@@ -28,7 +28,7 @@ if (isset($_SESSION['analyst_id'])) {
         if ($__pRow && $__pRow['preference_value'] === 'hover') {
             $checklistsSidebarMode = 'hover';
         }
-    } catch (Throwable $e) {}
+    } catch (Throwable) {}
 }
 
 require_once $path_prefix . 'includes/waffle-menu.php';

@@ -89,6 +89,35 @@ try {
         }
     }
 
+    // GH #208. ?teams=1 (System -> Analysts) adds each analyst's active teams, job
+    // title and department, so the list can be grouped and filtered by them. One
+    // query for every analyst: the page used to fetch teams one analyst at a time,
+    // which is what made a long list slow to appear.
+    if (!empty($_GET['teams'])) {
+        $teamsByAnalyst = [];
+        foreach ($conn->query("SELECT at.analyst_id, t.id, t.name FROM analyst_teams at
+                               JOIN teams t ON t.id = at.team_id
+                               WHERE t.is_active = 1 ORDER BY t.display_order, t.name") as $row) {
+            $teamsByAnalyst[(int)$row['analyst_id']][] = ['id' => (int)$row['id'], 'name' => $row['name']];
+        }
+        // job_title / department arrived with #80; an install whose Database
+        // Verification has not added them yet simply groups everyone under "Not set".
+        $profile = [];
+        try {
+            foreach ($conn->query("SELECT id, job_title, department FROM analysts") as $row) {
+                $profile[(int)$row['id']] = $row;
+            }
+        } catch (Exception $e) {
+            $profile = [];
+        }
+        foreach ($analysts as &$analyst) {
+            $analyst['teams'] = $teamsByAnalyst[$analyst['id']] ?? [];
+            $analyst['job_title'] = $profile[$analyst['id']]['job_title'] ?? null;
+            $analyst['department'] = $profile[$analyst['id']]['department'] ?? null;
+        }
+        unset($analyst);
+    }
+
     // GH #176. ?with_access=1 (the ticket inbox) adds the companies each active
     // analyst can work in, so the assign lists offer only people who can open the
     // ticket's company. TRAP: decided by getAccessibleTenantIds(), never a copy of

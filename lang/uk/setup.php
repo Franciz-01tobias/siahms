@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Увімкнено — вимкніть для продуктивного середовища (встановіть display_errors у значення 0 у config.php)',
         'display_errors_disabled' => 'Вимкнено',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — потрібна PHP 7.4 або вище',
+        'php_version_too_low' => '{version} — потрібна PHP 8.1 або вище',
         'php_version_eol' => '{version} — ще підтримується, але ця версія не отримує оновлень безпеки відколи досягла кінця терміну підтримки. Рекомендовано PHP 8.3 або 8.4.',
         'extension_loaded' => 'Завантажено',
         'extension_not_loaded' => 'Не завантажено — увімкніть у php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Налаштовано',
         'ca_ini_masked_broken' => 'Установлено, але вказує на файл, якого немає — виправте шлях або закоментуйте цей параметр у php.ini.',
         'php_version_ok_masked' => 'Відповідає вимогам',
-        'php_version_too_low_masked' => 'Застаріла версія — потрібен PHP 7.4 або новіший',
+        'php_version_too_low_masked' => 'Застаріла версія — потрібен PHP 8.1 або новіший',
         'php_version_eol_masked' => 'Підтримується, але ця версія досягла кінця терміну підтримки і більше не отримує оновлень безпеки. Увійдіть як адміністратор, щоб побачити версію.',
     ],
     'locked' => [

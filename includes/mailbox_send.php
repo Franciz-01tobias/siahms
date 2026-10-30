@@ -12,6 +12,7 @@
  * Never throws. Returns null on success, or the reason it could not send.
  */
 
+require_once __DIR__ . '/mailbox_provider.php';   // MailboxProvider
 require_once __DIR__ . '/email_log.php';
 
 /**
@@ -28,12 +29,12 @@ require_once __DIR__ . '/email_log.php';
  */
 function mailboxSendSimple(PDO $conn, array $mailbox, string $to, string $subject, string $htmlBody, string $route, ?int $ticketId = null): ?string
 {
-    $provider = $mailbox['provider'] ?? 'microsoft';
+    $provider = MailboxProvider::fromMailbox($mailbox);
     try {
-        if ($provider === 'imap') {
+        if ($provider === MailboxProvider::Imap) {
             require_once __DIR__ . '/mailbox_imap.php';
             imapSmtpSend($mailbox, $to, '', $subject, $htmlBody);
-        } elseif ($provider === 'google') {
+        } elseif ($provider === MailboxProvider::Google) {
             require_once __DIR__ . '/gmail.php';
             $cleaned = preg_replace('/[\x00-\x1F\x7F]/', '', (string)($mailbox['token_data'] ?? ''));
             $tokenData = $cleaned !== '' ? json_decode($cleaned, true) : null;

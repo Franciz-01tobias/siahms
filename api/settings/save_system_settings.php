@@ -19,6 +19,9 @@ require_once '../../includes/encryption.php';
 require_once '../../includes/rbac.php';
 require_once '../../includes/settings_keys.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 // Check if user is logged in
@@ -60,6 +63,24 @@ try {
                 'success' => false,
                 'error'   => 'You do not have permission to change this setting: ' . $key,
             ]);
+            exit;
+        }
+    }
+
+    // Settings whose value must be one case of an enum (PR #206). Checked, like the
+    // permissions above, before ANY key is written, so a combined post with one bad
+    // value is refused whole. The readers fall back to a safe default for a value
+    // they do not know - but a value nobody chose should never be stored at all.
+    $enumKeys = [
+        'ticket_workspace_mode' => ['../../includes/ticket_workspace.php', TicketWorkspaceMode::class],
+        'ticket_list_export'    => ['../../includes/ticket_list.php',      TicketListExport::class],
+    ];
+    foreach ($enumKeys as $key => [$file, $enum]) {
+        if (!array_key_exists($key, $settings)) continue;
+        require_once $file;
+        if (!is_string($settings[$key]) || $enum::tryFrom($settings[$key]) === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid value for setting: ' . $key]);
             exit;
         }
     }

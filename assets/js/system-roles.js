@@ -14,7 +14,7 @@ const Roles = (() => {
     const TEAMS = window.RBAC_TEAMS || [];
 
     /** HTML-escapes a value through a text node; null and undefined become an empty string. */
-    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
 
     let roles = [];
 

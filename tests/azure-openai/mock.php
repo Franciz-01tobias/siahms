@@ -72,7 +72,7 @@ header('Content-Type: application/json');
 // GH #171: a model's version date in the API version box. Azure answers an
 // api-version it does not know with a bare 404 and these exact words.
 // Checked FIRST: Azure turns an unknown address away before reading the body.
-if (strpos($uri, 'api-version=2025-08-07') !== false) {
+if (str_contains($uri, 'api-version=2025-08-07')) {
     http_response_code(404);
     echo json_encode(['error' => ['code' => '404', 'message' => 'Resource not found']]);
     exit;
@@ -82,7 +82,7 @@ if (strpos($uri, 'api-version=2025-08-07') !== false) {
 // The 400 a current Azure deployment returns when it is handed `max_tokens`.
 // Wording taken from Azure's own message, because our retry is triggered by
 // recognising it — a paraphrase here would make the test prove nothing.
-if ((strpos($uri, '/deployments/needs-max-completion/') !== false || strpos($uri, '/deployments/gpt5-like/') !== false)
+if ((str_contains($uri, '/deployments/needs-max-completion/') || str_contains($uri, '/deployments/gpt5-like/'))
     && array_key_exists('max_tokens', $body)) {
     http_response_code(400);
     echo json_encode(['error' => [
@@ -93,7 +93,7 @@ if ((strpos($uri, '/deployments/needs-max-completion/') !== false || strpos($uri
 }
 
 // The 400 a gpt-5-class model returns for any temperature but its default.
-if ((strpos($uri, '/deployments/needs-default-temperature/') !== false || strpos($uri, '/deployments/gpt5-like/') !== false)
+if ((str_contains($uri, '/deployments/needs-default-temperature/') || str_contains($uri, '/deployments/gpt5-like/'))
     && array_key_exists('temperature', $body) && $body['temperature'] != 1) {
     http_response_code(400);
     echo json_encode(['error' => [
@@ -104,7 +104,7 @@ if ((strpos($uri, '/deployments/needs-default-temperature/') !== false || strpos
 }
 
 // An unrelated 400 - the kind a retry must never swallow.
-if (strpos($uri, '/deployments/content-filtered/') !== false) {
+if (str_contains($uri, '/deployments/content-filtered/')) {
     http_response_code(400);
     echo json_encode(['error' => [
         'code'    => 'content_filter',
@@ -114,7 +114,7 @@ if (strpos($uri, '/deployments/content-filtered/') !== false) {
 }
 
 // The v1 route names no deployment in the address, so the body must.
-if (strpos($uri, '/openai/v1/chat/completions') !== false && empty($body['model'])) {
+if (str_contains($uri, '/openai/v1/chat/completions') && empty($body['model'])) {
     http_response_code(400);
     echo json_encode(['error' => ['code' => 'missing_model', 'message' => "Missing required parameter: 'model'."]]);
     exit;

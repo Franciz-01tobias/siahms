@@ -168,7 +168,7 @@ if (!defined('PROJECT_SETTINGS_LOADED')) {
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 if ($r['setting_value'] !== null && $r['setting_value'] !== '') $out[$r['setting_key']] = (string)$r['setting_value'];
             }
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // Before Database Verification: the defaults.
         }
         return $cache = $out;
@@ -241,7 +241,7 @@ if (!defined('PROJECT_SETTINGS_LOADED')) {
             if (!in_array($v, ['anyone', 'team'], true)) throw new InvalidArgumentException('Choose who may change a project.');
             return $v;
         }
-        if (strpos($rule, 'num:') === 0) {
+        if (str_starts_with($rule, 'num:')) {
             // A number with up to two decimals (37.5 hours a week).
             [, $min, $max] = explode(':', $rule);
             $v = str_replace(',', '.', $v);
@@ -250,7 +250,7 @@ if (!defined('PROJECT_SETTINGS_LOADED')) {
             }
             return (string)(float)$v;
         }
-        if (strpos($rule, 'int:') === 0) {
+        if (str_starts_with($rule, 'int:')) {
             [, $min, $max] = explode(':', $rule);
             if (!preg_match('/^\d+$/', $v) || (int)$v < (int)$min || (int)$v > (int)$max) {
                 throw new InvalidArgumentException("Enter a whole number from $min to $max.");
@@ -422,7 +422,7 @@ if (!defined('PROJECT_SETTINGS_LOADED')) {
         try {
             require_once __DIR__ . '/../rbac.php';
             return analystHasCapability($conn, $analystId, Cap::PROJECTS_MANAGE);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;
         }
     }
@@ -453,8 +453,50 @@ if (!defined('PROJECT_SETTINGS_LOADED')) {
                                    WHERE m.project_id = ? AND (m.analyst_id = ? OR at.analyst_id IS NOT NULL) LIMIT 1");
             $st->execute([$analystId, (int)$project['id'], $analystId]);
             return (bool)$st->fetchColumn();
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;
+        }
+    }
+
+    /**
+     * Can this analyst see the project's company? (GH #210)
+     *
+     * A project is one company's work, and being on it never lets anyone past
+     * that: every read checks the company first (ProjectsService::loadForActor()).
+     * So somebody who cannot see the company could be listed as the manager or a
+     * member and still never open the project - while its notifications named it
+     * to them. They are refused instead. Always true on a single-company install.
+     *
+     * @param mixed $projectTenant  projects.tenant_id as stored; NULL is the Default company
+     */
+    function projectAnalystReachesCompany(PDO $conn, int $analystId, $projectTenant): bool
+    {
+        if (!isMultiTenant($conn)) return true;
+        $tid = $projectTenant === null ? getDefaultTenantId($conn) : (int)$projectTenant;
+        return analystCanAccessTenant($conn, $analystId, $tid);
+    }
+
+    /**
+     * Does this TEAM give access to the project's company - every company, or that
+     * one under System -> Teams? (GH #210) A team on a project makes everyone in it
+     * part of the project's team, so the team itself must reach the company; whether
+     * some of its people happen to reach it on their own does not count.
+     *
+     * @param mixed $projectTenant  projects.tenant_id as stored; NULL is the Default company
+     */
+    function projectTeamReachesCompany(PDO $conn, int $teamId, $projectTenant): bool
+    {
+        if (!isMultiTenant($conn)) return true;
+        $tid = $projectTenant === null ? getDefaultTenantId($conn) : (int)$projectTenant;
+        try {
+            $st = $conn->prepare("SELECT can_access_all_tenants FROM teams WHERE id = ?");
+            $st->execute([$teamId]);
+            if ((int)$st->fetchColumn() === 1) return true;
+            $st = $conn->prepare("SELECT 1 FROM team_tenant_access WHERE team_id = ? AND tenant_id = ?");
+            $st->execute([$teamId, $tid]);
+            return (bool)$st->fetchColumn();
+        } catch (Exception $e) {
+            return tenancyDegradeAllowed($e);
         }
     }
 

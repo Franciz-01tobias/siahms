@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Obserwuj tę stronę.</strong> Gdy proces roboczy się uruchomi, status powyżej zmieni się na zielony, a poniżej pojawią się dostarczenia. Pełne uwagi o konfiguracji (Windows &amp; Linux, weryfikacja podpisu) znajdziesz w <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">wiki Przepływów pracy</a>.',
         'fact_worker' => 'Skrypt procesu roboczego',
         'fact_retry' => 'Harmonogram ponowień',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1h &middot; 6h, potem niepowodzenie',
         'fact_retention' => 'Przechowywanie dziennika',
         'fact_queued' => 'Teraz w kolejce',
         'days' => '{n} dni',

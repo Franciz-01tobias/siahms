@@ -47,7 +47,7 @@ try {
         throw new Exception('Channel not found');
     }
     $channel = loadMessagingChannel($conn, $id);
-    if (!$channel || ($channel['provider'] ?? '') !== 'telegram') {
+    if (!$channel || MessagingProviderKind::tryFrom((string)($channel['provider'] ?? '')) !== MessagingProviderKind::Telegram) {
         throw new Exception('Channel not found');
     }
     $secret = (string) ($channel['verify_token'] ?? '');

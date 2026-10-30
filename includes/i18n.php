@@ -127,7 +127,7 @@ class I18n {
                     self::$locale = $value;
                     return;
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 // Fall through to header / default
             }
         }

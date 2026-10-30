@@ -47,6 +47,14 @@ try {
     if (!$analystId) {
         feed_deny('403 Forbidden', 'Invalid or missing calendar token.');
     }
+    // 🔴 The token's owner must still be allowed to see this. Deactivating an
+    // analyst left their feed links working - nothing checked is_active - and so
+    // did removing the module. analystCanAccessModule() is false for an inactive
+    // or deleted analyst, and checking at use (rather than deleting the token)
+    // means reactivating them restores the link. Reported privately, October 2026.
+    if (!analystCanAccessModule($conn, (int)$analystId, 'calendar')) {
+        feed_deny('403 Forbidden', 'Invalid or missing calendar token.');
+    }
 
     // Shared team calendar. Bound the window (recent past + all future) so the
     // feed stays small no matter how much history accumulates.

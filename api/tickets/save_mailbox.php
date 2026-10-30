@@ -8,6 +8,9 @@ require_once '../../includes/functions.php';
 require_once '../../includes/rbac.php';
 require_once '../../includes/encryption.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 // Check if user is logged in
@@ -27,13 +30,19 @@ if (!$data) {
 }
 
 // Validate required fields — tenant ID only required for Microsoft.
-$provider = $data['provider'] ?? 'microsoft';
+// The provider comes from the form: an unknown one is refused (until 4.0 any text was
+// stored as given). None at all is Microsoft, as before.
+$provider = MailboxProvider::tryFrom((string)($data['provider'] ?? 'microsoft'));
+if ($provider === null) {
+    echo json_encode(['success' => false, 'error' => 'Unknown mailbox provider']);
+    exit;
+}
 // Basic IMAP authenticates with a username + password (no OAuth), so it needs none
 // of the Azure/Google client id/secret/redirect fields.
-$isImap = ($provider === 'imap');
+$isImap = ($provider === MailboxProvider::Imap);
 // App-only (client credentials) doesn't use the interactive sign-in flow, so it
 // needs no redirect URI / OAuth scopes — only the client id/secret + target mailbox.
-$isAppOnly = ($provider === 'microsoft') && (($data['auth_mode'] ?? 'delegated') === 'app_only');
+$isAppOnly = $provider->supportsAppOnly() && (($data['auth_mode'] ?? 'delegated') === 'app_only');
 if ($isImap) {
     $requiredFields = ['name', 'target_mailbox', 'imap_server', 'imap_username', 'smtp_server'];
 } else {
@@ -41,7 +50,7 @@ if ($isImap) {
     if (!$isAppOnly) {
         $requiredFields[] = 'oauth_redirect_uri';
     }
-    if ($provider === 'microsoft') {
+    if ($provider === MailboxProvider::Microsoft) {
         $requiredFields[] = 'azure_tenant_id';
     }
 }
@@ -57,20 +66,20 @@ try {
 
     $id = $data['id'] ?? null;
     $name = $data['name'];
-    $provider = $data['provider'] ?? 'microsoft';
+    // $provider: the MailboxProvider validated at the top.
     $oauth_redirect_uri_plain = trim($data['oauth_redirect_uri'] ?? '');
     $redirectPath = parse_url($oauth_redirect_uri_plain, PHP_URL_PATH) ?: '';
     // The redirect URI only matters for the interactive sign-in flow — skip the
     // callback checks for app-only and basic-IMAP mailboxes (neither redirects anywhere).
     if (!$isAppOnly && !$isImap) {
-        if ($provider === 'google' && !preg_match('#(^|/)google_oauth_callback\.php$#i', $redirectPath)) {
+        if ($provider === MailboxProvider::Google && !preg_match('#(^|/)google_oauth_callback\.php$#i', $redirectPath)) {
             echo json_encode([
                 'success' => false,
                 'error' => 'Google Workspace mailboxes must use google_oauth_callback.php as the OAuth redirect URI.'
             ]);
             exit;
         }
-        if ($provider === 'microsoft' && !preg_match('#(^|/)oauth_callback\.php$#i', $redirectPath)) {
+        if ($provider === MailboxProvider::Microsoft && !preg_match('#(^|/)oauth_callback\.php$#i', $redirectPath)) {
             echo json_encode([
                 'success' => false,
                 'error' => 'Microsoft 365 mailboxes must use oauth_callback.php as the OAuth redirect URI.'
@@ -159,7 +168,7 @@ try {
 
     // Authentication mode: 'delegated' (interactive sign-in, reads /me) or 'app_only'
     // (client credentials, reads /users/<target_mailbox>). App-only is Microsoft only.
-    $auth_mode = (($data['auth_mode'] ?? 'delegated') === 'app_only' && $provider === 'microsoft') ? 'app_only' : 'delegated';
+    $auth_mode = (($data['auth_mode'] ?? 'delegated') === 'app_only' && $provider->supportsAppOnly()) ? 'app_only' : 'delegated';
 
     // On edit: if the target address OR auth mode changed, the previously-authenticated
     // identity no longer applies. We clear it so a stale token can't keep reading the OLD
@@ -183,7 +192,7 @@ try {
     // (****) value means "leave the stored one untouched".
     $cols = [
         'name'                 => $name,
-        'provider'             => $provider,
+        'provider'             => $provider->value,
         'azure_tenant_id'      => $azure_tenant_id,
         'azure_client_id'      => $azure_client_id,
         'oauth_redirect_uri'   => $oauth_redirect_uri,

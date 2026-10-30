@@ -255,7 +255,7 @@ class CalendarService
                 if (!$c->fetchColumn()) {
                     throw new ServiceError('validation', 'invalid_field', "Unknown contract id: {$f['contract_id']}");
                 }
-            } catch (PDOException $e) {
+            } catch (PDOException) {
                 throw new ServiceError('validation', 'invalid_field', 'Contract links are not available on this install.');
             }
         }

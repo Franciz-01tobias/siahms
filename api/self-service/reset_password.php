@@ -60,6 +60,11 @@ if ($password !== $confirm) {
 }
 // The same minimum the portal's own change-password screen enforces. Stated here
 // rather than assumed: an endpoint that sets a password owns its own policy.
+require_once __DIR__ . '/../../includes/password_policy.php';   // the one rule for a new password
+if ($why = passwordPolicyError($password)) {
+    echo json_encode(['success' => false, 'error' => $why]);
+    exit;
+}
 if (strlen($password) < 8) {
     echo json_encode(['success' => false, 'error' => 'Your password must be at least 8 characters long.']);
     exit;

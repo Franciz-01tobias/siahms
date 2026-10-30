@@ -59,6 +59,9 @@ try {
     }
 
     if ($action === 'save') {
+        // ?action=save on a GET would save an empty address - which switches Tika
+        // off - for any administrator who followed a link (csrf.php).
+        csrfRequireWriteMethod();
         $url = trim((string)($in['url'] ?? ''));
 
         // An empty address is a legitimate save: it switches tier 2 off.

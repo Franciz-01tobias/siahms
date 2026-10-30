@@ -46,7 +46,7 @@ try {
         teamsPackageFail('Channel not found');
     }
     $channel = loadMessagingChannel($conn, $id);
-    if (!$channel || ($channel['provider'] ?? '') !== 'teams') {
+    if (!$channel || MessagingProviderKind::tryFrom((string)($channel['provider'] ?? '')) !== MessagingProviderKind::Teams) {
         teamsPackageFail('Channel not found');
     }
 

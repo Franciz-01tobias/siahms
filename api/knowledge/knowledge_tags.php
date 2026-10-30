@@ -16,7 +16,7 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 // Was reachable by ANY signed-in analyst with no module check at all. Matches the
 // list endpoint, which this must agree with (see the count note below).
-requireAnyModuleAccessJson(['knowledge', 'tickets', 'lms']);
+requireAnyModuleAccessJson(['knowledge', 'tickets', 'lms'], null, 'knowledge');   // owner: GH #217
 
 try {
     $conn = connectToDatabase();

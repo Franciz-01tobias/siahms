@@ -22,6 +22,7 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
+require_once '../../includes/services/asset_type_layout.php';
 
 header('Content-Type: application/json');
 
@@ -60,7 +61,25 @@ try {
         // No CMDB icon table on this install — types simply have no icons.
     }
 
+    // Which built-in sections and tabs each type shows (GH #200). Every consumer gets it: the
+    // asset page draws from it, and the settings modal edits it.
+    $layouts = AssetTypeLayout::forTypes($conn, array_column($rows, 'id'));
+
+    // GH #201: which CMDB class each type becomes through "Create linked CI". Read on its
+    // own, so the list still loads before Database Verification adds the column.
+    $classOf = [];
+    if ($rows) {
+        try {
+            $in = implode(',', array_map('intval', array_column($rows, 'id')));
+            $classOf = $conn->query("SELECT id, cmdb_class_id FROM asset_types WHERE id IN ($in) AND cmdb_class_id IS NOT NULL")->fetchAll(PDO::FETCH_KEY_PAIR);
+        } catch (PDOException $e) {
+            $classOf = [];
+        }
+    }
+
     foreach ($rows as &$r) {
+        $r['cmdb_class_id'] = isset($classOf[$r['id']]) ? (int)$classOf[$r['id']] : null;
+        $r['layout']    = $layouts[(int)$r['id']] ?? AssetTypeLayout::defaults();
         $r['is_active'] = (bool)$r['is_active'];
         $r['scope']     = ($r['tenant_id'] === null) ? 'global' : 'company';
         $r['icon_id']   = isset($r['icon_id']) && $r['icon_id'] !== null ? (int)$r['icon_id'] : null;
@@ -69,6 +88,15 @@ try {
     unset($r);
 
     $resp = ['success' => true, 'asset_types' => $rows, 'multi_tenant' => $multi];
+    // The settings dialog's CMDB class dropdown (GH #201): the active classes. Install-wide
+    // configuration, so naming them to an Assets administrator reveals no CI.
+    if ($manage) {
+        try {
+            $resp['cmdb_classes'] = $conn->query('SELECT id, name FROM cmdb_classes WHERE is_active = 1 ORDER BY display_order, name')->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            $resp['cmdb_classes'] = [];
+        }
+    }
 
     // Settings management view, only meaningful inside a *client* company context.
     if ($manage && $multi && !$isDefaultCtx) {
@@ -93,14 +121,24 @@ try {
 
         $ownStmt = $conn->prepare("SELECT id, name, description, is_active, display_order FROM asset_types WHERE tenant_id = ? ORDER BY display_order, name");
         $ownStmt->execute([$activeId]);
+        // The settings dialog edits these rows and saves every field it shows, so each one
+        // carries the icon, layout and CMDB class too. Without them, saving a company's own
+        // type in its context sent icon_id null and the default layout - wiping both.
+        $full = [];
+        foreach ($rows as $r) { $full[(int)$r['id']] = $r; }
         $own = [];
         foreach ($ownStmt->fetchAll(PDO::FETCH_ASSOC) as $o) {
+            $f = $full[(int)$o['id']] ?? [];
             $own[] = [
                 'id'            => (int)$o['id'],
                 'name'          => $o['name'],
                 'description'   => $o['description'],
                 'is_active'     => (bool)$o['is_active'],
                 'display_order' => (int)$o['display_order'],
+                'icon_id'       => $f['icon_id'] ?? null,
+                'icon_key'      => $f['icon_key'] ?? null,
+                'layout'        => $f['layout'] ?? AssetTypeLayout::forTypes($conn, [(int)$o['id']])[(int)$o['id']],
+                'cmdb_class_id' => $f['cmdb_class_id'] ?? null,
             ];
         }
 

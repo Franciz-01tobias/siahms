@@ -29,7 +29,7 @@ function domainNormalise(string $raw): array
 
     $s = mb_strtolower($s, 'UTF-8');
     $s = preg_replace('#^[a-z][a-z0-9+.\-]*://#', '', $s);   // scheme
-    if (strpos($s, '@') !== false) {                         // an e-mail address, or user@host
+    if (str_contains($s, '@')) {                         // an e-mail address, or user@host
         $s = substr($s, strrpos($s, '@') + 1);
     }
     $s = preg_replace('#[/?\#].*$#', '', $s);                // path, query, fragment
@@ -73,7 +73,7 @@ function domainNormalise(string $raw): array
     }
 
     $display = null;
-    if (strpos($ascii, 'xn--') !== false && function_exists('idn_to_utf8')) {
+    if (str_contains($ascii, 'xn--') && function_exists('idn_to_utf8')) {
         $u = idn_to_utf8($ascii, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
         if ($u !== false && $u !== $ascii) $display = $u;
     }

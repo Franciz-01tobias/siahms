@@ -196,7 +196,7 @@ try {
     $entry = $conn->query(
         "SELECT detail FROM asset_import_run_entries WHERE action='conflict' ORDER BY id DESC LIMIT 1"
     )->fetchColumn();
-    ok('the conflict says how many it matched', strpos((string)$entry, 'Matches 2') !== false, (string)$entry);
+    ok('the conflict says how many it matched', str_contains((string)$entry, 'Matches 2'), (string)$entry);
 
     // ================================================================
     echo "\n--- 🔑 THE HOLDING AREA ---\n";
@@ -220,7 +220,7 @@ try {
     ok('it kept the SOURCE ROW verbatim',
         $mine && ($mine['raw_row']['Screen size'] ?? null) === 'not-a-number',
         json_encode($mine['raw_row'] ?? null));
-    ok('it kept the REASON', $mine && strpos($mine['detail'], 'expects a number') !== false,
+    ok('it kept the REASON', $mine && str_contains($mine['detail'], 'expects a number'),
         $mine['detail'] ?? '');
     ok('and the conflict is in there too',
         count(array_filter($held, static fn($h) => $h['action'] === 'conflict')) >= 1);
@@ -255,7 +255,7 @@ try {
         AssetImportService::run($conn, $ctx, $parsed['rows'], $mapping, ['match_keys' => []], 'preview');
     } catch (ServiceError $e) { $threw = $e->getMessage(); }
     ok('refuses to run without an identity column',
-        $threw !== null && strpos($threw, 'identifies a row') !== false, (string)$threw);
+        $threw !== null && str_contains($threw, 'identifies a row'), (string)$threw);
 
     echo "\n--- unmapped columns are ignored, not guessed ---\n";
     $a1 = $conn->query("SELECT id FROM assets WHERE hostname='ZZIMP-01'")->fetchColumn();
@@ -292,7 +292,7 @@ try {
     $typoRow = null;
     foreach ($held2 as $h) { if (($h['display_name'] ?? '') === 'ZZIMP-22') { $typoRow = $h; break; } }
     ok('...and it says exactly what is missing',
-        $typoRow && strpos($typoRow['detail'], 'No asset type called "Televsion"') !== false,
+        $typoRow && str_contains($typoRow['detail'], 'No asset type called "Televsion"'),
         $typoRow['detail'] ?? 'not parked');
 
     $numeric = csvRows($tmp, "Name,Type\nZZIMP-23,{$typeId}\n");

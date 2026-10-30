@@ -209,9 +209,9 @@ $token = $_GET['token'] ?? '';
                     return;
                 }
 
-                if (newPw.length < 6) {
+                if (newPw.length < 8) {   // includes/password_policy.php has the full rule
                     msgEl.className = 'msg error';
-                    msgEl.textContent = <?= trj('reset_err_short', 'Password must be at least 6 characters.') ?>;
+                    msgEl.textContent = <?= trj('reset_err_short', 'Password must be at least 8 characters.') ?>;
                     return;
                 }
 

@@ -6,7 +6,7 @@
 (() => {
     const API = window.API_BASE;
     /** Escapes text for safe use in HTML. */
-    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
 
     /* The layout choice is remembered per analyst, the same way and through the
        same endpoint as the Knowledge module's. Two views only: this page has one

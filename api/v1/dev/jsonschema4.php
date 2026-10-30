@@ -181,7 +181,7 @@ class JsonSchema4 {
      *
      * @param mixed $d  any decoded JSON value
      */
-    private function isList($d): bool { return is_array($d) && ($d === [] || array_keys($d) === range(0, count($d) - 1)); }
+    private function isList($d): bool { return is_array($d) && array_is_list($d); }
     /**
      * Whether a PHP array is a non-empty JSON object (not a list).
      *

@@ -113,7 +113,7 @@ class ContractsService
             foreach (['tasks', 'calendar_events', 'rfps'] as $t) {
                 try {
                     $conn->prepare("UPDATE `$t` SET contract_id = NULL WHERE contract_id = ?")->execute([$id]);
-                } catch (Exception $e) { /* table absent on a minimal install */ }
+                } catch (Exception) { /* table absent on a minimal install */ }
             }
             $conn->prepare("DELETE FROM contracts WHERE id = ?")->execute([$id]);
             $conn->commit();
@@ -251,7 +251,7 @@ class ContractsService
             ] as $sql) {
                 try {
                     $conn->prepare($sql)->execute([$id]);
-                } catch (Exception $e) { /* table absent on a minimal install */ }
+                } catch (Exception) { /* table absent on a minimal install */ }
             }
             $conn->prepare("DELETE FROM suppliers WHERE id = ?")->execute([$id]);
             $conn->commit();
@@ -356,7 +356,7 @@ class ContractsService
                 $st->execute([$id, $to]);
                 $n = (int)$st->fetchColumn();
                 if ($n > 0) $blocked[] = "$n $what";
-            } catch (Exception $e) { /* table or column absent before Database Verification */ }
+            } catch (Exception) { /* table or column absent before Database Verification */ }
         }
         if ($blocked) {
             throw new ServiceError('conflict', 'conflict',

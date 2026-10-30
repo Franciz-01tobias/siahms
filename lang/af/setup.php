@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Aangeskakel — skakel af vir produksie (stel display_errors op 0 in config.php)',
         'display_errors_disabled' => 'Afgeskakel',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 of hoër word vereis',
+        'php_version_too_low' => '{version} — PHP 8.1 of hoër word vereis',
         'php_version_eol' => '{version} — steeds ondersteun, maar hierdie weergawe het geen sekuriteitsopdaterings gehad sedert dit end-of-life bereik het nie. PHP 8.3 of 8.4 word aanbeveel.',
         'extension_loaded' => 'Gelaai',
         'extension_not_loaded' => 'Nie gelaai nie — skakel aan in php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Opgestel',
         'ca_ini_masked_broken' => 'Gestel, maar wys na \'n lêer wat nie daar is nie — maak die pad reg of merk die instelling in php.ini as kommentaar.',
         'php_version_ok_masked' => 'Voldoen aan die vereiste',
-        'php_version_too_low_masked' => 'Te oud — PHP 7.4 of hoër word vereis',
+        'php_version_too_low_masked' => 'Te oud — PHP 8.1 of hoër word vereis',
         'php_version_eol_masked' => 'Ondersteun, maar hierdie weergawe het end-of-life bereik en ontvang nie meer sekuriteitsopdaterings nie. Meld aan as \'n administrateur om die weergawe te sien.',
     ],
     'locked' => [

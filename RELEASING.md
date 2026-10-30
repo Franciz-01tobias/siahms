@@ -42,7 +42,7 @@ New capability, backward compatible. This is the normal release.
 **The upgrade asks something of the operator, or can break a working install if they do
 nothing.** Reserve it for that, and nothing else. Concretely, for this codebase:
 
-- The **PHP floor rises** above the current 7.4.
+- The **PHP floor rises** above the current 8.1 (it last rose, from 7.4, in 4.0.0).
 - `config.php`, `db_config.php`, the Docker environment variables, or the encryption key
   path change shape in a way an existing file does not satisfy.
 - Database Verification **drops** a column or table that the previous release still reads.

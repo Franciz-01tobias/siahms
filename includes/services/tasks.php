@@ -145,7 +145,7 @@ class TasksService
             $title, $description, $status[0], $priority[0], $startDate, $dueDate,
             $analystId, $teamId, $links['parent_task_id'],
             $links['ticket_id'], $links['change_id'], $links['contract_id'], $tenantId,
-            $boardPosition, $ctx->actorId,
+            $boardPosition, $ctx->actorId > 0 ? $ctx->actorId : self::systemCreatorId($conn),
             !empty($status[2]) ? gmdate('Y-m-d H:i:s') : null,
         ]);
         $taskId = (int)$conn->lastInsertId();
@@ -173,7 +173,7 @@ class TasksService
 
         // #181: the task's history starts here. created_via says a PERSON made it,
         // as opposed to the repeat - TaskRecurrence::createOccurrence() writes its own.
-        try { $conn->prepare("UPDATE tasks SET created_via = 'manual' WHERE id = ?")->execute([$taskId]); } catch (Throwable $e) { /* before Database Verification */ }
+        try { $conn->prepare("UPDATE tasks SET created_via = 'manual' WHERE id = ?")->execute([$taskId]); } catch (Throwable) { /* before Database Verification */ }
         TaskHistory::record($conn, $taskId, 'created', $ctx, null, $dueDate, ['via' => 'manual', 'status' => $status[1] ?? null]);
 
         try {
@@ -626,7 +626,7 @@ class TasksService
         // (#181 section 5). The documents themselves stay; the tidy-up job
         // collects any that nothing links to any more.
         try { $conn->prepare("DELETE FROM document_links WHERE parent_type = 'task' AND parent_id IN ($ph)")->execute($ids); }
-        catch (Throwable $e) { /* an install without the documents tables */ }
+        catch (Throwable) { /* an install without the documents tables */ }
         // Their checklists too (discussion #138) - whether or not the feature is
         // switched on now, or the rows are stranded pointing at deleted tasks.
         ChecklistsService::deleteForTasks($conn, $ids);
@@ -742,7 +742,7 @@ class TasksService
             $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'tasks_collaborator_completion'");
             $stmt->execute();
             $v = $stmt->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return false;                      // pre-upgrade DB: behave as shipped
         }
         return is_string($v) && in_array(strtolower(trim($v)), ['1', 'on', 'true', 'yes'], true);
@@ -802,7 +802,7 @@ class TasksService
                ORDER BY tc.added_datetime, tc.id"
             );
             $stmt->execute($taskIds);
-        } catch (Exception $e) {
+        } catch (Exception) {
             // An install that has not run Database Verification since upgrading
             // has no table yet. No collaborators is the correct answer there, and
             // it must not take the board down with it.
@@ -919,7 +919,7 @@ class TasksService
             $stmt = $conn->prepare("SELECT COUNT(*) FROM task_collaborators WHERE task_id = ? AND is_completed = 0");
             $stmt->execute([$taskId]);
             return (int)$stmt->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return 0;
         }
     }
@@ -1181,7 +1181,7 @@ class TasksService
             );
             foreach ($ids as $id) {
                 try { $aud->execute([$id, $ctx->actorId ?: null, $oldName, $target['name']]); }
-                catch (Exception $e) { /* audit is best-effort, as elsewhere */ }
+                catch (Exception) { /* audit is best-effort, as elsewhere */ }
             }
 
             if ($ownTransaction) { $conn->commit(); }
@@ -1213,7 +1213,7 @@ class TasksService
             );
             $s->execute([$table]);
             return $cache[$table] = ((int)$s->fetchColumn() > 0);
-        } catch (Exception $e) {
+        } catch (Exception) {
             // Cannot tell: treat the table as having no company rather than
             // blocking the move on a question that could not be asked.
             return $cache[$table] = false;
@@ -1479,7 +1479,7 @@ class TasksService
             if (!$stmt->fetchColumn()) {
                 throw new ServiceError('validation', 'invalid_field', "Unknown " . str_replace('_id', '', $field) . " id: {$id}");
             }
-        } catch (PDOException $e) {
+        } catch (PDOException) {
             throw new ServiceError('validation', 'invalid_field', ucfirst(str_replace('_id', ' ', $field)) . "links are not available on this install.");
         }
         return $id;
@@ -1580,7 +1580,7 @@ class TasksService
             $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'tasks_time_scope'");
             $stmt->execute();
             $v = $stmt->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return self::TIME_SCOPE_DEFAULT;      // pre-upgrade DB: behave as shipped
         }
         $v = is_string($v) ? strtolower(trim($v)) : '';
@@ -1871,7 +1871,7 @@ class TasksService
         try {
             $dt = new DateTimeImmutable(trim($value), new DateTimeZone('UTC'));
             return $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
-        } catch (Exception $e) {
+        } catch (Exception) {
             throw new ServiceError('bad_request', 'invalid_parameter',
                 "'{$field}' is not a valid date/time. Use ISO 8601, e.g. 2026-07-02T09:00:00Z.");
         }
@@ -1886,6 +1886,18 @@ class TasksService
      * Change Management and Forms enforce. In the service, so the board, the task window, the
      * REST API and anything added later all refuse alike; the endpoints check it as well.
      */
+    /**
+     * Who a task made by nobody (a system or workflow caller, actor 0) is
+     * credited to. tasks.created_by_id is NOT NULL, so - as the workflow
+     * "Create a task" action does - the first active administrator.
+     */
+    private static function systemCreatorId(PDO $conn): int
+    {
+        $id = $conn->query('SELECT id FROM analysts WHERE is_admin = 1 AND COALESCE(is_active, 1) = 1 ORDER BY id LIMIT 1')->fetchColumn();
+        if (!$id) throw new ServiceError('validation', 'no_admin', 'There is no active administrator to credit the task to.');
+        return (int)$id;
+    }
+
     public static function assertCanWrite(PDO $conn, ActorContext $ctx): void
     {
         if ($ctx->actorId > 0 && function_exists('analystModuleLevel') && analystModuleLevel($conn, $ctx->actorId, 'tasks') === 'read') {
@@ -1908,7 +1920,7 @@ class TasksService
             $s->execute([$key]);
             $v = $s->fetchColumn();
             return ($v === false || $v === null || $v === '') ? $default : (string)$v;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $default;
         }
     }

@@ -227,7 +227,7 @@ function projectAssistOverview(PDO $conn, array $scope, int $analystId, array $a
         if ($r['field_name'] === 'raid_ticket_raised') return analystCanAccessModule($conn, $analystId, 'tickets');
         if ($r['field_name'] === 'raid_to_knowledge') return analystCanAccessModule($conn, $analystId, 'knowledge');
         if ($r['field_name'] === 'disruption_announced' || $r['field_name'] === 'disruption_withdrawn') return analystCanAccessModule($conn, $analystId, 'service-status');
-        if (!$withBudget && (strpos($r['field_name'], 'budget_') === 0 || strpos($r['field_name'], 'labour_') === 0 || $r['field_name'] === 'currency')) return false;
+        if (!$withBudget && (str_starts_with($r['field_name'], 'budget_') || str_starts_with($r['field_name'], 'labour_') || $r['field_name'] === 'currency')) return false;
         return true;
     }));
     if ($hist) {

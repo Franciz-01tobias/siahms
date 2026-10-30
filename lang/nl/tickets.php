@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'Provider',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'Standaard IMAP / SMTP (gebruikersnaam &amp; wachtwoord)',
+                'provider_imap' => 'Standaard IMAP / SMTP (gebruikersnaam & wachtwoord)',
                 'display_name' => 'Weergavenaam',
                 'display_name_placeholder' => 'bv. Service Desk',
                 'target_mailbox' => 'Doelpostvak',

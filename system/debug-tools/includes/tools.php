@@ -47,6 +47,7 @@ function getDebugTools() {
             'duration' => '~2 seconds',
             'persists' => 'The live-import step will populate demo data if it succeeds. Otherwise nothing persists.',
             'input'    => null,
+            'method'   => 'POST',   // it imports - the endpoint refuses a GET (csrfRequireWriteMethod)
         ],
         [
             'id'       => 'D002',
@@ -58,6 +59,7 @@ function getDebugTools() {
             'desc'     => 'Delete a ticket the same way the app does, showing every SQL statement — for foreign-key delete errors.',
             'keywords' => 'ticket delete foreign key fk constraint 1451 email_attachments sql trace destructive d002',
             'when'     => 'Run this when deleting a ticket fails with a foreign-key error (e.g. "1451 Cannot delete or update a parent row" on email_attachments). Enter the ticket reference, and it deletes the ticket the same way the app does — but shows every SQL statement and row count so you can see exactly what happened.',
+            'method'   => 'POST',   // it deletes - the endpoint refuses a GET (csrfRequireWriteMethod)
             'input'    => ['name' => 'ref', 'label' => 'Ticket reference', 'placeholder' => 'e.g. the ticket number shown on the ticket'],
             'checks'   => [
                 'Resolves the ticket from the reference (ticket_number, or raw id as a fallback)',
@@ -194,6 +196,7 @@ function getDebugTools() {
             ],
             'duration' => '~1 second',
             'persists' => 'Writes ONE probe row and deletes it again (removed in a finally block, and the tool reports if any was left behind). It has to write rather than use a rolled-back transaction, because MySQL does not let a search see rows that have not been committed. The row uses a reserved type that nothing else writes. Nothing else is modified.',
+            'method'   => 'POST',   // it writes - the endpoint refuses a GET (csrfRequireWriteMethod)
         ],
         [
             'id'       => 'D008',
@@ -462,6 +465,31 @@ function getDebugTools() {
             'duration' => 'Instant',
             'persists' => 'Nothing. Read-only - it counts tickets and reads table structure. It shows team, department and status names and ticket counts, never ticket content.',
         ],
+        [
+            // GH #222: the Assets page shipped dead in 4.3.0 - one comment swallowed the
+            // code after it, so the page's whole script failed to parse, and nothing
+            // that ran on the server could see it. This one runs in the BROWSER.
+            'id'       => 'D019',
+            'slug'     => 'd019',
+            'file'     => 'D019_page_health.php',
+            'runner'   => 'page-health',
+            'title'    => 'Page health — does every page\'s script load?',
+            'category' => 'System',
+            'icon'     => 'shield',
+            'desc'     => 'Open every page in FreeITSM and check that each one\'s JavaScript can be read by the browser - the fault that left a page stuck on its spinner after an upgrade.',
+            'keywords' => 'page health pages javascript script syntax error spinner blank page never loads broken page upgrade missing ) after argument list console check every page d019',
+            'when'     => 'Run this after every upgrade, alongside Database Verification - and whenever a page shows its loading spinner forever, a blank area, or buttons that do nothing. If a page\'s script contains one mistake the browser cannot read, the browser runs none of that script: the page looks loaded but nothing on it works. The server cannot see this - the page is sent perfectly well - so only your browser can check it. Paste the report into a bug report as it is.',
+            'checks'   => [
+                'Every page an analyst can open - found by looking at the files, so a page added in an update is checked the day it arrives',
+                'Each page is fetched as you, the way your browser would open it, and every script on it - written into the page or loaded from a file - is read by your browser without being run',
+                'A script the browser cannot read is reported with its page, the line, the browser\'s own message and the code on that line',
+                'A script file the page asks for that is not there, and a page the server answers with an error (HTTP 500, 404) are reported as problems too',
+                'Pages of modules switched off in System -> Modules are skipped, as are pages that send you elsewhere when opened without a record to show (they say why)',
+                'A summary per module, and a report to copy or download',
+            ],
+            'duration' => 'About a minute - every page is fetched, four at a time',
+            'persists' => 'Only the result: the date, who ran it and the counts are kept so Database Verification can show when the pages were last checked. No page\'s script is run - each is read by the browser and put aside. Opening a page does whatever opening it normally does on the server, exactly as if you had clicked to it.',
+        ],
     ];
 }
 
@@ -487,7 +515,7 @@ function debugToolAnalystOptions(): array {
         require_once __DIR__ . '/../../../includes/functions.php';
         $rows = connectToDatabase()->query("SELECT id, full_name FROM analysts WHERE is_active = 1 ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $r) $opts[] = ['value' => (string)$r['id'], 'label' => $r['full_name']];
-    } catch (Throwable $e) {
+    } catch (Throwable) {
     }
     return $opts;
 }

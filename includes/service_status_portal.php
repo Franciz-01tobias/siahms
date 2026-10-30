@@ -53,7 +53,7 @@ function ssPortalSettings(PDO $conn): array
                 $out[$r['setting_key']] = (string)$r['setting_value'];
             }
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // A pre-upgrade install without the rows gets the defaults, which are
         // the safe ones.
     }

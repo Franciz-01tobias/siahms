@@ -56,6 +56,8 @@ function switchTab(tab) {
     if (tab === 'classes') loadClasses();
     else if (tab === 'relationship-types') loadRelTypes();
     else if (tab === 'ai') loadCmdbAiExtras();
+    else if (tab === 'asset-card') loadAssetCard();
+    else if (tab === 'impact') loadImpactSettings();
     else if (tab === 'left-panel') loadSidebarMode();
 }
 
@@ -418,7 +420,9 @@ function relTypeImpactCell(r) {
         return `<span style="color: #9ca3af;">${escapeHtml(window.t('cmdb.settings.impact_cell_none'))}</span>`;
     }
     const word = dir === 'to_from' ? (r.verb || '') : (r.inverse_verb || '');
-    return `<span class="badge active">${escapeHtml(window.t('cmdb.settings.impact_cell_spreads', { verb: word }))}</span>`;
+    const extra = r.redundancy === 'membership' || r.redundancy === 'placement'
+        ? ` <span class="badge">${escapeHtml(window.t('cmdb.settings.rel_type_redundancy_' + r.redundancy))}</span>` : '';
+    return `<span class="badge active">${escapeHtml(window.t('cmdb.settings.impact_cell_spreads', { verb: word }))}</span>` + extra;
 }
 
 /** Draws the relationship types table - verb, inverse verb, description, impact, order, status, edit and delete. */
@@ -478,6 +482,7 @@ function openRelTypeModal(id = null) {
     document.getElementById('relTypeInverseVerb').value = r ? r.inverse_verb : '';
     document.getElementById('relTypeDescription').value = r ? (r.description || '') : '';
     document.getElementById('relTypeImpactDirection').value = (r && r.impact_direction) ? r.impact_direction : 'none';
+    document.getElementById('relTypeRedundancy').value = (r && r.redundancy) ? r.redundancy : 'none';
     document.getElementById('relTypeDisplayOrder').value = r ? r.display_order : 0;
     document.getElementById('relTypeIsActive').checked = r ? r.is_active : true;
     syncRelTypeImpactOptions();
@@ -497,6 +502,7 @@ async function saveRelType(ev) {
         inverse_verb: document.getElementById('relTypeInverseVerb').value,
         description: document.getElementById('relTypeDescription').value,
         impact_direction: document.getElementById('relTypeImpactDirection').value,
+        redundancy: document.getElementById('relTypeRedundancy').value,
         display_order: parseInt(document.getElementById('relTypeDisplayOrder').value, 10) || 0,
         is_active: document.getElementById('relTypeIsActive').checked
     };
@@ -874,8 +880,54 @@ function renderAiResult(added, created, errors) {
     details.innerHTML = html;
 }
 
+// ---------- Asset card (GH #201) ----------
+// Which details of a linked asset the CI's Asset card shows. A view setting only: the
+// server never sends an asset's details to someone who cannot open Assets, ticked or not.
+
+/** Ticks the asset details the card currently shows. */
+async function loadAssetCard() {
+    try {
+        const data = await (await fetch(API + 'asset_card_settings.php')).json();
+        if (!data.success) { showInlineToast(data.error || '', true); return; }
+        document.querySelectorAll('input[name="assetCardField"]').forEach(cb => { cb.checked = (data.fields || []).includes(cb.value); });
+    } catch (e) { /* the ticks stay as drawn */ }
+}
+
+/** Saves the ticked asset details. */
+async function saveAssetCard(ev) {
+    ev.preventDefault();
+    const fields = Array.from(document.querySelectorAll('input[name="assetCardField"]:checked')).map(cb => cb.value);
+    const data = await postJson(API + 'asset_card_settings.php', { fields: fields });
+    if (!data.success) { showInlineToast(data.error || '', true); return; }
+    showInlineToast(window.t('cmdb.settings.asset_card_saved'));
+}
+
+// ---------- Impact (GH #199 Part C) ----------
+// What "If this failed" assumes about a redundant group's other members when nothing
+// records their state. Either way the assumption is listed under the analysis.
+
+/** Selects the current choice. */
+async function loadImpactSettings() {
+    try {
+        const data = await (await fetch(API + 'impact_settings.php')).json();
+        if (!data.success) { showInlineToast(data.error || '', true); return; }
+        document.querySelectorAll('input[name="impactUnknown"]').forEach(r => { r.checked = r.value === data.unknown_members; });
+    } catch (e) { /* the radios stay as drawn */ }
+}
+
+/** Saves the choice. */
+async function saveImpactSettings(ev) {
+    ev.preventDefault();
+    const v = (document.querySelector('input[name="impactUnknown"]:checked') || {}).value || 'assume';
+    const data = await postJson(API + 'impact_settings.php', { unknown_members: v });
+    if (!data.success) { showInlineToast(data.error || '', true); return; }
+    showInlineToast(window.t('cmdb.settings.asset_card_saved'));
+}
+
 // ---------- Init ----------
 
 document.addEventListener('DOMContentLoaded', () => {
     loadClasses(); // First tab is Classes — load immediately
+    if (document.getElementById('asset-card-tab') && document.getElementById('asset-card-tab').classList.contains('active')) loadAssetCard();
+    if (document.getElementById('impact-tab') && document.getElementById('impact-tab').classList.contains('active')) loadImpactSettings();
 });

@@ -3,13 +3,14 @@
  * Workflows — Help guide.
  *
  * Full coverage: anatomy of a workflow, the visual canvas builder, condition
- * details (lookups, multi-select, operator-per-type filtering), the eight
- * action handlers, variable substitution, the AI co-author, Test fire, and
+ * details (lookups, multi-select, operator-per-type filtering), the action
+ * handlers, companies, variable substitution, the AI co-author, Test fire, and
  * what's still ahead.
  */
 session_start();
 require_once '../config.php';
 require_once '../includes/functions.php';
+require_once '../includes/tenancy.php';
 require_once '../includes/i18n.php';
 require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
@@ -23,6 +24,8 @@ requireModuleAccess('workflow');
 $current_page = 'help';
 $path_prefix = '../';
 $translationNamespaces = ['common', 'workflow'];
+// GH #209: the Companies section only means something once there are companies.
+$helpMultiCompany = isMultiTenant(connectToDatabase());
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo htmlspecialchars(I18n::getLocale()); ?>" data-theme="<?php echo htmlspecialchars(Theme::active()); ?>" data-theme-mode="<?php echo htmlspecialchars(Theme::mode()); ?>">
@@ -51,7 +54,7 @@ $translationNamespaces = ['common', 'workflow'];
     <!-- Mobile layer LAST, after this page's own stylesheet AND its inline
          <style> block, or a rule at equal specificity loses on document order
          (Techniques §9). -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="workflow" data-mobile-page="wf-help">
     <?php include 'includes/header.php'; ?>
@@ -89,6 +92,11 @@ $translationNamespaces = ['common', 'workflow'];
             <a href="#failures" class="help-nav-link" data-section="failures">
                 <span class="help-nav-num">9</span> <?php echo htmlspecialchars(t('workflow.help.nav_failures')); ?>
             </a>
+            <?php if ($helpMultiCompany): ?>
+            <a href="#companies" class="help-nav-link" data-section="companies">
+                <span class="help-nav-num">&#127970;</span> <?php echo htmlspecialchars(t('workflow.help.nav_companies')); ?>
+            </a>
+            <?php endif; ?>
             <a href="#ahead" class="help-nav-link" data-section="ahead">
                 <span class="help-nav-num">10</span> <?php echo htmlspecialchars(t('workflow.help.nav_ahead')); ?>
             </a>
@@ -188,6 +196,9 @@ $translationNamespaces = ['common', 'workflow'];
                 <tr><td><code>create_task</code></td><td><?php echo t('workflow.help.actions_row7_does'); ?></td><td><?php echo htmlspecialchars(t('workflow.help.actions_row7_args')); ?></td></tr>
                 <tr><td><code>create_ticket</code></td><td><?php echo t('workflow.help.actions_row8_does'); ?></td><td><?php echo htmlspecialchars(t('workflow.help.actions_row8_args')); ?></td></tr>
                 <tr><td><code>send_webhook</code></td><td><?php echo t('workflow.help.actions_row9_does'); ?></td><td><?php echo htmlspecialchars(t('workflow.help.actions_row9_args')); ?></td></tr>
+                <tr><td><code>assign_ticket_team</code></td><td><?php echo t('workflow.help.actions_row10_does'); ?></td><td><?php echo htmlspecialchars(t('workflow.help.actions_row10_args')); ?></td></tr>
+                <tr><td><code>set_ticket_department</code></td><td><?php echo t('workflow.help.actions_row11_does'); ?></td><td><?php echo htmlspecialchars(t('workflow.help.actions_row11_args')); ?></td></tr>
+                <tr><td><code>set_ticket_category</code></td><td><?php echo t('workflow.help.actions_row12_does'); ?></td><td><?php echo htmlspecialchars(t('workflow.help.actions_row12_args')); ?></td></tr>
             </table>
             </div>
             <p><?php echo t('workflow.help.actions_note'); ?></p>
@@ -292,6 +303,24 @@ $translationNamespaces = ['common', 'workflow'];
 
             </div>
 
+            <?php if ($helpMultiCompany): ?>
+            <div class="help-section" id="companies">
+                <div class="help-section-header">
+                    <span class="help-section-num">&#127970;</span>
+                    <div><h3><?php echo htmlspecialchars(t('workflow.help.companies_heading')); ?></h3></div>
+                </div>
+            <p><?php echo t('workflow.help.companies_intro'); ?></p>
+            <ul>
+                <li><?php echo t('workflow.help.companies_shared'); ?></li>
+                <li><?php echo t('workflow.help.companies_own'); ?></li>
+                <li><?php echo t('workflow.help.companies_who'); ?></li>
+                <li><?php echo t('workflow.help.companies_runs'); ?></li>
+            </ul>
+            <div class="help-note"><?php echo t('workflow.help.companies_note'); ?></div>
+
+            </div>
+            <?php endif; ?>
+
             <div class="help-section" id="ahead">
                 <div class="help-section-header">
                     <span class="help-section-num">10</span>
@@ -299,9 +328,6 @@ $translationNamespaces = ['common', 'workflow'];
                 </div>
             <ul>
                 <li><?php echo t('workflow.help.ahead_li1'); ?></li>
-                <li><?php echo t('workflow.help.ahead_li4'); ?></li>
-                <li><?php echo t('workflow.help.ahead_li5'); ?></li>
-                <li><?php echo t('workflow.help.ahead_li6'); ?></li>
                 <li><?php echo t('workflow.help.ahead_li7'); ?></li>
                 <li><?php echo t('workflow.help.ahead_li8'); ?></li>
             </ul>
@@ -358,6 +384,6 @@ $translationNamespaces = ['common', 'workflow'];
         });
     })();
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

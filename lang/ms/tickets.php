@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'Pembekal',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'IMAP / SMTP Asas (nama pengguna &amp; kata laluan)',
+                'provider_imap' => 'IMAP / SMTP Asas (nama pengguna & kata laluan)',
                 'display_name' => 'Nama paparan',
                 'display_name_placeholder' => 'cth., Meja Perkhidmatan',
                 'target_mailbox' => 'Peti mel sasaran',

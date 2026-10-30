@@ -75,14 +75,14 @@ try {
     // real routing function — which only extracts a domain when an "@" is
     // present — sees the same thing our trace does, and the two can't diverge.
     $fromForRouting = $fromAddress;
-    if ($fromAddress !== '' && strpos($fromAddress, '@') === false) {
+    if ($fromAddress !== '' && !str_contains($fromAddress, '@')) {
         $bare = normaliseEmailDomain($fromAddress);
         if ($bare !== '') $fromForRouting = 'test@' . $bare;
     }
 
     // Sender domain — extracted exactly as resolveTicketTenantForEmail() does.
     $fromDomain = '';
-    if (strpos($fromForRouting, '@') !== false) {
+    if (str_contains($fromForRouting, '@')) {
         $fromDomain = strtolower(trim(substr(strrchr($fromForRouting, '@'), 1)));
     }
     $isFreemail = $fromDomain !== '' && isFreemailDomain($conn, $fromDomain);

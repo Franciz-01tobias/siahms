@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Включено — отключите для рабочей среды (установите display_errors в 0 в config.php)',
         'display_errors_disabled' => 'Отключено',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — требуется PHP 7.4 или выше',
+        'php_version_too_low' => '{version} — требуется PHP 8.1 или выше',
         'php_version_eol' => '{version} — всё ещё поддерживается, но для этой версии нет обновлений безопасности с момента окончания её жизненного цикла. Рекомендуется PHP 8.3 или 8.4.',
         'extension_loaded' => 'Загружено',
         'extension_not_loaded' => 'Не загружено — включите в php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Настроено',
         'ca_ini_masked_broken' => 'Задано, но указывает на несуществующий файл — исправьте путь или закомментируйте параметр в php.ini.',
         'php_version_ok_masked' => 'Соответствует требованию',
-        'php_version_too_low_masked' => 'Слишком старая — требуется PHP 7.4 или выше',
+        'php_version_too_low_masked' => 'Слишком старая — требуется PHP 8.1 или выше',
         'php_version_eol_masked' => 'Поддерживается, но жизненный цикл этой версии закончился, и она больше не получает обновлений безопасности. Войдите как администратор, чтобы увидеть версию.',
     ],
     'locked' => [

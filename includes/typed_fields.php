@@ -459,7 +459,7 @@ final class TypedFields
         try {
             $dt = new DateTimeImmutable($v, new DateTimeZone('UTC'));
             return $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
-        } catch (Exception $e) {
+        } catch (Exception) {
             throw new ServiceError('bad_request', 'invalid_parameter',
                 "'{$field}' is not a valid date/time. Use ISO 8601, e.g. 2026-07-02T09:00:00Z.");
         }

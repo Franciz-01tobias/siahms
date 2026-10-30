@@ -99,19 +99,19 @@ $row = ['id' => 1, 'ticket_number' => 'T-TEST', 'subject' => 'Grievance about my
 $normal = calendarSyncEventFromTicket($row + ['sensitivity' => 'normal']);
 $secret = calendarSyncEventFromTicket($row + ['sensitivity' => 'confidential']);
 ok('positive control: a normal ticket carries its subject and requester',
-   strpos($normal['subject'], 'Grievance') !== false && strpos($normal['body'], 'Pat Example') !== false);
-ok('confidential: no subject', strpos($secret['subject'], 'Grievance') === false
-   && strpos($secret['subject'], 'T-TEST') !== false && strpos($secret['subject'], TICKET_CONFIDENTIAL_SUBJECT) !== false,
+   str_contains($normal['subject'], 'Grievance') && str_contains($normal['body'], 'Pat Example'));
+ok('confidential: no subject', !str_contains($secret['subject'], 'Grievance')
+   && str_contains($secret['subject'], 'T-TEST') && str_contains($secret['subject'], TICKET_CONFIDENTIAL_SUBJECT),
    $secret['subject']);
-ok('confidential: no requester, status still there', strpos($secret['body'], 'Pat Example') === false
-   && strpos($secret['body'], 'Open') !== false);
+ok('confidential: no requester, status still there', !str_contains($secret['body'], 'Pat Example')
+   && str_contains($secret['body'], 'Open'));
 ok('a row without the column reads as normal (before DB Verify)',
-   strpos(calendarSyncEventFromTicket($row)['subject'], 'Grievance') !== false);
+   str_contains(calendarSyncEventFromTicket($row)['subject'], 'Grievance'));
 
 echo "\n4. The .ics feed\n";
 $feed = (string)file_get_contents("$root/api/tickets/schedule_feed.php");
 ok('the feed selects sensitivity safely and names confidential tickets',
-   strpos($feed, 'ticketSensitivitySelectSql($conn)') !== false
+   str_contains($feed, 'ticketSensitivitySelectSql($conn)')
    && preg_match("/=== 'confidential'\s*\?\s*TICKET_CONFIDENTIAL_SUBJECT/", $feed) === 1);
 // The calendar code swallows its errors, so a broken SELECT would pass every
 // check above in silence. Run the expression for real.

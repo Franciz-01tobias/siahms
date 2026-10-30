@@ -24,7 +24,7 @@ return [
     'label'  => 'CMDB',
 
     'umbrella' => [
-        'cap'       => Cap::CMDB_MANAGE,
+        'cap'       => capKey(Cap::CMDB_MANAGE),
         'grant'     => 'Manage everything in CMDB settings',
         'sensitive' => true,   // implies the AI credentials
     ],
@@ -34,19 +34,36 @@ return [
             // The CI schema: classes and their properties. Also governs adding a property
             // option inline from the object page — the same change, reached another way.
             'id'        => 'classes',
-            'cap'       => Cap::CMDB_CLASSES,
+            'cap'       => capKey(Cap::CMDB_CLASSES),
             'label_key' => 'cmdb.settings.tab_classes',
             'grant'     => 'Manage CI classes and their properties (this is the CMDB\'s schema)',
         ],
         [
             'id'        => 'relationship-types',
-            'cap'       => Cap::CMDB_RELATIONSHIP_TYPES,
+            'cap'       => capKey(Cap::CMDB_RELATIONSHIP_TYPES),
             'label_key' => 'cmdb.settings.tab_rel_types',
             'grant'     => 'Manage relationship types',
         ],
         [
+            // GH #199 Part C: what "If this failed" assumes about a redundant group's other
+            // members when nothing records their state. Changes the analysis everyone reads.
+            'id'           => 'impact',
+            'cap'          => capKey(Cap::CMDB_IMPACT),
+            'label_key'    => 'cmdb.settings.tab_impact',
+            'grant'        => 'Choose how impact analysis treats cluster members with no recorded state',
+            'setting_keys' => ['cmdb_impact_unknown_members'],
+        ],
+        [
+            // GH #201: which details of a linked asset the CI's Asset card shows.
+            'id'           => 'asset-card',
+            'cap'          => capKey(Cap::CMDB_ASSET_CARD),
+            'label_key'    => 'cmdb.settings.tab_asset_card',
+            'grant'        => 'Choose which details of a linked asset a configuration item shows',
+            'setting_keys' => ['cmdb_asset_card_fields'],
+        ],
+        [
             'id'           => 'ai',
-            'cap'          => Cap::CMDB_AI,
+            'cap'          => capKey(Cap::CMDB_AI),
             'label_key'    => 'cmdb.settings.tab_ai',
             'grant'        => 'Configure the CMDB AI provider, including its API key',
             'sensitive'    => true,

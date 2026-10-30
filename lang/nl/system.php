@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Houd deze pagina in de gaten.</strong> Zodra het proces draait, wordt de status hierboven groen en verschijnen de afleveringen hieronder. De volledige installatienotities (Windows &amp; Linux, verificatie van handtekeningen) staan in <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">de Workflows-wiki</a>.',
         'fact_worker' => 'Procesbestand',
         'fact_retry' => 'Schema voor nieuwe pogingen',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1u &middot; 6u, daarna mislukt',
         'fact_retention' => 'Bewaartermijn van het logboek',
         'fact_queued' => 'Nu in wachtrij',
         'days' => '{n} dagen',

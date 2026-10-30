@@ -60,7 +60,7 @@ function presenceSchemaReady(PDO $conn): bool {
     if ($ready !== null) return $ready;
     try {
         $ready = (bool)$conn->query("SHOW TABLES LIKE 'ticket_presence'")->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         $ready = false;
     }
     return $ready;
@@ -122,7 +122,7 @@ function presenceOthers(PDO $conn, int $ticketId, int $analystId): array {
                 'seconds_ago' => (int)$r['seconds_ago'],
             ];
         }, $rows);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return [];
     }
 }
@@ -138,7 +138,7 @@ function presenceLeave(PDO $conn, int $ticketId, int $analystId): void {
             // No ticket named (the browser is going away entirely) — clear the lot.
             $conn->prepare("DELETE FROM ticket_presence WHERE analyst_id = ?")->execute([$analystId]);
         }
-    } catch (Exception $e) { /* leaving is best-effort by design */ }
+    } catch (Exception) { /* leaving is best-effort by design */ }
 }
 
 /**
@@ -155,7 +155,7 @@ function presencePurge(PDO $conn): void {
     try {
         $conn->prepare("DELETE FROM ticket_presence WHERE last_seen < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? MINUTE)")
              ->execute([PRESENCE_PURGE_MINUTES]);
-    } catch (Exception $e) { /* housekeeping only */ }
+    } catch (Exception) { /* housekeeping only */ }
 }
 
 /**

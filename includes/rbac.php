@@ -74,7 +74,7 @@ function getAnalystCapabilities(PDO $conn, int $analystId): array {
         $stmt = $conn->prepare($sql);
         $stmt->execute([$analystId, $analystId]);
         $granted = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return []; // fail closed — a broken query must not grant access (and don't cache it)
     }
 
@@ -91,12 +91,15 @@ function getAnalystCapabilities(PDO $conn, int $analystId): array {
  * Does this analyst hold a capability? Authoritative (DB-checked). is_admin is
  * always true. Use this for server-side enforcement.
  *
- * @param string $capability  the capability key, a Cap:: constant such as Cap::PROJECTS_MANAGE
+ * TRAP: typed Cap, not string. The held list is strings, and in_array() of an enum
+ * against strings is silently false - the type makes passing the wrong thing loud.
+ *
+ * @param Cap $capability  the capability, e.g. Cap::PROJECTS_MANAGE
  */
-function analystHasCapability(PDO $conn, int $analystId, string $capability): bool {
+function analystHasCapability(PDO $conn, int $analystId, Cap $capability): bool {
     if ($analystId <= 0) return false;
     if (analystIsAdmin($conn, $analystId)) return true;
-    return in_array($capability, getAnalystCapabilities($conn, $analystId), true);
+    return in_array($capability->value, getAnalystCapabilities($conn, $analystId), true);
 }
 
 /**
@@ -104,19 +107,19 @@ function analystHasCapability(PDO $conn, int $analystId, string $capability): bo
  * is enough, exactly as before - the permission exists, can be granted in Roles, and
  * bites only once the administrator has built the role and turned the restriction on.
  *
- * @param string $capability  an everyday-work Cap:: constant (a manifest 'action')
+ * @param Cap $capability  an everyday-work capability (a manifest 'action')
  */
-function capActionRestricted(PDO $conn, string $capability): bool {
-    if (!capIsEveryday($capability)) {
-        throw new LogicException("'{$capability}' is not an everyday-work capability");
+function capActionRestricted(PDO $conn, Cap $capability): bool {
+    if (!$capability->isEveryday()) {
+        throw new LogicException("'{$capability->value}' is not an everyday-work capability");
     }
-    $r = capActionRestriction($capability);
+    $r = capActionRestriction($capability->value);
     if ($r === null) return true;
     try {
         $s = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $s->execute([$r['setting']]);
         return (string)$s->fetchColumn() === (string)$r['value'];
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;   // unreadable settings: today's behaviour
     }
 }
@@ -130,36 +133,60 @@ function capActionRestricted(PDO $conn, string $capability): bool {
  * power and must not go through here, or is_admin would bypass it.
  *
  * @param int $analystId  the analyst; 0 (a system or portal actor) has no capabilities
- * @param string $capability  an everyday-work Cap:: constant
+ * @param Cap $capability  an everyday-work capability
  */
-function analystMayAct(PDO $conn, int $analystId, string $capability): bool {
+function analystMayAct(PDO $conn, int $analystId, Cap $capability): bool {
     if (!capActionRestricted($conn, $capability)) return true;
     return analystHasCapability($conn, $analystId, $capability);
 }
 
 /**
+ * End the request with a JSON refusal. The guards below all refuse this way.
+ *
+ * `never` (4.0): it does not return, and PHP now holds it to that - until 4.0 each
+ * guard repeated these lines and declared `void`, which a reader could take to mean
+ * the request carries on.
+ *
+ * @param int $status  the HTTP status, 401 or 403
+ * @param string $error  the message for the caller
+ * @param string|null $code  a machine-readable code, when the caller has one
+ */
+function rbacRefuseJson(int $status, string $error, ?string $code = null): never {
+    http_response_code($status);
+    header('Content-Type: application/json');
+    $body = ['success' => false, 'error' => $error];
+    if ($code !== null) $body['code'] = $code;
+    echo json_encode($body);
+    exit;
+}
+
+/**
+ * End the request by sending the browser somewhere else - the page twin of rbacRefuseJson().
+ *
+ * @param string $location  where to send the browser
+ */
+function rbacRefusePage(string $location): never {
+    header('Location: ' . $location);
+    exit;
+}
+
+/**
  * JSON gate for an everyday-work action: 403 unless analystMayAct().
  *
- * @param string $capability  an everyday-work Cap:: constant
+ * @param Cap $capability  an everyday-work capability
  */
-function requireActionJson(string $capability, ?PDO $conn = null): void {
+function requireActionJson(Cap $capability, ?PDO $conn = null): void {
     if (!isset($_SESSION['analyst_id'])) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'error' => 'Not authenticated']);
-        exit;
+        rbacRefuseJson(401, 'Not authenticated');
     }
     try {
         if ($conn === null) $conn = connectToDatabase();
         $ok = analystMayAct($conn, (int) $_SESSION['analyst_id'], $capability);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $ok = false;
     }
     if (!$ok) {
-        http_response_code(403);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'error' => 'You do not have permission to do this', 'code' => 'forbidden']);
-        exit;
+        rbacRefuseJson(403, 'You do not have permission to do this', 'forbidden');
     }
 }
 
@@ -170,22 +197,20 @@ function requireActionJson(string $capability, ?PDO $conn = null): void {
  * after) requireModuleAccess() — Layer 1 gets you into the module, this decides
  * whether you may configure it.
  *
- * @param string $capability  the capability key the page needs, a Cap:: constant
+ * @param Cap $capability  the capability the page needs
  */
-function requireCapability(string $capability, ?PDO $conn = null): void {
+function requireCapability(Cap $capability, ?PDO $conn = null): void {
     if (!isset($_SESSION['analyst_id'])) {
-        header('Location: ' . BASE_URL . 'auth/login.php');
-        exit;
+        rbacRefusePage(BASE_URL . 'auth/login.php');
     }
     try {
         if ($conn === null) $conn = connectToDatabase();
         $ok = analystHasCapability($conn, (int) $_SESSION['analyst_id'], $capability);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $ok = false;
     }
     if (!$ok) {
-        header('Location: ' . BASE_URL . '?denied=' . urlencode($capability));
-        exit;
+        rbacRefusePage(BASE_URL . '?denied=' . urlencode($capability->value));
     }
 }
 
@@ -193,25 +218,19 @@ function requireCapability(string $capability, ?PDO $conn = null): void {
  * Hard gate for a settings JSON write API: refuse a lacking analyst with 403.
  * The API twin of requireCapability(). Call right after connecting.
  *
- * @param string $capability  the capability key the endpoint needs, a Cap:: constant
+ * @param Cap $capability  the capability the endpoint needs
  */
-function requireCapabilityJson(string $capability, ?PDO $conn = null): void {
+function requireCapabilityJson(Cap $capability, ?PDO $conn = null): void {
     if (!isset($_SESSION['analyst_id'])) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'error' => 'Not authenticated']);
-        exit;
+        rbacRefuseJson(401, 'Not authenticated');
     }
     try {
         if ($conn === null) $conn = connectToDatabase();
         $ok = analystHasCapability($conn, (int) $_SESSION['analyst_id'], $capability);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $ok = false;
     }
     if (!$ok) {
-        http_response_code(403);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'error' => 'You do not have permission to manage these settings']);
-        exit;
+        rbacRefuseJson(403, 'You do not have permission to manage these settings');
     }
 }

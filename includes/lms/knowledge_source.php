@@ -61,7 +61,7 @@ function lmsCanUseArticle(PDO $conn, int $articleId): bool
         );
         $stmt->execute([$articleId]);
         return (int)$stmt->fetchColumn() > 0;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return false;
     }
 }

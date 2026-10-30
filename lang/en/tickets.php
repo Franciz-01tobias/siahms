@@ -17,6 +17,43 @@
  *  - Settings/dashboard/calendar/rota/users/help pages
  */
 return [
+    // The ticket table (PR #213): the list shown as a paginated table, and who may
+    // export it. See includes/ticket_list.php and assets/js/tickets-table.js.
+    'queue' => [
+        'layout'         => 'Ticket list',
+        'back'           => 'Back',
+        'back_title'     => 'Back to ticket list',
+        'resize'         => 'Resize ticket list and details',
+        'messages'       => 'Messages',
+        'table'          => 'Table',
+        'ticket'         => 'ticket',
+        'search'         => 'Search ticket number, subject or address…',
+        'search_content' => 'Search message bodies, notes and documents',
+        'save_failed'    => 'The list preference could not be saved.',
+        'export_title'   => 'Export all matching tickets as CSV',
+        // Tickets -> Settings -> General. The three choices are TicketListExport.
+        'export_label'        => 'Who can export the ticket list',
+        'export_help'         => 'Controls bulk CSV export of the filtered list. Existing ticket access still applies.',
+        'export_admins'       => 'Administrators only',
+        'export_ticket_users' => 'Anyone with Tickets',
+        'export_nobody'       => 'Nobody',
+        // Column headings, in the table and in the CSV's header row.
+        'columns' => [
+            'ticket_number'       => 'Ticket',
+            'subject'             => 'Subject',
+            'created_datetime'    => 'Created',
+            'priority_id'         => 'Priority',
+            'status_id'           => 'Status',
+            'assignee_id'         => 'Assigned analyst',
+            'department_id'       => 'Department',
+            'team_id'             => 'Team',
+            'ticket_type_id'      => 'Ticket type',
+            'work_start_datetime' => 'Work begins',
+            'work_end_datetime'   => 'Work ends',
+            'snoozed_until'       => 'Snoozed until',
+            'company_name'        => 'Company',
+        ],
+    ],
     // The AI reading aids (#104, ideas 7 and 12).
     'ai' => [
         'badge' => 'AI summary',
@@ -184,6 +221,8 @@ return [
         'opt_yes'             => 'Yes',
         'opt_no'              => 'No',
         'toggle_fullscreen'   => 'Toggle full-screen view',
+        'popout_back'         => 'Back',
+        'popout_back_title'   => 'Back to the ticket list (Esc)',
 
         // Email header meta + subject prefix
         'ticket_label'        => 'Ticket',
@@ -375,6 +414,11 @@ return [
         'and_more'      => '…and {count} more',
     ],
 
+    // The reading pane's one-row Links strip (fitLinksStrip in inbox.js).
+    'links' => [
+        'more_label' => 'Show {count} more links',
+        'less'       => 'Less',
+    ],
     'tasks' => [
         'menu_item'          => 'Task',
         'search_placeholder' => 'Search tasks, or type a new one…',
@@ -473,7 +517,7 @@ return [
         'share_label'           => 'Share this with the requester',
         // Says WHERE it goes, because "share" on its own reads as "send". A shared
         // note appears in the portal; it is not emailed. Reply is what emails.
-        'share_hint'            => 'They will see it, and any files you attach, in the self-service portal. It is not emailed — use Reply for that. Leave unticked to keep it internal.',
+        'share_hint'            => 'They will see it, and any files you attach, in the self-service portal. It is not emailed — use Reply for that. Leave it off to keep it internal.',
         'share_hint_no_mailbox' => 'This person has no email address, so a shared note is the only way to reach them. They will see it in the portal.',
         // Attachments (discussion #69). Internal notes only — the portal cannot
         // show a file, so a shared note carrying one would promise the requester
@@ -482,6 +526,9 @@ return [
         'attach_btn'            => 'Attach',
         'remove_file'           => 'Remove',
         'files_failed'          => '{n} of {total} file(s) could not be attached: {names}. The note itself was saved.',
+        // Pictures in the note box (GH #224) - assets/js/note-images.js.
+        'paste_hint'            => 'Paste a screenshot (Ctrl+V) to put it in the note where the cursor is. Backspace removes it.',
+        'save_failed'           => 'The note was not saved, and your text is still here: {error}',
     ],
 
     // Splitting a ticket (#914). Note "newer", never "after": the thread is shown
@@ -787,6 +834,8 @@ return [
         'schedule'             => 'Schedule',
         'ask_ai'               => 'Ask AI',
         'audit'                => 'Audit',
+        'export'               => 'Export',
+        'export_tip'           => 'Export this ticket and its tasks as a case report',
         'more'                 => 'More',
         'request_feedback'     => 'Feedback',
         'delete'               => 'Delete',
@@ -1225,7 +1274,7 @@ return [
                 'provider'                    => 'Provider',
                 'provider_microsoft'          => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google'             => 'Google Workspace (Gmail API)',
-                'provider_imap'               => 'Basic IMAP / SMTP (username &amp; password)',
+                'provider_imap'               => 'Basic IMAP / SMTP (username & password)',
                 'display_name'                => 'Display name',
                 'display_name_placeholder'    => 'e.g., Service Desk',
                 'target_mailbox'              => 'Target mailbox',
@@ -1297,6 +1346,25 @@ return [
                 'whitelist_domain'            => 'Domain',
                 'whitelist_email'             => 'Email',
                 'whitelist_value_placeholder' => 'e.g. company.com or user@example.com',
+            ],
+            // The delete dialog (GH #227) - see api/tickets/delete_mailbox.php.
+            'mailbox_delete' => [
+                'title'          => 'Delete mailbox "{name}"',
+                'checking'       => 'Checking what uses this mailbox...',
+                'nothing'        => 'Nothing uses this mailbox. It can be deleted.',
+                'intro'          => 'This mailbox still has:',
+                'on_tickets'     => '{count} email(s) on tickets',
+                'loose'          => '{count} email(s) not on any ticket',
+                'move_label'     => 'Move its emails to',
+                'move_none'      => 'No mailbox',
+                'move_help'      => 'Tickets keep their emails either way. Replies on those tickets go out from the mailbox chosen here.',
+                'none_tickets'   => 'With no mailbox, replies on those tickets can no longer be sent by email.',
+                'none_loose'     => 'The {count} email(s) not on any ticket are deleted, with their attachments.',
+                'knowledge'      => 'Knowledge article sharing sends from this mailbox. Choose another in Knowledge settings afterwards.',
+                'deactivate'     => 'Only want it to stop collecting mail? Edit the mailbox and untick Active instead - nothing is lost.',
+                'deleted'        => 'Mailbox deleted',
+                'error'          => 'Error deleting mailbox: {error}',
+                'failed'         => 'Failed to delete mailbox',
             ],
 
             // Activity log modal
@@ -2113,6 +2181,61 @@ return [
             'access_all'       => 'Access all companies',
             'access_all_help'  => 'On = this analyst can work in every company (now and any added later). Off = only the companies you tick below.',
         ],
+        // System -> Analysts list: grouping, layout, filters, paging (GH #208).
+        'analyst_view' => [
+            'search_placeholder' => 'Search name, username or email',
+            'group_by'           => 'Group by',
+            'then_by'            => 'Then by',
+            'layout'             => 'Layout',
+            'sort'               => 'Sort',
+            'per_page'           => 'Per page',
+            'filters'            => 'Filters',
+            'clear'              => 'Clear',
+            'default_btn'        => 'Default',
+            'make_default'       => 'Make this view the default for everyone',
+            'use_default'        => 'Go back to the default view',
+            'saved_default'      => 'This view is now the default for everyone who has not chosen their own.',
+            'reset_done'         => 'Back to the default view.',
+            'none'               => 'None',
+            'all'                => 'All',
+            'any'                => 'Any',
+            'g_company'          => 'Company',
+            'g_team'             => 'Team',
+            'g_department'       => 'Department',
+            'g_job_title'        => 'Job title',
+            'g_status'           => 'Status',
+            'g_admin'            => 'Administrator',
+            'g_signin'           => 'Sign-in method',
+            'layout_tree'        => 'Collapsible tree',
+            'layout_tabs'        => 'Tabs',
+            'layout_jump'        => 'One page with a jump list',
+            'sort_full_name'     => 'Full name',
+            'sort_username'      => 'Username',
+            'sort_last_login'    => 'Last sign-in',
+            'status_active'      => 'Active only',
+            'status_inactive'    => 'Inactive only',
+            'admin_yes'          => 'Administrators',
+            'admin_no'           => 'Not administrators',
+            'never'              => 'Never signed in',
+            'all_companies'      => 'All companies',
+            'no_companies'       => 'No companies',
+            'no_team'            => 'No team',
+            'not_set'            => 'Not set',
+            'active'             => 'Active',
+            'inactive'           => 'Inactive',
+            'local'              => 'Local',
+            'via_team'           => 'via team',
+            'via_team_tip'       => 'In this company because of a team they are in, not a grant of their own.',
+            'no_match'           => 'No analysts match these filters.',
+            'shown'              => '{shown} of {total} analysts',
+            'expand'             => 'Expand',
+            'collapse'           => 'Collapse',
+            'prev'               => 'Previous',
+            'next'               => 'Next',
+            'range'              => '{from}-{to} of {total}',
+            'of'                 => '{shown} of {total}',
+            'jump_to'            => 'Jump to',
+        ],
         // Sign-in method set at team level (GH #41) - System -> Teams and System -> Analysts
         // System -> Teams (GH #186): the counts, and the warning about a team with
         // members but no departments. These lived in the page's script as English;
@@ -2668,6 +2791,9 @@ return [
             'already_body'     => 'Thanks — we’ve already got your feedback for this ticket. Each survey link can only be used once.',
             'error_heading'    => 'Something went wrong',
             'error_body'       => 'We couldn’t save your response just now. Please try again in a minute, or reply to the original ticket email.',
+            // GH #217: CSAT switched off for the installation - neutral, says nothing about why.
+            'off_heading'      => 'We’re no longer collecting feedback',
+            'off_body'         => 'Thank you.',
             'ticket_line'      => 'Ticket',
             'intro'            => 'Hi {name}, thanks for letting us help. How would you rate the experience?',
             // Used when the requester record has no name to take a first name from.
@@ -2904,6 +3030,39 @@ return [
     // tickets/help.php — Tickets module help guide. Prose values contain inline
     // HTML markup (strong/em/code/a/&mdash; etc.) and are echoed unescaped.
     'help' => [
+        // Case reports (GH #204)
+        'case' => [
+            'nav'      => 'Case reports',
+            'heading'  => 'Case reports',
+            'intro'    => 'When a reviewer or an auditor asks how a case was handled, <strong>Export</strong> puts the ticket, its conversation and the tasks that did the work into one printable document - so nobody has to copy it out by hand.',
+            'step1'    => '<strong>Open the ticket</strong> and choose <strong>Export</strong> in its toolbar (under <strong>More</strong> when the reading pane is narrow). The report opens in a new tab. For a task with no ticket, use the document button at the top of the task window instead.',
+            'step2'    => '<strong>Tick what to include</strong> in the panel on the left. The report redraws as you tick, and nothing is recorded while you choose.',
+            'step3'    => '<strong>Choose the layout</strong>: a cover page, a contents page, each section on a new page, and a header with page numbers.',
+            'step4'    => '<strong>Print</strong>, then choose <em>Save as PDF</em> in the print dialog. Untick the browser\'s own <em>Headers and footers</em> - the report prints its own.',
+            'contents' => '<strong>What goes in:</strong> an overview of the ticket (with its custom fields, linked assets, configuration items and related tickets); every message, oldest first; the notes; the ticket\'s checklists; each linked task with its subtasks, checklist results and exception notes, form answers, the procedures followed, follow-ups and comments; the history of the ticket and of each task; and an index of the documents and email attachments, with the fingerprint FreeITSM recorded for each document.',
+            'layout'   => '<strong>Layout:</strong> the contents page lists every section and task, and each entry is a link in the saved PDF. The header and page numbers (<em>Page 3 of 12</em>) need a current Chrome or Edge; other browsers print the report without them.',
+            'who'      => '<strong>Who sees what:</strong> the report shows only what you could see on screen. Tasks, assets, configuration items, related tickets, documents and form answers are each checked with their own rule, and anything you may not see is <em>counted</em> - never named - so the reader knows something was left out. <strong>Internal notes are left out unless you tick them in</strong>, because a report usually leaves the team.',
+            'recorded' => '<strong>What is recorded:</strong> printing writes a <em>Case report</em> line on the ticket\'s audit trail with who printed it and which sections it covered. Previewing and changing the choices record nothing.',
+            'note'     => 'A case report is a copy of the record, not a write-up: nothing is reworded or summarised, pictures inside emails are not reproduced, files are listed rather than included, and only history FreeITSM actually recorded appears. A section that cannot be read says so in red instead of looking empty.',
+        ],
+        // The ticket workspace and the ticket table (PR #211, #212, #213).
+        'workspace' => [
+            'nav'       => 'Workspace and ticket table',
+            'heading'   => 'The workspace and the ticket table',
+            'intro'     => 'Two other ways to work through tickets, both optional. The <strong>workspace</strong> lays one ticket out for working rather than reading. The <strong>ticket table</strong> shows the list of tickets as a table you can filter, sort and save.',
+            'ws_title'  => 'The workspace',
+            'ws_what'   => 'In the workspace the ticket\'s properties sit in a column on the left, and its <strong>Conversation</strong>, <strong>Work</strong> (checklists and linked tasks), <strong>Links</strong>, <strong>Time and SLA</strong> and <strong>History</strong> are tabs beside them. The toolbar and every control are the same ones the reading pane has - only where they sit changes. A ticket\'s own <strong>checklist</strong> lists every step with its tickbox on the Work tab; <strong>Collapse</strong> shows just the next step (remembered in your browser), and <strong>Pop out</strong> still opens it on its own.',
+            'ws_admin'  => '<strong>An administrator switches it on</strong> in <strong>Tickets &rarr; Settings &rarr; General &rarr; Ticket workspace</strong>: <em>Off</em> (the default), <em>Only tickets turned into a workspace</em>, or <em>Every ticket</em>.',
+            'ws_make'   => '<strong>Turning a ticket into a workspace:</strong> in the middle setting, open the ticket and choose <strong>More &rarr; Make workspace</strong> (and <strong>Back to the reading pane</strong> to undo it). It belongs to the ticket, so everyone working it sees it the same way, and it is recorded on the ticket\'s history.',
+            'ws_own'    => '<strong>Your own choice:</strong> once it is on, <strong>Use the workspace</strong> in the list\'s filter menu, or in <strong>System &rarr; Preferences</strong>, turns it off for you alone. A ticket turned into a workspace then shows a small <em>Workspace</em> badge, so you know a colleague is working it that way.',
+            'ws_checklist' => '<strong>The ticket\'s checklists list every step:</strong> on the <strong>Work</strong> tab a checklist shows all its steps with their tickboxes. <strong>Collapse</strong> shrinks it to just the next step, as the reading pane shows it, and <strong>Expand</strong> brings the rest back - your browser remembers which you chose. <strong>Pop out</strong> still opens the full checklist in a window.',
+            'ws_tasks'  => '<strong>Linked tasks open in place:</strong> click a task on the <strong>Work</strong> tab and its own editor opens there - checklists, forms, procedures, subtasks, comments and documents included. <strong>Open separately</strong> opens it in its own window as before; Ctrl-click does the same. You need access to Tasks to edit it.',
+            'ws_safe'   => '<strong>Nothing half-typed is lost:</strong> moving to another ticket, or switching the workspace off, with a reply, a note or a task change unsaved asks you first, and waits for anything still saving.',
+            'tb_title'  => 'The ticket table',
+            'tb_what'   => 'Choose <strong>Table</strong> instead of <strong>Messages</strong> in the action row at the top of Tickets (or in <strong>System &rarr; Preferences</strong>). The folder you are in becomes the table\'s filter; pick columns, filter and sort them, search, and move through the list 25, 50 or 100 tickets at a time. <strong>Save view</strong> keeps a layout for yourself, your team or everyone.',
+            'tb_same'   => 'Clicking, Ctrl- and Shift-clicking, right-clicking, dragging to a folder and the bulk actions all work as they do in the message list, and the table never shows a ticket the list would not.',
+            'tb_export' => '<strong>CSV export:</strong> the CSV button exports <em>every</em> ticket that matches, not just the page, with the columns you have showing. Who may use it is set in <strong>Tickets &rarr; Settings &rarr; General &rarr; Who can export the ticket list</strong>: administrators only (the default), anyone with Tickets, or nobody. The button is not shown to anyone it is not open to.',
+        ],
         'page_title'   => 'Service Desk - Tickets Guide',
         'sidebar_title'=> 'Guide',
         'hero_title'   => 'Tickets module guide',
@@ -3020,8 +3179,22 @@ return [
             'fullscreen_heading' => '<strong>Full-screen view</strong>',
             'fullscreen_body'    => 'When you need to focus on a single ticket &mdash; a long conversation, a complex change, drafting a detailed reply &mdash; switch to full-screen view. The folder list and the ticket list disappear, the conversation fills the available width, and the properties (Department, Type, Status, Origin, First Time Fix, IT Training, Owner) move to a vertical sidebar on the right.',
             'fullscreen_max'     => '<strong>Maximize icon</strong> &mdash; small icon at the right end of the ticket subject line. Click to enter full-screen; click again to return to the 3-pane layout.',
-            'fullscreen_dbl'     => '<strong>Double-click a row</strong> &mdash; double-click any ticket in the list to open it directly in full-screen, Outlook-style "really open this one" gesture.',
+            'fullscreen_dbl'     => '<strong>Double-click a row, or press Enter</strong> &mdash; double-click any ticket in the list to open it straight in full-screen, Outlook-style "really open this one" gesture. <strong>Enter</strong> steps in one level at a time, as Escape steps out: on the Table list the first Enter opens the ticket beside the table and the next makes it full screen; on the Messages list, where the ticket is already showing, Enter makes it full screen. While the table is shown on its own, the arrow keys only move the highlight - a click or Enter opens the ticket, and once one is open the arrows show each ticket as you move.',
             'fullscreen_sticks'  => '<strong>Sticks across selections</strong> &mdash; once you\'re in full-screen, switching to the next ticket keeps you there. A fresh page reload (F5) with no ticket selected returns to the default 3-column layout, so you can\'t end up trapped with the folder list hidden.',
+            'fullscreen_back'    => '<strong>Back</strong> &mdash; the bar above the ticket shows its reference and a <strong>Back</strong> button, which returns you to the list exactly as you left it, with the keyboard back on the list - so the arrows move between tickets and Enter opens the next one straight away. <strong>Escape</strong> does the same, once any window or menu open over the ticket has closed.',
+            'fullscreen_keys'    => '<strong>The keys scroll the ticket</strong> &mdash; in full screen the arrow keys, Page Up / Page Down and Space scroll the conversation, not the hidden ticket list. In a picture or PDF window they scroll that window. In the normal three-pane view, click in the ticket and the keys scroll it too; click the list to go back to moving between tickets.',
+            // GH #226: pictures and PDFs open in the Files viewer, in a window over the ticket.
+            'viewer_heading'     => '<strong>Pictures and PDFs open over the ticket</strong>',
+            'viewer_body'        => 'Click a picture or a PDF attached to a note, or one in the ticket\'s <strong>Attachments</strong> list (its thumbnail or its row), and it opens in a window on top of the ticket &mdash; the same viewer as the Files module. The ticket stays exactly where it was underneath.',
+            'viewer_window'      => '<strong>Move it and size it</strong> &mdash; drag the title bar to move the window and any edge or corner to resize it; double-click the title bar, or drag it to the top of the screen, to fill the screen. The picture or PDF refits as the window changes size, until you zoom in or out yourself &mdash; <strong>Fit</strong> hands it back. Open several and they sit side by side.',
+            'viewer_close'       => '<strong>Close it</strong> &mdash; the &times; in its title bar, or <strong>Escape</strong> (which closes the window in front). <strong>Download</strong> saves the file. On a phone the file opens full screen with a Back button.',
+            'viewer_other'       => '<strong>Other files</strong> &mdash; Word documents, spreadsheets and everything else still download or open in a new tab, as before. To open a note\'s picture or PDF in a new tab instead, Ctrl-click it.',
+            // GH #224: screenshots pasted into a note, in place.
+            'paste_heading'      => '<strong>Paste a screenshot into a note</strong>',
+            'paste_body'         => 'Copy a screenshot, click into the <strong>Add note</strong> box and press <strong>Ctrl+V</strong>. The picture goes in where the cursor is, with your text before and after it, and stays in that place once the note is saved. Click it to open it in the viewer. <strong>Backspace</strong> removes it before you save.',
+            'paste_shared'       => '<strong>Shared notes share their pictures</strong> &mdash; the requester sees them in the portal, in place. On an internal note they are as private as the note.',
+            'paste_save'         => '<strong>Nothing is kept until you press Save</strong> &mdash; close the box and the pictures go with it. If a picture is refused, the note is not saved either, the reason is shown, and your text is still in the box.',
+            'paste_text'         => '<strong>Text stays text</strong> &mdash; pasting from Word, a web page or Excel puts in the words without their formatting. The <strong>Attach</strong> button still works for any other file.',
             'rightclick_heading' => '<strong>Right-click for quick actions</strong>',
             'rightclick_body'    => 'Right-click any ticket in the list to open a context menu. The menu shows the ticket reference at the top so you know what you\'re acting on, and every action operates on the right-clicked ticket <em>without</em> changing what\'s currently open in the reading pane &mdash; useful when you\'re reading ticket A and need to triage ticket B without losing your place.',
             'rightclick_status'  => '<strong>Set status &rarr;</strong> &mdash; flyout submenu listing every active status with its colour swatch. A tick appears next to the current value if you\'re right-clicking the ticket you\'ve got open. Picks immediately update the ticket, write an audit-trail entry, refresh the folder counts, and sync the reading pane\'s Status dropdown if applicable.',
@@ -3049,6 +3222,8 @@ return [
             'files_heading' => '<strong>File attachments</strong>',
             'files_body'    => 'Attach screenshots, logs, documents, or any supporting file directly to a ticket. Files can be dragged into the attachment drop zone or selected using the file browser. Attachments are stored on the server and linked to the ticket\'s activity trail so nothing gets lost.',
             'audit_heading' => '<strong>Audit logging</strong>',
+            'export_heading' => '<strong>Case reports</strong>',
+            'export_body'    => 'For a review or an auditor, <strong>Export</strong> in the ticket\'s toolbar turns the ticket and its tasks into one printable report - see <a href="#case-reports">Case reports</a>.',
             'audit_body'    => 'The activity trail automatically records every action without analyst intervention. When a priority is changed from Medium to High, the old and new values are captured. When a ticket is reassigned, both the previous and new analyst are logged. This creates a complete, tamper-proof history that satisfies ITIL audit requirements and helps managers understand how tickets are being handled.',
             'tip'           => 'When replying by email, you can add Cc recipients and attach files in the same action. The entire email conversation is threaded into the ticket\'s activity trail, keeping all communication in one place.',
         ],
@@ -3074,7 +3249,8 @@ return [
             'modes_heading' => '<strong>Two trigger modes &mdash; pick one</strong>',
             'mode_auto'   => '<strong>Auto on close</strong> &mdash; survey is queued automatically when a ticket transitions into any closed status. The analyst doesn\'t need to do anything &mdash; resolution drives the survey.',
             'mode_manual' => '<strong>Manual only</strong> &mdash; analyst clicks the ⭐ <strong>Feedback</strong> button in the ticket toolbar when they want to ask. Useful when you\'d rather decide ticket-by-ticket whether to invite feedback.',
-            'mode_off'    => '<strong>Off</strong> &mdash; feature disabled; no survey emails are sent.',
+            'switch_note' => 'Don\'t use CSAT at all? Switch it off under <strong>System &rarr; Modules &rarr; Availability &rarr; Ticket features</strong> and it disappears: no surveys, no CSAT page, no Request feedback button, and old survey links say feedback is no longer being collected. Nothing is deleted.',
+            'mode_off'    => '<strong>Off</strong> &mdash; no surveys are sent. The CSAT page and the results stay; to remove CSAT altogether, switch it off under <strong>System &rarr; Modules &rarr; Availability</strong>.',
             'modes_choose'=> 'Choose under <strong>Tickets &rarr; Settings &rarr; CSAT</strong>. The manual button still works in <em>auto</em> mode &mdash; analysts can re-request feedback on a ticket that\'s already been surveyed if needed.',
             'template_heading' => '<strong>The email template</strong>',
             'template_body'    => 'The survey email content comes from the existing <strong>Email templates</strong> tab &mdash; create a template with event <strong>CSAT survey</strong> (the new event alongside <em>Ticket assigned</em> / <em>Ticket closed</em>) and embed the <code>[csat_link]</code> merge code wherever you want the rating URL to appear. Standard merge codes (<code>[requester_name]</code>, <code>[ticket_reference]</code>, <code>[analyst_name]</code>) are available as normal.',
@@ -3155,6 +3331,7 @@ return [
             'tip'      => 'Use date range filters on individual widgets to compare current performance against previous periods. For example, a "This Month vs Last Month" view helps you spot trends in ticket volume early.',
         ],
         'cal_rota' => [
+            'switch_note' => 'Don\'t use the duty rota? Switch it off under <strong>System &rarr; Modules &rarr; Availability &rarr; Ticket features</strong> - the page, its settings and the War Room bot\'s <em>who is on call</em> go, and nothing is deleted.',
             'heading' => 'Calendar &amp; rota',
             'intro'   => 'Two scheduling tools help your team stay organised: a ticket calendar that visualises workload over time, and a staff rota for managing shifts and on-call availability.',
             'cal_heading' => '<strong>Calendar view</strong>',
@@ -3361,6 +3538,7 @@ return [
             'heading' => 'Overview',
             'sub'     => 'What SLAs are, why they matter, and how the FreeITSM engine works at a high level.',
             'p1'      => 'A Service Level Agreement (SLA) is a promise about how quickly your team will respond to and resolve a ticket. FreeITSM tracks two clocks per ticket: <strong>response</strong> (time from ticket creation to first analyst action) and <strong>resolution</strong> (time from ticket creation to ticket closure). Both targets are set per priority &mdash; so a P1 might have 30 minutes for response and 4 hours for resolution, while a P4 might have 8 working hours and 5 working days.',
+            'switch_note' => 'Don\'t use SLAs? Switch SLA off under <strong>System &rarr; Modules &rarr; Availability &rarr; Ticket features</strong>: clocks, breach warnings and SLA workflow triggers stop, while the business calendars stay for web chat\'s opening hours. Switching it back on asks whether to send the warnings missed while it was off, or skip them.',
             'p2'      => 'FreeITSM\'s SLA engine has four design choices worth understanding:',
             'choice_business' => '<strong>Business hours, not wall clock.</strong> A P2 raised at 4:30pm with a 1-hour response target doesn\'t breach at 5:30pm if the office closes at 5pm. The clock resumes at 9am the next working day. This is the industry standard and the only fair model when analysts go home at night.',
             'choice_pause'    => '<strong>Pause-able.</strong> When a ticket is in a status flagged "Pause SLA" (such as <em>Awaiting Response</em> or <em>On Hold</em>), the clock stops. It resumes when the ticket moves back to a working status.',
@@ -3531,5 +3709,44 @@ return [
             'r8_c' => 'This IP has hit more than 10 wrong-token attempts in the past hour. Wait 1 hour or clear the failures: <code>DELETE FROM sla_cron_runs WHERE client_ip = \'...\' AND outcome = \'auth_failed\'</code>.',
             'tip'  => 'For an in-depth technical walkthrough of cron setup including Linux examples and remote-scheduler integration, see <code>docs/sla-cron-setup.md</code> in the FreeITSM install directory.',
         ],
+    ],
+    // The ticket workspace (PR #211, #212): a ticket laid out for working. See
+    // includes/ticket_workspace.php and assets/js/ticket-workspace.js.
+    'workspace' => [
+        // Tickets -> Settings -> General. The three choices are TicketWorkspaceMode.
+        'layout'          => 'Ticket workspace',
+        'off'             => 'Off',
+        'selected'        => 'Only tickets turned into a workspace',
+        'all'             => 'Every ticket',
+        'mode_help'       => 'Off by default. Choose which tickets can use the workspace; each analyst can still choose the reading pane in their preferences.',
+        // The analyst's own switch, in the list's view menu.
+        'preference'      => 'Use the workspace',
+        'save_failed'     => 'Could not save the workspace preference.',
+        // More -> Make workspace, and the badge on a ticket that is one.
+        'badge'           => 'Workspace',
+        'make_workspace'  => 'Make workspace',
+        'back_to_pane'    => 'Back to the reading pane',
+        // The layout: the properties column, its three groups, and the tabs.
+        'properties'      => 'Properties',
+        'classification'  => 'Classification',
+        'responsibility'  => 'Responsibility',
+        'other'           => 'Other details',
+        'sections'        => 'Ticket sections',
+        'conversation'    => 'Conversation',
+        'work'            => 'Work',
+        'links'           => 'Links',
+        'time'            => 'Time and SLA',
+        'history'         => 'History',
+        'work_empty'      => 'No checklists or tasks yet. Use Checklist, or Link to… → Task, to add one.',
+        'loading'         => 'Loading…',
+        'unavailable'     => 'This section could not be loaded. Refresh to try again.',
+        'sla_unavailable' => 'SLA information is unavailable',
+        // Leaving a ticket, or the layout, with something unsaved.
+        'discard'         => 'You have unsaved work. Discard it and continue?',
+        'discard_button'  => 'Discard',
+        // A linked task opened in the Work tab (PR #212).
+        'task'            => 'Task',
+        'open_task'       => 'Open separately',
+        'close_task'      => 'Close',
     ],
 ];

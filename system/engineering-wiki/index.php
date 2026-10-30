@@ -89,6 +89,6 @@ $startPage = 'handbook/start';
         };
     </script>
     <script src="../../assets/js/engineering-wiki.js?v=6"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

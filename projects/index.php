@@ -40,7 +40,7 @@ $translationNamespaces = ['common', 'projects'];
     <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
     <link rel="stylesheet" href="../assets/css/projects.css?v=48">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="projects" data-mobile-page="projects-portfolio">
     <?php include 'includes/header.php'; ?>
@@ -126,9 +126,9 @@ $translationNamespaces = ['common', 'projects'];
 
     <?php include 'includes/project_form.php'; ?>
 
-    <script src="../assets/js/projects.js?v=10"></script>
+    <script src="../assets/js/projects.js?v=11"></script>
     <script src="../assets/js/projects-charts.js?v=9"></script>
     <script src="../assets/js/projects-portfolio.js?v=14"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

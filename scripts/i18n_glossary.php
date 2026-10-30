@@ -43,7 +43,7 @@ foreach ($locs as $loc) {
             $ev = trim($ev); $lv = trim($lc[$k]);
             if ($ev === '' || $lv === '') continue;
             $len = mb_strlen($ev);
-            if ($len >= 60 && $len <= 220 && strpos($ev, '<') === false && count($voice) < 400) {
+            if ($len >= 60 && $len <= 220 && !str_contains($ev, '<') && count($voice) < 400) {
                 $voice[] = [$ns, $ev, $lv];
             }
             if ($len < 2 || $len > 32) continue;

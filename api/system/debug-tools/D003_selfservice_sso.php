@@ -171,7 +171,7 @@ if ($email === '') {
     emit_and_exit($sections);
 }
 $emailValid = (bool)filter_var($email, FILTER_VALIDATE_EMAIL);
-$domain = (strpos($email, '@') !== false) ? strtolower(trim(substr(strrchr($email, '@'), 1))) : '';
+$domain = (str_contains($email, '@')) ? strtolower(trim(substr(strrchr($email, '@'), 1))) : '';
 addSection($sections, "INPUT", [
     "Email           : {$email}",
     "Valid format    : " . yn($emailValid),

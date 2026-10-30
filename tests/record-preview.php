@@ -96,7 +96,7 @@ try {
         $p = recordPreview($conn, $admin, 'knowledge_article', $found['knowledge_article']);
         ok('an article returns its opening lines', array_key_exists('lead', $p));
         ok('and its lead carries no markup',
-            strpos((string)($p['lead'] ?? ''), '<') === false,
+            !str_contains((string)($p['lead'] ?? ''), '<'),
             'raw HTML reached the preview');
     }
 

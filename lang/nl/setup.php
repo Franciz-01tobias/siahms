@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Ingeschakeld — schakel uit voor productie (zet display_errors op 0 in config.php)',
         'display_errors_disabled' => 'Uitgeschakeld',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 of hoger is vereist',
+        'php_version_too_low' => '{version} — PHP 8.1 of hoger is vereist',
         'php_version_eol' => '{version} — nog ondersteund, maar deze versie heeft geen beveiligingsupdates meer ontvangen sinds het einde van de levensduur. PHP 8.3 of 8.4 aanbevolen.',
         'extension_loaded' => 'Geladen',
         'extension_not_loaded' => 'Niet geladen — schakel in via php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Geconfigureerd',
         'ca_ini_masked_broken' => 'Ingesteld, maar verwijst naar een bestand dat er niet is — corrigeer het pad of zet de instelling in commentaar in php.ini.',
         'php_version_ok_masked' => 'Voldoet aan de eis',
-        'php_version_too_low_masked' => 'Te oud — PHP 7.4 of hoger is vereist',
+        'php_version_too_low_masked' => 'Te oud — PHP 8.1 of hoger is vereist',
         'php_version_eol_masked' => 'Ondersteund, maar deze versie heeft het einde van de levensduur bereikt en ontvangt geen beveiligingsupdates meer. Meld je aan als beheerder om de versie te zien.',
     ],
     'locked' => [

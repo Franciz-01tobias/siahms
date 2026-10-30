@@ -43,7 +43,7 @@ function leaseReady(PDO $conn): bool
     static $ok = null;
     if ($ok !== null) return $ok;
     try { $conn->query("SELECT 1 FROM lease_assets LIMIT 0"); $conn->query("SELECT 1 FROM lease_outcomes LIMIT 0"); return $ok = true; }
-    catch (Throwable $e) { return $ok = false; }
+    catch (Throwable) { return $ok = false; }
 }
 
 /**
@@ -317,7 +317,7 @@ function leaseDelete(PDO $conn, ActorContext $ctx, int $id): void
     try {
         require_once __DIR__ . '/documents.php';
         if (function_exists('documentsDetachParent')) documentsDetachParent($conn, 'lease', $id);
-    } catch (Throwable $e) { /* the orphan sweep catches it */ }
+    } catch (Throwable) { /* the orphan sweep catches it */ }
     leaseSyncCalendar($conn);
 }
 
@@ -820,7 +820,7 @@ function leaseSyncAllCalendar(PDO $conn): void
     try {
         require_once __DIR__ . '/asset_warranty_calendar.php';
         syncAssetWarrantyCalendar($conn);
-    } catch (Throwable $e) { /* the calendar is never worth failing a lease edit over */ }
+    } catch (Throwable) { /* the calendar is never worth failing a lease edit over */ }
 }
 
 /**
@@ -838,6 +838,7 @@ function leaseSyncCalendar(PDO $conn): void
     try {
         require_once __DIR__ . '/asset_warranty_calendar.php';
         if (!leaseReady($conn) || !awcColumnExists($conn, 'calendar_events', 'source')) return;
+        if (!moduleIsEnabled($conn, 'calendar')) return;   // GH #217: nothing at all while the Calendar is switched off
         $source = 'asset_lease_notice';
         $conn->prepare("DELETE FROM calendar_events WHERE source = ?")->execute([$source]);
         if (!in_array(awcGetSetting($conn, 'asset_lease_surface', 'dashboard'), ['calendar', 'both'], true)) return;
@@ -861,7 +862,7 @@ function leaseSyncCalendar(PDO $conn): void
                   . 'Auto-generated from Assets -> Leases.';
             $ins->execute([$title, $desc, $cat, $dt, $dt, $source]);
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // A calendar that could not be rebuilt must never fail the lease save.
     }
 }

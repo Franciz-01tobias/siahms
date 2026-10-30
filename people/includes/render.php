@@ -338,7 +338,28 @@ function pplSections(array $sections, bool $person): string
     if (isset($sections['courses']))   $h .= $person ? pplSectionCoursesPerson($sections['courses']) : pplSectionCoursesCompany($sections['courses']);
     if (isset($sections['forms']))     $h .= pplSectionForms($sections['forms'], $person);
     if (isset($sections['projects']))  $h .= pplSectionProjects($sections['projects'], $person);
+    if (isset($sections['starters']))  $h .= pplSectionStarters($sections['starters']);
     return $h;
+}
+
+/**
+ * Starters & leavers (4.6.0): the person's joining, moving and leaving cases.
+ *
+ * @param array $s  the starters section from includes/people.php: rows, total
+ */
+function pplSectionStarters(array $s): string
+{
+    $head = [t('people.section.col_case'), t('people.section.col_date'), t('people.section.col_status'), t('people.section.col_progress')];
+    $tone = ['open' => '', 'done' => 'good', 'cancelled' => 'muted'];
+    $rows = array_map(function ($r) use ($tone) {
+        return [
+            pplLink($r['url'], t('starters.kind.' . $r['kind'])) . ($r['template'] ? '<div class="ppl-dim">' . pplE($r['template']) . '</div>' : ''),
+            pplE(peopleBareDate($r['effective_date'])),
+            pplPill(t('starters.status.' . $r['status']), null, $tone[$r['status']] ?? ''),
+            $r['steps_total'] ? pplE(t('people.section.steps_of', ['done' => $r['steps_done'], 'total' => $r['steps_total']])) : '',
+        ];
+    }, $s['rows']);
+    return pplCard('starters', t('people.section.starters'), $s['total'], $head, $rows);
 }
 
 /** The <head> every People page shares. $extraCss: page stylesheets, linked
@@ -364,7 +385,7 @@ function pplHead(string $title, array $namespaces = ['common', 'people'], array 
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/people.css?v=5">
     <?php foreach ($extraCss as $css): ?><link rel="stylesheet" href="<?php echo BASE_URL . pplE($css); ?>">
     <?php endforeach; ?>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/mobile.css?v=196">
     <script>function pplShowAll(b) { b.closest('.ppl-card').querySelectorAll('tr.ppl-extra').forEach(function (r) { r.hidden = false; }); b.remove(); }</script>
     <?php
 }

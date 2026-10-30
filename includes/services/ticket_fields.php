@@ -75,7 +75,7 @@ final class TicketFieldsService
                 $conn->query("SELECT 1 FROM ticket_field_values LIMIT 1");
                 $conn->query("SELECT ask_requester FROM ticket_fields LIMIT 1");
                 $ready = true;
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 $ready = false;
             }
         }
@@ -238,7 +238,7 @@ final class TicketFieldsService
         try {
             $v = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'ticket_portal_field_answers'")->fetchColumn();
             return in_array($v, ['off', 'header', 'side'], true) ? $v : 'header';
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return 'header';
         }
     }
@@ -607,7 +607,7 @@ final class TicketFieldsService
         foreach (array_values(array_map('intval', $ids)) as $i => $fid) {
             try {
                 self::loadEditable($conn, $fid, $shared, $tenantId);
-            } catch (ServiceError $e) {
+            } catch (ServiceError) {
                 continue;
             }
             $upd->execute([$i + 1, $fid]);

@@ -39,7 +39,7 @@ foreach ($routes as $i => [$method, $pattern, $perm, $handler]) {
     $hasBody = in_array($method, ['POST', 'PATCH'], true);
     $stub  = "        {m: '{$method}', p: '{$path}', perm: '{$permStr}', s: 'TODO one-line summary',\n";
     $stub .= "         d: 'TODO description.',\n";
-    $stub .= "         params: [" . (strpos($path, '{') !== false ? "P('id', 'path', 'TODO', true)" : "") . "]"
+    $stub .= "         params: [" . (str_contains($path, '{') ? "P('id', 'path', 'TODO', true)" : "") . "]"
            . ($hasBody ? ",\n         body: { /* TODO example */ }" : "") . "},";
     $stubs[] = "  // handler: {$handler}\n" . $stub;
 }

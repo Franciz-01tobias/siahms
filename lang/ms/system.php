@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Perhatikan halaman ini.</strong> Sebaik sahaja pekerja berjalan, status di atas bertukar hijau dan penghantaran muncul di bawah. Nota persediaan penuh (Windows &amp; Linux, pengesahan tandatangan) ada dalam <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">wiki Workflows</a>.',
         'fact_worker' => 'Skrip pekerja',
         'fact_retry' => 'Jadual cuba semula',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1j &middot; 6j, kemudian gagal',
         'fact_retention' => 'Pengekalan log',
         'fact_queued' => 'Dalam baris gilir kini',
         'days' => '{n} hari',

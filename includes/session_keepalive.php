@@ -98,7 +98,7 @@ function sessionRefreshGcTimestamp(): void
     // nested directories. Working out the nested path means reimplementing PHP's
     // hashing, so those installs are left alone rather than guessed at — they keep
     // exactly the behaviour they have today.
-    if ($path !== '' && strpos($path, ';') !== false) {
+    if ($path !== '' && str_contains($path, ';')) {
         $parts = explode(';', $path);
         if ((int)$parts[0] > 0) {
             return;

@@ -147,7 +147,7 @@ $mcpUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 
         [data-theme-mode="dark"] .table-action-btn.danger:hover { background: #3a1a1d; color: #fca5a5; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
 </head>
@@ -322,7 +322,7 @@ $mcpUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 
     }
 
     function esc(s) {
-        const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML;
+        const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function renderKeys() {
@@ -517,6 +517,6 @@ $mcpUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . 
 
     loadKeys();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

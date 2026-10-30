@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'Провайдер',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'Обычный IMAP / SMTP (имя пользователя &amp; пароль)',
+                'provider_imap' => 'Обычный IMAP / SMTP (имя пользователя & пароль)',
                 'display_name' => 'Отображаемое имя',
                 'display_name_placeholder' => 'напр. Service Desk',
                 'target_mailbox' => 'Целевой почтовый ящик',

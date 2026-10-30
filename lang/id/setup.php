@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Aktif — nonaktifkan untuk produksi (atur display_errors menjadi 0 di config.php)',
         'display_errors_disabled' => 'Nonaktif',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — diperlukan PHP 7.4 atau lebih tinggi',
+        'php_version_too_low' => '{version} — diperlukan PHP 8.1 atau lebih tinggi',
         'php_version_eol' => '{version} — masih didukung, tetapi rilis ini tidak menerima pembaruan keamanan sejak mencapai akhir masa pakai. Disarankan PHP 8.3 atau 8.4.',
         'extension_loaded' => 'Dimuat',
         'extension_not_loaded' => 'Tidak dimuat — aktifkan di php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Terkonfigurasi',
         'ca_ini_masked_broken' => 'Diatur, tetapi menunjuk ke berkas yang tidak ada — perbaiki jalur atau jadikan komentar pengaturan itu di php.ini.',
         'php_version_ok_masked' => 'Memenuhi persyaratan',
-        'php_version_too_low_masked' => 'Terlalu lama — diperlukan PHP 7.4 atau lebih tinggi',
+        'php_version_too_low_masked' => 'Terlalu lama — diperlukan PHP 8.1 atau lebih tinggi',
         'php_version_eol_masked' => 'Didukung, tetapi rilis ini telah mencapai akhir masa pakai dan tidak lagi menerima pembaruan keamanan. Masuk sebagai administrator untuk melihat versinya.',
     ],
     'locked' => [

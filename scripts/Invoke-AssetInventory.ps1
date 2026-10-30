@@ -126,46 +126,79 @@ $buildNumber    = if ($ubr) { "$($os.BuildNumber).$ubr" } else { "$($os.BuildNum
 
 Write-Host "  System info collected" -ForegroundColor Green
 
+# ─── What each section came to ──────────────────────────────────────────────────
+# FreeITSM keeps, per section, whether this report collected it, found it empty or
+# could not collect it, so an asset can say how fresh each list is (report_version 2).
+# A section named here keeps its last good list on the server instead of being replaced.
+#
+# TRAP: Windows answering "nothing" for volumes, drives, network adapters or Device
+# Manager is treated as a FAILED collection, not an empty one. Every PC that can reach
+# FreeITSM has at least one of each, so an empty answer means WMI did not answer - and
+# reporting it as empty would wipe the machine's list (the 226-row Device Manager wipe).
+# Installed software is the one list that is trusted when it comes back empty.
+$collectionFailures = [ordered]@{}
+
+function Get-Section {
+    param([string]$Name, [string]$Noun, [scriptblock]$Collect, [switch]$EmptyIsFailure)
+    try {
+        $items = @(& $Collect)
+        if ($EmptyIsFailure -and $items.Count -eq 0) {
+            $script:collectionFailures[$Name] = "Windows returned no $Noun - treated as a failed collection, the last list is kept."
+        }
+        return ,$items
+    } catch {
+        $script:collectionFailures[$Name] = "Could not read $($Noun): $($_.Exception.Message)"
+        Write-Host "  $Noun skipped: $($_.Exception.Message)" -ForegroundColor Yellow
+        return ,@()
+    }
+}
+
 # ─── Disks ───────────────────────────────────────────────────────────────────────
 
-$logicalDisks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
-    @{
-        drive        = $_.DeviceID
-        label        = $_.VolumeName
-        file_system  = $_.FileSystem
-        size_bytes   = $_.Size
-        free_bytes   = $_.FreeSpace
-        used_percent = if ($_.Size -and $_.Size -gt 0) {
-            [math]::Round((($_.Size - $_.FreeSpace) / $_.Size) * 100, 1)
-        } else { 0 }
+$logicalDisks = Get-Section -Name 'disks' -Noun 'volumes' -EmptyIsFailure -Collect {
+    Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction Stop | ForEach-Object {
+        @{
+            drive        = $_.DeviceID
+            label        = $_.VolumeName
+            file_system  = $_.FileSystem
+            size_bytes   = $_.Size
+            free_bytes   = $_.FreeSpace
+            used_percent = if ($_.Size -and $_.Size -gt 0) {
+                [math]::Round((($_.Size - $_.FreeSpace) / $_.Size) * 100, 1)
+            } else { 0 }
+        }
     }
-})
+}
 
-$physicalDisks = @(Get-CimInstance Win32_DiskDrive | ForEach-Object {
-    @{
-        model      = $_.Model
-        serial     = if ($_.SerialNumber) { $_.SerialNumber.Trim() } else { $null }
-        size_bytes = $_.Size
-        media_type = $_.MediaType
-        interface  = $_.InterfaceType
+$physicalDisks = Get-Section -Name 'physical_disks' -Noun 'physical drives' -EmptyIsFailure -Collect {
+    Get-CimInstance Win32_DiskDrive -ErrorAction Stop | ForEach-Object {
+        @{
+            model      = $_.Model
+            serial     = if ($_.SerialNumber) { $_.SerialNumber.Trim() } else { $null }
+            size_bytes = $_.Size
+            media_type = $_.MediaType
+            interface  = $_.InterfaceType
+        }
     }
-})
+}
 
 Write-Host "  Disk info collected ($($logicalDisks.Count) logical, $($physicalDisks.Count) physical)" -ForegroundColor Green
 
 # ─── Network adapters ────────────────────────────────────────────────────────────
 
-$networkAdapters = @(Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "IPEnabled=True" | ForEach-Object {
-    @{
-        name         = $_.Description
-        mac_address  = $_.MACAddress
-        ip_addresses = @($_.IPAddress)
-        subnet_masks = @($_.IPSubnet)
-        gateway      = @($_.DefaultIPGateway | Where-Object { $_ })
-        dhcp_enabled = $_.DHCPEnabled
-        dns_servers  = @($_.DNSServerSearchOrder | Where-Object { $_ })
+$networkAdapters = Get-Section -Name 'network_adapters' -Noun 'network adapters' -EmptyIsFailure -Collect {
+    Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "IPEnabled=True" -ErrorAction Stop | ForEach-Object {
+        @{
+            name         = $_.Description
+            mac_address  = $_.MACAddress
+            ip_addresses = @($_.IPAddress)
+            subnet_masks = @($_.IPSubnet)
+            gateway      = @($_.DefaultIPGateway | Where-Object { $_ })
+            dhcp_enabled = $_.DHCPEnabled
+            dns_servers  = @($_.DNSServerSearchOrder | Where-Object { $_ })
+        }
     }
-})
+}
 
 Write-Host "  Network info collected ($($networkAdapters.Count) adapters)" -ForegroundColor Green
 
@@ -252,7 +285,11 @@ try {
         }
     }
     Write-Host "  Device Manager info collected ($($devices.Count) devices)" -ForegroundColor Green
+    if ($devices.Count -eq 0) {
+        $collectionFailures['devices'] = "Windows returned no devices - treated as a failed collection, the last list is kept."
+    }
 } catch {
+    $collectionFailures['devices'] = "Could not read Device Manager: $($_.Exception.Message)"
     Write-Host "  Device Manager info skipped: $_" -ForegroundColor Yellow
 }
 
@@ -263,7 +300,7 @@ $regPaths = @(
     "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
 )
 
-$software = @(
+$software = Get-Section -Name 'software' -Noun 'installed software' -Collect {
     $regPaths | ForEach-Object {
         Get-ItemProperty -Path $_ -ErrorAction SilentlyContinue
     } | Where-Object {
@@ -283,7 +320,7 @@ $software = @(
             system_component  = $isComponent
         }
     }
-)
+}
 
 $appCount = ($software | Where-Object { -not $_.system_component }).Count
 $componentCount = ($software | Where-Object { $_.system_component }).Count
@@ -312,6 +349,13 @@ Write-Host "  Last boot: $lastBoot UTC (uptime: $uptimeDays days)" -ForegroundCo
 # ─── Build the payload ───────────────────────────────────────────────────────────
 
 $payload = [ordered]@{
+    # 2 = every section is sent, an empty list is a real "none", and the sections that
+    # could not be collected are named in collection_failures. FreeITSM before 3.15.0
+    # ignores both and treats an empty list as "did not find out", so this is safe to
+    # roll out before or after the server is upgraded.
+    report_version      = 2
+    collection_failures = $collectionFailures
+
     # Core asset fields (match assets table schema)
     hostname         = $env:COMPUTERNAME
     manufacturer     = $cs.Manufacturer
@@ -499,12 +543,17 @@ if ($ApiUrl) {
             $postFailed = $true
         }
 
-        # Post device manager data separately
-        if (-not $postFailed -and $devices.Count -gt 0) {
+        # Post device manager data separately - every time, so a failed or empty
+        # collection is recorded as such rather than looking like no report at all.
+        if (-not $postFailed) {
             $dmUrl = "$($ApiUrl.TrimEnd('/'))/api/external/device-manager/submit/"
+            $dmFailures = [ordered]@{}
+            if ($collectionFailures.Contains('devices')) { $dmFailures['devices'] = $collectionFailures['devices'] }
             $dmPayload = [ordered]@{
-                hostname = $env:COMPUTERNAME
-                devices  = $devices
+                report_version      = 2
+                collection_failures = $dmFailures
+                hostname            = $env:COMPUTERNAME
+                devices             = $devices
             }
             $dmJson = $dmPayload | ConvertTo-Json -Depth 5 -Compress:$false
 
@@ -528,3 +577,7 @@ if ($ApiUrl) {
 
 Write-Host ""
 Write-Host "Done. Collected: $($software.Count) apps, $($logicalDisks.Count) drives, $($networkAdapters.Count) NICs, $($gpus.Count) GPUs, $($devices.Count) devices" -ForegroundColor Cyan
+if ($collectionFailures.Count -gt 0) {
+    Write-Host "Not collected this time (FreeITSM keeps the last good list):" -ForegroundColor Yellow
+    foreach ($name in $collectionFailures.Keys) { Write-Host "  $($name): $($collectionFailures[$name])" -ForegroundColor Yellow }
+}

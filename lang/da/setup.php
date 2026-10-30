@@ -66,7 +66,7 @@ return [
         'display_errors_enabled' => 'Slået til — slå den fra i drift (sæt display_errors til 0 i config.php)',
         'display_errors_disabled' => 'Slået fra',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 eller nyere er påkrævet',
+        'php_version_too_low' => '{version} — PHP 8.1 eller nyere er påkrævet',
         'php_version_eol' => '{version} — stadig understøttet, men denne udgave har ikke fået sikkerhedsopdateringer, siden den nåede sin udløbsdato. PHP 8.3 eller 8.4 anbefales.',
         'extension_loaded' => 'Indlæst',
         'extension_not_loaded' => 'Ikke indlæst — slå den til i php.ini',
@@ -81,7 +81,7 @@ return [
         'ca_ini_masked_ok' => 'Konfigureret',
         'ca_ini_masked_broken' => 'Sat, men peger på en fil, der ikke findes — ret stien, eller sæt indstillingen som kommentar i php.ini.',
         'php_version_ok_masked' => 'Opfylder kravet',
-        'php_version_too_low_masked' => 'For gammel — PHP 7.4 eller nyere er påkrævet',
+        'php_version_too_low_masked' => 'For gammel — PHP 8.1 eller nyere er påkrævet',
         'php_version_eol_masked' => 'Understøttet, men denne udgave har nået sin udløbsdato og får ikke længere sikkerhedsopdateringer. Log ind som administrator for at se versionen.',
     ],
     'locked' => [

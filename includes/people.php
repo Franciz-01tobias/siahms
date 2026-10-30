@@ -187,7 +187,7 @@ function peopleCompanyCards(PDO $conn, int $analystId): array
     $domains = [];
     try {
         foreach ($conn->query("SELECT tenant_id, COUNT(*) FROM tenant_domains GROUP BY tenant_id")->fetchAll(PDO::FETCH_KEY_PAIR) as $id => $n) $domains[(int)$id] = (int)$n;
-    } catch (Throwable $e) { /* routing domains are optional */ }
+    } catch (Throwable) { /* routing domains are optional */ }
 
     foreach ($cards as &$c) {
         $c['people']       = $everyone[$c['id']][0] ?? 0;
@@ -265,6 +265,12 @@ function personDetail(PDO $conn, int $analystId, int $userId): ?array
     if ($can('lms'))       $sections['courses']   = peopleCoursesForPerson($conn, $userId);
     if ($can('forms'))     $sections['forms']     = peopleForms($conn, $analystId, $who);
     if ($can('projects'))  $sections['projects']  = peopleProjects($conn, $analystId, $who);
+    // 4.6.0: joining, moving, leaving - the Starters & leavers service answers for itself.
+    if ($can('starters')) {
+        require_once __DIR__ . '/starters/service.php';
+        $rows = StartersService::casesForPerson($conn, $analystId, $userId);
+        $sections['starters'] = ['rows' => $rows, 'total' => count($rows)];
+    }
     return ['person' => $person, 'sections' => $sections];
 }
 
@@ -287,7 +293,7 @@ function companyDetail(PDO $conn, int $analystId, int $tenantId): ?array
         $d = $conn->prepare("SELECT domain FROM tenant_domains WHERE tenant_id = ? ORDER BY domain");
         $d->execute([$tenantId]);
         $domains = $d->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Throwable $e) { /* routing domains are optional */ }
+    } catch (Throwable) { /* routing domains are optional */ }
 
     [$m, $mArgs] = peopleCompanyMatch($conn, $tenantId, 'u.tenant_id');
     $cnt = $conn->prepare("SELECT SUM(u.is_active = 1), SUM(u.is_active = 0) FROM users u WHERE 1=1 $m");
@@ -539,7 +545,7 @@ function peopleCoursesForPerson(PDO $conn, int $userId): array
     require_once __DIR__ . '/lms_access.php';
     $learner = LmsLearner::user($userId);
     if (!$learner) return ['total' => 0, 'rows' => []];
-    try { $courses = lmsMyCourses($conn, $learner); } catch (Throwable $e) { return ['total' => 0, 'rows' => []]; }
+    try { $courses = lmsMyCourses($conn, $learner); } catch (Throwable) { return ['total' => 0, 'rows' => []]; }
     $rows = array_map(fn($c) => [
         'id' => (int)$c['id'], 'title' => $c['title'], 'status' => (string)$c['status'],
         'deadline' => $c['deadline'] ?? null, 'completed' => $c['completion_datetime'] ?? null,
@@ -566,7 +572,7 @@ function peopleCoursesForCompany(PDO $conn, int $tenantId): array
               ORDER BY c.title"
         );
         $st->execute($mArgs);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return ['total' => 0, 'rows' => []];
     }
     $rows = array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title'], 'finished' => (int)$r['finished'], 'in_progress' => (int)$r['in_progress']],
@@ -602,7 +608,7 @@ function peopleForms(PDO $conn, int $analystId, array $who): array
               LIMIT " . PEOPLE_SECTION_LIMIT
         );
         $st->execute($mArgs);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return ['total' => 0, 'rows' => []];
     }
     $canTickets = analystCanAccessModule($conn, $analystId, 'tickets');
@@ -787,7 +793,7 @@ function peopleContractorTasks(PDO $conn, int $analystId, array $who): array
         require_once __DIR__ . '/projects/visibility.php';
         [$vSql, $vArgs] = projectVisibleSql($conn, $analystId, 'p');
         if ($vSql !== '') { $hide = " AND (t.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id $vSql))"; $args = array_merge($args, $vArgs); }
-    } catch (Throwable $e) { /* no Projects tables */ }
+    } catch (Throwable) { /* no Projects tables */ }
     $col = isset($who['contact']) ? 't.assigned_contact_id' : 't.assigned_supplier_id';
     $st = $conn->prepare(
         "SELECT t.id, t.title, t.due_date, t.project_id, ts.name AS status, ts.colour AS status_colour, COALESCE(ts.is_closed, 0) AS is_closed,
@@ -858,7 +864,7 @@ function peopleSupplierAssets(PDO $conn, int $analystId, int $supplierId): array
                                      (SELECT COALESCE(NULLIF(hu.display_name, ''), hu.email) FROM users_assets hua JOIN users hu ON hu.id = hua.user_id WHERE hua.asset_id = a.id ORDER BY hua.id LIMIT 1) AS holder
                               $from ORDER BY at.name, a.hostname LIMIT " . PEOPLE_SECTION_LIMIT);
         $st->execute($all);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return ['total' => 0, 'rows' => []];   // assets.supplier_id arrives with Database Verification
     }
     $rows = array_map(fn($r) => [
@@ -931,7 +937,7 @@ function peopleBareDate(?string $d): string
     try {
         $dt = new DateTime(substr($d, 0, 10) . ' 00:00:00', new DateTimeZone('UTC'));
         return DateFmt::render($dt, DateFmt::DATE_TEMPLATES[DateFmt::dateKey()]);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return (string)$d;
     }
 }

@@ -23,6 +23,9 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/rbac.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -30,6 +33,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+// GH #217: refused while the sla feature is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'sla');
 requireCapabilityJson(Cap::TICKETS_SLA);   // settings tab — see docs/design/rbac.md
 
 try {

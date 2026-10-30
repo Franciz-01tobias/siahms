@@ -36,14 +36,16 @@ leaseEndpoint('GET', function (PDO $conn, ActorContext $ctx, array $in) {
     $keep = (int)($in['keep_cost_centre'] ?? 0) ?: null;
     $costCentres = costCentreReady($conn, 'leases') ? costCentreOptions($conn, $tenant, $keep) : [];
 
-    require_once __DIR__ . '/../../../includes/contract_party.php';
-    [$vSql, $vP] = contractVisibilitySql($conn, $aid, 'c');
-    [$tSql, $tP] = contractTenantReady($conn) ? tenantScopeSqlFor($conn, $tenant, 'c.tenant_id') : ['', []];
-    $st = $conn->prepare("SELECT c.id, c.contract_number, c.title FROM contracts c WHERE 1=1$tSql$vSql ORDER BY c.title LIMIT 1000");
-    $st->execute(array_merge($tP, $vP));
     $contracts = [];
-    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
-        $contracts[] = ['id' => (int)$c['id'], 'name' => trim(($c['contract_number'] ? $c['contract_number'] . ' - ' : '') . $c['title'])];
+    if (moduleIsEnabled($conn, 'contracts')) {   // GH #217: none to offer while Contracts is switched off
+        require_once __DIR__ . '/../../../includes/contract_party.php';
+        [$vSql, $vP] = contractVisibilitySql($conn, $aid, 'c');
+        [$tSql, $tP] = contractTenantReady($conn) ? tenantScopeSqlFor($conn, $tenant, 'c.tenant_id') : ['', []];
+        $st = $conn->prepare("SELECT c.id, c.contract_number, c.title FROM contracts c WHERE 1=1$tSql$vSql ORDER BY c.title LIMIT 1000");
+        $st->execute(array_merge($tP, $vP));
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $contracts[] = ['id' => (int)$c['id'], 'name' => trim(($c['contract_number'] ? $c['contract_number'] . ' - ' : '') . $c['title'])];
+        }
     }
 
     return [

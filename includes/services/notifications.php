@@ -260,7 +260,7 @@ class NotificationsService
             );
             $stmt->execute([$analystId]);
             $raw = $stmt->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return [];
         }
         if (!is_string($raw) || $raw === '') {
@@ -396,13 +396,42 @@ class NotificationsService
         [$table, $col, $id] = self::who($recipient);
         try {
             $stmt = $conn->prepare(
-                "SELECT COUNT(*) FROM $table WHERE $col = ? AND read_datetime IS NULL"
+                "SELECT COUNT(*) FROM $table WHERE $col = ? AND read_datetime IS NULL" . self::switchedOffClause($conn)
             );
             $stmt->execute([$id]);
             return (int)$stmt->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return 0;
         }
+    }
+
+    /**
+     * GH #217. The notification entity types that belong to a switchable module. A
+     * notification about a record in a module switched off for the install is left
+     * where it is but not listed or counted, so the bell neither links into a
+     * module nobody can open nor shows a badge for things that cannot be seen.
+     * Switch the module back on and they return.
+     */
+    private const ENTITY_MODULES = [
+        'task' => 'tasks', 'problem' => 'problems', 'change' => 'changes', 'asset' => 'assets',
+        'cmdb_object' => 'cmdb', 'knowledge_article' => 'knowledge', 'contract' => 'contracts',
+        'supplier' => 'contracts', 'supplier_contact' => 'contracts', 'domain' => 'domains',
+        'project' => 'projects', 'person' => 'people',
+    ];
+
+    /** " AND entity_type NOT IN (...)" for the switched-off modules' entity types, or ''. */
+    private static function switchedOffClause(PDO $conn): string
+    {
+        if (!function_exists('moduleIsEnabled')) return '';
+        $hidden = [];
+        foreach (self::ENTITY_MODULES as $type => $module) {
+            if (!moduleIsEnabled($conn, $module)) $hidden[] = $conn->quote($type);
+        }
+        $clause = $hidden ? ' AND (entity_type IS NULL OR entity_type NOT IN (' . implode(',', $hidden) . '))' : '';
+        // SLA (a Tickets feature, slice 2): its notifications are about tickets, so
+        // they are picked out by event type instead.
+        if (!moduleIsEnabled($conn, 'sla')) $clause .= " AND event_type NOT IN ('sla.warning', 'sla.breached')";
+        return $clause;
     }
 
     /**
@@ -419,7 +448,7 @@ class NotificationsService
             "SELECT id, event_type, entity_type, entity_id, entity_ref, title, body,
                     actor_name, event_count, created_datetime, updated_datetime, read_datetime
              FROM $table
-             WHERE $col = ?
+             WHERE $col = ?" . self::switchedOffClause($conn) . "
              ORDER BY updated_datetime DESC, id DESC
              LIMIT $limit"
         );

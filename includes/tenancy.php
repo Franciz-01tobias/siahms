@@ -221,7 +221,7 @@ function getAccessibleTenantIds(PDO $conn, int $analystId): array {
         if ($stmt->fetchColumn()) {
             return $cache[$analystId] = $allTenantIds();
         }
-    } catch (Exception $e) { /* column not migrated yet — ignore team all-access */ }
+    } catch (Exception) { /* column not migrated yet — ignore team all-access */ }
 
     // Otherwise: the analyst's own granted tenants, unioned with the specific
     // companies granted by any team they belong to.
@@ -235,7 +235,7 @@ function getAccessibleTenantIds(PDO $conn, int $analystId): array {
         );
         $stmt->execute([':aid' => $analystId]);
         return $cache[$analystId] = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-    } catch (Exception $e) {
+    } catch (Exception) {
         // team_tenant_access not migrated yet — fall back to analyst-only grants.
         $stmt = $conn->prepare("SELECT tenant_id FROM analyst_tenant_access WHERE analyst_id = ?");
         $stmt->execute([$analystId]);
@@ -765,6 +765,9 @@ function ticketTenantFilter(PDO $conn, int $analystId, string $alias = 't', bool
     }
 
     $active  = getActiveTenantId($conn, $analystId);
+    if (!analystCanAccessTenant($conn, $analystId, $active)) {
+        return [' AND 1 = 0', []];   // no company at all - see activeTenantFilter()
+    }
     $default = getDefaultTenantId($conn);
     if ($active === $default) {
         return [" AND ($col = ? OR $col IS NULL)", [$active]];
@@ -788,6 +791,16 @@ function activeTenantFilter(PDO $conn, int $analystId, string $alias = 't', stri
         return ['', []];
     }
     $active  = getActiveTenantId($conn, $analystId);
+    // 🔴 An analyst with NO company access is shown nothing, not the Default
+    // company. getActiveTenantId() ends with "first accessible, else Default", so
+    // an analyst who may reach no company at all - a new SSO user under "no
+    // company until granted", or one whose last company was unticked - fell back
+    // to Default and saw its tickets, tasks and changes in every list and search.
+    // The All companies view already failed closed (allAccessibleTenantsFilter).
+    // Reported privately, October 2026.
+    if (!analystCanAccessTenant($conn, $analystId, $active)) {
+        return [' AND 1 = 0', []];
+    }
     $default = getDefaultTenantId($conn);
     $qualified = $alias === '' ? $col : "$alias.$col";
     if ($active === $default) {
@@ -992,7 +1005,9 @@ function knowledgeTenantFilterForCompany(PDO $conn, ?int $tenantId, string $alia
  */
 function knowledgeTenantFilter(PDO $conn, int $analystId, string $alias = 'a'): array {
     if (!isMultiTenant($conn)) return ['', []];
-    return knowledgeTenantFilterForCompany($conn, getActiveTenantId($conn, $analystId), $alias);
+    $active = getActiveTenantId($conn, $analystId);
+    // No company at all: shared articles only (see activeTenantFilter()).
+    return knowledgeTenantFilterForCompany($conn, analystCanAccessTenant($conn, $analystId, $active) ? $active : null, $alias);
 }
 
 /**
@@ -1054,7 +1069,7 @@ function resolveTenantForNewUser(PDO $conn, string $email): ?int {
     }
 
     $addr = strtolower(trim($email));
-    if ($addr === '' || strpos($addr, '@') === false) return null;
+    if ($addr === '' || !str_contains($addr, '@')) return null;
 
     $domain = strtolower(trim(substr(strrchr($addr, '@'), 1)));
     if ($domain === '') return null;
@@ -1062,7 +1077,7 @@ function resolveTenantForNewUser(PDO $conn, string $email): ?int {
     // Freemail is never mapped by domain — see (3) above.
     try {
         if (isFreemailDomain($conn, $domain)) return null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;   // can't prove it's safe → don't guess.
     }
 
@@ -1071,7 +1086,7 @@ function resolveTenantForNewUser(PDO $conn, string $email): ?int {
         $stmt->execute([$domain]);
         $val = $stmt->fetchColumn();
         if ($val !== false && $val !== null) return (int) $val;
-    } catch (Exception $e) { /* table missing → no answer */ }
+    } catch (Exception) { /* table missing → no answer */ }
 
     return null;
 }
@@ -1120,7 +1135,7 @@ function resolveTicketTenantForEmail(PDO $conn, $mailboxId, string $fromAddress)
             if ($val !== false && $val !== null) {
                 return (int) $val;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // tenant_id column missing on a part-migrated install → treat as shared.
         }
     }
@@ -1137,14 +1152,14 @@ function resolveTicketTenantForEmail(PDO $conn, $mailboxId, string $fromAddress)
             if ($val !== false && $val !== null) {
                 return (int) $val;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // tenant_sender_addresses missing → fall through to domain routing.
         }
     }
 
     // (3b) Shared intake → route by the sender's domain.
     $domain = '';
-    if (strpos($fromAddress, '@') !== false) {
+    if (str_contains($fromAddress, '@')) {
         $domain = strtolower(trim(substr(strrchr($fromAddress, '@'), 1)));
     }
     if ($domain !== '') {
@@ -1155,7 +1170,7 @@ function resolveTicketTenantForEmail(PDO $conn, $mailboxId, string $fromAddress)
             if ($val !== false && $val !== null) {
                 return (int) $val;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // tenant_domains missing → fall through to triage.
         }
     }
@@ -1196,7 +1211,7 @@ function resolveTicketTenantForChannel(PDO $conn, $channelId, string $fromIdenti
             if ($val !== false && $val !== null) {
                 return (int) $val;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // tenant_id column missing on a part-migrated install → treat as shared.
         }
     }
@@ -1211,7 +1226,7 @@ function resolveTicketTenantForChannel(PDO $conn, $channelId, string $fromIdenti
             if ($val !== false && $val !== null) {
                 return (int) $val;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // table missing → fall through to triage.
         }
     }
@@ -1232,7 +1247,7 @@ function resolveTicketTenantForChannel(PDO $conn, $channelId, string $fromIdenti
  */
 function resolveTenantIdForAddress(PDO $conn, string $email): ?int {
     $addr = strtolower(trim($email));
-    if ($addr === '' || strpos($addr, '@') === false) return null;
+    if ($addr === '' || !str_contains($addr, '@')) return null;
 
     // (1) Exact sender-address override (lets a freemail address map to a company).
     try {
@@ -1240,7 +1255,7 @@ function resolveTenantIdForAddress(PDO $conn, string $email): ?int {
         $stmt->execute([$addr]);
         $val = $stmt->fetchColumn();
         if ($val !== false && $val !== null) return (int) $val;
-    } catch (Exception $e) { /* table missing → fall through */ }
+    } catch (Exception) { /* table missing → fall through */ }
 
     // (2) Registered domain → tenant.
     $domain = strtolower(trim(substr(strrchr($addr, '@'), 1)));
@@ -1250,7 +1265,7 @@ function resolveTenantIdForAddress(PDO $conn, string $email): ?int {
             $stmt->execute([$domain]);
             $val = $stmt->fetchColumn();
             if ($val !== false && $val !== null) return (int) $val;
-        } catch (Exception $e) { /* table missing → fall through */ }
+        } catch (Exception) { /* table missing → fall through */ }
     }
 
     return null;
@@ -1286,7 +1301,7 @@ function getCustomFreemailDomains(PDO $conn): array {
                 $d = strtolower(trim($row['domain']));
                 if ($d !== '') $cache[] = $d;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             $cache = [];
         }
     }
@@ -1394,7 +1409,7 @@ function getTenantConfigRows(PDO $conn, string $table, string $entityType, int $
     if (!isMultiTenant($conn)) {
         try {
             return $conn->query("SELECT $cols FROM $table$tail")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Exception $e) {
+        } catch (Exception) {
             return [];
         }
     }
@@ -1412,12 +1427,58 @@ function getTenantConfigRows(PDO $conn, string $table, string $entityType, int $
         $stmt = $conn->prepare($sql);
         $stmt->execute([$tenantId, $entityType, $tenantId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Part-migrated (no tenant_id column / no hidden table) → fall back to all.
         try {
             return $conn->query("SELECT $cols FROM $table$tail")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Exception $e2) {
+        } catch (Exception) {
             return [];
         }
+    }
+}
+
+/**
+ * What has to follow a ticket when it changes company: the tasks raised from it
+ * (and their subtasks), and its search entries.
+ *
+ * 🔴 Moving a ticket, or routing it out of triage, wrote tickets.tenant_id and
+ * nothing else. Its tasks stayed in the old company - visible there, disagreeing
+ * with their ticket, until somebody moved each one by hand - and its search
+ * entries kept the old company until
+ * a later reply happened to re-index it. Reported privately, October 2026.
+ * includes/search/search.php also judges ticket rows by the live company, so
+ * search is right even for a path that forgets to call this.
+ *
+ * @param int[] $ticketIds  tickets whose company has just changed
+ * @param ?int $tenantId  their new company (null = triage)
+ */
+function ticketsFollowCompanyMove(PDO $conn, array $ticketIds, ?int $tenantId): void {
+    $ticketIds = array_values(array_unique(array_filter(array_map('intval', $ticketIds))));
+    if (!$ticketIds) return;
+    $ph = implode(',', array_fill(0, count($ticketIds), '?'));
+    try {
+        $ids = $conn->prepare("SELECT id FROM tasks WHERE ticket_id IN ($ph)");
+        $ids->execute($ticketIds);
+        $taskIds = array_map('intval', $ids->fetchAll(PDO::FETCH_COLUMN));
+        // Subtasks inherit their parent's company, at any depth.
+        for ($depth = 0, $level = $taskIds; $level && $depth < 10; $depth++) {
+            $lp = implode(',', array_fill(0, count($level), '?'));
+            $sub = $conn->prepare("SELECT id FROM tasks WHERE parent_task_id IN ($lp)");
+            $sub->execute($level);
+            $level = array_values(array_diff(array_map('intval', $sub->fetchAll(PDO::FETCH_COLUMN)), $taskIds));
+            $taskIds = array_merge($taskIds, $level);
+        }
+        if ($taskIds) {
+            $tp = implode(',', array_fill(0, count($taskIds), '?'));
+            $conn->prepare("UPDATE tasks SET tenant_id = ? WHERE id IN ($tp)")->execute(array_merge([$tenantId], $taskIds));
+        }
+    } catch (Exception $e) {
+        error_log('ticketsFollowCompanyMove (tasks): ' . $e->getMessage());
+    }
+    try {
+        require_once __DIR__ . '/search/indexer.php';
+        foreach ($ticketIds as $tid) searchIndexTicket($conn, $tid);
+    } catch (Throwable $e) {
+        error_log('ticketsFollowCompanyMove (search): ' . $e->getMessage());
     }
 }

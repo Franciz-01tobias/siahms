@@ -18,6 +18,9 @@ require_once '../../includes/rbac.php';
 require_once '../../includes/settings_keys.php';
 require_once '../../includes/encryption.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 // Check if user is logged in

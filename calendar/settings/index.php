@@ -188,7 +188,7 @@ $translationNamespaces = ['common', 'calendar'];
          is why <body> below carries the marker attribute. LAYER 16i adds what
          15e doesn't reach — the .lookup-table, which sits straight inside a
          .tab-content and becomes a card feed rather than a sideways scroll. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
 </head>
@@ -202,7 +202,7 @@ $translationNamespaces = ['common', 'calendar'];
         <?php renderSettingsTabBar($visibleTabs, $activeTabId); ?>
 
         <?php if (settingsTabVisible($visibleTabs, 'categories')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'categories' ? ' active' : ''; ?>" id="categories-tab" data-capability="<?php echo Cap::CALENDAR_CATEGORIES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'categories' ? ' active' : ''; ?>" id="categories-tab" data-capability="<?php echo capKey(Cap::CALENDAR_CATEGORIES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('calendar.settings.heading')); ?></h2>
                 <button class="add-btn" onclick="openCategoryModal()"><?php echo htmlspecialchars(t('calendar.settings.add')); ?></button>
@@ -521,9 +521,9 @@ $translationNamespaces = ['common', 'calendar'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

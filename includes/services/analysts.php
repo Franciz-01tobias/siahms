@@ -178,7 +178,8 @@ final class AnalystsService
         ];
         if ($effective) {
             $out['effective'] = [
-                'modules'      => getAnalystAllowedModules($conn, $id),
+                // Effective: what they can open, so less any module switched off (GH #217).
+                'modules'      => modulesWithoutSwitchedOff($conn, getAnalystAllowedModules($conn, $id)),
                 'companies'    => getAccessibleTenantIds($conn, $id),
                 'capabilities' => getAnalystCapabilities($conn, $id),
             ];
@@ -255,7 +256,7 @@ final class AnalystsService
             $s->execute([$analystId]);
             $id = $s->fetchColumn();
             return $id === false ? null : (int)$id;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return null;   // before Database Verification adds the column
         }
     }

@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>આ પેજ પર નજર રાખો.</strong> worker ચાલે એટલે ઉપરની સ્થિતિ લીલી થાય છે અને ડિલિવરી નીચે દેખાય છે. સંપૂર્ણ સેટઅપ નોંધ (Windows &amp; Linux, signature verification) <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">Workflows wiki</a> માં છે.',
         'fact_worker' => 'Worker સ્ક્રિપ્ટ',
         'fact_retry' => 'ફરી પ્રયાસનું શેડ્યુલ',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1h &middot; 6h, પછી નિષ્ફળ',
         'fact_retention' => 'લોગ જાળવણી',
         'fact_queued' => 'અત્યારે ક્યુમાં',
         'days' => '{n} દિવસ',

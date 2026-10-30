@@ -51,7 +51,7 @@ class CostCentresService
         try {
             $conn->query("SELECT 1 FROM cost_centres LIMIT 0");
             return true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;
         }
     }

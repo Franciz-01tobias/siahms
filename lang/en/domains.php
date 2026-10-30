@@ -28,6 +28,7 @@ return [
 
     // ---- the register ----------------------------------------------------------
     'list' => [
+        'any_scope'        => 'Any scope',
         'search'             => 'Search',
         'search_placeholder' => 'Name, registrar, tag…',
         'views'              => 'Views',
@@ -55,6 +56,7 @@ return [
         'any_company'        => 'Any company',
     ],
     'view' => [
+        'internal_note'  => 'Internal - registration and email checks do not apply. Checked through this server\'s DNS only; nothing is sent outside the network.',
         'all'         => 'All domains',
         'attention'   => 'Needs attention',
         'expiring30'  => 'Expiring in 30 days',
@@ -80,7 +82,7 @@ return [
         'expires'     => 'Expires',
         'renewal'     => 'Renewal',
         'registrar'   => 'Registrar',
-        'grade'       => 'Grade',
+        'grade'       => 'Grade / health',   // GH #203: an internal domain shows its health here
         'protection'  => 'Locks',
         'certificate' => 'Certificate',
         'owner'       => 'Owner',
@@ -102,9 +104,31 @@ return [
         'none'  => 'Not checked yet',
         'title' => 'Security grade {grade}',
     ],
+    'scope' => [
+        'public'   => 'Public',
+        'internal' => 'Internal',
+    ],
+    // GH #203: an internal domain's health, instead of a grade.
+    'health' => [
+        'healthy'        => 'Healthy',
+        'problem'        => 'Problem',
+        'not_checked'    => 'Not checked',
+        'stale'          => 'Stale',
+        'label'          => 'Health',
+        'last_completed' => 'Last completed check',
+        'last_healthy'   => 'Last healthy',
+        'next_due'       => 'Next check due',
+        'never'          => 'Never',
+        'known_after'    => '{state}, last confirmed {date} - the checks since have not completed.',
+        'stale_note'     => 'No check has completed for over twice the interval ({minutes} minutes), so this is not current. Is the scheduled job running?',
+        'not_checked_note' => 'No check has completed yet. Click Check now, or wait for the scheduled run.',
+        'title'          => 'Health: {state}',
+    ],
     'status' => ['none' => 'No status'],
 
     'field' => [
+        'scope'              => 'Scope',
+        'scope_hint'         => 'Internal: a name used only inside your network - an intranet or an internal application. It is never sent outside: no public DNS, registry lookup, Certificate Transparency or look-alike scan. It gets a health status from this server\'s DNS instead of a security grade.',
         'domain_name'        => 'Domain name',
         'display_name'       => 'Shown as',
         'company'            => 'Company',
@@ -147,6 +171,9 @@ return [
         'hosting_provider'   => 'Web host',
         'ssl_hosts'          => 'Extra hosts to check',
         'ssl_hosts_hint'     => 'Sub-domains whose certificates matter too, e.g. mail.example.com, shop.example.com. The domain itself and www are always checked.',
+        'parent'             => 'Subdomain of',
+        'parent_none'        => 'Not a subdomain',
+        'parent_hint'        => 'Its registration, expiry and renewal are the parent\'s, and are not looked up or reminded here. Found for you when the parent is in the register.',
         'dkim_selectors'     => 'DKIM selectors',
         'dkim_selectors_hint'=> 'Ask your email provider, e.g. selector1, selector2 for Microsoft 365, google for Google Workspace.',
         'cost'               => 'Renewal cost',
@@ -271,6 +298,24 @@ return [
 
     // ---- check findings: title + advice, per key -----------------------------------
     'check' => [
+        // GH #203: an internal domain's DNS-only health check.
+        'int_resolves'    => ['title' => '{host} resolves ({addresses})', 'advice' => ''],
+        'int_no_address'  => ['title' => '{host} does not resolve', 'advice' => 'This server\'s DNS resolver has no address for {host}. If the name should exist, check the record on your internal DNS server - or whether this server asks the right DNS server.'],
+        'int_no_ipv4'     => ['title' => '{host} has no IPv4 address', 'advice' => 'This server\'s DNS resolver answered with no IPv4 address for {host}, and its IPv6 lookup could not be completed (on Windows this is how a name that does not exist is answered). If the name should exist, check the record on your internal DNS server.'],
+        'int_not_checked' => ['title' => '{host}: not checked', 'advice' => 'This server could not ask its DNS resolver about {host} ({error}). That says nothing about the name itself - the last known health is kept until a check completes.'],
+        'int_scope_note'  => ['title' => 'Internal: checked through this server\'s DNS only', 'advice' => 'Nothing about this domain is sent outside the network. Registration, email security, name servers and DNSSEC do not apply, and certificates on internal hosts are not checked yet - that comes with the protections in a later release.'],
+        'sub_registration' => [
+            'title'  => 'A subdomain of {parent} - its registration is the parent\'s',
+            'advice' => 'Expiry, renewal and the registrar are checked and reminded on {parent}.',
+        ],
+        'dns_sub_parent_zone' => [
+            'title'  => 'Answered by {parent}\'s name servers',
+            'advice' => '',
+        ],
+        'dmarc_inherited' => [
+            'title'  => 'No DMARC record of its own - {parent}\'s applies (policy: {policy})',
+            'advice' => 'Receivers use the parent\'s record for a subdomain without one, with its sp= policy when it sets one. Publish a record at _dmarc of this subdomain only if it needs a different policy.',
+        ],
         'reg_redemption' => [
             'title'  => 'The registration has lapsed and is in the registry\'s redemption or deletion period',
             'advice' => 'Contact the registrar today. A domain in redemption can usually still be recovered, at a fee; once it is deleted anyone can register it.',
@@ -310,6 +355,14 @@ return [
         'dns_nxdomain' => [
             'title'  => 'The domain does not resolve (DNS says it does not exist)',
             'advice' => 'Either the registration has lapsed, or it has no name servers. Check the registrar straight away.',
+        ],
+        'dns_lookup_failed' => [
+            'title'  => '{count} DNS lookups could not be answered, so the checks that needed them were skipped',
+            'advice' => 'This is the server running FreeITSM failing to look records up - it says nothing about the domain itself, and no grade is given until the checks can run. First failure: {error} ({names}). Make sure this server can reach DNS on the internet, or choose a different resolver under Domains → Settings → Monitoring, then click Check now.',
+        ],
+        'dns_server_only' => [
+            'title'  => 'Not checked: {types}',
+            'advice' => 'Domains is set to use only this server\'s DNS resolver (Domains → Settings → Monitoring), and it cannot look these record types up. They are left out rather than asked of a public DNS service - this costs the domain nothing.',
         ],
         'dns_no_ns'     => ['title' => 'No name servers answer for this domain', 'advice' => 'Set name servers at the registrar - nothing (website, email) can work without them.'],
         'dns_single_ns' => ['title' => 'Only one name server ({ns})', 'advice' => 'Use at least two name servers, ideally on different networks, so one outage does not take the domain offline.'],
@@ -419,8 +472,16 @@ return [
         'delete_title'    => 'Delete domain',
         'delete_body'     => 'Delete {name} from the register, with its history? This does not touch the registration itself.',
         'saved'           => 'Saved.',
+        'subdomain_of'    => 'subdomain of {name}',
+        'parent_reg'      => 'Registration - {name}\'s',
+        'parent_reg_note' => 'A subdomain is registered as part of its parent. These are {name}\'s details; renew and refresh it there.',
+        'parent_open'     => 'Open {name}',
+        'subdomains'      => 'Subdomains',
+        'subdomains_hint' => 'Each is checked on its own - DNS, email and certificates - and renews with this domain.',
+        'sub_refresh'     => 'A subdomain has no registration of its own to refresh.',
     ],
     'tab' => [
+        'health'       => 'Health',
         'overview'     => 'Overview',
         'security'     => 'Security and email',
         'certificates' => 'Certificates',
@@ -498,6 +559,7 @@ return [
         'add_domain'    => 'Link a domain',
     ],
     'area' => [
+        'health'       => 'Health',
         'registration' => 'Registration',
         'dns'          => 'DNS',
         'email'        => 'Email',
@@ -544,6 +606,26 @@ return [
         'ack_all'      => 'Mark all seen',
         'new'          => 'New',
         'scanned'      => '{n} current certificates, {fresh} new.',
+        'manual_title' => 'Recorded certificates',
+        'manual_intro' => 'Certificates the checks cannot reach - an internal server, a VPN appliance, a SAML signing or code-signing certificate. Their expiry gets the same alerts, calendar entries and Watchtower count as the checked ones.',
+        'manual_none'  => 'None recorded.',
+        'manual_add'   => 'Add',
+        'manual_new'   => 'Record a certificate',
+        'manual_edit'  => 'Edit certificate',
+        'm_purpose'    => 'System or purpose',
+        'm_purpose_ph' => 'e.g. ADFS token signing, VPN appliance, staff portal',
+        'm_type'       => 'Type',
+        'm_provider'   => 'Provider',
+        'm_provider_other' => 'Not a supplier - type the name',
+        'm_provider_ph'=> 'e.g. Let\'s Encrypt, internal CA',
+        'm_expiry'     => 'Expiry date',
+        'm_url'        => 'Address',
+        'm_url_ph'     => 'https://… where it is used or renewed',
+        'm_notes'      => 'Notes',
+        'm_delete'     => 'Delete certificate',
+        'm_delete_body'=> 'Delete the record of "{name}"? Its reminders stop.',
+        'm_saved'      => 'Certificate saved.',
+        'm_not_ready'  => 'Run Database Verification to record certificates here.',
     ],
     'la' => [
         'explain'       => 'Names one slip away from yours - a missing letter, a swapped pair, a 1 for an l, another ending. A look-alike that exists may be innocent; one that receives email can catch invoices and password resets meant for you.',
@@ -579,7 +661,13 @@ return [
         'viewed_code' => 'Auth code viewed',
         'blank'       => '(blank)',
         'f' => [
+            'scope'                 => 'Scope',
+            'health_status'         => 'Health',
             'domain_created'        => 'Added',
+            'parent_domain_id'      => 'Subdomain of',
+            'certificate_added'     => 'Certificate recorded',
+            'certificate_changed'   => 'Certificate changed',
+            'certificate_removed'   => 'Certificate removed',
             'domain_name'           => 'Domain name',
             'status_id'             => 'Status',
             'purpose'               => 'Purpose',
@@ -629,7 +717,15 @@ return [
 
     // ---- settings ----------------------------------------------------------------------
     'settings' => [
+        'internal_interval'      => 'Check internal domains every',
+        'internal_interval_desc' => 'How often internal domains are checked (DNS only, through this server). The scheduled job has to run at least this often for a short interval to happen: for every 15 minutes, run cron/domains.php every 15 minutes.',
+        'ii_15'   => '15 minutes',
+        'ii_30'   => '30 minutes',
+        'ii_60'   => 'Hour',
+        'ii_240'  => '4 hours',
+        'ii_1440' => 'Day',
         'tab_statuses'   => 'Statuses',
+        'tab_cert_types' => 'Certificate types',
         'tab_alerts'     => 'Alerts',
         'tab_monitoring' => 'Monitoring',
         'tab_auth_codes' => 'Auth codes',
@@ -655,6 +751,15 @@ return [
         'st_edit'        => 'Edit status',
         'st_delete'      => 'Delete status',
         'st_delete_body' => 'Delete the status "{name}"?',
+
+        'ct_title'       => 'Certificate types',
+        'ct_intro'       => 'The types a certificate recorded on a domain can be. Switch one off to stop offering it; a type in use cannot be deleted.',
+        'ct_in_use'      => 'Certificates',
+        'ct_add'         => 'Add a certificate type',
+        'ct_edit'        => 'Edit certificate type',
+        'ct_delete'      => 'Delete certificate type',
+        'ct_delete_body' => 'Delete the certificate type "{name}"?',
+        'ct_not_ready'   => 'Run Database Verification to create this list.',
 
         'alerts_title'        => 'Alerts',
         'alerts_off_state'    => 'Email alerts are OFF. Nothing is emailed until you switch them on. The notification bell and workflows are told regardless - they need no switch.',
@@ -735,9 +840,10 @@ return [
         'checks'             => 'DNS, email and certificate checks',
         'checks_desc'        => 'Grade each domain daily: name servers, DNSSEC, CAA, SPF, DKIM, DMARC, MTA-STS, and the certificates on the domain and www.',
         'resolver'           => 'DNS resolver',
-        'resolver_desc'      => 'Automatic uses DNS-over-HTTPS on Windows servers (whose own resolver times out on large answers) and the server\'s resolver elsewhere.',
+        'resolver_desc'      => 'Automatic uses DNS-over-HTTPS on Windows servers (whose own resolver times out on large answers) and the server\'s resolver elsewhere - and when one cannot answer, tries the others before giving up. A lookup that still fails is reported as such, never as a missing record. "This server only" never asks Google or Cloudflare, even when this server cannot answer - for internal names you would rather keep inside; DNSSEC (and CAA where this server cannot ask for it) is then not checked. Registry lookups, the Certificate Transparency watch and the look-alike scan are separate, and have their own switches.',
         'rs_auto'            => 'Automatic',
         'rs_system'          => 'The server\'s own resolver',
+        'rs_system_only'     => 'This server only - never public DNS',
         'rs_google'          => 'Google DNS-over-HTTPS',
         'rs_cloudflare'      => 'Cloudflare DNS-over-HTTPS',
         'ct'                 => 'Certificate Transparency watch',
@@ -759,6 +865,8 @@ return [
 
     // ---- dashboard ---------------------------------------------------------------------
     'dash' => [
+        'internal'           => 'Internal',
+        'internal_desc'      => '{healthy} healthy, {problem} with a problem, {other} not checked or stale',
         'forecast'       => 'Renewals in the next 12 months',
         'grades'         => 'Security grades',
         'attention'      => 'Needs attention',
@@ -784,6 +892,8 @@ return [
         'email_note'     => 'From each domain\'s last check. Parked, defensive and redirect domains are counted as locked down or not, rather than as missing records.',
     ],
     'reason' => [
+        'health'              => 'Internal name not healthy',
+        'stale'               => 'Health check out of date',
         'expired'             => 'Expired',
         'expiring'            => 'Expiring soon',
         'certificate'         => 'Certificate expiring',
@@ -848,6 +958,26 @@ return [
             'p4'    => 'About a sixth of domain endings - mostly country codes such as .de, .io and .co - have no modern lookup service (RDAP). For those FreeITSM uses the older WHOIS service. Some registries, .de among them, never publish an expiry date at all; enter it from the registrar\'s invoice so the alerts still work.',
             'p5'    => 'Give each domain a Purpose. It changes what the checks look for: a parked or defensive domain should never send email, so it is checked for being locked down rather than for having email set up.',
         ],
+        'subdomains' => [
+            'nav'   => 'Subdomains',
+            'title' => 'Subdomains',
+            'intro' => 'students.example.org, shop.example.org - names under a domain you hold, kept with it.',
+            'p1'    => 'Add a subdomain like any domain. When the domain it belongs to is already in the register, it is linked to it for you - and add the parent after its subdomains and they are linked then. The subdomain\'s page says **subdomain of** its parent, and the parent\'s page lists its subdomains.',
+            'p2'    => 'A subdomain is registered as part of its parent, so its registration is the parent\'s: it is never looked up at a registry, its page shows the parent\'s registrar, expiry and renewal, and the renewal reminders go to the parent only.',
+            'p3'    => 'Everything else is checked for the subdomain itself: its mail servers, SPF, DKIM and certificates. (Look-alikes are not scanned for it - only a name somebody could register has those.) What DNS keeps at the parent is read there - a subdomain with no name servers of its own is answered by the parent\'s, its CAA can be the parent\'s, and its DNSSEC is the parent zone\'s.',
+            'p4'    => 'DMARC: a subdomain with no DMARC record of its own is covered by its parent\'s - with the parent\'s subdomain policy (sp=) when it sets one, otherwise its main policy. The checks say which applies. A parent with p=reject but sp=none protects itself and not its subdomains.',
+            'p5'    => 'To change or remove the link, choose **Subdomain of** in the Edit dialog. A subdomain cannot have subdomains of its own: every one is linked to the domain that is actually registered.',
+        ],
+        'internal' => [
+            'nav'   => 'Internal domains',
+            'title' => 'Internal domains',
+            'intro' => 'Names that only exist inside your network - an intranet, an internal application - kept inside it.',
+            'p1'    => 'Set a domain\'s **Scope** to **Internal** (when adding it, or under Edit) and it is never sent outside the network: no public DNS, no registry lookup, no Certificate Transparency watch and no look-alike scan - not even as a fallback when something fails. Registration, renewal, purpose and email security do not apply, so they are not shown as failures.',
+            'p2'    => 'Instead of a security grade it gets a **health**: does each name - the domain and its extra hosts - resolve, asked of this server\'s DNS resolver only. **Healthy**, **Problem** (a name does not resolve), **Not checked** (the check could not run - which says nothing about the name) or **Stale** (no check has completed for twice the interval). Nothing that did not run is ever shown as a pass.',
+            'p3'    => 'Two dates are kept: the **last completed check** and when it was **last healthy**. A check that finds a problem is still a current result, and if later checks cannot complete, the last known problem stays on screen with a note rather than turning into "unknown".',
+            'p4'    => 'Internal domains are checked every hour by default - change it under **Settings → Monitoring → Check internal domains every**. The scheduled job has to run at least that often for a short interval to happen. They are left out of the security grades, the email posture and registration alerts; a problem appears under **Needs attention** and on the dashboard.',
+            'p5'    => 'Certificates on internal hosts are not checked yet: connecting to internal addresses needs the protections that come with the next part (administrator-only targets, permitted networks and ports). Also note that *This server only* keeps FreeITSM\'s questions on this server - if this server\'s DNS resolver forwards questions it cannot answer to a public service, a name can still leave the network from there.',
+        ],
         'grade' => [
             'nav'   => 'The security grade',
             'title' => 'The security grade',
@@ -856,6 +986,7 @@ return [
             'p2'    => 'The checks cover four areas. Registration: expiry, transfer lock, registry lock, how it renews. DNS: name servers, DNSSEC, CAA. Email: SPF, DKIM, DMARC, MTA-STS and TLS reporting. Website: the certificate on the domain, on www, and on any extra hosts you list.',
             'p3'    => 'The Security and email tab on each domain lists every check with plain-English advice, and records to copy where one is needed. The Overview tab shows the three most worth fixing.',
             'p4'    => 'Press Check now on a domain after fixing something to see the new grade straight away rather than waiting for tomorrow\'s run.',
+            'p5'    => 'The DNS questions are asked by this server or, on Windows and when it cannot answer, by Google or Cloudflare. If your domains include internal names you would rather not send outside, set Domains → Settings → Monitoring → DNS resolver to This server only: nothing is then asked of a public DNS service, and DNSSEC (which needs one) shows as not checked, costing nothing. Registry lookups, the Certificate Transparency watch and the look-alike scan are separate and have their own switches.',
         ],
         'email' => [
             'nav'   => 'Email security',
@@ -876,6 +1007,8 @@ return [
             'p3'    => 'Certificate Transparency: every publicly trusted certificate is published in open logs. With the watch switched on (Settings → Monitoring), FreeITSM asks crt.sh weekly for every certificate issued for each domain and flags the new ones. A certificate you did not ask for is often the first sign of a phishing site being prepared.',
             'p4'    => 'The first look at a domain records what already exists as seen, so switching the watch on does not bury you in years-old certificates.',
             'p5'    => 'Certificate renewals can appear on the Watchtower card and in the Calendar, set separately from domain renewals in Settings → Alerts → Where certificate renewals are shown. And a certificate that expires on a domain linked to Service Status services flags those services as at risk - see **Service Status** below.',
+            'p6'    => '**Recorded certificates** are the ones the checks cannot reach: an internal server, a VPN appliance, a SAML or ADFS signing certificate, a code-signing certificate. Add them on the domain\'s (or subdomain\'s) Certificates tab: what it is for, its type, the provider - one of your Contracts suppliers, or typed in - its expiry date and where it is used. Each gets the same certificate alert, Calendar entry and Watchtower count as the checked ones, named so you know which.',
+            'p7'    => 'The list of certificate types is yours to change in Settings → Certificate types. Switch a type off to stop offering it; certificates that already have it keep it.',
         ],
         'lookalikes' => [
             'nav'   => 'Look-alikes',

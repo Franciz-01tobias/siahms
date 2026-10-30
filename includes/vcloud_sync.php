@@ -130,7 +130,7 @@ function vcdLogout(array $c, string $token): void
 {
     try {
         vcdHttp($c, 'DELETE', '/cloudapi/1.0.0/sessions/current', vcdAcceptJson($c['api_version']), $token);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Nothing to do: the session times out on its own.
     }
 }
@@ -148,7 +148,7 @@ function vcdTryGet(array $c, string $token, string $path, array $headers): ?stri
     try {
         [$code, $body] = vcdHttp($c, 'GET', $path, $headers, $token);
         return ($code >= 200 && $code < 300) ? $body : null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
 }
@@ -473,7 +473,7 @@ function vcdSaveConnection(PDO $conn, array $in): int
     if ($org === '' || mb_strlen($org) > 100) {
         throw new Exception('The organization is required. Use the organization name, or System for a provider administrator.');
     }
-    if ($username === '' || mb_strlen($username) > 100 || strpos($username, ':') !== false) {
+    if ($username === '' || mb_strlen($username) > 100 || str_contains($username, ':')) {
         throw new Exception('A user name is required (without a colon).');
     }
     if (!preg_match('/^\d+\.\d+$/', $version)) {

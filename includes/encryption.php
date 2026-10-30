@@ -58,6 +58,8 @@ define('ENCRYPTED_SETTING_KEYS', [
     'knowledge_writeup_api_key',
     'warroom_ai_api_key',
     'projects_ai_api_key',
+    'zabbix_token',   // the secret Zabbix sends; shown to administrators to paste into Zabbix, so not masked
+    'threecx_token',  // the secret 3CX sends; carried in the template an administrator downloads, so not masked
 ]);
 
 /**
@@ -236,7 +238,7 @@ function encryptValue($plaintext) {
     }
 
     // Don't double-encrypt
-    if (strpos($plaintext, ENCRYPTION_PREFIX) === 0) {
+    if (str_starts_with($plaintext, ENCRYPTION_PREFIX)) {
         return $plaintext;
     }
 
@@ -278,7 +280,7 @@ function decryptValue($encrypted) {
     }
 
     // Not encrypted - return as-is (supports migration)
-    if (strpos($encrypted, ENCRYPTION_PREFIX) !== 0) {
+    if (!str_starts_with($encrypted, ENCRYPTION_PREFIX)) {
         return $encrypted;
     }
 

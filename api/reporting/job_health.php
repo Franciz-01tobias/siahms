@@ -64,7 +64,8 @@ try {
             exit;
         }
         $job = (string)($in['job'] ?? '');
-        if (!isset(jobRegistry()[$job])) throw new InvalidArgumentException('Unknown job.');
+        $registry = jobRegistryAll($conn);
+        if (!isset($registry[$job])) throw new InvalidArgumentException('Unknown job.');
 
         $cfg = jobHealthConfig($conn);
         $mine = $cfg[$job] ?? [];
@@ -82,7 +83,7 @@ try {
         if ($mine) $cfg[$job] = $mine; else unset($cfg[$job]);
         $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('job_health_config', ?)
                         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")->execute([json_encode($cfg)]);
-        echo json_encode(['success' => true, 'job' => jobHealthOne($conn, jobRegistry()[$job], $cfg[$job] ?? [])]);
+        echo json_encode(['success' => true, 'job' => jobHealthOne($conn, $registry[$job], $cfg[$job] ?? [])]);
         exit;
     }
 
@@ -102,7 +103,7 @@ try {
         $where = [];
         $args = [];
         $job = (string)($_GET['job'] ?? '');
-        if ($job !== '' && isset(jobRegistry()[$job])) { $where[] = 'job_key = ?'; $args[] = $job; }
+        if ($job !== '' && isset(jobRegistryAll($conn)[$job])) { $where[] = 'job_key = ?'; $args[] = $job; }
         $outcome = (string)($_GET['outcome'] ?? '');
         if (in_array($outcome, ['running', 'ok', 'partial', 'failed', 'skipped'], true)) { $where[] = 'outcome = ?'; $args[] = $outcome; }
         $trigger = (string)($_GET['trigger'] ?? '');
@@ -122,7 +123,7 @@ try {
                               ORDER BY r.id DESC LIMIT {$limit} OFFSET {$offset}");
         $s->execute($args);
         $names = [];
-        foreach (jobRegistry() as $k => $d) $names[$k] = jobHealthT($d['name_key'], $k);
+        foreach (jobRegistryAll($conn) as $k => $d) $names[$k] = jobHealthName($d);
         $runs = array_map(function ($r) use ($names) {
             $r['job_name'] = $names[$r['job_key']] ?? $r['job_key'];
             $r['counts'] = $r['counts_json'] ? (json_decode($r['counts_json'], true) ?: []) : [];

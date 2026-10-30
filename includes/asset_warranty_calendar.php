@@ -36,6 +36,9 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
      */
     function syncAssetWarrantyCalendar(PDO $conn): array
     {
+        // GH #217: nothing at all while the Calendar is switched off - not even the clear-out,
+        // so switching it back on finds the entries as they were until the next sync.
+        if (!moduleIsEnabled($conn, 'calendar')) return ['success' => true, 'synced' => 0];
         try {
             // The feature depends on schema added alongside it; bail quietly if
             // a DB verification hasn't run yet.
@@ -147,6 +150,9 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
             require_once __DIR__ . '/leases.php';
             if (leaseReady($conn)) $goneBack = ' AND NOT ' . leaseGoneBackSql('a');
         }
+        // A retired asset has left the estate: no warranty or lease entry for it.
+        require_once __DIR__ . '/asset_retirement.php';
+        $goneBack .= assetNotRetiredSql($conn, 'a');
         $rows = $conn->query(
             "SELECT a.id, a.hostname, a.`{$column}` AS expiry_date
              FROM assets a
@@ -232,7 +238,7 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
             $new = (int)$conn->lastInsertId();
             awcSetSetting($conn, $settingKey, (string)$new);
             return $new;
-        } catch (Exception $e) {
+        } catch (Exception) {
             return null; // category column shape differs / table missing — events just go uncategorised
         }
     }
@@ -266,7 +272,7 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
             $used->execute([$source]);
             $adopted = (int)$used->fetchColumn();
             if ($adopted > 0) { awcSetSetting($conn, $settingKey, (string)$adopted); }
-        } catch (Exception $e) { /* the name lookup will cope */ }
+        } catch (Exception) { /* the name lookup will cope */ }
     }
 
     /**
@@ -282,7 +288,7 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
                 "INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?)
                  ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
             )->execute([$key, $value]);
-        } catch (Exception $e) { /* next sync will work it out again */ }
+        } catch (Exception) { /* next sync will work it out again */ }
     }
 
     /**
@@ -298,7 +304,7 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
             $s->execute([$key]);
             $v = $s->fetchColumn();
             return ($v === false || $v === null || $v === '') ? $default : (string)$v;
-        } catch (Exception $e) {
+        } catch (Exception) {
             return $default;
         }
     }
@@ -318,7 +324,7 @@ if (!function_exists('syncAssetWarrantyCalendar')) {
             );
             $s->execute([$table, $col]);
             return (int)$s->fetchColumn() > 0;
-        } catch (Exception $e) {
+        } catch (Exception) {
             return false;
         }
     }

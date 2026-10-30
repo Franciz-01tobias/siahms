@@ -6,6 +6,7 @@
  * Templates are configured in Tickets > Settings > Templates.
  */
 
+require_once __DIR__ . '/mailbox_provider.php';   // MailboxProvider
 require_once __DIR__ . '/encryption.php';
 require_once __DIR__ . '/email_log.php';
 require_once __DIR__ . '/public_url.php';   // publicAbsoluteUrl(), for the [ticket_url] merge code
@@ -122,13 +123,13 @@ function sendTemplateEmail(PDO $conn, int $ticketId, string $eventTrigger, array
             return; // Manual ticket or no mailbox — skip silently
         }
 
-        $provider = $mailbox['provider'] ?? 'microsoft';
+        $provider = MailboxProvider::fromMailbox($mailbox);
         $accessToken = null;
         $graphBase = '/me';
-        if ($provider === 'imap') {
+        if ($provider === MailboxProvider::Imap) {
             // Basic IMAP sends via SMTP — no OAuth token to validate/refresh.
             require_once __DIR__ . '/mailbox_imap.php';
-        } elseif ($provider === 'google') {
+        } elseif ($provider === MailboxProvider::Google) {
             if (empty($mailbox['token_data'])) {
                 error_log("Template email: mailbox {$mailbox['id']} has no token data");
                 return;
@@ -186,9 +187,9 @@ function sendTemplateEmail(PDO $conn, int $ticketId, string $eventTrigger, array
         $fullBody = buildTemplateEmailBody($body, $ticketNumber, $bodyIsHtml);
 
         // Send via appropriate API
-        if ($provider === 'imap') {
+        if ($provider === MailboxProvider::Imap) {
             imapSmtpSend($mailbox, $recipientEmail, '', $fullSubject, $fullBody);
-        } elseif ($provider === 'google') {
+        } elseif ($provider === MailboxProvider::Google) {
             $fromAddress = $mailbox['target_mailbox'] ?? '';
             gmailSendEmail($accessToken, $recipientEmail, $fullSubject, $fullBody, $fromAddress);
         } else {
@@ -336,7 +337,7 @@ function templateRulesByTemplate(PDO $conn, array $templateIds): array
             ];
         }
         return $out;
-    } catch (Exception $e) {
+    } catch (Exception) {
         // A part-upgraded install without the table has no rules, which means every
         // template applies to everyone — exactly the behaviour before this existed.
         return [];
@@ -683,13 +684,13 @@ function internalTicketEmail(PDO $conn, int $ticketId, array $recipients, string
         throw new Exception('no mailbox available to send from');
     }
 
-    $provider    = $mailbox['provider'] ?? 'microsoft';
+    $provider    = MailboxProvider::fromMailbox($mailbox);
     $accessToken = null;
     $graphBase   = '/me';
-    if ($provider === 'imap') {
+    if ($provider === MailboxProvider::Imap) {
         // Basic IMAP sends via SMTP - no OAuth token to validate or refresh.
         require_once __DIR__ . '/mailbox_imap.php';
-    } elseif ($provider === 'google') {
+    } elseif ($provider === MailboxProvider::Google) {
         $tokenData = json_decode(preg_replace('/[\x00-\x1F\x7F]/', '', $mailbox['token_data'] ?? ''), true);
         if (!$tokenData || !isset($tokenData['access_token'])) {
             throw new Exception("invalid token data on mailbox {$mailbox['id']}");
@@ -712,9 +713,9 @@ function internalTicketEmail(PDO $conn, int $ticketId, array $recipients, string
     $firstError = null;
     foreach ($recipients as $to) {
         try {
-            if ($provider === 'imap') {
+            if ($provider === MailboxProvider::Imap) {
                 imapSmtpSend($mailbox, $to, '', $subject, $bodyHtml);
-            } elseif ($provider === 'google') {
+            } elseif ($provider === MailboxProvider::Google) {
                 gmailSendEmail($accessToken, $to, $subject, $bodyHtml, $mailbox['target_mailbox'] ?? '');
             } else {
                 templateSendViaGraph($accessToken, [

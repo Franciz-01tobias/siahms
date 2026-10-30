@@ -46,6 +46,8 @@ if ($limit < 1 || $limit > 100) $limit = 50;
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'knowledge');
 
     // The whole "what may this requester read" question, answered in ONE place —
     // see includes/knowledge/portal_reader.php for the two traps it encodes.

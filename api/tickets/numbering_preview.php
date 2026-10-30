@@ -46,7 +46,7 @@ try {
     // that clash, because "there is a clash" is useless without "between whom".
     if ($cfg['ticket_number_scope'] === 'per_company'
         && $cfg['ticket_number_style'] !== 'random'
-        && strpos($cfg['ticket_number_format'], '{COMPANY}') !== false) {
+        && str_contains($cfg['ticket_number_format'], '{COMPANY}')) {
         $conn = connectToDatabase();
         foreach (TicketNumbering::codeClashes($conn) as $code => $names) {
             $problems[] = $code === ''

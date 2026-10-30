@@ -247,7 +247,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         $fallback = 'System.Description';
         try {
             $t = $this->devopsRequest('GET', $this->projectUrl($project, 'wit/workitemtypes/' . rawurlencode($type)));
-        } catch (Exception $e) {
+        } catch (Exception) {
             return $cache[$key] = $fallback;   // a create with a plausible field beats no create
         }
 
@@ -447,7 +447,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
                     $name = (string)($s['name'] ?? '');
                     if ($name !== '') $map[mb_strtolower($name)] = (string)($s['category'] ?? '');
                 }
-            } catch (Exception $e) {
+            } catch (Exception) {
                 // Leave the map empty: an unknown category is null, which the
                 // caller renders as "no status yet" rather than a wrong one.
             }
@@ -549,7 +549,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
                     // every other linked issue silently stops updating.
                     'errorPolicy' => 'omit',
                 ]));
-            } catch (Exception $e) {
+            } catch (Exception) {
                 continue;   // a bad chunk must not lose the others
             }
             foreach ((array)($res['value'] ?? []) as $wi) {
@@ -796,7 +796,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
         foreach ($this->searchChangedSince($ids, $cutoff) as $externalId) {
             try {
                 $comments = $this->fetchComments($externalId);
-            } catch (Exception $e) {
+            } catch (Exception) {
                 continue;   // one unreadable item must not lose the others' comments
             }
             foreach ($comments as $c) {
@@ -867,7 +867,7 @@ class AzureDevOpsProvider extends IssueTrackerProvider
             try {
                 $res = $this->devopsRequest('POST',
                     $this->apiUrl('wit/wiql', ['timePrecision' => 'true']), ['query' => $wiql]);
-            } catch (Exception $e) {
+            } catch (Exception) {
                 continue;
             }
             foreach ((array)($res['workItems'] ?? []) as $w) {

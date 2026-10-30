@@ -24,6 +24,7 @@ require_once __DIR__ . '/resources/changes.php';
 require_once __DIR__ . '/resources/knowledge.php';
 require_once __DIR__ . '/resources/tasks.php';
 require_once __DIR__ . '/resources/cmdb.php';
+require_once __DIR__ . '/resources/virtual_estate.php';   // GH #199
 require_once __DIR__ . '/resources/contracts.php';
 require_once __DIR__ . '/resources/domains.php';
 require_once __DIR__ . '/resources/cost_centres.php';
@@ -78,6 +79,9 @@ foreach ($routes as [$routeMethod, $pattern, $permission, $handler]) {
     }
     if ($permission !== null) {
         apiRequirePermission($apiKey, $permission[0], $permission[1]);
+        // A module switched off for the install answers 403 module_disabled,
+        // whatever the key may do (GH #217, lib/modules.php).
+        apiV1RequireModulesEnabled($conn, $permission[0], $path);
     }
     array_shift($matches); // drop the full-match element
     try {
@@ -116,6 +120,7 @@ function apiHandleRoot(PDO $conn, array $apiKey, array $params, array $body): vo
             'GET /assets/{id}/custody', 'GET /assets/{id}/disks', 'GET /assets/{id}/network-adapters',
             'GET /assets/{id}/devices', 'GET /assets/{id}/software',
             'GET /assets/{id}/inventory', 'POST /assets/{id}/inventory', 'DELETE /assets/{id}/inventory/{source}',
+            'GET /assets/{id}/ci-link', 'POST /assets/{id}/ci-link', 'DELETE /assets/{id}/ci-link', 'GET /cmdb/objects/{id}/asset-link', 'POST /assets/{id}/ci-link/create-ci', 'GET /virtual-estate/{id}', 'POST /virtual-estate/{id}/reports',
             'GET /problems', 'POST /problems', 'GET /problems/{id}', 'PATCH /problems/{id}',
             'DELETE /problems/{id}', 'GET /problems/{id}/notes', 'POST /problems/{id}/notes',
             'GET /problems/{id}/audit', 'POST /problems/{id}/tickets',

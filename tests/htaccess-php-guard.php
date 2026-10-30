@@ -103,10 +103,10 @@ $fixed = htaccessGuardPhpDirectives($bareOld);
 check('repairs the 3.1.0 file', htaccessUnguardedPhpDirectives($fixed) === []);
 check('keeps a mod_php 8 copy of the directive', (bool)preg_match('#<IfModule mod_php\.c>\s*php_flag engine off\s*</IfModule>#', $fixed));
 check('keeps a mod_php 7 copy of the directive', (bool)preg_match('#<IfModule mod_php7\.c>\s*php_flag engine off\s*</IfModule>#', $fixed));
-check('leaves every other line alone', strpos($fixed, "RemoveHandler .php\n") !== false && strpos($fixed, '# Branding uploads.') === 0);
+check('leaves every other line alone', str_contains($fixed, "RemoveHandler .php\n") && str_starts_with($fixed, '# Branding uploads.'));
 check('is idempotent', htaccessGuardPhpDirectives($fixed) === $fixed);
 $crlf = htaccessGuardPhpDirectives("# x\r\nphp_flag engine off\r\n");
-check('keeps CRLF line endings', strpos($crlf, "\r\n") !== false && preg_match("/(?<!\r)\n/", $crlf) === 0);
+check('keeps CRLF line endings', str_contains($crlf, "\r\n") && preg_match("/(?<!\r)\n/", $crlf) === 0);
 $clean = "<IfModule mod_php.c>\n  php_flag engine off\n</IfModule>\n";
 check('does not touch a file that is already right', htaccessGuardPhpDirectives($clean) === $clean);
 

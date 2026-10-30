@@ -362,6 +362,11 @@
      * the palette.
      */
     async function loadClasses() {
+        // GH #217: CMDB switched off - say so instead of a load failure. Not granted keeps the old error.
+        if (!window.NM_CMDB && window.NM_CMDB_OFF) {
+            elPaletteBody.innerHTML = '<div class="nm-palette-empty">' + escapeHtml(window.NM_CMDB_OFF) + '</div>';
+            return;
+        }
         try {
             const resp = await fetch(CMDB_API + 'get_classes.php');
             const data = await resp.json();
@@ -1192,7 +1197,7 @@
         elNdClassValue.textContent = n.class_name || '—';
         elNdPlannedRow.style.display = n.is_planned ? '' : 'none';
         // CMDB deep-link — opens the object detail page in a new tab
-        elNdCmdbLink.href = '../cmdb/object.php?id=' + n.cmdb_object_id;
+        if (elNdCmdbLink) elNdCmdbLink.href = '../cmdb/object.php?id=' + n.cmdb_object_id;   // GH #217: absent without CMDB
 
         // Icon preview + change/reset state. The Reset button only matters
         // when an override is active (clears it back to the class default).
@@ -1211,15 +1216,19 @@
         }
 
         // "Add related objects" is a mutation; gate on the editable version
-        elNdAddRelatedBtn.disabled = !editable;
-        elNdAddRelatedBtn.title = !editable
-            ? t('network-mapper.editor.readonly_generic_title')
-            : t('network-mapper.detail.add_related_title');
+        // GH #217: the button and the properties are absent without CMDB.
+        if (elNdAddRelatedBtn) {
+            elNdAddRelatedBtn.disabled = !editable;
+            elNdAddRelatedBtn.title = !editable
+                ? t('network-mapper.editor.readonly_generic_title')
+                : t('network-mapper.detail.add_related_title');
+        }
 
         // Kick off the CMDB properties fetch. Selection swaps mid-flight are
         // handled by stamping currentPropertiesObjectId — the resolver checks
         // it's still the latest before rendering.
-        loadNodeProperties(n.cmdb_object_id);
+        if (window.NM_CMDB) loadNodeProperties(n.cmdb_object_id);
+        else if (elNdPropertiesSection) elNdPropertiesSection.style.display = 'none';
     }
 
     // ---- CMDB properties (lazy-loaded per selection) ----

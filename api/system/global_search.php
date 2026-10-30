@@ -51,7 +51,7 @@ if (mb_strlen($q) < 2) {
 }
 
 // null allowed_modules = unrestricted (all modules). Matches the waffle panel.
-$allowed = $_SESSION['allowed_modules'] ?? null;
+$allowed = analystAllowedModulesNow();   // the grants now, not at sign-in
 $can = function (string $key) use ($allowed): bool {
     return $allowed === null || in_array($key, $allowed, true);
 };

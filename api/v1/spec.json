@@ -393,6 +393,13 @@
                             "req": false
                         },
                         {
+                            "name": "workspace",
+                            "in": "body",
+                            "desc": "Boolean. Mark this ticket as a workspace. Audited as Workspace on/off; changing only this flag does not trigger workflow events. Requires Database Verification. Display still follows the install mode and each analyst's preference.",
+                            "type": "boolean",
+                            "req": false
+                        },
+                        {
                             "name": "company_id",
                             "in": "body",
                             "desc": "Move the ticket to another company (key must be scoped to both)",
@@ -940,6 +947,12 @@
                             "req": false
                         },
                         {
+                            "name": "retired",
+                            "in": "query",
+                            "desc": "exclude (default) leaves out assets that have left the estate; include returns every asset; only returns just the retired ones",
+                            "req": false
+                        },
+                        {
                             "name": "sort",
                             "in": "query",
                             "desc": "hostname, id, first_seen, last_seen, warranty_expiry, purchase_date, model — prefix \"-\" for descending (default hostname)",
@@ -1473,6 +1486,100 @@
                 },
                 {
                     "m": "GET",
+                    "p": "/assets/{id}/ci-link",
+                    "perm": "asset_ci_links.read",
+                    "s": "The linked configuration item",
+                    "d": "The configuration item this asset is the same equipment as (GH #201), and every earlier period of being linked. current is null when there is no link. Each period says who linked and unlinked it, when and how (ui, api:<key name>), and why it ended: unlinked, replaced, ci_deleted (the CI was deleted - its name and class are kept on the row) or asset_merged. A key without cmdb_objects.read sees the CI end as {\"restricted\": true}, with no id or name - in current and in the history. made_on names the asset a period was made on when that asset has since been merged into this one.",
+                    "params": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "desc": "Asset id",
+                            "req": true
+                        }
+                    ],
+                    "section": "Asset assignments, history & inventory",
+                    "slug": "get-assets-id-ci-link"
+                },
+                {
+                    "m": "POST",
+                    "p": "/assets/{id}/ci-link",
+                    "perm": "asset_ci_links.create",
+                    "s": "Link a configuration item",
+                    "d": "Links this asset to a configuration item in the same company: \"these two records are the same piece of equipment\". An identity, not a dependency - nothing is added to the CMDB graph and nothing is copied. Safe to retry: the same pair again answers 200 with unchanged true. One live link per asset and per CI: if either already has one, the answer is 409 ci_already_linked or asset_already_linked, naming the other record (or saying it is one the key cannot see), with the live link ids in error.details.conflicts. To replace on purpose, send replace true and replaces_link_ids with exactly those ids; if the links changed since, the answer is 409 link_changed, so a newer link is never displaced silently. Needs only this permission - not assets.update or cmdb_objects.update - and the key's company scope must reach both records. POST rather than PUT because this API takes only GET, POST, PATCH and DELETE.",
+                    "params": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "desc": "Asset id",
+                            "req": true
+                        },
+                        {
+                            "name": "cmdb_object_id / replace / replaces_link_ids",
+                            "in": "body",
+                            "req": true,
+                            "desc": "cmdb_object_id: the CI; replace: true to end the conflicting links; replaces_link_ids (or replaces_link_id): the live link ids from the 409 you are replacing"
+                        }
+                    ],
+                    "body": {
+                        "cmdb_object_id": 88
+                    },
+                    "section": "Asset assignments, history & inventory",
+                    "slug": "post-assets-id-ci-link"
+                },
+                {
+                    "m": "DELETE",
+                    "p": "/assets/{id}/ci-link",
+                    "perm": "asset_ci_links.delete",
+                    "s": "Unlink the configuration item",
+                    "d": "Ends the live link. Both records are kept, and the period stays in the history with who ended it and how. 404 not_linked when there is no link. Pass ?link_id=N to say which link you mean: if it is no longer the live one, the answer is 409 link_changed.",
+                    "params": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "desc": "Asset id",
+                            "req": true
+                        },
+                        {
+                            "name": "link_id",
+                            "in": "query",
+                            "req": false,
+                            "desc": "The live link id you expect to end"
+                        }
+                    ],
+                    "section": "Asset assignments, history & inventory",
+                    "slug": "delete-assets-id-ci-link"
+                },
+                {
+                    "m": "POST",
+                    "p": "/assets/{id}/ci-link/create-ci",
+                    "perm": "asset_ci_links.create",
+                    "s": "Create the linked configuration item",
+                    "d": "Creates a configuration item of the class this asset's type is mapped to (Assets -> Settings -> Asset types -> CMDB class) and links it, in one transaction - a linked CI or nothing. Also needs cmdb_objects.create. The name defaults to the asset's; properties must supply the class's required ones, validated as on POST /cmdb/objects. Nothing hardware-shaped is copied: the asset's details are read live through the link. 422 no_class_mapped when the type has no class. 409 possible_matches, with error.details.matches, when unlinked CIs of that class in the company have the asset's name - link one of them instead (POST /assets/{id}/ci-link), or send ignore_matches true to create anyway. Retry-safe: an asset already linked creates nothing and returns its CI with created false (200); a new CI is 201.",
+                    "params": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "desc": "Asset id",
+                            "req": true
+                        },
+                        {
+                            "name": "name / properties / ignore_matches",
+                            "in": "body",
+                            "req": false,
+                            "desc": "name: the CI's name (default: the asset's); properties: {property_key: value} for the class's required properties; ignore_matches: true to create despite same-name CIs"
+                        }
+                    ],
+                    "body": {
+                        "properties": {
+                            "environment": "Production"
+                        }
+                    },
+                    "section": "Asset assignments, history & inventory",
+                    "slug": "post-assets-id-ci-link-create-ci"
+                },
+                {
+                    "m": "GET",
                     "p": "\/assets\/{id}\/custody",
                     "perm": "asset_history.read",
                     "s": "Custody log",
@@ -1500,11 +1607,28 @@
                     }
                 },
                 {
+                    "m": "GET",
+                    "p": "\/assets\/{id}\/connections",
+                    "perm": "assets.read",
+                    "s": "Connected assets",
+                    "d": "What is physically connected to this asset - a monitor on a computer, a phone in a dock - from either end. current lists each connected asset once, with every source's row beside the others: manual (confirmed by a person) and rest:<source> (observed by a tool through POST \/assets\/{id}\/inventory, section connections). A tool's row says when it was last observed connected, not that it is connected now. history lists connections that have ended. Not custody (who holds it) and not a CMDB dependency.",
+                    "params": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "desc": "Asset id",
+                            "req": true
+                        }
+                    ],
+                    "section": "Asset assignments, history & inventory",
+                    "slug": "get-assets-id-connections"
+                },
+                {
                     "m": "POST",
                     "p": "\/assets\/{id}\/inventory",
                     "perm": "asset_inventory.create",
                     "s": "Report inventory from your own tool",
-                    "d": "Reports what an external tool (an RMM, Lansweeper, a CMDB export) saw on this asset: software, volumes (disks) and network adapters. The rows go into the same inventory every screen and report reads, tagged with your source, and no other source's rows are touched. The asset's own fields and last_seen (\"the agent reported\") never change. A source name belongs to one analyst per company - the first to write it - so a rotated key for the same analyst keeps it; built-in names (agent, intune, ...) are refused. (source, source_device_ref) links to one asset; naming it on another is a 409 naming the asset. Each section is judged on its own: complete = exactly this list for this source (an empty list removes all of them), partial = added and updated only, omitted = untouched; older than the newest applied = stale, same time and content = replayed, same time and different content = failed (observation_conflict). A section that fails is rolled back alone and named; the others apply (207). Send the same report again to retry the failed sections - the applied ones answer replayed. Each applied section reports added, updated and removed counts.",
+                    "d": "Reports what an external tool (an RMM, Lansweeper, a CMDB export) saw on this asset: software, volumes (disks) and network adapters. The rows go into the same inventory every screen and report reads, tagged with your source, and no other source's rows are touched. The asset's own fields and last_seen (\"the agent reported\") never change. A source name belongs to one analyst per company - the first to write it - so a rotated key for the same analyst keeps it; built-in names (agent, intune, ...) are refused. (source, source_device_ref) links to one asset; naming it on another is a 409 naming the asset. Each section is judged on its own: complete = exactly this list for this source (an empty list removes all of them), partial = added and updated only, omitted = untouched; older than the newest applied = stale, same time and content = replayed, same time and different content = failed (observation_conflict). A section that fails is rolled back alone, named, and recorded as failed beside its last good data (GET .../inventory); the others apply (207). Send the same report again to retry the failed sections - the applied ones answer replayed. Each applied section reports added, updated and removed counts. A connections section (the assets physically connected to this one) also lists, as unmatched, any serial no asset has or several share - kept for review in Assets, never created.",
                     "params": [
                         {
                             "name": "id",
@@ -1516,7 +1640,7 @@
                             "name": "schema_version \/ source \/ source_device_ref \/ observed_at \/ sections",
                             "in": "body",
                             "req": true,
-                            "desc": "schema_version 1; source: your tool's name (lowercase, max 48); source_device_ref: your tool's id for the device; observed_at: when it scanned (RFC3339 with timezone); sections: software, disks and\/or network_adapters, each {complete, items}"
+                            "desc": "schema_version 1; source: your tool's name (lowercase, max 48); source_device_ref: your tool's id for the device; observed_at: when it scanned (RFC3339 with timezone); sections: software, disks, network_adapters and\/or connections, each {complete, items}. A connections item names the other asset by connected_asset_id or serial, with optional name, model and connected (false = gone)"
                         }
                     ],
                     "body": {
@@ -1556,7 +1680,7 @@
                     "p": "\/assets\/{id}\/inventory",
                     "perm": "asset_inventory.read",
                     "s": "Inventory sources on an asset",
-                    "d": "Which external sources report on this asset: each source, its device reference, the analyst who owns the source name, and per section when it was observed and imported, and by whom. The rows themselves are in the disks, network-adapters and software lists, each with its source.",
+                    "d": "Which sources report on this asset - the inventory agent (source agent) and external tools: each source, its device reference (none for the agent), the analyst who owns the source name, and per section when its last good data was observed and imported, and by whom, and what the last attempt came to: last_outcome succeeded, empty (a complete, empty list), skipped (left out of the agent's last report) or failed (with last_error), at last_attempt_at. A failed or skipped attempt never moves observed_at, so old data never looks new. observed_at is null for a section that has only ever failed. The rows themselves are in the disks, network-adapters and software lists, each with its source.",
                     "params": [
                         {
                             "name": "id",
@@ -1747,6 +1871,108 @@
                             }
                         ]
                     }
+                }
+            ]
+        },
+        {
+            "section": "Virtual estate (Hyper-V)",
+            "items": [
+                {
+                    "m": "POST",
+                    "p": "/virtual-estate/{connection}/reports",
+                    "perm": "virtual_estate.create",
+                    "s": "Send a collector report",
+                    "d": "What scripts/Invoke-HyperVInventory.ps1 sends: the Hyper-V hosts, Failover Clusters, cluster roles and VMs it read. Accepted ONLY from the key the connection was given, so a key cannot write another estate (403 otherwise). scope names the clusters and standalone hosts the report covers; a report only ever marks objects in its own scope. Each section - clusters, hosts, cluster_roles, vms, vm_disks, vm_networks - is complete (exactly this list: what is missing is marked not_seen_since, never deleted), partial (added and updated only) or left out (untouched). Hosts are identified by hardware UUID (id); a missing, all-zero, all-F or repeated one falls back to the host's name and is marked name-based. VMs are identified by their Get-VM Id. Inside a report, VMs and roles name their host by host name. unreadable lists hosts or clusters that could not be read: everything on them is kept and marked not confirmed. A report older than the newest for the same scope is stale; the same scope, observed_at and content again is replayed (safe to resend); the same scope and observed_at with different content is 409 observation_conflict. Each section applies in its own savepoint: 207 when some failed (send the same report again to retry them), 422 when all did. A VM or host that comes back with a new identity while one of the same name stops being seen is raised for review in Assets -> Settings -> Hyper-V, never merged automatically.",
+                    "params": [
+                        {
+                            "name": "connection",
+                            "in": "path",
+                            "desc": "The connection id (Assets -> Settings -> Hyper-V)",
+                            "req": true
+                        },
+                        {
+                            "name": "schema_version / observed_at / scope / collector / unreadable / sections",
+                            "in": "body",
+                            "req": true,
+                            "desc": "schema_version 1; observed_at RFC 3339 with timezone; scope [{kind: cluster|host, id, name}]; collector {name, version, powershell, host}; unreadable [{kind, id, name, error}]; sections {name: {complete, items}}"
+                        }
+                    ],
+                    "body": {
+                        "schema_version": 1,
+                        "observed_at": "2026-10-26T09:14:00Z",
+                        "scope": [
+                            {
+                                "kind": "cluster",
+                                "id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+                                "name": "CL-PROD"
+                            }
+                        ],
+                        "collector": {
+                            "name": "Invoke-HyperVInventory",
+                            "version": "1.0.0",
+                            "powershell": "5.1",
+                            "host": "MGMT01"
+                        },
+                        "unreadable": [],
+                        "sections": {
+                            "clusters": {
+                                "complete": true,
+                                "items": [
+                                    {
+                                        "id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+                                        "name": "CL-PROD",
+                                        "quorum_type": "NodeAndFileShareMajority"
+                                    }
+                                ]
+                            },
+                            "hosts": {
+                                "complete": true,
+                                "items": [
+                                    {
+                                        "id": "4c4c4544-0042-3510-8051-b4c04f4d4e32",
+                                        "name": "HV-NODE-A",
+                                        "cluster_id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+                                        "node_state": "Up"
+                                    }
+                                ]
+                            },
+                            "vms": {
+                                "complete": true,
+                                "items": [
+                                    {
+                                        "id": "8a7b6c5d-4e3f-2a1b-0c9d-8e7f6a5b4c3d",
+                                        "name": "PAYROLL-01",
+                                        "host": "HV-NODE-A",
+                                        "state": "Running",
+                                        "is_clustered": true,
+                                        "possible_owners": [
+                                            "HV-NODE-A",
+                                            "HV-NODE-B"
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "section": "Virtual estate (Hyper-V)",
+                    "slug": "post-virtual-estate-connection-reports"
+                },
+                {
+                    "m": "GET",
+                    "p": "/virtual-estate/{connection}",
+                    "perm": "virtual_estate.read",
+                    "s": "Is the collector on time?",
+                    "d": "The connection's state, for monitoring: freshness (on_time, late after its expected interval, overdue after the grace as well, never), when the last report arrived and what it was observing, its outcome and summary, the collector that sent it, how many clusters, hosts and VMs are currently seen (and how many VMs are not confirmed because their host could not be read), and how many identity changes wait for review. The key's company scope must cover the connection's company.",
+                    "params": [
+                        {
+                            "name": "connection",
+                            "in": "path",
+                            "desc": "The connection id (Assets -> Settings -> Hyper-V)",
+                            "req": true
+                        }
+                    ],
+                    "section": "Virtual estate (Hyper-V)",
+                    "slug": "get-virtual-estate-connection"
                 }
             ]
         },
@@ -5117,7 +5343,7 @@
                     "p": "\/cmdb\/objects\/{id}\/impact",
                     "perm": "cmdb_objects.read",
                     "s": "Impact analysis",
-                    "d": "The blast radius: all descendants (with depth), objects referencing this one via object_ref properties, and incoming relationships (things that depend on it).",
+                    "d": "The blast radius: all descendants (with depth), objects referencing this one via object_ref properties, and incoming relationships (things that depend on it). Grades (GH #199): when a relationship type is marked as redundant membership or placement with failover, each blast_radius entry has a grade - affected, may_be_interrupted (a highly available role with another member to restart on), redundancy_reduced (some members of a redundant group lost; not a promise it keeps working) or unknown - with grade_via (the path that gave it) and unknown_via (paths that depend on a missing fact). The most severe established grade wins; a possible failover never softens a hard dependency. blast_radius_grades has used, counts and limits (what the model does not know: quorum, storage, capacity, placement rules, members assumed available). With no such type, every entry is affected, as before.",
                     "params": [
                         {
                             "name": "id",
@@ -5139,6 +5365,23 @@
                             }
                         ]
                     }
+                },
+                {
+                    "m": "GET",
+                    "p": "/cmdb/objects/{id}/asset-link",
+                    "perm": "asset_ci_links.read",
+                    "s": "The linked asset",
+                    "d": "The asset this configuration item is the same equipment as (GH #201), seen from the CI, with every earlier period. With assets.read, current carries the asset card's details, read live from the asset and never stored on the CI (which ones is CMDB -> Settings -> Asset card): type, manufacturer, model, serial, asset tag, status, location and inventory freshness. Without it, the asset end is {\"restricted\": true}, with no id or name.",
+                    "params": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "desc": "Configuration item id",
+                            "req": true
+                        }
+                    ],
+                    "section": "CMDB",
+                    "slug": "get-cmdb-objects-id-asset-link"
                 },
                 {
                     "m": "POST",
@@ -6387,6 +6630,12 @@
                             "req": false
                         },
                         {
+                            "name": "scope",
+                            "in": "query",
+                            "desc": "public or internal (GH #203)",
+                            "req": false
+                        },
+                        {
                             "name": "tag",
                             "in": "query",
                             "desc": "Domains carrying this tag",
@@ -6535,6 +6784,12 @@
                             "name": "nameservers \/ ssl_hosts \/ dkim_selectors \/ dns_provider \/ hosting_provider \/ registrant_name \/ notes",
                             "in": "body",
                             "desc": "Free text; ssl_hosts must be this domain or its sub-domains",
+                            "req": false
+                        },
+                        {
+                            "name": "parent_domain_id",
+                            "in": "body",
+                            "desc": "Makes it a subdomain of that domain (same company; the name must be under it; one level). Found for you when omitted and the parent is in the register; null to unlink. A subdomain's registration is its parent's and is never looked up.",
                             "req": false
                         },
                         {
@@ -11037,7 +11292,7 @@
                     "p": "\/workflows",
                     "perm": "workflows.read",
                     "s": "List workflows",
-                    "d": "All automation rules, most recently updated first, with run stats and condition\/action counts (full rule bodies on GET one). Install-wide.",
+                    "d": "All automation rules, most recently updated first, with run stats and condition\/action counts (full rule bodies on GET one). Each has a company: null = shared, it runs for every company; otherwise only that company's events run it. A key sees the shared workflows and those of the companies it can reach.",
                     "params": [
                         {
                             "name": "trigger_event",
@@ -11055,6 +11310,12 @@
                             "name": "q",
                             "in": "query",
                             "desc": "Search names and descriptions",
+                            "req": false
+                        },
+                        {
+                            "name": "company",
+                            "in": "query",
+                            "desc": "A company id for that company's own workflows, or \"shared\" for the ones that run for every company. 403 for a company the key cannot reach.",
                             "req": false
                         }
                     ],
@@ -11089,7 +11350,7 @@
                     "p": "\/workflows",
                     "perm": "workflows.create",
                     "s": "Create a workflow",
-                    "d": "trigger_event, condition operators and action types are validated against the engine's catalogues (see GET \/workflow-triggers and \/workflow-actions) so nothing unexecutable can be stored — unknown operators are a 422, stricter than the UI. Zero actions is allowed (draft-friendly, like the editor). Action args support {{dot.path}} template variables resolved from the event payload. NOTE: actions run with engine privileges (create tickets, send email) — grant create\/fire to trusted keys only.",
+                    "d": "trigger_event, condition operators and action types are validated against the engine's catalogues (see GET \/workflow-triggers and \/workflow-actions) so nothing unexecutable can be stored — unknown operators are a 422, stricter than the UI. Zero actions is allowed (draft-friendly, like the editor). Action args support {{dot.path}} template variables resolved from the event payload. NOTE: actions run with engine privileges (create tickets, send email) — grant create\/fire to trusted keys only. company_id picks the company it runs for; omit it for a shared workflow (a key that reaches every company) or the key's default company (any other key). A company's own workflow acts only on that company's records: an action that names another company's ticket fails, and says so in the run.",
                     "params": [
                         {
                             "name": "name",
@@ -11125,6 +11386,12 @@
                             "name": "is_active",
                             "in": "body",
                             "desc": "Default true",
+                            "req": false
+                        },
+                        {
+                            "name": "company_id",
+                            "in": "body",
+                            "desc": "The company it runs for, or null for shared (every company). Shared needs a key that reaches every company.",
                             "req": false
                         }
                     ],
@@ -11263,7 +11530,7 @@
                     "p": "\/workflows\/{id}",
                     "perm": "workflows.update",
                     "s": "Update a workflow",
-                    "d": "Partial update; sent fields are validated like create. Toggle is_active to pause\/resume a rule without losing it.",
+                    "d": "Partial update; sent fields are validated like create. Toggle is_active to pause\/resume a rule without losing it. Send company_id to move it to another company, or null to share it. A shared workflow can only be changed by a key that reaches every company (403 otherwise).",
                     "params": [
                         {
                             "name": "id",
@@ -11272,7 +11539,7 @@
                             "req": true
                         },
                         {
-                            "name": "name \/ description \/ trigger_event \/ conditions \/ actions \/ is_active",
+                            "name": "name \/ description \/ trigger_event \/ conditions \/ actions \/ is_active \/ company_id",
                             "in": "body",
                             "desc": "What to change",
                             "req": false
@@ -11340,7 +11607,7 @@
                     "p": "\/workflows\/{id}",
                     "perm": "workflows.delete",
                     "s": "Delete a workflow",
-                    "d": "Hard delete. Execution history survives as the audit trail — runs are detached (workflow_id null) but stay attributable via their workflow_name snapshot.",
+                    "d": "Hard delete. Execution history survives as the audit trail — runs are detached (workflow_id null) but stay attributable via their workflow_name snapshot. A shared workflow needs a key that reaches every company.",
                     "params": [
                         {
                             "name": "id",
@@ -11368,7 +11635,7 @@
                     "p": "\/workflows\/{id}\/fire",
                     "perm": "workflows.fire",
                     "s": "Test-fire a workflow",
-                    "d": "Runs the workflow immediately with a synthetic payload — the editor's \"Test fire\" button. Executes real actions but does not bump run_count \/ last-run stats. Returns the execution result including the per-step log.",
+                    "d": "Runs the workflow immediately with a synthetic payload — the editor's \"Test fire\" button. Executes real actions but does not bump run_count \/ last-run stats. Returns the execution result including the per-step log. A shared workflow's actions can reach every company, so firing one needs a key that reaches every company.",
                     "params": [
                         {
                             "name": "id",
@@ -11524,7 +11791,7 @@
                     "p": "\/workflow-executions",
                     "perm": "workflow_executions.read",
                     "s": "List all runs",
-                    "d": "Install-wide run history, including orphaned runs whose workflow has since been deleted.",
+                    "d": "Run history, including orphaned runs whose workflow has since been deleted. Each run has the company its event belonged to; a key sees the runs for the companies it can reach (a run with no company known needs a key that reaches every company).",
                     "params": [
                         {
                             "name": "workflow_id",
@@ -11594,7 +11861,7 @@
                     "p": "\/workflow-executions\/{id}",
                     "perm": "workflow_executions.read",
                     "s": "Get one run",
-                    "d": "Full detail: the trigger payload snapshot and the per-step log (each condition evaluated, each action's result or error).",
+                    "d": "Full detail: the trigger payload snapshot and the per-step log (each condition evaluated, each action's result or error). 404 for a run of a company the key cannot reach.",
                     "params": [
                         {
                             "name": "id",

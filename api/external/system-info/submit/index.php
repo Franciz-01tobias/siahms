@@ -3,10 +3,17 @@
  * External API: System Info / Asset Inventory Ingest
  *
  * Accepts a JSON POST with full hardware inventory from the PowerShell
- * collection script and upserts the asset record plus related tables
- * (disks, network adapters, software inventory).
+ * collection script and upserts the asset record; the volumes, physical drives,
+ * network adapters and software go through AssetInventoryService::agentReport(),
+ * the one inventory implementation the REST API shares.
+ *
+ * report_version 2 (agent from 3.15.0): every section is sent, an empty list
+ * means "collected, and empty", and collection_failures names the sections the
+ * agent tried and could not collect. Without it, an empty section is skipped.
  *
  * Auth: Authorization header with API key (validated against apikeys table).
+ *
+ * @wiki Inventory-Freshness-Developer-Guide
  */
 header('Content-Type: application/json');
 
@@ -69,6 +76,10 @@ try {
     echo json_encode(['error' => 'Failed to validate API key']);
     exit;
 }
+
+// GH #217: an agent's report is refused while its module is switched off for the
+// install - the device is not recorded, and nothing is queued to arrive later.
+requireModuleOnJson($conn, 'assets');
 
 // --------------------------------------------------
 // Parse JSON payload (with UTF-8 normalization)
@@ -168,14 +179,30 @@ try {
         'inventory agent'
     );
 
+    if ($reconcileRes['asset_id'] !== null && $reconcileRes['retired']) {
+        // A retired asset still reporting: it has left the estate, so its record is
+        // kept as it was when it left. Only "last seen" moves - a retired machine
+        // that is still on the network is worth noticing - and nothing else is
+        // written, nor a duplicate created.
+        $conn->prepare("UPDATE assets SET last_seen = UTC_TIMESTAMP() WHERE id = ?")->execute([(int)$reconcileRes['asset_id']]);
+        echo json_encode(['success' => true, 'asset_id' => (int)$reconcileRes['asset_id'], 'retired' => true,
+                          'message' => 'This asset is retired in FreeITSM: the report was not applied.']);
+        exit;
+    }
     if ($reconcileRes['asset_id'] !== null) {
         $hostId = (int)$reconcileRes['asset_id'];
+
+        // GH #200 part D: a manufacturer or model a person protected is not overwritten;
+        // what the agent reports is kept beside it for the asset page to show.
+        require_once __DIR__ . '/../../../../includes/services/asset_protection.php';
+        $makeModel = ['manufacturer' => strOrNull($data, 'manufacturer', 50), 'model' => strOrNull($data, 'model', 50)];
+        $mayWrite = AssetProtectionService::filterReported($conn, $hostId, $makeModel, 'the agent');
 
         // Update all fields
         $stmt = $conn->prepare("
             UPDATE assets SET
-                manufacturer     = ?,
-                model            = ?,
+                manufacturer     = IF(?, manufacturer, ?),
+                model            = IF(?, model, ?),
                 memory           = ?,
                 service_tag      = ?,
                 operating_system = ?,
@@ -194,8 +221,8 @@ try {
             WHERE id = ?
         ");
         $stmt->execute([
-            strOrNull($data, 'manufacturer', 50),
-            strOrNull($data, 'model', 50),
+            (int)!array_key_exists('manufacturer', $mayWrite), $makeModel['manufacturer'],
+            (int)!array_key_exists('model', $mayWrite), $makeModel['model'],
             intOrNull($data, 'memory'),
             strOrNull($data, 'service_tag', 50),
             strOrNull($data, 'operating_system', 50),
@@ -248,325 +275,61 @@ try {
 }
 
 // --------------------------------------------------
-// 2. Sync disks (delete + reinsert)
+// 2. Volumes, physical drives, network adapters and software
 // --------------------------------------------------
-$disksSynced = 0;
-$leftUnchanged = [];
+//
+// ONE implementation (GH #200 Part B, the #194 follow-up): the same service the REST
+// API reports through reconciles the rows and records, per section, what this report
+// came to - succeeded, empty, skipped or failed - so the asset page can say how fresh
+// each list is. Device Manager arrives separately (device-manager/submit) the same way.
+//
+// 🔴 AN EMPTY LIST FROM AN OLD AGENT IS "I DID NOT FIND OUT", NOT "THERE IS NOTHING".
+// A WMI blip once emptied 226 Device Manager rows this way. Only an agent that sends
+// report_version 2 can say "collected, and empty" - AssetInventoryService::agentState()
+// draws that line, and an older agent's empty section is skipped and named in
+// left_unchanged, as before.
+require_once __DIR__ . '/../../../../includes/services/asset_inventory.php';
 
-/**
- * Is there anything in this part of the report?
- *
- * 🔴 AN EMPTY LIST IS "I DID NOT FIND OUT", NOT "THERE IS NOTHING THERE".
- * Every block below wipes the asset's rows and reinserts, which is right when
- * the agent has told us what the machine currently has. It was wrong when it
- * had not: the DELETE ran unconditionally while the INSERT was guarded, so a
- * report carrying no disks emptied the table and left it empty — a WMI blip
- * taking 226 device rows with it, silently, until the next good run. Any
- * client holding an API key could do the same with `{"disks":{}}`.
- *
- * Skipping the wipe is safe because the opposite case barely exists: a working
- * machine that can reach this endpoint has at least one volume, one drive and
- * one network adapter. Stale data outliving a removed disk by one run is a far
- * smaller problem than an inventory that empties itself.
- *
- * Silence is the other half of the bug, so a skipped section is NAMED in the
- * response rather than looking like a successful sync of nothing.
- *
- * @param mixed $value  one section of the report, e.g. $data['disks']; only a non-empty array counts
- */
-function reportHas($value): bool {
-    return !empty($value) && is_array($value);
-}
+$v2 = (int)($data['report_version'] ?? 1) >= 2;
+$failures = is_array($data['collection_failures'] ?? null) ? $data['collection_failures'] : [];
+$disks = is_array($data['disks'] ?? null) ? $data['disks'] : [];
 
 try {
-    // The agent has authoritative per-drive data, so it owns asset_disks for
-    // its own source on any host it reports for — but only when it actually reported some.
-    if (!reportHas($data['disks']['logical'] ?? null)) {
-        $leftUnchanged[] = 'disks';
-    } else {
-        // TRAP: 'intune' too. Intune's volumes are only a stand-in until the agent reports
-        // (intuneSyncDisks() skips an asset with agent rows), so the agent replaces them as it
-        // always has. REST sources ('rest:...') are another tool's view and are left alone.
-        $conn->prepare("DELETE FROM asset_disks WHERE asset_id = ? AND source IN ('agent', 'intune')")->execute([$hostId]);
-        $stmt = $conn->prepare("
-            INSERT INTO asset_disks (asset_id, drive, label, file_system, size_bytes, free_bytes, used_percent, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'agent')
-        ");
-
-        foreach ($data['disks']['logical'] as $disk) {
-            $stmt->execute([
-                $hostId,
-                mb_substr($disk['drive'] ?? '', 0, 10),
-                mb_substr($disk['label'] ?? '', 0, 100),
-                mb_substr($disk['file_system'] ?? '', 0, 20),
-                isset($disk['size_bytes']) && is_numeric($disk['size_bytes']) ? (int)$disk['size_bytes'] : null,
-                isset($disk['free_bytes']) && is_numeric($disk['free_bytes']) ? (int)$disk['free_bytes'] : null,
-                isset($disk['used_percent']) && is_numeric($disk['used_percent']) ? round((float)$disk['used_percent'], 1) : null
-            ]);
-            $disksSynced++;
-        }
-    }
-} catch (PDOException $e) {
+    $sections = AssetInventoryService::agentReport($conn, $hostId, [
+        'disks'            => AssetInventoryService::agentState($disks['logical'] ?? null, $v2, $failures['disks'] ?? null),
+        'physical_disks'   => AssetInventoryService::agentState($disks['physical'] ?? null, $v2, $failures['physical_disks'] ?? null),
+        'network_adapters' => AssetInventoryService::agentState($data['network_adapters'] ?? null, $v2, $failures['network_adapters'] ?? null),
+        'software'         => AssetInventoryService::agentState($data['software'] ?? null, $v2, $failures['software'] ?? null),
+    ]);
+} catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['error' => 'Failed to sync disks', 'detail' => $e->getMessage()]);
+    echo json_encode(['error' => 'Failed to sync inventory', 'detail' => $e->getMessage()]);
     exit;
 }
 
-// --------------------------------------------------
-// 2b. Sync physical disks (delete + reinsert)
-// --------------------------------------------------
-//
-// The agent has sent `disks.physical` — model, serial, size, media type and
-// interface — since its first version, and until now this endpoint read only
-// `disks.logical` and dropped the rest on the floor (discussion #97). The
-// serial is the useful part: it is what a warranty claim and a disposal audit
-// both ask for, and nothing else in the product records it.
-//
-// ⚠️ ITS OWN try/catch, and it never fails the report. asset_physical_disks
-// only exists after Database Verification has run, so on an install that has
-// pulled this update but not yet verified, the INSERT throws — and letting
-// that 500 would stop every agent in the estate from reporting anything at
-// all over a table nobody has yet asked for. The machine's hardware, volumes,
-// adapters and software still land; the drives start appearing after the
-// next verification.
-$physicalDisksSynced = 0;
+$applied = fn(string $name, string $count) => ($sections[$name]['result'] ?? '') === 'applied' ? (int)$sections[$name][$count] : 0;
+$leftUnchanged = array_keys(array_filter($sections, fn($s) => $s['result'] !== 'applied'));
+$failed = array_filter($sections, fn($s) => $s['result'] === 'failed');
+$software = $sections['software'] ?? [];
 
-try {
-    if (!reportHas($data['disks']['physical'] ?? null)) {
-        $leftUnchanged[] = 'physical_disks';
-    } else {
-        $conn->prepare("DELETE FROM asset_physical_disks WHERE asset_id = ?")->execute([$hostId]);
-        $stmt = $conn->prepare("
-            INSERT INTO asset_physical_disks (asset_id, model, serial, size_bytes, media_type, interface_type)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-
-        foreach ($data['disks']['physical'] as $disk) {
-            // A model with no serial is still worth having — plenty of USB
-            // enclosures and virtual disks report one and not the other — but a
-            // row that is entirely empty is noise, and VMs produce them.
-            $trimmed = static function ($value, int $max) {
-                $v = trim((string)($value ?? ''));
-                return $v === '' ? null : mb_substr($v, 0, $max);
-            };
-            $model  = $trimmed($disk['model'] ?? null, 255);
-            $serial = $trimmed($disk['serial'] ?? null, 100);
-            $size   = isset($disk['size_bytes']) && is_numeric($disk['size_bytes']) ? (int)$disk['size_bytes'] : null;
-            if ($model === null && $serial === null && $size === null) {
-                continue;
-            }
-            $stmt->execute([
-                $hostId,
-                $model,
-                $serial,
-                $size,
-                $trimmed($disk['media_type'] ?? null, 100),
-                $trimmed($disk['interface'] ?? null, 50)
-            ]);
-            $physicalDisksSynced++;
-        }
-    }
-} catch (PDOException $e) {
-    // Deliberately swallowed — see above.
-    $physicalDisksSynced = 0;
-}
-
-// --------------------------------------------------
-// 3. Sync network adapters (delete + reinsert)
-// --------------------------------------------------
-$adaptersSynced = 0;
-
-try {
-    if (!reportHas($data['network_adapters'] ?? null)) {
-        $leftUnchanged[] = 'network_adapters';
-    } else {
-        $conn->prepare("DELETE FROM asset_network_adapters WHERE asset_id = ? AND source = 'agent'")->execute([$hostId]);
-        $stmt = $conn->prepare("
-            INSERT INTO asset_network_adapters (asset_id, name, mac_address, ip_address, subnet_mask, gateway, dhcp_enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
-
-        foreach ($data['network_adapters'] as $adapter) {
-            // Extract first IPv4 address from ip_addresses array
-            $ipv4 = null;
-            if (!empty($adapter['ip_addresses']) && is_array($adapter['ip_addresses'])) {
-                foreach ($adapter['ip_addresses'] as $ip) {
-                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-                        $ipv4 = $ip;
-                        break;
-                    }
-                }
-            }
-
-            // Extract first subnet mask
-            $subnet = null;
-            if (!empty($adapter['subnet_masks']) && is_array($adapter['subnet_masks'])) {
-                $subnet = $adapter['subnet_masks'][0] ?? null;
-            }
-
-            // Extract first gateway
-            $gateway = null;
-            if (!empty($adapter['gateway']) && is_array($adapter['gateway'])) {
-                $gateway = $adapter['gateway'][0] ?? null;
-            }
-
-            $stmt->execute([
-                $hostId,
-                mb_substr($adapter['name'] ?? '', 0, 255),
-                mb_substr($adapter['mac_address'] ?? '', 0, 17),
-                $ipv4 ? mb_substr($ipv4, 0, 45) : null,
-                $subnet ? mb_substr($subnet, 0, 45) : null,
-                $gateway ? mb_substr($gateway, 0, 45) : null,
-                isset($adapter['dhcp_enabled']) ? ($adapter['dhcp_enabled'] ? 1 : 0) : null
-            ]);
-            $adaptersSynced++;
-        }
-    }
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Failed to sync network adapters', 'detail' => $e->getMessage()]);
-    exit;
-}
-
-// --------------------------------------------------
-// 4. Process software inventory (if present)
-// --------------------------------------------------
-$softwareProcessed = 0;
-$insertedApps = 0;
-$insertedDetails = 0;
-$updatedDetails = 0;
-$deletedDetails = 0;
-
-if (!empty($data['software']) && is_array($data['software'])) {
-    try {
-        // Load existing host/app mappings — scoped to source='agent' so the
-        // delete-of-orphans below only touches our own rows. Intune-sourced
-        // rows for the same host stay untouched.
-        $existingAppIds = [];
-        $stmt = $conn->prepare("SELECT app_id FROM software_inventory_detail WHERE host_id = ? AND source = 'agent'");
-        $stmt->execute([$hostId]);
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $existingAppIds[(int)$row['app_id']] = true;
-        }
-
-        $seenAppIds = [];
-        $appCache = [];
-
-        foreach ($data['software'] as $item) {
-            $displayName = isset($item['display_name']) ? trim($item['display_name']) : '';
-            if ($displayName === '') continue;
-
-            $publisher        = isset($item['publisher']) && trim($item['publisher']) !== '' ? trim($item['publisher']) : null;
-            $displayVersion   = $item['display_version'] ?? null;
-            $installDate      = $item['install_date'] ?? null;
-            $uninstallString  = $item['uninstall_string'] ?? null;
-            $installLocation  = $item['install_location'] ?? null;
-            $estimatedSize    = $item['estimated_size'] ?? null;
-            $systemComponent  = !empty($item['system_component']) ? 1 : 0;
-
-            $appKey = strtolower($displayName) . '|' . strtolower($publisher ?? '');
-            $appId = null;
-
-            if (isset($appCache[$appKey])) {
-                $appId = $appCache[$appKey];
-            } else {
-                // Look up or insert app
-                $stmt = $conn->prepare("
-                    SELECT id FROM software_inventory_apps
-                    WHERE display_name = ? AND (publisher IS NULL OR publisher = ?)
-                ");
-                $stmt->execute([$displayName, $publisher]);
-                $appRow = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if ($appRow) {
-                    $appId = (int)$appRow['id'];
-                } else {
-                    $stmt = $conn->prepare("INSERT INTO software_inventory_apps (display_name, publisher) VALUES (?, ?)");
-                    $stmt->execute([$displayName, $publisher]);
-                    $appId = (int)$conn->lastInsertId();
-                    $insertedApps++;
-                    require_once dirname(__DIR__, 4) . '/workflow/includes/engine.php';
-                    WorkflowEngine::dispatch('software.application_discovered', ['application' => ['id' => $appId, 'name' => $displayName, 'publisher' => $publisher]]);
-                }
-
-                $appCache[$appKey] = $appId;
-            }
-
-            $seenAppIds[$appId] = true;
-
-            // Upsert detail row — every read/write here is scoped to source='agent'
-            // so the agent only ever touches its own rows. Intune-sourced rows
-            // for the same (host_id, app_id) coexist as separate detail rows.
-            $stmt = $conn->prepare("SELECT id FROM software_inventory_detail WHERE host_id = ? AND app_id = ? AND source = 'agent'");
-            $stmt->execute([$hostId, $appId]);
-            $detailRow = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if ($detailRow) {
-                $stmt = $conn->prepare("
-                    UPDATE software_inventory_detail SET
-                        display_version = ?, install_date = ?, uninstall_string = ?,
-                        install_location = ?, estimated_size = ?, system_component = ?,
-                        last_seen = UTC_TIMESTAMP()
-                    WHERE host_id = ? AND app_id = ? AND source = 'agent'
-                ");
-                $stmt->execute([$displayVersion, $installDate, $uninstallString, $installLocation, $estimatedSize, $systemComponent, $hostId, $appId]);
-                $updatedDetails++;
-            } else {
-                $stmt = $conn->prepare("
-                    INSERT INTO software_inventory_detail
-                        (host_id, app_id, display_version, install_date, uninstall_string, install_location, estimated_size, system_component, created_at, last_seen, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(), 'agent')
-                ");
-                $stmt->execute([$hostId, $appId, $displayVersion, $installDate, $uninstallString, $installLocation, $estimatedSize, $systemComponent]);
-                $insertedDetails++;
-            }
-
-            $softwareProcessed++;
-        }
-
-        // Delete agent-owned mappings for software no longer present in the submit
-        $toDelete = array_diff_key($existingAppIds, $seenAppIds);
-        if (!empty($toDelete)) {
-            $stmt = $conn->prepare("DELETE FROM software_inventory_detail WHERE host_id = ? AND app_id = ? AND source = 'agent'");
-            foreach ($toDelete as $appId => $_) {
-                $stmt->execute([$hostId, $appId]);
-                $deletedDetails++;
-            }
-        }
-
-    } catch (PDOException $e) {
-        // Software processing failed but asset/disks/network already saved — report partial success
-        echo json_encode([
-            'status'    => 'partial',
-            'hostname'  => $hostname,
-            'asset_id'  => $hostId,
-            'is_new'    => $isNew,
-            'disks_synced'     => $disksSynced,
-            'physical_disks_synced' => $physicalDisksSynced,
-            'left_unchanged'   => $leftUnchanged,
-            'adapters_synced'  => $adaptersSynced,
-            'error'     => 'Software processing failed: ' . $e->getMessage()
-        ]);
-        exit;
-    }
-}
-
-// --------------------------------------------------
-// Success response
-// --------------------------------------------------
-echo json_encode([
-    'status'             => 'ok',
+$response = [
+    'status'             => $failed ? 'partial' : 'ok',
     'hostname'           => $hostname,
     'asset_id'           => $hostId,
     'is_new'             => $isNew,
-    'disks_synced'       => $disksSynced,
-    'physical_disks_synced' => $physicalDisksSynced,
+    'disks_synced'       => $applied('disks', 'added') + $applied('disks', 'updated'),
+    'physical_disks_synced' => $applied('physical_disks', 'added'),
     'left_unchanged'     => $leftUnchanged,
-    'adapters_synced'    => $adaptersSynced,
-    'software_processed' => $softwareProcessed,
-    'software_new_apps'  => $insertedApps,
-    'software_new_links' => $insertedDetails,
-    'software_updated'   => $updatedDetails,
-    'software_removed'   => $deletedDetails,
-    'message'            => 'Asset inventory synchronized'
-]);
+    'adapters_synced'    => $applied('network_adapters', 'added') + $applied('network_adapters', 'updated'),
+    'software_processed' => $applied('software', 'added') + $applied('software', 'updated'),
+    'software_new_links' => $applied('software', 'added'),
+    'software_updated'   => $applied('software', 'updated'),
+    'software_removed'   => $applied('software', 'removed'),
+    // Per section: applied (with added / updated / removed), skipped or failed (with its error).
+    'sections'           => $sections,
+    'message'            => 'Asset inventory synchronized',
+];
+if ($failed) {
+    $response['error'] = implode('; ', array_map(fn($n, $s) => "$n: {$s['error']}", array_keys($failed), $failed));
+}
+echo json_encode($response);

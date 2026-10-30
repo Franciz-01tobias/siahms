@@ -33,7 +33,10 @@ try {
     // still be quietly accepting entries from a stale tab or a bookmarked call.
     require_once '../../includes/tenant_settings.php';
     if (!timeTrackingUiOn($conn, ticketTenantId($conn, (int)$ticketId))) {
-        echo json_encode(['success' => false, 'error' => 'Time tracking is switched off for this company.']);
+        // Say which switch: the whole installation's (GH #217) or this company's.
+        echo json_encode(['success' => false, 'error' => moduleIsEnabled($conn, 'time-tracking')
+            ? 'Time tracking is switched off for this company.'
+            : moduleDisabledMessage('time-tracking')]);
         exit;
     }
 

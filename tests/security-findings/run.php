@@ -171,7 +171,7 @@ $writers = [
 foreach ($writers as $w) {
     $src = code("$APP/$w");
     check("$w routes uploads through uploadStoreBytes()",
-          is_string($src) && strpos($src, 'uploadStoreBytes(') !== false);
+          is_string($src) && str_contains($src, 'uploadStoreBytes('));
     check("$w no longer derives a filename with the old preg_replace",
           is_string($src) && !preg_match("/preg_replace\('\/\[\^a-zA-Z0-9\._\\\\?-\]\/'/", $src));
 }
@@ -188,12 +188,12 @@ check("tickets/attachments/web.config exists (nginx and IIS never read .htaccess
 heading('F2  setup/ grants nothing to an anonymous visitor');
 
 check("setup/index.php no longer sets a setup_access privilege flag",
-      strpos(code("$APP/setup/index.php"), "\$_SESSION['setup_access'] = true") === false);
+      !str_contains(code("$APP/setup/index.php"), "\$_SESSION['setup_access'] = true"));
 
 $verifySrc = code("$APP/api/system/db_verify.php");
 check("db_verify asks the database instead of trusting a session flag",
-      strpos($verifySrc, 'installIsUnprovisioned(') !== false
-      && strpos($verifySrc, "empty(\$_SESSION['setup_access'])") === false);
+      str_contains($verifySrc, 'installIsUnprovisioned(')
+      && !str_contains($verifySrc, "empty(\$_SESSION['setup_access'])"));
 
 // The bootstrap gate must fail CLOSED on anything that is not a missing schema.
 check("a missing table reads as 'fresh install'",       dbErrorIsMissingSchema(mkPdoEx('42S02', 1146)));
@@ -230,9 +230,9 @@ if ($BASE === null) {
             check("the anonymous setup page leaks no absolute filesystem path",
                   !preg_match('~[A-Za-z]:[\\\\/][A-Za-z0-9_\\\\/.-]{6,}~', preg_replace('~<script>window\.translations.*?</script>~s', '', $r1[2])));
             check("the anonymous setup page does not print the default password",
-                  strpos($r1[2], '<strong>freeitsm</strong>') === false);
+                  !str_contains($r1[2], '<strong>freeitsm</strong>'));
             check("the anonymous setup page offers no Database Verify button",
-                  strpos($r1[2], 'id="dbVerifySection"') === false);
+                  !str_contains($r1[2], 'id="dbVerifySection"'));
         }
     }
 }
@@ -259,7 +259,7 @@ if ($conn === null) {
         foreach ($conn->query("SELECT * FROM target_mailboxes")->fetchAll(PDO::FETCH_ASSOC) as $row) {
             foreach (ENCRYPTED_MAILBOX_COLUMNS as $col) {
                 $v = $row[$col] ?? null;
-                if ($v !== null && $v !== '' && strpos($v, ENCRYPTION_PREFIX) !== 0) {
+                if ($v !== null && $v !== '' && !str_starts_with($v, ENCRYPTION_PREFIX)) {
                     $plainMailbox[] = "mailbox {$row['id']}.{$col}";
                 }
             }
@@ -271,7 +271,7 @@ if ($conn === null) {
         foreach ($conn->query("SELECT setting_key, setting_value FROM system_settings")->fetchAll(PDO::FETCH_ASSOC) as $row) {
             if ($row['setting_value'] === null || $row['setting_value'] === '') continue;
             if (!isEncryptedSettingKey($row['setting_key'])) continue;
-            if (strpos($row['setting_value'], ENCRYPTION_PREFIX) !== 0) $plainSettings[] = $row['setting_key'];
+            if (!str_starts_with($row['setting_value'], ENCRYPTION_PREFIX)) $plainSettings[] = $row['setting_key'];
         }
         check("every secret setting in the database is ciphertext", $plainSettings === [],
               implode(', ', $plainSettings) . ' — run Database Verify to migrate them');
@@ -283,7 +283,7 @@ if ($conn === null) {
         } else {
             $plain = decryptValue($sample);
             check("POSITIVE CONTROL: an encrypted secret still decrypts to something usable",
-                  is_string($plain) && $plain !== '' && strpos($plain, ENCRYPTION_PREFIX) !== 0);
+                  is_string($plain) && $plain !== '' && !str_starts_with($plain, ENCRYPTION_PREFIX));
         }
     } catch (Exception $e) {
         skipped("stored secrets are ciphertext", $e->getMessage());
@@ -308,8 +308,8 @@ foreach ([['photo.png', 'image/png'], ['scan.JPG', 'image/jpeg'], ['report.pdf',
 }
 $inj = attachmentServeRules("bad\r\nX-Injected: 1.png");
 check("a filename cannot break out of the response header",
-      strpos($inj['filename'], "\r") === false && strpos($inj['filename'], "\n") === false
-      && strpos($inj['filename'], '"') === false, $inj['filename']);
+      !str_contains($inj['filename'], "\r") && !str_contains($inj['filename'], "\n")
+      && !str_contains($inj['filename'], '"'), $inj['filename']);
 
 
 // ── F6 ───────────────────────────────────────────────────────────────────────
@@ -324,12 +324,27 @@ if (!is_string($tiny) || !preg_match('/majorVersion:"(\d+)",minorVersion:"([\d.]
     $version = $m[1] . '.' . $m[2];
     check("bundled TinyMCE is 8.5.1 or later (CVE-2026-47759/60/61/62 fixed in 8.5.1)",
           version_compare($version, '8.5.1', '>='), "found $version");
+    // 8.9.3 fixed a stored XSS in the media plugin, which the Inbox and Knowledge
+    // editors switch on.
+    check("bundled TinyMCE is 8.9.3 or later (media plugin stored XSS fixed in 8.9.3)",
+          version_compare($version, '8.9.3', '>='), "found $version");
 }
+
+// The other bundled libraries with published fixes FreeITSM depends on (4.1.0).
+$jspdf = @file_get_contents("$APP/assets/js/vendor/jspdf.umd.min.js");
+$jv = (is_string($jspdf) && preg_match('/Version (\d+\.\d+\.\d+)/', $jspdf, $m)) ? $m[1] : '0';
+check("bundled jsPDF is 4.2.1 or later (CVE-2025-68428, CVE-2026-24737, CVE-2026-25940, CVE-2026-31938)",
+      version_compare($jv, '4.2.1', '>='), "found $jv");
+$prism = @file_get_contents("$APP/assets/js/vendor/prism.min.js");
+check("bundled Prism has the CVE-2024-53382 fix (1.30.0: currentScript must be a SCRIPT)",
+      is_string($prism) && str_contains($prism, '"SCRIPT"===document.currentScript.tagName'));
+check("no second copy of jsPDF is bundled (html2pdf carried its own until 4.1.0)",
+      !is_file("$APP/assets/js/vendor/html2pdf.bundle.min.js"));
 check("VENDOR.md exists so a scanner-invisible dependency is at least written down",
       is_file("$APP/VENDOR.md"));
 $vendor = (string)@file_get_contents("$APP/VENDOR.md");
 check("VENDOR.md records the TinyMCE version actually shipping",
-      isset($version) && strpos($vendor, $version) !== false, $version ?? '?');
+      isset($version) && str_contains($vendor, $version), $version ?? '?');
 
 
 // ── F7 ───────────────────────────────────────────────────────────────────────
@@ -357,9 +372,9 @@ foreach ($identityPoints as $p) {
     // session was never rotated — silently, with this test passing throughout. Erlend
     // Volden caught it by running the code rather than reading it. A file that rotates
     // the session must therefore hold the session OPEN.
-    if (strpos($src, 'sessionPromoteToAuthenticated()') !== false) {
+    if (str_contains($src, 'sessionPromoteToAuthenticated()')) {
         check("$p keeps the session open, so the rotation is not a no-op",
-              strpos($src, 'read_and_close') === false,
+              !str_contains($src, 'read_and_close'),
               "session_start(['read_and_close' => true]) makes the rotation silently do nothing");
     }
 }
@@ -368,21 +383,21 @@ foreach ($identityPoints as $p) {
 foreach ([['.user.ini', 'FPM/CGI — nginx and IIS'], ['docker/php.ini', 'the Docker image']] as [$f, $who]) {
     $src = code("$APP/$f");
     check("$f exists and hardens the cookie for $who",
-          $src !== '' && strpos($src, 'session.cookie_httponly = 1') !== false
-                      && strpos($src, 'session.cookie_samesite = Lax') !== false
-                      && strpos($src, 'session.use_strict_mode = 1') !== false);
+          $src !== '' && str_contains($src, 'session.cookie_httponly = 1')
+                      && str_contains($src, 'session.cookie_samesite = Lax')
+                      && str_contains($src, 'session.use_strict_mode = 1'));
 }
 $rootHt = code("$APP/.htaccess");
 check(".htaccess carries the same settings for Apache mod_php",
-      strpos($rootHt, 'session.cookie_httponly 1') !== false
-      && strpos($rootHt, 'session.cookie_samesite Lax') !== false
-      && strpos($rootHt, 'session.use_strict_mode 1') !== false);
+      str_contains($rootHt, 'session.cookie_httponly 1')
+      && str_contains($rootHt, 'session.cookie_samesite Lax')
+      && str_contains($rootHt, 'session.use_strict_mode 1'));
 // Comments stripped, so this looks for a real directive rather than the note in each
 // file explaining why the directive is deliberately absent.
 check("cookie_secure is NOT forced in static config (it would lock out HTTP installs)",
-      strpos($rootHt, 'session.cookie_secure') === false
-      && strpos(code("$APP/.user.ini"), 'session.cookie_secure') === false
-      && strpos(code("$APP/docker/php.ini"), 'session.cookie_secure') === false);
+      !str_contains($rootHt, 'session.cookie_secure')
+      && !str_contains(code("$APP/.user.ini"), 'session.cookie_secure')
+      && !str_contains(code("$APP/docker/php.ini"), 'session.cookie_secure'));
 
 // ⚠️ THE OTHER HALF OF THIS GUARD. Everything above proves it refuses an ATTACKER's
 // text/plain. Nothing proved that our OWN front end had stopped sending it — and it
@@ -406,8 +421,8 @@ function fetchCallsMissingJsonHeader(string $src): array
         // mask a bare one, nor a bare neighbour incriminate a compliant one.
         $next = strpos($src, 'fetch(', $off);
         $win  = substr($src, $p, min(700, ($next === false ? strlen($src) : $next) - $p));
-        if (strpos($win, 'JSON.stringify') === false) continue;   // not a JSON body
-        if (strpos($win, 'body') === false) continue;             // not sending one
+        if (!str_contains($win, 'JSON.stringify')) continue;   // not a JSON body
+        if (!str_contains($win, 'body')) continue;             // not sending one
         if (stripos($win, 'Content-Type') !== false) continue;    // declared, fine
         $hits[] = substr_count(substr($src, 0, $p), "\n") + 1;
     }
@@ -439,7 +454,7 @@ foreach ($it as $file) {
     // This file carries a deliberate violation as its own self-test, two checks up.
     if (realpath($file->getPathname()) === realpath(__FILE__)) continue;
     $src = @file_get_contents($file->getPathname());
-    if (!is_string($src) || strpos($src, 'fetch(') === false) continue;
+    if (!is_string($src) || !str_contains($src, 'fetch(')) continue;
     foreach (fetchCallsMissingJsonHeader($src) as $line) {
         $offenders[] = ltrim(str_replace($APP, '', $file->getPathname()), '/\\') . ':' . $line;
     }
@@ -516,14 +531,14 @@ if ($conn === null) {
 
 $secSrc = code("$APP/system/security/index.php");
 check("System → Security no longer pre-fills 5 and 2 for settings that may be unset",
-      strpos($secSrc, "s.max_ip_attempts || '5'") === false
-      && strpos($secSrc, "s.min_ip_attempts || '2'") === false);
+      !str_contains($secSrc, "s.max_ip_attempts || '5'")
+      && !str_contains($secSrc, "s.min_ip_attempts || '2'"));
 check("the forced password change is enforced on every request, not just at login",
       is_file("$APP/includes/password_gate.php")
-      && strpos(code("$APP/includes/functions.php"), 'password_gate.php') !== false);
+      && str_contains(code("$APP/includes/functions.php"), 'password_gate.php'));
 
 foreach (['api/myaccount/verify_login_otp.php', 'api/self-service/verify_login_otp.php'] as $p) {
-    check("$p counts failed codes and gives up", strpos(code("$APP/$p"), 'mfa_attempts') !== false);
+    check("$p counts failed codes and gives up", str_contains(code("$APP/$p"), 'mfa_attempts'));
 }
 
 
@@ -541,13 +556,13 @@ check("analystCanAccessUser() exists — the guard save_user.php was missing",
 
 $rec = code("$APP/api/self-service/get_recording.php");
 check("get_recording.php gates analysts on the Tickets module",
-      strpos($rec, "analystCanAccessModule(") !== false);
+      str_contains($rec, "analystCanAccessModule("));
 check("get_recording.php gates analysts on the recording's own ticket",
-      strpos($rec, 'analystCanAccessTicket(') !== false);
+      str_contains($rec, 'analystCanAccessTicket('));
 
 $su = code("$APP/api/tickets/save_user.php");
 check("save_user.php checks the company of the account being EDITED, not only the destination",
-      strpos($su, 'analystCanAccessUser(') !== false);
+      str_contains($su, 'analystCanAccessUser('));
 
 if ($conn === null) {
     skipped("an unknown record id is denied rather than allowed", 'no database connection');
@@ -587,8 +602,8 @@ if ($conn === null) {
     $plain = settingsGetDecrypted($conn, $roundTripKeys);
     foreach ($roundTripKeys as $k) {
         if (!isset($raw[$k])) { skipped("$k round-trips", 'not seeded on this install'); continue; }
-        $atRest  = strpos((string)$raw[$k], ENCRYPTION_PREFIX) === 0;
-        $usable  = ($plain[$k] ?? '') !== '' && strpos((string)$plain[$k], ENCRYPTION_PREFIX) !== 0;
+        $atRest  = str_starts_with((string)$raw[$k], ENCRYPTION_PREFIX);
+        $usable  = ($plain[$k] ?? '') !== '' && !str_starts_with((string)$plain[$k], ENCRYPTION_PREFIX);
         check("$k is ciphertext at rest AND plaintext through the accessor",
               $atRest && $usable,
               !$atRest ? 'stored in the clear' : 'decrypt returned nothing usable');
@@ -598,14 +613,14 @@ if ($conn === null) {
 // R1 — the screen that hands the token to a human must not print ciphertext.
 $wh = code("$APP/system/webhooks/index.php");
 check("System → Webhooks decrypts the cron token before printing the URL",
-      strpos($wh, 'settingsGetDecrypted(') !== false,
+      str_contains($wh, 'settingsGetDecrypted('),
       'a raw SELECT here puts ?token=ENC%3A… on screen');
 
 // R2 — both halves, and they must agree with each other.
 $ksend = code("$APP/api/knowledge/send_share_email.php");
 $ksave = code("$APP/api/knowledge/save_email_settings.php");
 check("knowledge email READS the SMTP password through a decrypt",
-      strpos($ksend, 'isEncryptedSettingKey(') !== false && strpos($ksend, 'decryptValue(') !== false);
+      str_contains($ksend, 'isEncryptedSettingKey(') && str_contains($ksend, 'decryptValue('));
 check("knowledge email WRITES the SMTP password encrypted",
       preg_match('/knowledge_email_smtp_password.{0,40}encryptValue\(/s', $ksave) === 1,
       'storing it raw makes the value oscillate: encrypted by Verify, plaintext by Save');
@@ -673,7 +688,7 @@ if ($conn === null) {
 // S1 — the create path authorises the company it will ACTUALLY use.
 $su2 = code("$APP/api/tickets/save_user.php");
 check("save_user.php authorises the RESOLVED destination company, not just a sent one",
-      strpos($su2, '$destinationTenantId') !== false
+      str_contains($su2, '$destinationTenantId')
       && preg_match('/analystCanAccessTenant\([^;]*\$destinationTenantId/', $su2) === 1,
       'gating the check on $tenantSent lets an omitted tenant_id skip it entirely');
 check("save_user.php still short-circuits on single-company installs",
@@ -718,8 +733,8 @@ if ($conn === null) {
 // S9 — SSO is not a way around the gate.
 $oidc = code("$APP/api/auth/oidc_callback.php");
 check("oidc_callback.php honours must_change_password",
-      strpos($oidc, "must_change_password") !== false
-      && strpos($oidc, "password_expired") !== false,
+      str_contains($oidc, "must_change_password")
+      && str_contains($oidc, "password_expired"),
       'SSO would otherwise be the one sign-in path that skips the gate');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -737,7 +752,7 @@ heading('S2  The four sibling endpoints');
 
 $du = code("$APP/api/tickets/delete_user.php");
 check("delete_user.php calls a tenancy guard at all",
-      strpos($du, 'analystCanAccessUser') !== false,
+      str_contains($du, 'analystCanAccessUser'),
       'it had no company check of any kind');
 // Position is the finding. A guard under the counts still answers "how many
 // tickets does that other company's contact have?" before refusing.
@@ -747,7 +762,7 @@ check("...ABOVE the ticket/asset counts, so the refusal text leaks nothing",
       $guardPos !== false && $countPos !== false && $guardPos < $countPos,
       'the counts are a cross-tenant oracle whether or not the DELETE runs');
 check("delete_user.php answers 'not found' rather than 'not yours'",
-      strpos($du, 'User not found') !== false);
+      str_contains($du, 'User not found'));
 
 $v1u = code("$APP/api/v1/resources/users.php");
 check("v1 PATCH /users/{id} checks the SUBJECT row, not just the destination",
@@ -756,7 +771,7 @@ check("v1 PATCH /users/{id} checks the SUBJECT row, not just the destination",
 check("v1 GET /users/{id} is scoped too",
       substr_count($v1u, 'apiKeyCanAccessTenantRow') >= 2);
 check("v1 GET /users (list) is scoped by the key's companies",
-      strpos($v1u, 'apiKeyTenantFilter') !== false,
+      str_contains($v1u, 'apiKeyTenantFilter'),
       'the list returned every requester on the install');
 
 $esc = code("$APP/api/integrations/escalate_ticket.php");
@@ -773,9 +788,9 @@ check("escalate_ticket.php checks the ticket BEFORE the preview branch",
 foreach (['test_channel', 'slack_diagnose'] as $mf) {
     $src = code("$APP/api/messaging/$mf.php");
     check("$mf.php checks the channel's company",
-          strpos($src, 'analystCanAccessChannel') !== false);
+          str_contains($src, 'analystCanAccessChannel'));
     check("...and requires includes/tenancy.php, or that call is a fatal",
-          strpos($src, "includes/tenancy.php") !== false,
+          str_contains($src, "includes/tenancy.php"),
           'the guard lives there and neither file included it');
 }
 
@@ -787,7 +802,7 @@ heading("S3's cousins  Guards that forgive the wrong exceptions");
 // guard means a lock-wait timeout reads as authorisation.
 $tk = code("$APP/includes/services/tasks.php");
 check("TasksService::ticketAccessible() denies on an unexpected database error",
-      strpos($tk, 'return tenancyDegradeAllowed($e)') !== false,
+      str_contains($tk, 'return tenancyDegradeAllowed($e)'),
       'a bare `return true` here turns a busy database into a cross-company read');
 
 // ...and the sweep that found it, kept as a standing check so the next one cannot
@@ -825,39 +840,39 @@ check("get_users.php scopes the USER LIST, not only the ticket count",
 // Precedence is half the fix: appended after a bare `a LIKE ? OR b LIKE ?` the
 // company clause would bind to the last OR branch only.
 check("...and brackets the search terms so the company clause cannot bind to one OR branch",
-      strpos($gu, 'AND (u.display_name LIKE ?') !== false,
+      str_contains($gu, 'AND (u.display_name LIKE ?'),
       'an unbracketed OR list makes the tenancy clause decorative');
 
 // The picker sends a user_id, so the boundary must re-check it. A scoped list
 // governs what is easy to choose, never what can be sent.
 $ct = code("$APP/api/tickets/create_ticket.php");
 check("create_ticket.php authorises a chosen requester id",
-      strpos($ct, 'analystCanAccessUser') !== false,
+      str_contains($ct, 'analystCanAccessUser'),
       'user_id arrives in a JSON body and can be any integer');
 
 // And the requester created by a manual ticket gets a company like every other
 // path does — three callers resolved it and the fourth quietly did not.
 $ts = code("$APP/includes/services/tickets.php");
 check("a requester created by a manual ticket gets its company resolved",
-      strpos($ts, 'resolveTenantForNewUser') !== false,
+      str_contains($ts, 'resolveTenantForNewUser'),
       'they were inserted with no tenant_id at all, so their tickets sat in triage forever');
 
 heading('S6  The MFA counter, in the database rather than the session');
 
 $thr = code("$APP/includes/mfa_throttle.php");
 check("the throttle whitelists its table names",
-      strpos($thr, 'MFA_THROTTLE_TABLES') !== false
-      && strpos($thr, 'in_array($table, MFA_THROTTLE_TABLES, true)') !== false,
+      str_contains($thr, 'MFA_THROTTLE_TABLES')
+      && str_contains($thr, 'in_array($table, MFA_THROTTLE_TABLES, true)'),
       'a caller-supplied table would otherwise be interpolated into SQL');
 check("a disabled account-lockout policy cannot re-enable unlimited code guessing",
-      strpos($thr, 'MFA_THROTTLE_FALLBACK_THRESHOLD') !== false,
+      str_contains($thr, 'MFA_THROTTLE_FALLBACK_THRESHOLD'),
       'max_failed_logins = 0 must not mean "no MFA limit"');
 foreach (['api/myaccount/verify_login_otp.php', 'api/self-service/verify_login_otp.php'] as $otp) {
     $src = code("$APP/$otp");
-    check("$otp records failures durably",  strpos($src, 'mfaThrottleRecordFailure') !== false);
-    check("$otp refuses while locked",      strpos($src, 'mfaThrottleMinutesRemaining') !== false);
+    check("$otp records failures durably",  str_contains($src, 'mfaThrottleRecordFailure'));
+    check("$otp refuses while locked",      str_contains($src, 'mfaThrottleMinutesRemaining'));
     check("$otp clears the count ONLY on a correct code",
-          strpos($src, 'mfaThrottleReset') !== false);
+          str_contains($src, 'mfaThrottleReset'));
 }
 
 // The behavioural half. This is the finding: the count must survive the thing the
@@ -918,19 +933,19 @@ heading('S9  The remainder');
 
 $tm = code("$APP/includes/ticket_merge.php");
 check("the merge snapshot is written through uploads.php, not by hand",
-      strpos($tm, 'uploadStoreBytes') !== false && strpos($tm, 'file_put_contents') === false,
+      str_contains($tm, 'uploadStoreBytes') && !str_contains($tm, 'file_put_contents'),
       'it hand-wrote a .html into the web root');
 
 $sb = code("$APP/api/system/save_branding.php");
 check("branding no longer accepts SVG",
-      strpos($sb, 'image/svg+xml') === false && strpos($sb, "'svg'") === false,
+      !str_contains($sb, 'image/svg+xml') && !str_contains($sb, "'svg'"),
       'an SVG logo is script on our own origin when navigated to directly');
 check("branding uses the shared image whitelist",
-      strpos($sb, 'UPLOAD_TYPES_IMAGE') !== false);
+      str_contains($sb, 'UPLOAD_TYPES_IMAGE'));
 check("branding no longer moves the file itself",
-      strpos($sb, 'move_uploaded_file') === false);
+      !str_contains($sb, 'move_uploaded_file'));
 check("...and prepares the directory as web-servable, not deny-all",
-      strpos($sb, 'uploadPrepareWebServableDir') !== false,
+      str_contains($sb, 'uploadPrepareWebServableDir'),
       'the deny-all would 403 the logo on every page');
 // The rule this depends on, asserted directly rather than assumed.
 require_once "$APP/includes/uploads.php";
@@ -956,14 +971,14 @@ foreach ($configs as $dir) {
           stripos($xml, 'denyUrlSequences') !== false);
 }
 check("the generator no longer writes <handlers><clear/> either",
-      strpos(code("$APP/includes/uploads.php"), '<handlers>') === false,
+      !str_contains(code("$APP/includes/uploads.php"), '<handlers>'),
       'directories created at runtime would otherwise reintroduce it');
 
 // S9e — containment, and the sibling-prefix trap in the comparison itself.
 foreach (['api/tickets/get_attachment.php', 'api/self-service/get_attachment.php'] as $ga) {
     $src = code("$APP/$ga");
     check("$ga contains the resolved path to the attachments directory",
-          strpos($src, 'realpath') !== false && strpos($src, 'strncmp') !== false,
+          str_contains($src, 'realpath') && str_contains($src, 'strncmp'),
           'a bare strpos prefix also matches a sibling like attachments-old');
 }
 
@@ -1020,11 +1035,11 @@ $cmJs = code("$APP/assets/js/change-management.js");
 check("change-management.js defines safeChangeHtml() over safeHtmlFragment()",
       (bool)preg_match('/function safeChangeHtml\(.{0,400}?return safeHtmlFragment\(/s', $cmJs));
 check("the detail view renders change text through safeChangeHtml()",
-      strpos($cmJs, '<div class="detail-section-body">${safeChangeHtml(content)}</div>') !== false
-      && strpos($cmJs, '<div class="detail-section-body">${content}</div>') === false);
+      str_contains($cmJs, '<div class="detail-section-body">${safeChangeHtml(content)}</div>')
+      && !str_contains($cmJs, '<div class="detail-section-body">${content}</div>'));
 check("the PDF export renders change text through safeChangeHtml()",
-      strpos($cmJs, '${safeChangeHtml(section.content)}') !== false
-      && strpos($cmJs, '${section.content}') === false);
+      str_contains($cmJs, '${safeChangeHtml(section.content)}')
+      && !str_contains($cmJs, '${section.content}'));
 $cmPage = code("$APP/change-management/index.php");
 $posSafe = strpos($cmPage, 'assets/js/safe-html.js');
 $posCm   = strpos($cmPage, 'assets/js/change-management.js');
@@ -1032,19 +1047,19 @@ check("the change page loads safe-html.js, before change-management.js",
       $posSafe !== false && $posCm !== false && $posSafe < $posCm);
 // POSITIVE CONTROL - the cleaner it relies on still strips handlers.
 check("POSITIVE CONTROL: safe-html.js still drops every on* attribute",
-      strpos(code("$APP/assets/js/safe-html.js"), "name.indexOf('on') === 0") !== false);
+      str_contains(code("$APP/assets/js/safe-html.js"), "name.indexOf('on') === 0"));
 
 // Saving an AI provider's key is a settings-tab job, like testing it. Module access alone
 // let any analyst with Forms / Workflow replace the key or point it at another endpoint.
 foreach (['forms' => 'FORMS_AI', 'workflow' => 'WORKFLOW_AI'] as $mod => $cap) {
     $src = code("$APP/api/$mod/save_ai_settings.php");
     check("api/$mod/save_ai_settings.php requires Cap::$cap",
-          strpos($src, "requireCapabilityJson(Cap::$cap)") !== false);
+          str_contains($src, "requireCapabilityJson(Cap::$cap)"));
     check("api/$mod/save_ai_settings.php loads rbac.php, so the guard cannot fatal",
           (bool)preg_match('#require(_once)?[^;\n]*rbac\.php#', $src));
     // POSITIVE CONTROL - the sibling it was copied from carries the same guard.
     check("POSITIVE CONTROL: api/$mod/test_ai_key.php carries the same Cap::$cap",
-          strpos(code("$APP/api/$mod/test_ai_key.php"), "requireCapabilityJson(Cap::$cap)") !== false);
+          str_contains(code("$APP/api/$mod/test_ai_key.php"), "requireCapabilityJson(Cap::$cap)"));
 }
 
 // ── Live checks (need a base URL) ──────────────────────────────────────────
@@ -1054,7 +1069,7 @@ if ($BASE === null) {
 } else {
     $anon = @file_get_contents($BASE . 'setup/');
     check("setup/ hides the exact PHP version from anonymous visitors",
-          is_string($anon) && strpos($anon, PHP_VERSION) === false,
+          is_string($anon) && !str_contains($anon, PHP_VERSION),
           'the build number maps straight to a published vulnerability list');
     // Positive control: the page must still be answering, or the check above
     // passes for the wrong reason — the round-two lesson, applied here.

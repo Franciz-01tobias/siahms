@@ -41,7 +41,7 @@ function searchMinTokenSize(PDO $conn): int {
     if ($n !== null) return $n;
     try {
         $n = (int)$conn->query("SELECT @@innodb_ft_min_token_size")->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $n = 3;   // stock MySQL
     }
     return $n;
@@ -144,15 +144,23 @@ function searchScopeForAnalyst(PDO $conn, int $analystId, array $overrides = [])
         // Which modules this caller may read. Attached documents inherit their
         // visibility from the record they hang off, so the corpus row alone
         // cannot answer whether they may be listed — see below.
-        'allowed_modules'   => array_key_exists('allowed_modules', $_SESSION ?? [])
-                                 ? $_SESSION['allowed_modules'] : null,
+        // The grants NOW, not the copy taken at sign-in (analystAllowedModulesNow()).
+        // Less any module switched off for the install (GH #217).
+        'allowed_modules'   => modulesWithoutSwitchedOff($conn, getAnalystAllowedModules($conn, (int)$analystId)),
     ];
 
     if (function_exists('isMultiTenant') && isMultiTenant($conn)) {
         $active  = getActiveTenantId($conn, $analystId);
         $default = getDefaultTenantId($conn);
-        $scope['tenant_id']       = $active;
-        $scope['include_default'] = ($active === $default);
+        if (!analystCanAccessTenant($conn, $analystId, $active)) {
+            // No company at all: shared entries only, never the Default company's
+            // (see activeTenantFilter() in tenancy.php). -1 matches no company.
+            $scope['tenant_id']       = -1;
+            $scope['include_default'] = false;
+        } else {
+            $scope['tenant_id']       = $active;
+            $scope['include_default'] = ($active === $default);
+        }
     }
     $scope = array_merge($scope, $overrides);
 
@@ -173,7 +181,7 @@ function searchScopeForAnalyst(PDO $conn, int $analystId, array $overrides = [])
         $scope['document_clause'] = documentSearchVisibilityClause(
             $conn, $analystId, $scope['allowed_modules'], 'sd'
         );
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // If the clause cannot be built, exclude documents entirely rather than
         // letting them through unfiltered. Fail closed.
         $scope['document_clause'] = [" AND sd.source_type <> 'document'", []];
@@ -287,8 +295,22 @@ function searchCorpusQuery(PDO $conn, string $rawQuery, array $scope, array $opt
                  . " WHERE vf_ts.id = t.status_id AND vf_ts.is_closed = 1))";
     }
 
+    // 🔴 A ticket's row is judged by the ticket's company NOW, not the copy taken
+    // when it was indexed. Moving a ticket to another company, and routing it out
+    // of triage, write only tickets.tenant_id and re-index nothing, so the old
+    // company kept finding it - with snippets of its messages and internal notes -
+    // until the next reply happened to re-index it. Every move path (the move
+    // button, PATCH, the bulk triage sweeps) is covered here, in the one query they
+    // all go through. Reported privately, October 2026.
+    $liveParams = [];
+    if (!empty($scope['tenant_id'])) {
+        $delSql .= " AND (sd.ticket_id IS NULL OR t.tenant_id = ?"
+                 . (!empty($scope['include_default']) ? " OR t.tenant_id IS NULL" : '') . ")";
+        $liveParams[] = (int)$scope['tenant_id'];
+    }
+
     $where = "MATCH($cols) AGAINST (? IN BOOLEAN MODE)" . $scopeSql . $delSql;
-    $args  = array_merge([$parsed['expr']], $scopeParams);
+    $args  = array_merge([$parsed['expr']], $scopeParams, $liveParams);
 
     // --- 1. how many tickets match, and which page of them ------------------
     $countSql = "SELECT COUNT(DISTINCT COALESCE(sd.ticket_id, -sd.id))

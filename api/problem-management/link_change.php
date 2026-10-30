@@ -12,6 +12,7 @@ require_once '../../includes/services/problems.php';
 header('Content-Type: application/json');
 if (!isset($_SESSION['analyst_id'])) { echo json_encode(['success' => false, 'error' => 'Not authenticated']); exit; }
 requireModuleAccessJson('problems');
+requireModuleOnJson(connectToDatabase(), 'changes');   // GH #217: nothing to link while Changes is switched off
 
 try {
     $d = json_decode(file_get_contents('php://input'), true) ?: [];

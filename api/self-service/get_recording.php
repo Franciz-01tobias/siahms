@@ -109,6 +109,7 @@ try {
         header("Content-Range: bytes $start-$end/$size");
     }
     header("Content-Type: $contentType");
+    header("X-Content-Type-Options: nosniff");   // a video is played, never sniffed into something else
     header("Accept-Ranges: bytes");
     header("Content-Length: $length");
     header('Cache-Control: private, max-age=600');

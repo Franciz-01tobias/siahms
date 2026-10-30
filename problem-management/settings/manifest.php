@@ -14,26 +14,26 @@ return [
     'module' => 'problems',
     'label'  => 'Problem management',
     'umbrella' => [
-        'cap'       => Cap::PROBLEMS_MANAGE,
+        'cap'       => capKey(Cap::PROBLEMS_MANAGE),
         'grant'     => 'Manage everything in Problem management settings',
         'sensitive' => true,   // implies the AI credentials
     ],
     'tabs' => [
         [
             'id'        => 'statuses',
-            'cap'       => Cap::PROBLEMS_STATUSES,
+            'cap'       => capKey(Cap::PROBLEMS_STATUSES),
             'label'     => 'Statuses',
             'grant'     => 'Manage problem statuses',
         ],
         [
             'id'        => 'priorities',
-            'cap'       => Cap::PROBLEMS_PRIORITIES,
+            'cap'       => capKey(Cap::PROBLEMS_PRIORITIES),
             'label'     => 'Priorities',
             'grant'     => 'Manage problem priorities',
         ],
         [
             'id'           => 'ai',
-            'cap'          => Cap::PROBLEMS_AI,
+            'cap'          => capKey(Cap::PROBLEMS_AI),
             'label'        => 'Problem AI',
             'grant'        => 'Configure the Problem AI provider, including its API key',
             'sensitive'    => true,

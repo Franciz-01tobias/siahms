@@ -28,7 +28,7 @@ function rfpTenantReady(PDO $conn): bool
     static $ok = null;
     if ($ok !== null) return $ok;
     try { $conn->query("SELECT tenant_id FROM rfps LIMIT 0"); return $ok = true; }
-    catch (Throwable $e) { return $ok = false; }
+    catch (Throwable) { return $ok = false; }
 }
 
 /**

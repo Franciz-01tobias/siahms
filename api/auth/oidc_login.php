@@ -80,5 +80,6 @@ try {
     exit;
 
 } catch (Exception $e) {
-    ssoBail('Could not start sign-in: ' . $e->getMessage());
+    require_once __DIR__ . '/../../includes/db_errors.php';
+    ssoBail('Could not start sign-in: ' . dbSafeClientMessage($e, 'a server error. The details are in the server log.'));
 }

@@ -50,8 +50,8 @@ $dash = file_get_contents(__DIR__ . '/../watchtower/index.php');
 $colours = file_get_contents(__DIR__ . '/../includes/module-colors.php');
 $missingEl = []; $missingCol = [];
 foreach ($reg as $k => $c) {
-    if (strpos($dash, 'id="' . $c['element'] . '"') === false) $missingEl[] = $k;
-    if (strpos($colours, "'" . $c['module'] . "'") === false) $missingCol[] = $k;
+    if (!str_contains($dash, 'id="' . $c['element'] . '"')) $missingEl[] = $k;
+    if (!str_contains($colours, "'" . $c['module'] . "'")) $missingCol[] = $k;
 }
 is_('every card has its element on the dashboard', $missingEl, []);
 is_('every card has a module colour',              $missingCol, []);
@@ -64,11 +64,11 @@ is_('every card has a settings name', array_values(array_filter(array_keys($reg)
 
 echo "\nModules: one list for every launcher:\n";
 $home = file_get_contents(__DIR__ . '/../index.php');
-is_('the home page draws from the module list',  strpos($home, 'analystVisibleModules($modules)') !== false, true);
+is_('the home page draws from the module list',  str_contains($home, 'analystVisibleModules($modules)'), true);
 is_('the home page has no hand-written cards',   substr_count($home, '<a href="watchtower/"'), 0);
 $waffle = file_get_contents(__DIR__ . '/../includes/waffle-menu.php');
 is_('the waffle draws from the module list',     substr_count($waffle, 'analystVisibleModules($modules)'), 2);   // drawer + Ctrl+K
-is_('the Files start menu draws from it',        strpos(file_get_contents(__DIR__ . '/../files/index.php'), 'analystVisibleModules($modules)') !== false, true);
+is_('the Files start menu draws from it',        str_contains(file_get_contents(__DIR__ . '/../files/index.php'), 'analystVisibleModules($modules)'), true);
 
 echo "\n" . str_repeat('-', 78) . "\n  $pass passed, $fail failed\n\n";
 exit($fail ? 1 : 0);

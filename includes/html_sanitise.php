@@ -149,7 +149,7 @@ function sanitiseUserHtmlNode(DOMDocument $doc, DOMNode $node): void {
                 // Whitespace is stripped first: "java\tscript:" is a javascript:
                 // URL to a browser but not to a naive comparison.
                 $value = strtolower(preg_replace('/\s+/', '', $child->getAttribute('href')));
-                if (strpos($value, 'javascript:') === 0 || strpos($value, 'data:') === 0 || strpos($value, 'vbscript:') === 0) {
+                if (str_starts_with($value, 'javascript:') || str_starts_with($value, 'data:') || str_starts_with($value, 'vbscript:')) {
                     $child->removeAttribute('href');
                 }
             }

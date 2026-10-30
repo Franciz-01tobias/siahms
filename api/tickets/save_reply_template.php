@@ -34,6 +34,9 @@ require_once '../../includes/rbac.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/reply_templates.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {

@@ -179,7 +179,7 @@ function aiSettingsLoad(PDO $conn, string $ns): array
     }
 
     $provider = $rows[$keys['provider']] ?? $entry['default_provider'];
-    if (!in_array($provider, AI_PROVIDER_VALID, true)) {
+    if (AiProvider::tryFrom((string)$provider) === null) {   // a stale or hand-edited value
         $provider = $entry['default_provider'];
     }
 
@@ -261,7 +261,7 @@ function aiSettingsSave(PDO $conn, string $ns, array $data): void
     $keys = aiSettingsKeys($ns);
 
     $provider = $data['provider'] ?? 'anthropic';
-    if (!in_array($provider, AI_PROVIDER_VALID, true)) {
+    if (AiProvider::tryFrom((string)$provider) === null) {
         throw new InvalidArgumentException('Invalid provider');
     }
     $model = trim((string)($data['model'] ?? ''));

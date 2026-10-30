@@ -125,7 +125,11 @@ final class ActorContext
             if ((int)$stmt->fetchColumn() === 1) return null; // all companies
             return getAccessibleTenantIds($conn, $analystId);
         } catch (Throwable $e) {
-            return null;
+            // 🔴 Null means ALL companies, so a lookup that failed - a lock wait, a
+            // lost connection - used to widen the scope to everything. Fail closed,
+            // except for the one case tenancy.php allows: a genuinely part-migrated
+            // install. Reported privately, October 2026.
+            return ($e instanceof Exception && function_exists('tenancyDegradeAllowed') && tenancyDegradeAllowed($e)) ? null : [];
         }
     }
 }

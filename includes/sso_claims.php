@@ -43,7 +43,7 @@ function ssoClaimsReady(PDO $conn): bool
         $conn->query("SELECT 1 FROM sso_group_teams LIMIT 0");
         $conn->query("SELECT 1 FROM sso_groups_seen LIMIT 0");
         return $ok = true;
-    } catch (Throwable $e) { return $ok = false; }
+    } catch (Throwable) { return $ok = false; }
 }
 
 /** The claims offered in the dropdown; anything else is "Other". */
@@ -222,7 +222,7 @@ function ssoRememberGroups(PDO $conn, int $providerId, string $who, array $group
                               VALUES (?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())
                               ON DUPLICATE KEY UPDATE last_seen_datetime = UTC_TIMESTAMP()");
         foreach (array_slice($groups, 0, 500) as $g) $up->execute([$providerId, mb_substr($g, 0, 255)]);
-    } catch (Throwable $e) { /* never fails a sign-in */ }
+    } catch (Throwable) { /* never fails a sign-in */ }
 }
 
 /**

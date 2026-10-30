@@ -53,7 +53,7 @@ function analystSignInReady(PDO $conn): bool
             $conn->query("SELECT auth_follow_team FROM analysts LIMIT 0");
             $conn->query("SELECT auth_method, auth_provider_id FROM teams LIMIT 0");
             $ready = true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $ready = false;
         }
     }

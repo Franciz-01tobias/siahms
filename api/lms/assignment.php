@@ -76,7 +76,7 @@ if (strtoupper($method) === 'PUT') {
              ->execute([$courseId, $targetType, $groupId, $deadline, $id]);
         echo json_encode(['success' => true]);
     } catch (Exception $e) {
-        if (strpos($e->getMessage(), 'Duplicate') !== false) {
+        if (str_contains($e->getMessage(), 'Duplicate')) {
             echo json_encode(['success' => false, 'error' => $targetType === 'all_users'
                 ? 'This course has already been pushed to everyone on the portal'
                 : 'This course is already assigned to that group']);

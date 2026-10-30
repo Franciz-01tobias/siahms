@@ -13,6 +13,9 @@ require_once '../../includes/landing.php';   // re-issue the landing cookie on l
 
 header('Content-Type: application/json');
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 // Check for pending MFA state
 if (!isset($_SESSION['mfa_pending_analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'No MFA challenge pending']);
@@ -219,7 +222,7 @@ try {
         if (empty($pwChanged)) {
             $expired = true;
         } else {
-            $changed = new DateTime($pwChanged);
+            $changed = new DateTime($pwChanged, new DateTimeZone('UTC'));   // stored in UTC
             $now = new DateTime('now', new DateTimeZone('UTC'));
             if ($now->diff($changed)->days >= $expiryDays) {
                 $expired = true;
@@ -247,5 +250,8 @@ try {
 
     echo json_encode(['success' => true, 'message' => 'Login successful', 'redirect' => $redirect]);
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    // Before sign-in completes: never the raw text (it can be a database error,
+    // or the encryption key's path on the server). The real message is logged.
+    error_log('[verify_login_otp] ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Something went wrong checking the code. Please try again.']);
 }

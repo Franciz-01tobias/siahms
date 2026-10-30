@@ -36,6 +36,19 @@ return [
         'check'    => ['rows', 'workflows', $live],
     ],
     [
+        // GH #209.
+        'id'       => 'workflow.company_workflows',
+        'module'   => 'workflow',
+        'tier'     => 'extra',
+        'category' => 'organisation',
+        'title'    => 'Company-specific workflows',
+        'what'     => 'A workflow that runs for one company only, set under Runs for in the editor. It only acts on that company\'s records; a shared workflow still runs for everyone.',
+        'why'      => 'If you support several organisations, one client\'s automation should never touch another client\'s tickets - and each client\'s own people can look after their own rules.',
+        'done'     => 'At least one active workflow belongs to a specific company.',
+        'link'     => 'workflow/',
+        'check'    => ['rows', 'workflows', "$live AND tenant_id IS NOT NULL"],
+    ],
+    [
         'id'       => 'workflow.conditions',
         'module'   => 'workflow',
         'tier'     => 'extra',
@@ -465,11 +478,12 @@ return [
         'tier'     => 'extra',
         'category' => 'communication',
         'title'    => 'Post to Microsoft Teams',
-        'what'     => 'A workflow webhook using the Microsoft Teams format, which posts a message card to a Teams channel.',
+        'what'     => 'A workflow webhook using a Microsoft Teams format - the Workflows card, or the older message card - which posts to a Teams channel.',
         'why'      => 'In a Microsoft shop, alerts reach people in Teams, where they are, rather than in an inbox they check twice a day.',
         'done'     => 'At least one active workflow sends a Teams webhook.',
         'link'     => 'workflow/',
-        'check'    => $preset('teams'),
+        // Either Teams format: "preset":"teams" alone would not match "teams_workflows".
+        'check'    => ['rows', 'workflows', "$live AND actions LIKE '%\"type\":\"send_webhook\"%' AND (actions LIKE '%\"preset\":\"teams\"%' OR actions LIKE '%\"preset\":\"teams_workflows\"%')"],
     ],
     [
         'id'       => 'workflow.webhook_discord',

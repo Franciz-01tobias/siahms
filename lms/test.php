@@ -27,7 +27,8 @@ header('X-Robots-Tag: noindex, nofollow');
 
 $raw  = (string)($_GET['t'] ?? '');
 $conn = connectToDatabase();
-$s    = lmsCtFindSitting($conn, $raw);
+// GH #217: with the LMS switched off the link reads as not valid, like a cancelled one.
+$s    = moduleIsEnabled($conn, 'lms') ? lmsCtFindSitting($conn, $raw) : null;
 $state = (!$s || (int)$s['is_cancelled']) ? 'invalid' : lmsCtState($s);
 if ($state === 'timeup') {
     lmsCtFinalise($conn, $s, 'time_up');

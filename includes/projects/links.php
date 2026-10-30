@@ -61,7 +61,7 @@ if (!defined('PROJECT_LINKS_LOADED')) {
             if ($k === null) return false;
             if (!isset($ready[$name])) {
                 try { $conn->query("SELECT 1 FROM {$k['table']} LIMIT 0"); $ready[$name] = true; }
-                catch (Throwable $e) { $ready[$name] = false; }
+                catch (Throwable) { $ready[$name] = false; }
             }
             if ($kind !== null) return $ready[$name];
         }
@@ -432,7 +432,7 @@ if (!defined('PROJECT_LINKS_LOADED')) {
         $st->execute([$targetId]);
         require_once __DIR__ . '/../services/projects.php';
         $ids = array_values(array_filter(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)), function ($pid) use ($conn, $ctx) {
-            try { ProjectsService::loadForActor($conn, $ctx, $pid); return true; } catch (Throwable $e) { return false; }
+            try { ProjectsService::loadForActor($conn, $ctx, $pid); return true; } catch (Throwable) { return false; }
         }));
         return projectLinkProjectRows($conn, $ids);
     }
@@ -466,7 +466,7 @@ if (!defined('PROJECT_LINKS_LOADED')) {
         $st->execute($args);
         $ids = [];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $p) {
-            try { ProjectsService::loadForActor($conn, $ctx, (int)$p['id']); } catch (Throwable $e) { continue; }
+            try { ProjectsService::loadForActor($conn, $ctx, (int)$p['id']); } catch (Throwable) { continue; }
             if (!projectCanChange($conn, $ctx->actorId, $p)) continue;
             $ids[] = (int)$p['id'];
             if (count($ids) >= 20) break;
@@ -478,7 +478,7 @@ if (!defined('PROJECT_LINKS_LOADED')) {
     function projectLinksDeleteAll(PDO $conn, int $projectId): void
     {
         foreach (projectLinkKinds() as $k) {
-            try { $conn->prepare("DELETE FROM {$k['table']} WHERE project_id = ?")->execute([$projectId]); } catch (Throwable $e) { /* not created yet */ }
+            try { $conn->prepare("DELETE FROM {$k['table']} WHERE project_id = ?")->execute([$projectId]); } catch (Throwable) { /* not created yet */ }
         }
     }
 
@@ -507,7 +507,7 @@ if (!defined('PROJECT_LINKS_LOADED')) {
                   WHERE pc.project_id = ? AND c.approval_datetime IS NULL AND COALESCE(s.is_closed, 0) = 0
                ORDER BY c.work_start_datetime IS NULL, c.work_start_datetime, c.id");
             $st->execute([$projectId]);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return [];   // before Database Verification: nothing linked
         }
         return array_map(fn($r) => [

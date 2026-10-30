@@ -45,7 +45,7 @@ function domainApiBody(): array
  *
  * @param array $data  extra keys to send alongside success
  */
-function domainApiOk(array $data = []): void
+function domainApiOk(array $data = []): never
 {
     echo json_encode(['success' => true] + $data);
     exit;
@@ -57,7 +57,7 @@ function domainApiOk(array $data = []): void
  * @param string $message  the error text, shown to the user as it stands
  * @param int    $status   HTTP status code; 200 leaves the status alone
  */
-function domainApiFail(string $message, int $status = 200): void
+function domainApiFail(string $message, int $status = 200): never
 {
     if ($status !== 200) http_response_code($status);
     echo json_encode(['success' => false, 'error' => $message]);
@@ -67,9 +67,9 @@ function domainApiFail(string $message, int $status = 200): void
 /**
  * Stops the request with a JSON refusal unless the signed-in analyst holds the capability.
  *
- * @param string $cap  a capability key, normally a Cap::DOMAINS_* constant
+ * @param Cap $cap  a capability, normally Cap::DOMAINS_*
  */
-function domainRequireCap(PDO $conn, string $cap): void
+function domainRequireCap(PDO $conn, Cap $cap): void
 {
     requireCapabilityJson($cap, $conn);
 }
@@ -77,11 +77,11 @@ function domainRequireCap(PDO $conn, string $cap): void
 /**
  * True when the analyst holds the capability; false on any error.
  *
- * @param string $cap  a capability key, normally a Cap::DOMAINS_* constant
+ * @param Cap $cap  a capability, normally Cap::DOMAINS_*
  */
-function domainHasCap(PDO $conn, int $analystId, string $cap): bool
+function domainHasCap(PDO $conn, int $analystId, Cap $cap): bool
 {
-    try { return analystHasCapability($conn, $analystId, $cap); } catch (Throwable $e) { return false; }
+    try { return analystHasCapability($conn, $analystId, $cap); } catch (Throwable) { return false; }
 }
 
 /**

@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'Penyedia',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'IMAP / SMTP dasar (nama pengguna &amp; kata sandi)',
+                'provider_imap' => 'IMAP / SMTP dasar (nama pengguna & kata sandi)',
                 'display_name' => 'Nama Tampilan',
                 'display_name_placeholder' => 'misal, Service Desk',
                 'target_mailbox' => 'Kotak Surat Tujuan',

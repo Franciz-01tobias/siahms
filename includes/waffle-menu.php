@@ -37,7 +37,7 @@ I18n::initFromSession();
 // Password expiry guard — force redirect if password is expired
 if (!empty($_SESSION['password_expired'])) {
     $currentUrl = $_SERVER['REQUEST_URI'] ?? '';
-    if (strpos($currentUrl, 'force_password_change.php') === false && strpos($currentUrl, 'analyst_logout.php') === false && strpos($currentUrl, 'api/') === false) {
+    if (!str_contains($currentUrl, 'force_password_change.php') && !str_contains($currentUrl, 'analyst_logout.php') && !str_contains($currentUrl, 'api/')) {
         header('Location: ' . BASE_URL . 'force_password_change.php');
         exit;
     }
@@ -125,6 +125,12 @@ $modules = [
         'name' => t('common.modules.people.name'),
         'path' => 'people/',
         'icon' => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>'
+    ],
+    'starters' => [
+        'name' => t('common.modules.starters.name'),
+        'path' => 'starters/',
+        // A person and an arrow: someone joining, moving or leaving.
+        'icon' => '<circle cx="8" cy="7" r="4"></circle><path d="M2 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path><path d="M16 11h6"></path><path d="M19 8l3 3-3 3"></path>'
     ],
     'files' => [
         'name' => t('common.modules.files.name'),
@@ -259,6 +265,13 @@ $modules = [
 
     .waffle-panel.active {
         display: block;
+    }
+
+    /* Dark mode: same colour as the page and a black shadow on a dark page left
+       the panel with no edge - lift it with a lighter surface and a border. */
+    [data-theme="dark"] .waffle-panel {
+        background: var(--surface-2);
+        box-shadow: 0 0 0 1px var(--border), 0 12px 40px rgba(0, 0, 0, 0.6);
     }
 
     .waffle-panel-header {
@@ -800,7 +813,7 @@ function renderWaffleMenuJS() {
                     $desktopNotif = $row['preference_value'];
                 }
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // Defaults stand
         }
     }
@@ -890,7 +903,8 @@ function renderWaffleMenuJS() {
     }
 
     function closeWaffleMenu() {
-        document.getElementById('wafflePanel').classList.remove('active');
+        // waffle-panel--rail: opened from the sidebar's Recent (#124); the next open may be the waffle's own.
+        document.getElementById('wafflePanel').classList.remove('active', 'waffle-panel--rail');
         document.getElementById('waffleOverlay').classList.remove('active');
     }
 
@@ -1246,11 +1260,17 @@ function renderNotificationBell($path_prefix) {
     // The bell itself is shared with the self-service portal - see
     // includes/notification_bell.php. Only the URLs are the analyst's.
     require_once __DIR__ . '/notification_bell.php';
-    notificationBellRender($path_prefix, [
-        'list'       => $path_prefix . 'api/notifications/get_notifications.php',
-        'markRead'   => $path_prefix . 'api/notifications/mark_read.php',
-        'clear'      => $path_prefix . 'api/notifications/clear.php',
-        'linkPrefix' => $path_prefix,
+    // URLs from BASE_URL, like the rest of the header: $path_prefix is a
+    // FILESYSTEM path, and on a pretty URL served deeper than its file
+    // (system/integrations/<provider>/help) it pointed every bell URL one folder
+    // too high - the script 404'd and the page threw "NotificationBell is not
+    // defined". Found adding the Zabbix help page, October 2026.
+    $url = defined('BASE_URL') ? BASE_URL : $path_prefix;
+    notificationBellRender($url, [
+        'list'       => $url . 'api/notifications/get_notifications.php',
+        'markRead'   => $url . 'api/notifications/mark_read.php',
+        'clear'      => $url . 'api/notifications/clear.php',
+        'linkPrefix' => $url,
         'seenKey'    => 'nbSeenUnread',
     ]);
 }
@@ -1278,7 +1298,7 @@ function renderWarRoomAlerts($path_prefix) {
         );
         $__s->execute([':a' => (int) $_SESSION['analyst_id']]);
         $__wraDesktop = ((string) $__s->fetchColumn()) === '1';
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $__wraDesktop = false;              // fail quiet, never noisy
     }
     ?>
@@ -1379,8 +1399,10 @@ function renderWarRoomAlerts($path_prefix) {
     <script>
     (function () {
         'use strict';
-        var base  = <?php echo json_encode(($path_prefix ?: './') . 'api/war-room/'); ?>;
-        var room  = <?php echo json_encode(($path_prefix ?: './') . 'war-room/'); ?>;
+        // From BASE_URL, for the same reason as the bell above: on a pretty URL
+        // served deeper than its file, $path_prefix pointed one folder too high.
+        var base  = <?php echo json_encode((defined('BASE_URL') ? BASE_URL : ($path_prefix ?: './')) . 'api/war-room/'); ?>;
+        var room  = <?php echo json_encode((defined('BASE_URL') ? BASE_URL : ($path_prefix ?: './')) . 'war-room/'); ?>;
         // The war room polls for itself; asking again from the header would double
         // the traffic on the one page that least needs it.
         var onWarRoom = /\/war-room\//.test(window.location.pathname);
@@ -1519,7 +1541,7 @@ function renderHeaderRight($analyst_name, $path_prefix) {
             );
             $__pa->execute([$_SESSION['analyst_email']]);
             $__portalAccount = (bool)$__pa->fetchColumn();
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $__portalAccount = false;
         }
     }
@@ -1537,7 +1559,7 @@ function renderHeaderRight($analyst_name, $path_prefix) {
             ob_start();
             renderTenantSwitcher(connectToDatabase(), (int) $_SESSION['analyst_id']);
             $__tenantSwitcherHtml = ob_get_clean();
-        } catch (Exception $e) {
+        } catch (Exception) {
             $__tenantSwitcherHtml = '';
         }
     }
@@ -1915,7 +1937,7 @@ function renderHeaderRight($analyst_name, $path_prefix) {
 
     <div class="header-right">
         <?php // The "Back to ..." link (3.5.0) - System -> Branding. Nothing unless set up.
-        try { if (!function_exists('connectToDatabase')) require_once __DIR__ . '/functions.php'; require_once __DIR__ . '/back_link.php'; echo backLinkHtml(connectToDatabase(), 'analyst'); } catch (Throwable $e) {} ?>
+        try { if (!function_exists('connectToDatabase')) require_once __DIR__ . '/functions.php'; require_once __DIR__ . '/back_link.php'; echo backLinkHtml(connectToDatabase(), 'analyst'); } catch (Throwable) {} ?>
         <?php echo $__tenantSwitcherHtml; ?>
         <?php renderNotificationBell($path_prefix); ?>
         <?php renderWarRoomAlerts($path_prefix); ?>

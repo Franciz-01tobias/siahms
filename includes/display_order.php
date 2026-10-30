@@ -73,7 +73,7 @@ function analystModuleOrderSaved(): array {
         );
         $st->execute([$aid]);
         $memo = displayOrderParse($st->fetchColumn());
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // No table yet, or no database: the default order.
     }
     return $memo;
@@ -93,7 +93,7 @@ function analystModuleOrderSaved(): array {
  * @return array          key => module, ordered, filtered; 'approvals' => true on the Forms alias
  */
 function analystVisibleModules(array $modules): array {
-    $allowed = $_SESSION['allowed_modules'] ?? null;
+    $allowed = analystAllowedModulesNow();
     $out = [];
     foreach (displayOrderMerge(analystModuleOrderSaved(), array_keys($modules)) as $key) {
         $module = $modules[$key];

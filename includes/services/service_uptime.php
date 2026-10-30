@@ -60,7 +60,7 @@ class ServiceUptime
             if (in_array($v, self::WINDOWS, true)) {
                 return $v;
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // fall through
         }
         return self::DEFAULT_WINDOW;
@@ -73,7 +73,7 @@ class ServiceUptime
             $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'status_uptime_show_portal'");
             $stmt->execute();
             return (string) $stmt->fetchColumn() === '1';
-        } catch (Exception $e) {
+        } catch (Exception) {
             return false;
         }
     }
@@ -183,7 +183,7 @@ class ServiceUptime
         try {
             $conn->query("SELECT 1 FROM status_incident_update_services LIMIT 1");
             return $ok = true;
-        } catch (Exception $e) {
+        } catch (Exception) {
             return $ok = false;
         }
     }
@@ -227,7 +227,7 @@ class ServiceUptime
             );
             $stmt->execute([$serviceId, $incidentId]);
             $updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Exception $e) {
+        } catch (Exception) {
             return null;   // tables not migrated yet — fall back
         }
 

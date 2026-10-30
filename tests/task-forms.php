@@ -147,7 +147,7 @@ section('3. The one completion gate');
 $chk = ChecklistsService::taskCompletionCheck($conn, $t1);
 ok('a required, blocking form that is not submitted blocks', !empty($chk['blocking']), json_encode($chk));
 $e = threw(fn() => ChecklistsService::assertTaskCompletionAllowed($conn, $t1));
-ok('...and assertTaskCompletionAllowed() refuses, naming the form', $e instanceof ServiceError && strpos($e->getMessage(), 'ZZ-TF Backup check') !== false, $e ? $e->getMessage() : 'no throw');
+ok('...and assertTaskCompletionAllowed() refuses, naming the form', $e instanceof ServiceError && str_contains($e->getMessage(), 'ZZ-TF Backup check'), $e ? $e->getMessage() : 'no throw');
 TaskForms::update($conn, $ctx, $tf, true, 'warn');
 $chk = ChecklistsService::taskCompletionCheck($conn, $t1);
 ok('set to warn, it warns and does not block', !$chk['blocking'] && !empty($chk['warning']), json_encode($chk));
@@ -351,7 +351,7 @@ $again = TaskFollowUps::createTask($conn, $ctx, $t8, 'ZZ-TF fix job 4', '', null
 ok('a retried Create with the same reference returns it - no second task', $again['replayed'] === true && $again['record_id'] === $fu['record_id']
     && (int)$conn->query("SELECT COUNT(*) FROM tasks WHERE title = 'ZZ-TF fix job 4'")->fetchColumn() === 1);
 $new = $conn->query("SELECT tenant_id, description FROM tasks WHERE id = " . (int)$fu['record_id'])->fetch(PDO::FETCH_ASSOC);
-ok('...in the occurrence\'s company, saying where it came from', strpos((string)$new['description'], 'TASK-' . $t8) !== false);
+ok('...in the occurrence\'s company, saying where it came from', str_contains((string)$new['description'], 'TASK-' . $t8));
 $list = TaskFollowUps::forTask($conn, $t8, $admin);
 ok('listed with its live state (open) and where it came from', ($list[0]['open'] ?? null) === true && $list[0]['source_kind'] === 'step' && $list[0]['visible'] === true);
 ok('history: follow_up_created', (int)$conn->query("SELECT COUNT(*) FROM task_events WHERE task_id = $t8 AND event_type = 'follow_up_created'")->fetchColumn() === 1);
@@ -495,7 +495,7 @@ if ($BASE) {
     $ch = curl_init($BASE . 'api/tasks/evidence_export.php?series=' . $rid . '&file=form_answers&from=' . date('Y-m-d', strtotime('-3 days')) . '&to=' . date('Y-m-d', strtotime('+1 day')));
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIE => "PHPSESSID=$sess"]);
     $csv = (string)curl_exec($ch); curl_close($ch);
-    ok('the form answers CSV has the question and the answer', strpos($csv, 'Explanation') !== false && strpos($csv, 'Job 4 failed again') !== false, substr($csv, 0, 300));
+    ok('the form answers CSV has the question and the answer', str_contains($csv, 'Explanation') && str_contains($csv, 'Job 4 failed again'), substr($csv, 0, 300));
     // ── The REST API (phase 5) ─────────────────────────────────────────────
     section('P5. REST API (GET /tasks/{id}/forms, POST .../submissions)');
     $rawKey = 'fitsm_zz' . bin2hex(random_bytes(16));

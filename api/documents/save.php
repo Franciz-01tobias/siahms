@@ -22,6 +22,9 @@ require_once '../../includes/tenancy.php';
 require_once '../../includes/uploads.php';
 require_once '../../includes/documents.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -30,7 +33,7 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 $analystId = (int) $_SESSION['analyst_id'];
-$allowed   = $_SESSION['allowed_modules'] ?? null;
+$allowed   = analystAllowedModulesNow();   // the grants now, not at sign-in
 
 // A file upload arrives as multipart; a link may arrive as either.
 $body = [];

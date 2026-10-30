@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Следите за этой страницей.</strong> Когда обработчик заработает, статус выше станет зелёным, а доставки появятся ниже. Подробные заметки по настройке (Windows и Linux, проверка подписи) — в <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">вики по рабочим процессам</a>.',
         'fact_worker' => 'Скрипт обработчика',
         'fact_retry' => 'График повторов',
-        'fact_retry_val' => '1 мин &middot; 5 мин &middot; 15 мин &middot; 1 ч &middot; 6 ч, затем ошибка',
         'fact_retention' => 'Хранение журнала',
         'fact_queued' => 'В очереди сейчас',
         'days' => '{n} дн.',

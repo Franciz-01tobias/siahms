@@ -10,6 +10,9 @@ require_once '../../includes/analyst_signin.php';   // Follow team (GH #41)
 
 header('Content-Type: application/json');
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 // Check if user is logged in
 if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
@@ -29,6 +32,11 @@ $username = trim($data['username'] ?? '');
 $fullName = trim($data['full_name'] ?? '');
 $email = trim($data['email'] ?? '') ?: null;
 $password = $data['password'] ?? null;
+require_once __DIR__ . '/../../includes/password_policy.php';   // the one rule for a new password
+if ($password !== null && $password !== '' && ($why = passwordPolicyError((string)$password))) {
+    echo json_encode(['success' => false, 'error' => $why]);
+    exit;
+}
 $isActive = $data['is_active'] ?? true;
 // Which sign-in method: NULL/empty = local password, otherwise an auth_providers.id (SSO).
 $authProviderId = !empty($data['auth_provider_id']) ? (int)$data['auth_provider_id'] : null;

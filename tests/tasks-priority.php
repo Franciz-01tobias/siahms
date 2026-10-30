@@ -80,9 +80,9 @@ $helper = is_file($helperPath) ? file_get_contents($helperPath) : '';
 ok('the helper validates the colour as a literal hex value',
    (bool) preg_match('/\^#\[0-9a-fA-F\]/', $helper));
 ok('the helper escapes the name',
-   strpos($helper, "replace(/[&<>\"']/g") !== false);
+   str_contains($helper, "replace(/[&<>\"']/g"));
 ok('the helper still accepts the legacy on/off setting',
-   strpos($helper, 'normaliseStyle') !== false
+   str_contains($helper, 'normaliseStyle')
    && preg_match("/return 'dot'/", $helper) === 1);
 
 // ---- 2. No stylesheet may colour a priority by its name --------------------
@@ -118,9 +118,9 @@ foreach ($renderers as $rel) {
     ok("{$rel} never lower-cases a priority name", !$bad, $bad ? trim($m[0]) : '');
 
     // Anything that draws a priority must go through the helper.
-    if (strpos($raw, 'priority-dot') !== false || strpos($raw, 'priority-pill') !== false) {
+    if (str_contains($raw, 'priority-dot') || str_contains($raw, 'priority-pill')) {
         ok("{$rel} draws priorities through TasksPriority",
-           strpos($raw, 'TasksPriority.') !== false);
+           str_contains($raw, 'TasksPriority.'));
     }
 }
 
@@ -140,7 +140,7 @@ foreach ($pages as $rel) {
     ok("{$rel} exists", is_file($path), $path);
     if (!is_file($path)) continue;
     $php = file_get_contents($path);
-    ok("{$rel} loads tasks-priority.js", strpos($php, 'tasks-priority.js') !== false);
+    ok("{$rel} loads tasks-priority.js", str_contains($php, 'tasks-priority.js'));
 }
 
 // ---- 5. The colour must be on the wire wherever a priority is ---------------
@@ -167,18 +167,18 @@ foreach ($queries as $rel => $what) {
 
 $save = file_get_contents($root . '/api/tasks/save_settings.php');
 ok('save_settings normalises the placement before storing it',
-   strpos($save, '$priorityStyles') !== false
-   && strpos($save, "in_array(\$p, \$priorityStyles, true)") !== false);
+   str_contains($save, '$priorityStyles')
+   && str_contains($save, "in_array(\$p, \$priorityStyles, true)"));
 
 $get = file_get_contents($root . '/api/tasks/get_settings.php');
 ok('get_settings reads the legacy boolean as a placement',
-   strpos($get, "empty(\$p) ? 'off' : 'dot'") !== false);
+   str_contains($get, "empty(\$p) ? 'off' : 'dot'"));
 
 // ---- 7. The default lookup must not resolve by name (GH #79) ---------------
 
 $svc = file_get_contents($root . '/includes/services/tasks.php');
 ok('the tasks service resolves defaults by is_default, not by name',
-   strpos($svc, "ORDER BY is_default DESC, display_order, id") !== false
+   str_contains($svc, "ORDER BY is_default DESC, display_order, id")
    && !preg_match("/lookupDefault\(\\\$conn, '[a-z_]+', '[A-Z]/", $svc));
 ok('the tasks service ignores deactivated defaults',
    preg_match('/lookupDefault.*?is_active = 1/s', $svc) === 1);

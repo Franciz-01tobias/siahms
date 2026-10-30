@@ -103,7 +103,7 @@ function warRoomEnsureChannels(PDO $conn, int $analystId): void
                        WHERE c.kind = '" . WARROOM_KIND_TEAM . "' AND c.team_id = t.id)"
         );
         $stmt->execute([':aid' => $analystId]);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // A channel we could not create just does not appear. Never let this
         // stop the page loading — the all-hands room is what matters.
     }
@@ -259,7 +259,7 @@ function warRoomCanAccessChannel(PDO $conn, int $analystId, int $channelId): boo
                 return warRoomIsMember($conn, $analystId, $channelId);
         }
         return false;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;                                          // fail closed
     }
 }
@@ -429,7 +429,7 @@ function warRoomOpenDm(PDO $conn, int $analystId, int $otherId): int
         );
         $ins->execute([':k' => $key, ':by' => $analystId]);
         $id = (int) $conn->lastInsertId();
-    } catch (PDOException $e) {
+    } catch (PDOException) {
         // Lost the race against the other person opening the same DM: theirs is
         // now the one that exists, so use it.
         $find->execute([':k' => $key]);
@@ -736,7 +736,7 @@ function warRoomSend(PDO $conn, int $analystId, int $channelId, string $body): i
  */
 function warRoomResolveMentions(PDO $conn, int $channelId, int $authorId, string $body): array
 {
-    if (strpos($body, '@') === false) return [];
+    if (!str_contains($body, '@')) return [];
 
     $entitled = warRoomChannelAudience($conn, $channelId);
     if (!$entitled) return [];
@@ -1222,7 +1222,7 @@ function warRoomRetentionDays(PDO $conn): int
         $stmt->execute();
         $v = $stmt->fetchColumn();
         return $v === false ? 0 : max(0, (int) $v);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return 0;                                 // never delete on an error
     }
 }
@@ -1282,7 +1282,7 @@ function warRoomPrune(PDO $conn): void
             $path = rtrim(WARROOM_ATTACH_DIR, '/\\') . DIRECTORY_SEPARATOR . $name;
             if (is_file($path)) @unlink($path);
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Retention is housekeeping — never let it break posting a message.
     }
 }
@@ -1329,7 +1329,7 @@ function warRoomSweepOrphanFiles(PDO $conn): void
             // row is written, and deleting it in that window would lose it.
             if (is_file($path) && ($now - (int) filemtime($path)) > 60) @unlink($path);
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         // Housekeeping. Never let it break posting a message.
     }
 }

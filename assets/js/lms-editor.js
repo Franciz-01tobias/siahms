@@ -25,7 +25,7 @@ const LMSEditor = (() => {
     let baselineBody = '';
 
     /** Escapes text for safe use in HTML. */
-    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
 
     // ---------- boot ----------
 
@@ -54,6 +54,9 @@ const LMSEditor = (() => {
         // at init; an editor is not rebuilt on resize.
         const isPhone = window.matchMedia('(max-width: 768px)').matches;
         tinymce.init({
+            // Plugins and skins load without the page's ?v=, so a browser could pair a new
+            // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+            cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
             selector: '#lessonBody',
             license_key: 'gpl',
             height: 420,
@@ -534,7 +537,8 @@ const LMSEditor = (() => {
 
     /** Opens the AI lesson modal, loading the knowledge article list into its drop-down the first time. */
     async function openLessonAiModal() {
-        if (articles === null) {
+        // GH #217: no picker (Knowledge switched off) - nothing to fill.
+        if (articles === null && document.getElementById('aiArticle')) {
             const r = await fetch(`${API}knowledge_articles.php`);
             const d = await r.json();
             articles = d.data || [];
@@ -556,7 +560,7 @@ const LMSEditor = (() => {
     async function generateLesson(e) {
         e.preventDefault();
         const btn = document.getElementById('lessonAiBtn');
-        const articleId = document.getElementById('aiArticle').value;
+        const articleId = (document.getElementById('aiArticle') || {}).value || '';   // GH #217: absent while Knowledge is off
         const title = document.getElementById('lessonTitle').value.trim();
 
         if (!articleId && !title) { showToast(window.t('lms.editor.ai_lesson_need'), 'error'); return; }

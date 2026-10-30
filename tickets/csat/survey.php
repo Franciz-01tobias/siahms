@@ -25,7 +25,10 @@ $response = null;
 $ticket   = null;
 $error    = '';
 
-if ($token === '' || !preg_match('/^[a-f0-9]{20,64}$/i', $token)) {
+// GH #217: CSAT switched off for the install - a neutral page, no lookup, nothing saved.
+if (!moduleIsEnabled($conn, 'csat')) {
+    $error = 'off';
+} elseif ($token === '' || !preg_match('/^[a-f0-9]{20,64}$/i', $token)) {
     $error = 'invalid';
 } else {
     $stmt = $conn->prepare(
@@ -205,7 +208,7 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     font-size: 14px;
 }
 </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="csat-survey">
 <div class="card">
@@ -214,6 +217,10 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     <div class="thanks-icon">✅</div>
     <h1><?= trh('thanks_heading', 'Thanks for your feedback!') ?></h1>
     <p class="intro"><?= trh('thanks_body', 'We’ve recorded your response. The team will use it to keep improving the service.') ?></p>
+
+<?php elseif ($error === 'off'): /* GH #217 */ ?>
+    <h1><?= trh('off_heading', 'We’re no longer collecting feedback') ?></h1>
+    <p class="intro"><?= trh('off_body', 'Thank you.') ?></p>
 
 <?php elseif ($error === 'invalid'): ?>
     <h1><?= trh('invalid_heading', 'This survey link isn’t valid') ?></h1>
@@ -325,6 +332,6 @@ button.submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 <?php endif; ?>
 
 </div>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

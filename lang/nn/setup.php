@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Aktivert — bør slåast av i produksjon (sett display_errors til 0 i config.php)',
         'display_errors_disabled' => 'Deaktivert',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 eller nyare krevst',
+        'php_version_too_low' => '{version} — PHP 8.1 eller nyare krevst',
         'php_version_eol' => '{version} — framleis støtta, men denne versjonen har ikkje fått tryggingsoppdateringar sidan han nådde slutten på levetida. PHP 8.3 eller 8.4 er tilrådd.',
         'extension_loaded' => 'Lasta',
         'extension_not_loaded' => 'Ikkje lasta — aktiver ho i php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Konfigurert',
         'ca_ini_masked_broken' => 'Sett, men peikar på ei fil som ikkje finst — rett stien eller kommenter ut innstillinga i php.ini.',
         'php_version_ok_masked' => 'Oppfyller kravet',
-        'php_version_too_low_masked' => 'For gammal — PHP 7.4 eller høgare er påkravd',
+        'php_version_too_low_masked' => 'For gammal — PHP 8.1 eller høgare er påkravd',
         'php_version_eol_masked' => 'Støtta, men denne utgåva har nådd slutten av levetida og får ikkje lenger tryggingsoppdateringar. Logg inn som administrator for å sjå versjonen.',
     ],
     'locked' => [

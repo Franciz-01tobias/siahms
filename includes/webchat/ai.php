@@ -20,7 +20,7 @@ function webchatAiConfigured(PDO $conn): bool
     try {
         $cfg = aiSettingsLoad($conn, 'knowledge_ai');
         return ($cfg['api_key'] ?? '') !== '';
-    } catch (Exception $e) {
+    } catch (Exception) {
         return false;
     }
 }
@@ -101,7 +101,7 @@ function webchatAiSummarise(PDO $conn, string $transcript): string
     }
     try {
         $cfg = aiSettingsLoad($conn, 'knowledge_ai');
-    } catch (Exception $e) {
+    } catch (Exception) {
         return '';
     }
     if (!aiConfigured($cfg)) {
@@ -115,7 +115,7 @@ function webchatAiSummarise(PDO $conn, string $transcript): string
     try {
         $r = aiProviderChat($cfg, ['system' => $system, 'user' => $transcript, 'max_tokens' => 400]);
         return trim((string) ($r['content'] ?? ''));
-    } catch (Exception $e) {
+    } catch (Exception) {
         return '';
     }
 }

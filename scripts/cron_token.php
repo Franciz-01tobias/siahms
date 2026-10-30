@@ -46,7 +46,7 @@ $args    = array_slice($argv, 1);
 $wantUrl = in_array('--url', $args, true);
 $which   = null;
 foreach ($args as $a) {
-    if (strpos($a, '--') !== 0) { $which = strtolower($a); break; }
+    if (!str_starts_with($a, '--')) { $which = strtolower($a); break; }
 }
 
 if ($which !== null && !isset(CRON_TOKENS[$which])) {

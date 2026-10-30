@@ -197,7 +197,7 @@ $art = (int)$conn->query("SELECT id FROM knowledge_articles ORDER BY id DESC LIM
 if ($art) {
     $p = recordPreview($conn, $admin, 'knowledge_article', $art);
     ok('an article lead carries no markup at all',
-        strpos((string)($p['lead'] ?? ''), '<') === false,
+        !str_contains((string)($p['lead'] ?? ''), '<'),
         'raw HTML reached the preview');
 }
 

@@ -53,7 +53,7 @@ function proxmoxLoadConnection(PDO $conn, int $connectionId): array
  */
 function proxmoxIsApiToken(array $c): bool
 {
-    return strpos((string)($c['username'] ?? ''), '!') !== false;
+    return str_contains((string)($c['username'] ?? ''), '!');
 }
 
 /**
@@ -132,7 +132,7 @@ function proxmoxTryGet(array $c, array $auth, string $path)
 {
     try {
         return proxmoxCall($c, 'GET', '/api2/json' . $path, null, $auth)['data'] ?? null;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
 }
@@ -341,7 +341,7 @@ function proxmoxVmDetails(array $c, array $auth, string $type, string $node, int
                 }
                 foreach (($iface['ip-addresses'] ?? []) as $addr) {
                     $ip = (string)($addr['ip-address'] ?? '');
-                    if (($addr['ip-address-type'] ?? '') === 'ipv4' && $ip !== '' && strpos($ip, '127.') !== 0) {
+                    if (($addr['ip-address-type'] ?? '') === 'ipv4' && $ip !== '' && !str_starts_with($ip, '127.')) {
                         $ips[] = $ip;
                     }
                 }
@@ -399,7 +399,7 @@ function proxmoxVmDetailBlock(array $cfg, string $type, array $guestIfaces): arr
         $isDisk = $type === 'qemu'
             ? (bool)preg_match('/^(scsi|virtio|ide|sata)\d+$/', $key)
             : ($key === 'rootfs' || (bool)preg_match('/^mp\d+$/', $key));
-        if ($isDisk && strpos($value, 'media=cdrom') === false && preg_match('/size=(\d+(?:\.\d+)?)([KMGT]?)/i', $value, $m)) {
+        if ($isDisk && !str_contains($value, 'media=cdrom') && preg_match('/size=(\d+(?:\.\d+)?)([KMGT]?)/i', $value, $m)) {
             $gb = proxmoxSizeToGb((float)$m[1], strtoupper($m[2]));
             $disks[$key] = [
                 'label'    => $key,
@@ -417,7 +417,7 @@ function proxmoxVmDetailBlock(array $cfg, string $type, array $guestIfaces): arr
                 'label'       => $key,
                 'type'        => $model,
                 'mac_address' => $mac,
-                'state'       => strpos($value, 'link_down=1') !== false ? 'disconnected' : 'connected',
+                'state'       => str_contains($value, 'link_down=1') ? 'disconnected' : 'connected',
                 'backing'     => ['network_name' => $bridge],
             ];
         }
@@ -453,7 +453,7 @@ function proxmoxDiskGb(array $cfg, string $type): ?float
         $isDisk = $type === 'qemu'
             ? (bool)preg_match('/^(scsi|virtio|ide|sata)\d+$/', (string)$key)
             : ((string)$key === 'rootfs' || (bool)preg_match('/^mp\d+$/', (string)$key));
-        if (!$isDisk || strpos((string)$value, 'media=cdrom') !== false) {
+        if (!$isDisk || str_contains((string)$value, 'media=cdrom')) {
             continue;
         }
         if (preg_match('/size=(\d+(?:\.\d+)?)([KMGT]?)/i', (string)$value, $m)) {
@@ -496,7 +496,7 @@ function proxmoxSaveConnection(PDO $conn, array $in): int
     if ($username === '' || mb_strlen($username) > 100) {
         throw new Exception('A Proxmox user or API token is required, for example monitor@pve or monitor@pve!freeitsm.');
     }
-    if (strpos($username, '!') !== false && !preg_match('/^[^\s@!]+@[^\s!]+![^\s!]+$/', $username)) {
+    if (str_contains($username, '!') && !preg_match('/^[^\s@!]+@[^\s!]+![^\s!]+$/', $username)) {
         throw new Exception('An API token ID must look like monitor@pve!freeitsm.');
     }
     $current = null;

@@ -12,6 +12,9 @@ require_once '../../includes/demo_data.php';   // DEMO_MODULES, demoTablesWithIn
 
 header('Content-Type: application/json');
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 if (!isset($_SESSION['analyst_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not authenticated']);
     exit;
@@ -39,7 +42,7 @@ function getPrimaryKeyColumn($tableName) {
 // @param mixed $idMap  the ids inserted so far, keyed 'table.ref'
 function resolveReferences($record, $idMap) {
     foreach ($record as $key => $value) {
-        if (is_string($value) && strpos($value, '@') === 0) {
+        if (is_string($value) && str_starts_with($value, '@')) {
             $refKey = substr($value, 1);
             if (!isset($idMap[$refKey])) {
                 throw new Exception("Unresolved reference: $value (field: $key)");
@@ -60,7 +63,7 @@ function resolveTokens($record, $conn) {
             $record[$key] = generateDemoTicketNumber($conn);
         } elseif ($value === '__NOW__') {
             $record[$key] = gmdate('Y-m-d H:i:s');
-        } elseif (strpos($value, '__UNIQUE__') !== false) {
+        } elseif (str_contains($value, '__UNIQUE__')) {
             $record[$key] = str_replace('__UNIQUE__', uniqid(), $value);
         } elseif (preg_match('/^__BCRYPT:(.+)__$/', $value, $m)) {
             $record[$key] = password_hash($m[1], PASSWORD_DEFAULT);
@@ -317,7 +320,7 @@ try {
                 // demo supplier, imported without Contracts' demo data.
                 foreach ((array)($record['_optional_fields'] ?? []) as $f) {
                     $v = $record[$f] ?? null;
-                    if (is_string($v) && strpos($v, '@') === 0 && !isset($idMap[substr($v, 1)])) unset($record[$f]);
+                    if (is_string($v) && str_starts_with($v, '@') && !isset($idMap[substr($v, 1)])) unset($record[$f]);
                 }
                 unset($record['_optional_fields']);
                 $record = resolveReferences($record, $idMap);

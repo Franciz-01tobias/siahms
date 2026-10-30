@@ -145,7 +145,7 @@ $shapes = include '../includes/shapes.php';
         [data-theme-mode="dark"] .pms-shape-opt:hover { border-color: #3a3f6b; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own CSS so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="process-mapper" data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -164,7 +164,7 @@ $shapes = include '../includes/shapes.php';
 
         <!-- Step types tab (existing content) -->
         <?php if (settingsTabVisible($visibleTabs, 'step-types')): ?>
-        <div class="tab-content<?php echo $activeTabId === 'step-types' ? ' active' : ''; ?>" id="step-types-tab" data-capability="<?php echo Cap::PROCESS_MAPPER_STEP_TYPES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'step-types' ? ' active' : ''; ?>" id="step-types-tab" data-capability="<?php echo capKey(Cap::PROCESS_MAPPER_STEP_TYPES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('process-mapper.settings.title')); ?></h2>
                 <button class="add-btn" onclick="PMS.openAdd()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -284,7 +284,7 @@ $shapes = include '../includes/shapes.php';
         function esc(s) {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Use the shared toast notification system (assets/js/toast.js) so
@@ -486,6 +486,6 @@ $shapes = include '../includes/shapes.php';
                  switchTab, saveSidebarMode };
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

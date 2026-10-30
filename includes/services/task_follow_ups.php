@@ -23,7 +23,7 @@ class TaskFollowUps
         static $ready = null;
         if ($ready !== null) return $ready;
         try { $conn->query("SELECT id FROM task_follow_ups LIMIT 0"); return $ready = true; }
-        catch (Throwable $e) { return $ready = false; }
+        catch (Throwable) { return $ready = false; }
     }
 
     /** Tasks -> Settings -> Evidence -> "An open follow-up at completion": allow (default) | warn | block. */
@@ -34,7 +34,7 @@ class TaskFollowUps
             $s->execute();
             $v = (string)$s->fetchColumn();
             return in_array($v, ['warn', 'block'], true) ? $v : 'allow';
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return 'allow';
         }
     }
@@ -209,7 +209,7 @@ class TaskFollowUps
         try {
             $place = implode(',', array_fill(0, count($taskIds), '?'));
             $conn->prepare("DELETE FROM task_follow_ups WHERE task_id IN ($place)")->execute(array_values($taskIds));
-        } catch (Throwable $e) { /* before Database Verification */ }
+        } catch (Throwable) { /* before Database Verification */ }
     }
 
     /** For the #181 frozen record. */

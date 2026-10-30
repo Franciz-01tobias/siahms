@@ -81,9 +81,9 @@ function classifyHash($h) {
     if ($h === '') return ['label' => '(empty — no password set)', 'php_native' => false, 'note' => 'No hash stored. This is a passwordless account.', 'raw_algo' => null];
     if (preg_match('/^\$2[aby]\$(\d{2})\$/', $h, $m)) return ['label' => 'bcrypt (' . substr($h, 0, 4) . ', cost ' . $m[1] . ')', 'php_native' => true, 'note' => 'FreeITSM-native — password_verify() can check this.', 'raw_algo' => null];
     if (preg_match('/^\$argon2(id|i|d)\$/', $h, $m)) return ['label' => 'argon2' . $m[1], 'php_native' => true, 'note' => 'Argon2 — password_verify() can check this.', 'raw_algo' => null];
-    if (strpos($h, '$1$') === 0)  return ['label' => 'md5crypt ($1$)', 'php_native' => 'maybe', 'note' => 'Unix md5crypt. Verifiable only if the host crypt() supports it — NOT what FreeITSM creates (bcrypt).', 'raw_algo' => null];
-    if (strpos($h, '$5$') === 0)  return ['label' => 'sha256crypt ($5$)', 'php_native' => 'maybe', 'note' => 'Unix sha256crypt — platform-dependent; NOT what FreeITSM creates.', 'raw_algo' => null];
-    if (strpos($h, '$6$') === 0)  return ['label' => 'sha512crypt ($6$)', 'php_native' => 'maybe', 'note' => 'Unix sha512crypt — platform-dependent; NOT what FreeITSM creates.', 'raw_algo' => null];
+    if (str_starts_with($h, '$1$'))  return ['label' => 'md5crypt ($1$)', 'php_native' => 'maybe', 'note' => 'Unix md5crypt. Verifiable only if the host crypt() supports it — NOT what FreeITSM creates (bcrypt).', 'raw_algo' => null];
+    if (str_starts_with($h, '$5$'))  return ['label' => 'sha256crypt ($5$)', 'php_native' => 'maybe', 'note' => 'Unix sha256crypt — platform-dependent; NOT what FreeITSM creates.', 'raw_algo' => null];
+    if (str_starts_with($h, '$6$'))  return ['label' => 'sha512crypt ($6$)', 'php_native' => 'maybe', 'note' => 'Unix sha512crypt — platform-dependent; NOT what FreeITSM creates.', 'raw_algo' => null];
     if (preg_match('/^\$P\$|^\$H\$/', $h)) return ['label' => 'phpass portable ($P$/$H$)', 'php_native' => false, 'note' => 'WordPress/phpBB portable hash. password_verify() CANNOT check this — login will always fail.', 'raw_algo' => null];
     if (preg_match('/^pbkdf2_sha256\$|^pbkdf2_sha1\$|^bcrypt_sha256\$|^sha1\$|^md5\$|^argon2\$/', $h)) return ['label' => 'Django (' . substr($h, 0, strpos($h, '$')) . '$…)', 'php_native' => false, 'note' => 'Django/Werkzeug-style hash. password_verify() CANNOT check this — login will always fail.', 'raw_algo' => null];
     if (preg_match('/^\{(SSHA|SHA|SSHA256|SHA256|MD5)\}/i', $h, $m)) return ['label' => 'LDAP ' . $m[1], 'php_native' => false, 'note' => 'LDAP-style hash. password_verify() CANNOT check this — login will always fail.', 'raw_algo' => null];
@@ -355,7 +355,7 @@ if (!$encLoaded) {
 
     $totpSecret = (string)($row['totp_secret'] ?? '');
     if (!empty($row['totp_enabled']) && $totpSecret !== '') {
-        if (strpos($totpSecret, 'ENC:') === 0) {
+        if (str_starts_with($totpSecret, 'ENC:')) {
             $decOk = false; $decErr = '';
             try { $plain = decryptValue($totpSecret); $decOk = ($plain !== false && $plain !== null && $plain !== ''); }
             catch (Throwable $e) { $decErr = $e->getMessage(); }

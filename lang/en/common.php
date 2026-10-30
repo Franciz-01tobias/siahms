@@ -10,6 +10,11 @@ return [
     // Every currency dropdown and every amount (includes/money.php +
     // assets/js/money.js, GH #189). Published to the browser by
     // Money::scriptTag(), so a page needs no namespace for them.
+    // Click-to-call (System → Integrations → 3CX): the button beside a phone number.
+    'phone_dial' => [
+        'call'       => 'Call',
+        'call_title' => 'Call {number}',
+    ],
     'currency' => [
         'favourites' => 'Favourites',
         'all'        => 'All currencies',
@@ -50,6 +55,9 @@ return [
         'unpin'     => 'Unpin',
         'pin_tip'   => 'Keep the sidebar open with names',
         'unpin_tip' => 'Open the sidebar only when you point at it',
+        // The arrows that appear when the modules do not all fit (#124).
+        'scroll_top'    => 'Scroll to the top',
+        'scroll_bottom' => 'Scroll to the bottom',
     ],
     'reorder' => [
         'drag'     => 'Drag to move',
@@ -309,6 +317,7 @@ return [
         'domains'        => ['name' => 'Domains',     'description' => 'Track domain names, renewals, DNS, email security and certificates'],
         'files'          => ['name' => 'Files',       'description' => 'Share files and folders securely, with a record of who opened what and when'],
         'people'         => ['name' => 'People',      'description' => 'Everything about a person or a company, from every module, on one page'],
+        'starters'       => ['name' => 'Starters & leavers', 'description' => 'Everything that has to happen when someone joins, moves or leaves - tasks, kit and accounts, from one checklist'],
         'service-status' => ['name' => 'Status',      'description' => 'Monitor service health and track incidents'],
         'war-room'       => ['name' => 'War room',    'description' => 'Fallback chat for when Teams or Slack is unavailable'],
         'wiki'           => ['name' => 'Wiki',        'description' => 'Browse auto-generated codebase documentation'],
@@ -328,6 +337,87 @@ return [
     // resolved when the bell renders, not when the row is written, so a
     // notification reads in the LANGUAGE OF WHOEVER IS READING IT rather than
     // whoever happened to trigger it.
+
+    // GH #201: the link between an asset and its configuration item - the same card on
+    // the asset page and the CI page (assets/js/ci-asset-link.js).
+    'ci_link' => [
+        'title_asset'              => 'Configuration item',
+        'title_cmdb'               => 'Asset',
+        'module_cmdb'              => 'the CMDB',
+        'module_assets'            => 'Assets',
+        'none_ci'                  => 'No configuration item.',
+        'none_asset'               => 'No asset.',
+        'link'                     => 'Link',
+        'replace'                  => 'Replace',
+        'unlink'                   => 'Unlink',
+        'cancel'                   => 'Cancel',
+        'loading'                  => 'Loading...',
+        'not_ready'                => 'Run Database Verification to use links between assets and configuration items.',
+        'restricted_heading_ci'    => 'Linked configuration item - restricted',
+        'restricted_heading_asset' => 'Linked asset - restricted',
+        'restricted_ci'            => 'a restricted configuration item',
+        'restricted_asset'         => 'a restricted asset',
+        'no_access'                => 'Linking is not available because you cannot open {module}.',
+        'from_asset'               => 'From the asset',
+        'field_type'               => 'Type',
+        'field_manufacturer'       => 'Manufacturer',
+        'field_model'              => 'Model',
+        'field_serial'             => 'Serial number',
+        'field_asset_tag'          => 'Asset tag',
+        'field_status'             => 'Status',
+        'field_location'           => 'Location',
+        'field_freshness'          => 'Inventory',
+        'fresh_current'            => 'Current',
+        'fresh_stale'              => 'Stale',
+        'fresh_failed'             => 'Last read failed',
+        'fresh_none'               => 'Nothing reports this asset',
+        'last_seen'                => 'last seen {when}',
+        'linked_by'                => 'Linked {by}',
+        'by'                       => 'by {name}',
+        'by_system'                => 'automatically',
+        'via_api'                  => 'REST: {key}',
+        'history'                  => 'Link history',
+        'live'                     => 'Linked now',
+        'made_on'                  => '(made on {name}, since merged)',
+        'reason_unlinked'          => 'Unlinked',
+        'reason_replaced'          => 'Replaced',
+        'reason_ci_deleted'        => 'Configuration item deleted',
+        'reason_asset_merged'      => 'Ended when two assets were merged',
+        'pick_ci'                  => 'Search configuration items...',
+        'pick_asset'               => 'Search assets by name, serial or asset tag...',
+        'already_linked'           => 'already linked',
+        'no_results'               => 'Nothing matches.',
+        'replace_title'            => 'Replace the link?',
+        'replace_body'             => 'Replacing ends that link - it stays in the link history - and links {name} instead. Nothing is deleted.',
+        'unlink_title'             => 'Unlink?',
+        'unlink_body'              => 'The link to {name} ends and stays in the link history. Both records are kept.',
+        'linked'                   => 'Linked',
+        'unlinked'                 => 'Unlinked',
+        'unchanged'                => 'Already linked',
+        'failed'                   => 'The link could not be saved.',
+        'impact_show'              => 'Show',
+        'create'                   => 'Create linked CI',
+        'create_title'             => 'New {class} linked to this asset',
+        'create_matches'           => 'These already exist with the same name. A name alone does not prove it is the same equipment - link one if it is.',
+        'create_link_instead'      => 'Link this one instead',
+        'create_name'              => 'Name',
+        'create_go'                => 'Create',
+        'create_anyway'            => 'Create a new one',
+        'create_unmapped'          => 'This asset\'s type is not mapped to a CMDB class.',
+        'created'                  => 'Configuration item created and linked',
+        'impact_diagram'           => 'Open as diagram',
+        'impact_diagram_empty'     => 'Nothing would be affected, so there is nothing to draw.',
+        'impact_some'              => 'If this failed, affected: {n}',
+        'impact_some_more'         => 'If this failed, affected: at least {n}',
+        'impact_none'              => 'If this failed: nothing else in the CMDB depends on it.',
+        'impact_unconfigured'      => 'If this failed: nothing is set to carry impact in the CMDB yet.',
+        'impact_graded'            => 'If this failed: {summary}',
+        'grade_affected'           => 'affected',
+        'grade_may_be_interrupted' => 'may be interrupted',
+        'grade_redundancy_reduced' => 'redundancy reduced',
+        'grade_unknown'            => 'unknown',
+    ],
+
     // The documents panel, shared by every module that attaches files or links
     // to a record. Lives in `common` because it belongs to no single module.
     'documents' => [
@@ -695,4 +785,17 @@ return [
         'aria'               => 'Preview this record',
     ],
 
+    // The shared data table's server mode (assets/js/data-table.js, PR #213): a
+    // table that asks the server for one page at a time. Only Tickets uses it so far.
+    'table_server' => [
+        'retry'         => 'Retry',
+        'failed'        => 'Could not refresh this list. The previous rows are unavailable for actions.',
+        'previous'      => 'Previous',
+        'next'          => 'Next',
+        'page_size'     => 'Rows per page',
+        'range'         => '{from}-{to} of {total}',
+        'page'          => 'Page {page} of {pages}',
+        'cancel_export' => 'Cancel export',
+        'export_failed' => 'The export could not be completed.',
+    ],
 ];

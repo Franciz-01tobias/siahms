@@ -40,6 +40,9 @@ require_once '../../includes/services/tickets.php';
 require_once '../../includes/services/notifications.php';   // duringBulk() — discussion #55
 
 header('Content-Type: application/json');
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 if (!isset($_SESSION['analyst_id'])) { echo json_encode(['success' => false, 'error' => 'Not authenticated']); exit; }
 requireModuleAccessJson('tickets');
 

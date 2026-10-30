@@ -9,9 +9,11 @@
  *
  * Options (set before include):
  *   $dtShowPdf           bool   — show the PDF export button (default false)
+ *   $dtShowCsv           bool   — show the CSV export button (default true)
  *   $dtSearchPlaceholder string — search box placeholder
  */
 $dtShowPdf = $dtShowPdf ?? false;
+$dtShowCsv = $dtShowCsv ?? true;
 $dtSearchPlaceholder = $dtSearchPlaceholder ?? 'Search across visible columns...';
 ?>
 <div class="dt-layout">
@@ -49,7 +51,8 @@ $dtSearchPlaceholder = $dtSearchPlaceholder ?? 'Search across visible columns...
             Save view
         </button>
         <button type="button" class="dt-btn" id="dtResetBtn" title="Clear all filters, sort and search">Reset</button>
-        <button type="button" class="dt-btn" id="dtCsvBtn" title="Download visible rows as CSV">
+        <?php if ($dtShowCsv): ?>
+        <button type="button" class="dt-btn" id="dtCsvBtn" title="<?php echo htmlspecialchars($dtCsvTitle ?? 'Download visible rows as CSV'); ?>">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -57,6 +60,7 @@ $dtSearchPlaceholder = $dtSearchPlaceholder ?? 'Search across visible columns...
             </svg>
             CSV
         </button>
+        <?php endif; ?>
         <?php if ($dtShowPdf): ?>
         <button type="button" class="dt-btn" id="dtPdfBtn" title="Download visible rows as PDF (selectable text)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

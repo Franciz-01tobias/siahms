@@ -139,7 +139,7 @@ file_put_contents($controlSql, $sql);
 $controlDrift = dbVerifyIndexListSelfCheck($controlSql, $tmp);
 ok('CONTROL — a wrong list DOES report drift (so "no drift" means something)',
    count($controlDrift) > 0);
-$sawType = (bool) array_filter($controlDrift, fn($d) => strpos($d, 'differs') !== false);
+$sawType = (bool) array_filter($controlDrift, fn($d) => str_contains($d, 'differs'));
 ok('CONTROL — and it specifically catches a FULLTEXT downgraded to KEY', $sawType);
 @unlink($tmp); @unlink($controlSql);
 
@@ -170,17 +170,17 @@ ok('a space after the comma is NOT reported as drift',
    $withList("[['task_recurrences','ix_task_recurrences_due','key','(`is_active`, `next_due_date`)']]") === []);
 ok('CONTROL — a REORDERED column list IS still drift',
    (bool) array_filter($withList("[['task_recurrences','ix_task_recurrences_due','key','(`next_due_date`,`is_active`)']]"),
-       fn($d) => strpos($d, 'differs') !== false));
+       fn($d) => str_contains($d, 'differs')));
 ok('CONTROL — a KEY promoted to UNIQUE IS still drift, despite the space',
    (bool) array_filter($withList("[['task_recurrences','ix_task_recurrences_due','unique','(`is_active`, `next_due_date`)']]"),
-       fn($d) => strpos($d, 'differs') !== false));
+       fn($d) => str_contains($d, 'differs')));
 ok('CONTROL — an index missing from the list IS still drift',
-   (bool) array_filter($withList('[]'), fn($d) => strpos($d, 'missing from the backfill list') !== false));
+   (bool) array_filter($withList('[]'), fn($d) => str_contains($d, 'missing from the backfill list')));
 ok('CONTROL — an index only in the list IS still drift',
    (bool) array_filter(
        $withList("[['task_recurrences','ix_task_recurrences_due','key','(`is_active`,`next_due_date`)'],"
                . "['task_recurrences','ix_gone','key','(`id`)']]"),
-       fn($d) => strpos($d, 'no longer in freeitsm.sql') !== false));
+       fn($d) => str_contains($d, 'no longer in freeitsm.sql')));
 @unlink($wsSql); @unlink($wsList);
 
 echo "\n" . str_repeat('=', 60) . "\n";

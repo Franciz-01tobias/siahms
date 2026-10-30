@@ -63,7 +63,7 @@ function publicBaseUrlSetting(PDO $conn): string
         if ($configured === '') {
             $configured = $found['messaging_public_base_url'] ?? '';
         }
-    } catch (Exception $ignored) {
+    } catch (Exception) {
         // An install whose system_settings table predates this still gets a link.
         return '';
     }

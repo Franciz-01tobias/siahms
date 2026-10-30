@@ -145,7 +145,7 @@ function webchatLoadConversation(PDO $conn, string $token, int $channelId): ?arr
         );
         $stmt->execute([$token, $channelId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;
     }
     return $row ?: null;
@@ -170,7 +170,7 @@ function webchatRateLimitStart(PDO $conn, string $ip): void
         if ((int) $st->fetchColumn() >= 5) {
             webchatFail('Too many chats started — please wait a moment and try again', 429);
         }
-    } catch (Exception $e) { /* table missing → don't block */ }
+    } catch (Exception) { /* table missing → don't block */ }
 }
 
 /** Cap inbound messages per conversation per minute. Exits (429) on breach. */
@@ -189,5 +189,5 @@ function webchatRateLimitSend(PDO $conn, int $ticketId): void
         if ((int) $st->fetchColumn() >= 20) {
             webchatFail('You are sending messages too quickly — please slow down', 429);
         }
-    } catch (Exception $e) { /* don't block */ }
+    } catch (Exception) { /* don't block */ }
 }

@@ -34,7 +34,7 @@ function projectsSchemaReady(PDO $conn): bool
                              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tasks' AND COLUMN_NAME = 'project_id'");
         $ready = (int)$st->fetchColumn() === 1
             && (int)$conn->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projects'")->fetchColumn() === 1;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $ready = false;
     }
     return $ready;

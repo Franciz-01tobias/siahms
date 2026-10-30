@@ -53,7 +53,7 @@ function ticketSensitivityReady(PDO $conn): bool
             $conn->query("SELECT default_sensitivity FROM departments LIMIT 0");
             $conn->query("SELECT default_sensitivity FROM target_mailboxes LIMIT 0");
             $ready = true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $ready = false;
         }
     }
@@ -173,7 +173,7 @@ function ticketIsConfidential(PDO $conn, int $ticketId): bool
         $st = $conn->prepare("SELECT sensitivity FROM tickets WHERE id = ?");
         $st->execute([$ticketId]);
         return ticketSensitivityNormalise($st->fetchColumn()) === 'confidential';
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;
     }
 }
@@ -189,7 +189,7 @@ function ticketAiConfidentialPolicy(PDO $conn): string
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'ticket_ai_confidential'");
         $st->execute();
         return $st->fetchColumn() === 'allow' ? 'allow' : 'block';
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return 'block';
     }
 }
@@ -304,7 +304,7 @@ function ticketEmailRecipientsAllowed(PDO $conn, int $ticketId, string $to): boo
         $st = $conn->prepare("SELECT LOWER(email) FROM analysts WHERE is_active = 1 AND LOWER(email) IN ($in)");
         $st->execute($addrs);
         $analysts = $st->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;                                  // could not check: do not send
     }
     foreach ($addrs as $a) {

@@ -103,12 +103,12 @@ try {
         // A target that matches the signed-in mailbox's primary OR any alias is "ok".
         $target  = strtolower(trim((string) ($mailbox['target_mailbox'] ?? '')));
         $acceptedSet = mailboxAcceptedSet($mailbox);
-        if ($mailbox['provider'] === 'imap') {
+        if (MailboxProvider::fromMailbox($mailbox) === MailboxProvider::Imap) {
             // Basic IMAP has no OAuth sign-in — it connects straight to the target
             // inbox with the stored password. "Connected" once a password is stored.
             $mailbox['auth_status'] = !empty($mailbox['imap_password_set']) ? 'imap' : 'unauthenticated';
             $mailbox['is_authenticated'] = !empty($mailbox['imap_password_set']);
-        } elseif ($mailbox['provider'] === 'google') {
+        } elseif (MailboxProvider::fromMailbox($mailbox) === MailboxProvider::Google) {
             $mailbox['auth_status'] = $mailbox['is_authenticated'] ? 'ok' : 'unauthenticated';
         } elseif ($mailbox['auth_mode'] === 'app_only') {
             $mailbox['auth_status'] = 'app_only';            // always reads the target directly

@@ -17,6 +17,7 @@
 require_once __DIR__ . '/template_email.php';
 require_once __DIR__ . '/encryption.php';   // csat_token_secret is stored encrypted
 require_once __DIR__ . '/session_security.php'; // requestScheme() — proxy-aware (GH #152)
+require_once __DIR__ . '/module_availability.php'; // moduleIsEnabled('csat') - GH #217
 
 /**
  * Read a system_settings key with a default fallback.
@@ -66,7 +67,7 @@ function csatBuildUrl(string $token): string {
     // up from this file's directory to derive it relative to DOCUMENT_ROOT.
     $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
     $appRoot = rtrim(str_replace('\\', '/', realpath(__DIR__ . '/..')), '/');
-    $appPath = $docRoot && strpos($appRoot, $docRoot) === 0
+    $appPath = $docRoot && str_starts_with($appRoot, $docRoot)
         ? substr($appRoot, strlen($docRoot))
         : '';
     // Canonical survey URL since the root-folder tidy (the old /csat.php
@@ -169,7 +170,7 @@ function csatChannelLocale(PDO $conn, array $channel, string $from): string {
         $stmt = $conn->prepare("SELECT locale FROM messaging_identity_links WHERE channel_type = 'telegram' AND external_id = ?");
         $stmt->execute([$from]);
         $locale = (string)($stmt->fetchColumn() ?: '');
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $locale = '';
     }
     return $locale !== '' ? $locale : 'en';
@@ -234,7 +235,7 @@ function csatPendingRequestForChat(PDO $conn, int $channelId, string $from): ?in
         );
         $stmt->execute([$channelId, $from]);
         $id = $stmt->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return null;   // before Database Verification: no chat surveys exist yet
     }
     return $id ? (int)$id : null;
@@ -252,7 +253,7 @@ function csatResponseBelongsToChat(PDO $conn, int $responseId, int $channelId, s
         $stmt = $conn->prepare("SELECT 1 FROM ticket_csat_responses WHERE id = ? AND channel_id = ? AND channel_from = ?");
         $stmt->execute([$responseId, $channelId, $from]);
         return (bool)$stmt->fetchColumn();
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return false;
     }
 }
@@ -268,7 +269,7 @@ function csatStoredRating(PDO $conn, int $responseId): ?int {
         $stmt->execute([$responseId]);
         $r = $stmt->fetchColumn();
         return ($r === false || $r === null) ? null : (int)$r;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return null;
     }
 }
@@ -304,6 +305,10 @@ function csatRecordRating(PDO $conn, int $responseId, int $rating): bool {
  * @param bool $force  true to send even when one-survey-per-ticket is on and one already exists
  */
 function sendCsatSurvey(PDO $conn, int $ticketId, ?int $analystId, bool $force = false): array {
+    // GH #217: CSAT switched off for the install - no survey by any route.
+    if (!moduleIsEnabled($conn, 'csat')) {
+        return ['result' => CSAT_RESULT_OFF, 'response_id' => null];
+    }
     $mode = csatGetSetting($conn, 'csat_mode', 'off');
     if ($mode === 'off') {
         return ['result' => CSAT_RESULT_OFF, 'response_id' => null];

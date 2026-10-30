@@ -47,7 +47,7 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <script src="../../assets/js/safe-html.js?v=2"></script>
+    <script src="../../assets/js/safe-html.js?v=4"></script>
     <style>
         .ka-page { padding:16px 30px 24px; height:calc(100vh - 48px); display:flex; flex-direction:column; overflow:hidden; }
         .ka-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px; flex-shrink:0; }
@@ -126,7 +126,7 @@ $canAnalyse = analystHasCapability(connectToDatabase(), (int)$_SESSION['analyst_
         .ka-draft-note { font-size:12px; color:var(--text-muted); margin-top:12px; }
     </style>
     <!-- Mobile: LAYER 17g. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body>
 <?php require_once '../includes/header.php'; ?>
@@ -570,6 +570,6 @@ async function kaSaveDraft() {
     } catch (e) { /* the list still works without the status line */ }
 })();
 </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

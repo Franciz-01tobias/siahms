@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'सक्षम है — प्रोडक्शन के लिए बंद करें (config.php में display_errors को 0 सेट करें)',
         'display_errors_disabled' => 'बंद है',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 या उससे ऊपर ज़रूरी है',
+        'php_version_too_low' => '{version} — PHP 8.1 या उससे ऊपर ज़रूरी है',
         'php_version_eol' => '{version} — अभी भी सपोर्टेड है, लेकिन एंड ऑफ़ लाइफ में पहुंचने के बाद से इस रिलीज़ को कोई सिक्योरिटी अपडेट नहीं मिला है। PHP 8.3 या 8.4 की सलाह दी जाती है।',
         'extension_loaded' => 'लोड है',
         'extension_not_loaded' => 'लोड नहीं है — php.ini में सक्षम करें',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'कॉन्फ़िगर्ड',
         'ca_ini_masked_broken' => 'सेट है, लेकिन ऐसी फ़ाइल की ओर इशारा करता है जो मौजूद नहीं है — php.ini में पाथ ठीक करें या सेटिंग को कमेंट आउट करें।',
         'php_version_ok_masked' => 'ज़रूरत पूरी करता है',
-        'php_version_too_low_masked' => 'बहुत पुराना है — PHP 7.4 या उससे ऊपर ज़रूरी है',
+        'php_version_too_low_masked' => 'बहुत पुराना है — PHP 8.1 या उससे ऊपर ज़रूरी है',
         'php_version_eol_masked' => 'सपोर्टेड है, लेकिन यह रिलीज़ एंड ऑफ़ लाइफ में पहुंच चुकी है और अब सिक्योरिटी अपडेट नहीं मिलते। वर्शन देखने के लिए एडमिनिस्ट्रेटर के रूप में साइन इन करें।',
     ],
     'locked' => [

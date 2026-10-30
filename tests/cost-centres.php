@@ -38,8 +38,8 @@ file_put_contents("$tmp/a.csv", spreadsheetWriteCsv(['Code', 'Name', 'Descriptio
 $x = spreadsheetRead("$tmp/a.xlsx", 'a.xlsx');
 check('xlsx round trip keeps 0010, quotes, accents and a formula-looking value', array_slice($x, 1), $rows);
 check('csv round trip is the same', spreadsheetRead("$tmp/a.csv", 'a.csv'), $x);
-check('csv export guards a formula with an apostrophe', strpos(file_get_contents("$tmp/a.csv"), "'=SUM(A1)") !== false, true);
-check('csv export leaves a plain negative number alone', strpos(file_get_contents("$tmp/a.csv"), "\r\n-5,") !== false, true);
+check('csv export guards a formula with an apostrophe', str_contains(file_get_contents("$tmp/a.csv"), "'=SUM(A1)"), true);
+check('csv export leaves a plain negative number alone', str_contains(file_get_contents("$tmp/a.csv"), "\r\n-5,"), true);
 
 file_put_contents("$tmp/semi.csv", "Kostenstelle;Bezeichnung\r\n0010;Café\r\n\r\n");
 check('semicolon CSV (European Excel), blank line dropped', spreadsheetRead("$tmp/semi.csv", 'semi.csv'), [['Kostenstelle', 'Bezeichnung'], ['0010', 'Café']]);

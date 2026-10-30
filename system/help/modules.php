@@ -14,7 +14,10 @@ require __DIR__ . '/_top.php';
             <p>Modules lets you decide, per analyst, which parts of FreeITSM each person can open — Tickets, Assets, Knowledge, Changes, Calendar, Checks, Reporting, Software, Forms, Contracts, Wiki, Tasks, CMDB and System. It's a single grid of analysts against modules, with a toggle in every cell.</p>
         </div>
     </div>
-    <p>It does not switch a module on or off for the whole install. Every module stays available; this page just governs who is allowed to reach it. Only active analysts appear in the grid.</p>
+    <p>The access grid governs <em>who</em> may reach each module. Only active analysts appear in it.</p>
+    <p><strong>Availability</strong>, at the top of the page, is different: it switches a module off for the <strong>whole installation</strong>. A switched-off module disappears for everyone, administrators included - from the launcher and menus, from other modules' buttons and <em>Link to</em> options, from the REST API, from workflow triggers and actions, and from its scheduled jobs. Opening its address takes you back to the home page, and its endpoints answer that it is switched off.</p>
+    <p><strong>Ticket features</strong>, under the modules, switch off parts of Tickets on their own: <strong>CSAT</strong> (no surveys are sent and old survey links say feedback is no longer being collected), <strong>SLA</strong> (no clocks, breach warnings or SLA workflow triggers; the business calendars stay, because web chat uses them for its opening hours), <strong>Time tracking</strong> (no recording time anywhere, including the REST API) and the <strong>Duty rota</strong>. Tickets keeps working without any of them. Switching SLA back on asks whether to send the warnings and breaches that were missed while it was off, or to skip them.</p>
+    <div class="help-note"><strong>Nothing is deleted.</strong> The module's records, settings and everyone's access grants stay exactly as they were, and switching it back on brings it all back. Every module is on unless you switch it off, so upgrading FreeITSM never switches anything off. <strong>Tickets</strong> and <strong>System</strong> are always on.</div>
     <div class="help-note">Changes save the moment you flip a toggle — there is no Save button. A small confirmation appears after each change.</div>
 </div>
 

@@ -40,15 +40,15 @@ echo "1. Labels\n";
 $cat = rpCatalogue($conn, $adminId);
 $missing = [];
 foreach ($cat['tools'] as $t) {
-    foreach (['title', 'desc'] as $k) if (strpos($t[$k], 'reporting.') === 0) $missing[] = $t[$k];
+    foreach (['title', 'desc'] as $k) if (str_starts_with($t[$k], 'reporting.')) $missing[] = $t[$k];
 }
 foreach ($cat['handlers'] as $key => $h) {
     foreach ($h['opts'] as $o) {
-        if (strpos($o['label'], 'reporting.') === 0) $missing[] = $o['label'];
-        foreach ($o['values'] ?? [] as $v) if (strpos($v['label'], 'reporting.') === 0) $missing[] = $v['label'];
+        if (str_starts_with($o['label'], 'reporting.')) $missing[] = $o['label'];
+        foreach ($o['values'] ?? [] as $v) if (str_starts_with($v['label'], 'reporting.')) $missing[] = $v['label'];
     }
 }
-foreach (RP_RANGE_PRESETS as $p) if (strpos(t('reporting.packs.range.' . $p), 'reporting.') === 0) $missing[] = $p;
+foreach (RP_RANGE_PRESETS as $p) if (str_starts_with(t('reporting.packs.range.' . $p), 'reporting.')) $missing[] = $p;
 check(!$missing, 'every toolbox, option and range label resolves' . ($missing ? ': ' . implode(', ', array_unique($missing)) : ''));
 check(count($cat['tools']) >= 30, 'positive control: the toolbox has ' . count($cat['tools']) . ' items');
 

@@ -6,6 +6,7 @@
 session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/rbac.php';
 
 header('Content-Type: application/json');
 
@@ -14,6 +15,10 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('software');
+// The API keys tab's capability, as generate_apikey.php and delete_apikey.php require.
+// Module access alone let any Software analyst read every key - reported privately,
+// October 2026.
+requireCapabilityJson(Cap::SOFTWARE_API_KEYS);
 
 try {
     $conn = connectToDatabase();

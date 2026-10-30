@@ -52,8 +52,8 @@ function renderTenantSwitcher(PDO $conn, int $analystId): void {
         $triageCount = 0;
         try {
             $triageCount = (int)$conn->query("SELECT COUNT(*) FROM tickets WHERE tenant_id IS NULL")->fetchColumn();
-        } catch (Exception $e) {}
-    } catch (Exception $e) {
+        } catch (Exception) {}
+    } catch (Exception) {
         return; // never break the header
     }
     ?>

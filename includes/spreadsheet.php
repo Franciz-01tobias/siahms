@@ -270,7 +270,7 @@ function spreadsheetReadXlsx(string $path): array
         foreach ($rels->Relationship as $rel) {
             if ((string)$rel['Id'] === $rid) {
                 $t = ltrim((string)$rel['Target'], '/');
-                $sheetPath = strpos($t, 'xl/') === 0 ? $t : 'xl/' . $t;
+                $sheetPath = str_starts_with($t, 'xl/') ? $t : 'xl/' . $t;
                 break;
             }
         }

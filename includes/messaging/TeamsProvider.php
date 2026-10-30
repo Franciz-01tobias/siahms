@@ -104,7 +104,7 @@ class TeamsProvider extends MessagingProvider
         JWT::$leeway = 300;
         try {
             $claims = (array)JWT::decode(trim(substr($auth, 7)), JWK::parseKeySet(['keys' => $keys], 'RS256'));
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;   // bad signature, unknown key, expired, not yet valid
         } finally {
             JWT::$leeway = $leeway;
@@ -221,7 +221,7 @@ class TeamsProvider extends MessagingProvider
         foreach (($a['attachments'] ?? []) as $att) {
             $type = (string)($att['contentType'] ?? '');
             $url  = (string)($att['contentUrl'] ?? '');
-            if ($url !== '' && strpos($type, 'image/') === 0) {
+            if ($url !== '' && str_starts_with($type, 'image/')) {
                 $media[] = ['url' => $url, 'content_type' => $type, 'filename' => (string)($att['name'] ?? '')];
             }
         }
@@ -301,10 +301,10 @@ class TeamsProvider extends MessagingProvider
      */
     public function sendMedia(string $to, string $filePath, string $mimeType, string $caption = '', string $publicUrl = '', string $filename = ''): string
     {
-        if (strpos($mimeType, 'image/') !== 0) {
+        if (!str_starts_with($mimeType, 'image/')) {
             throw new Exception('Teams can only receive images sent from FreeITSM for now.');
         }
-        if ($publicUrl === '' || strpos($publicUrl, 'https://') !== 0) {
+        if ($publicUrl === '' || !str_starts_with($publicUrl, 'https://')) {
             throw new Exception('Teams needs a public https address for the image, and this install does not have one configured.');
         }
         return $this->postActivity($to, [
@@ -481,7 +481,7 @@ class TeamsProvider extends MessagingProvider
         $cfg = json_decode((string)$r1, true);
         $jwks = (string)($cfg['jwks_uri'] ?? '');
         // Only follow the key location Microsoft publishes, never one an attacker names.
-        if ($c1 !== 200 || strpos($jwks, 'https://login.botframework.com/') !== 0) {
+        if ($c1 !== 200 || !str_starts_with($jwks, 'https://login.botframework.com/')) {
             return [];
         }
         [$c2, $r2] = $this->httpRequest($jwks, ['method' => 'GET']);

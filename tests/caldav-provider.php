@@ -137,11 +137,11 @@ cardDavRequest($acct, 'PUT', $url, $withAlarm, ['Content-Type: text/calendar', '
 
 $p->updateEvent($cal, $id, ['subject' => 'TICKET-0001 - Renamed', 'start' => '2026-09-21 16:00:00', 'end' => '2026-09-21 17:00:00'] + $event);
 $after = cardDavRequest($acct, 'GET', $url)['body'];
-ok('the update moved the event', strpos($after, 'Renamed') !== false && CalDavCalendarProvider::eventTimes($after, $tz)['start'] === '2026-09-21 16:00:00', $after);
-ok('the reminder the analyst added survived', strpos($after, 'TRIGGER:-PT15M') !== false && strpos($after, 'DESCRIPTION:Leave now') !== false, $after);
-ok('their own property survived', strpos($after, 'X-ANALYST-NOTE:bring the charger') !== false);
+ok('the update moved the event', str_contains($after, 'Renamed') && CalDavCalendarProvider::eventTimes($after, $tz)['start'] === '2026-09-21 16:00:00', $after);
+ok('the reminder the analyst added survived', str_contains($after, 'TRIGGER:-PT15M') && str_contains($after, 'DESCRIPTION:Leave now'), $after);
+ok('their own property survived', str_contains($after, 'X-ANALYST-NOTE:bring the charger'));
 ok('there is exactly one DTSTART at event level and the old summary is gone',
-   substr_count($after, 'SUMMARY:') === 1 && strpos($after, 'TICKET-0001 - Test') === false, $after);
+   substr_count($after, 'SUMMARY:') === 1 && !str_contains($after, 'TICKET-0001 - Test'), $after);
 
 $r2 = $p->pollChanges($cal, $r1['token']);
 ok('the edit is reported with its new time', ($r2['changed'][0]['start'] ?? '') === '2026-09-21 16:00:00', json_encode($r2));

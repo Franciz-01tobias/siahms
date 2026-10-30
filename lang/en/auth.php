@@ -94,7 +94,7 @@ return [
     'reset_working'       => 'Resetting...',
     'reset_success'       => 'Password reset successfully. Redirecting to login...',
     'reset_err_both'      => 'Please fill in both fields.',
-    'reset_err_short'     => 'Password must be at least 6 characters.',
+    'reset_err_short'     => 'Password must be at least 8 characters.',
     'reset_err_mismatch'  => 'Passwords do not match.',
 
     // ── Password expired (auth/force_password_change.php) ───────────────

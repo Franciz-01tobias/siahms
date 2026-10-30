@@ -129,7 +129,7 @@ function isPasswordExpired($conn, $passwordChangedDatetime) {
     $days = (int)(getSecuritySetting($conn, 'password_expiry_days') ?? 0);
     if ($days <= 0) return false;
     if (empty($passwordChangedDatetime)) return true; // never changed
-    $changed = new DateTime($passwordChangedDatetime);
+    $changed = new DateTime($passwordChangedDatetime, new DateTimeZone('UTC'));   // stored in UTC
     $now = new DateTime('now', new DateTimeZone('UTC'));
     return $now->diff($changed)->days >= $days;
 }
@@ -199,7 +199,7 @@ function checkIpBan($conn, $ip) {
         $stmt->execute([$ip]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) {
-            $until = new DateTime($row['banned_until']);
+            $until = new DateTime($row['banned_until'], new DateTimeZone('UTC'));
             $now = new DateTime('now', new DateTimeZone('UTC'));
             return max(1, (int)ceil(($until->getTimestamp() - $now->getTimestamp()) / 60));
         }
@@ -300,7 +300,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Check account lockout
             if ($analyst && !empty($analyst['locked_until'])) {
-                $lockedUntil = new DateTime($analyst['locked_until']);
+                // 🔴 Written in UTC (UTC_TIMESTAMP() below), so it must be READ as UTC.
+                //   Read in PHP's own zone (Europe/London in the shipped config.php), the
+                //   lock ended an hour early all summer - and the default lock is 30
+                //   minutes, so it had expired the moment it was set: unlimited password
+                //   guesses against any known username. Reported privately, October 2026.
+                // TRAP: never new DateTime($dbValue) without a zone - the DB session is UTC.
+                $lockedUntil = new DateTime($analyst['locked_until'], new DateTimeZone('UTC'));
                 $now = new DateTime('now', new DateTimeZone('UTC'));
                 if ($now < $lockedUntil) {
                     $remaining = $now->diff($lockedUntil);
@@ -525,7 +531,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } catch (Exception $e) {
             if ($e->getMessage() !== '__ip_banned__') {
-                $error = tr('err_exception', 'Login error: {message}', ['message' => $e->getMessage()]);
+                require_once __DIR__ . '/../includes/db_errors.php';
+                $error = tr('err_exception', 'Login error: {message}', ['message' => dbSafeClientMessage($e, 'a server error. The details are in the server log.')]);
             }
         }
     }

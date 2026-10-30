@@ -13,6 +13,7 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+requireModuleOnJson(connectToDatabase(), 'rota');   // GH #217: not while the duty rota is switched off
 
 try {
     $conn = connectToDatabase();

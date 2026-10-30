@@ -33,7 +33,7 @@ const LMSPlayer = (() => {
     let startedAt = Date.now();
 
     /** Escapes text for safe use in HTML. */
-    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
     /** Seconds since the time count was last sent to the server. */
     const elapsed = () => Math.round((Date.now() - startedAt) / 1000);
 

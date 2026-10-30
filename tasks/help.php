@@ -55,7 +55,7 @@ $translationNamespaces = ['common', 'tasks'];
             --on-accent:    var(--tsk-on-accent);
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -291,6 +291,9 @@ $translationNamespaces = ['common', 'tasks'];
                         </div>
                     </div>
 
+                    <h4><?php echo htmlspecialchars(t('tasks.help.table_open_heading')); ?></h4>
+                    <p><?php echo t('tasks.help.table_open_body'); ?></p>
+
                     <h4><?php echo htmlspecialchars(t('tasks.help.table_edit_heading')); ?></h4>
                     <p><?php echo t('tasks.help.table_edit_body'); ?></p>
 
@@ -418,6 +421,8 @@ $translationNamespaces = ['common', 'tasks'];
                     <h4><?php echo htmlspecialchars(t('tasks.help.evidence_history_heading')); ?></h4>
                     <p><?php echo t('tasks.help.evidence_history_body'); ?></p>
                     <p class="help-note"><?php echo t('tasks.help.evidence_history_note'); ?></p>
+                    <h4><?php echo htmlspecialchars(t('tasks.help.case_report_heading')); ?></h4>
+                    <p><?php echo t('tasks.help.case_report_body'); ?></p>
 
                     <h4><?php echo htmlspecialchars(t('tasks.help.evidence_report_heading')); ?></h4>
                     <p><?php echo t('tasks.help.evidence_report_body'); ?></p>
@@ -637,6 +642,6 @@ $translationNamespaces = ['common', 'tasks'];
             });
         });
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

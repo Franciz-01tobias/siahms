@@ -100,10 +100,10 @@ final class EwMarkdown
             }
 
             // | table |
-            if (strpos($line, '|') !== false && $i + 1 < $n && $this->isTableRule($lines[$i + 1])) {
+            if (str_contains($line, '|') && $i + 1 < $n && $this->isTableRule($lines[$i + 1])) {
                 $rows = [$line, $lines[$i + 1]];
                 $i += 2;
-                while ($i < $n && trim($lines[$i]) !== '' && strpos($lines[$i], '|') !== false) { $rows[] = $lines[$i]; $i++; }
+                while ($i < $n && trim($lines[$i]) !== '' && str_contains($lines[$i], '|')) { $rows[] = $lines[$i]; $i++; }
                 $out .= $this->table($rows);
                 continue;
             }
@@ -446,7 +446,7 @@ final class EwMarkdown
         $t = preg_replace('/(?<![\w_])_(?=[^\s_])(.+?)(?<=[^\s_])_(?![\w_])/s', '<em>$1</em>', $t);
         $t = preg_replace('/~~(?=\S)(.+?)(?<=\S)~~/s', '<del>$1</del>', $t);
         // 5. put the held pieces back (they may nest, so repeat until none are left).
-        for ($guard = 0; $guard < 5 && strpos($t, "\x1A") !== false; $guard++) {
+        for ($guard = 0; $guard < 5 && str_contains($t, "\x1A"); $guard++) {
             $t = preg_replace_callback('/\x1A(\d+)\x1A/', fn($m) => $this->holds[(int)$m[1]] ?? '', $t);
         }
         if (count($this->holds) > $base + 500) $this->holds = array_slice($this->holds, 0, $base);

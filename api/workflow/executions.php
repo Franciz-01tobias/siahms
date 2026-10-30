@@ -63,10 +63,19 @@ if ($q !== '') {
     $params[] = $like; $params[] = $like; $params[] = $like;
 }
 
-$whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
-
 try {
     $conn = connectToDatabase();
+
+    // GH #209. A run holds its whole payload, so only the runs for companies
+    // this analyst can see - in the list, the facets AND the tallies, because a
+    // count or a workflow's name is data too.
+    require_once __DIR__ . '/../../includes/workflow_tenancy.php';
+    [$eSql, $eArgs] = workflowExecutionFilter($conn, (int)$_SESSION['analyst_id'], 'e.tenant_id');
+    if ($eSql !== '') {
+        $where[] = substr($eSql, strlen(' AND '));
+        $params  = array_merge($params, $eArgs);
+    }
+    $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
     $countStmt = $conn->prepare("SELECT COUNT(*) FROM workflow_executions e $whereSql");
     $countStmt->execute($params);
@@ -102,24 +111,31 @@ try {
 
     // Facets — only offer filter values that exist in the log, so you can't pick
     // a combination that returns nothing for a reason you can't see.
-    $workflows = $conn->query(
+    $facet = $conn->prepare(
         "SELECT DISTINCT e.workflow_id AS id,
                 COALESCE(w.name, e.workflow_name, '(deleted workflow)') AS name
            FROM workflow_executions e
            LEFT JOIN workflows w ON w.id = e.workflow_id
-          WHERE e.workflow_id IS NOT NULL
+          WHERE e.workflow_id IS NOT NULL$eSql
           ORDER BY name"
-    )->fetchAll(PDO::FETCH_ASSOC);
+    );
+    $facet->execute($eArgs);
+    $workflows = $facet->fetchAll(PDO::FETCH_ASSOC);
 
-    $triggers = $conn->query(
-        "SELECT trigger_event, COUNT(*) c FROM workflow_executions
-          GROUP BY trigger_event ORDER BY trigger_event"
-    )->fetchAll(PDO::FETCH_ASSOC);
+    $facet = $conn->prepare(
+        "SELECT e.trigger_event, COUNT(*) c FROM workflow_executions e
+          WHERE 1=1$eSql
+          GROUP BY e.trigger_event ORDER BY e.trigger_event"
+    );
+    $facet->execute($eArgs);
+    $triggers = $facet->fetchAll(PDO::FETCH_ASSOC);
 
     // Headline counts across the WHOLE log (not the current page), so the tabs
     // can show how much is wrong without you having to filter to find out.
     $tally = [];
-    foreach ($conn->query("SELECT status, COUNT(*) c FROM workflow_executions GROUP BY status") as $r) {
+    $tallyStmt = $conn->prepare("SELECT e.status, COUNT(*) c FROM workflow_executions e WHERE 1=1$eSql GROUP BY e.status");
+    $tallyStmt->execute($eArgs);
+    foreach ($tallyStmt as $r) {
         $tally[$r['status']] = (int)$r['c'];
     }
 

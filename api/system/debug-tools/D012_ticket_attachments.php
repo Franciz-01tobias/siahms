@@ -596,10 +596,10 @@ if ($kindAvailable['Screen recording']) {
                 // ANYWAY (includes/ticket_recordings.php says so, deliberately), so a
                 // row still pointing into recordings/pending/ is a known, expected
                 // breakage rather than a mystery. Say which it is.
-                'skip'      => (strpos($stored, 'recordings/pending/') === 0)
+                'skip'      => (str_starts_with($stored, 'recordings/pending/'))
                     ? null : null,
             ];
-            if (strpos($stored, 'recordings/pending/') === 0) {
+            if (str_starts_with($stored, 'recordings/pending/')) {
                 $items[count($items) - 1]['note'] .= '  <-- still in pending/: the move onto the ticket failed at claim time';
             }
         }
@@ -648,7 +648,7 @@ foreach ($items as $idx => $it) {
 
     if ($it['skip'] !== null) {
         $L[] = '    RESULT            : ' . $it['skip'];
-        $verdict = (strpos($it['skip'], 'LINK') === 0) ? 'LINK' : 'NOT CHECKED';
+        $verdict = (str_starts_with($it['skip'], 'LINK')) ? 'LINK' : 'NOT CHECKED';
         $results[] = ['n' => $n, 'kind' => $it['kind'], 'id' => $it['id'], 'name' => $it['name'], 'verdict' => $verdict, 'dir' => null];
         $fileLines = array_merge($fileLines, $L, ['']);
         continue;
@@ -875,7 +875,7 @@ $foreignModules = ['knowledge'];
 
 $docItems = []; $emailItems = [];
 foreach ($items as $it) {
-    if (strpos($it['kind'], 'Document') === 0) $docItems[] = $it;
+    if (str_starts_with($it['kind'], 'Document')) $docItems[] = $it;
     elseif ($it['kind'] === 'Email attachment') $emailItems[] = $it;
 }
 

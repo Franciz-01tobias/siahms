@@ -13,10 +13,17 @@
 require_once __DIR__ . '/../../includes/domains/api_bootstrap.php';
 require_once __DIR__ . '/../../includes/domains/watch.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 domainApiRun(function () use ($conn, $ctx) {
     $in = domainApiBody();
     $row = DomainsService::loadForActor($conn, $ctx, (int)($in['id'] ?? 0));
     $id = (int)$row['id'];
+    // GH #203: both scans send the name (or names made from it) outside.
+    if (in_array($in['action'] ?? '', ['scan_ct', 'scan_lookalikes'], true) && !domainMayLeaveNetwork($row)) {
+        domainApiFail('This is an internal domain: it is never sent outside the network, so it has no watches.');
+    }
     switch ($in['action'] ?? '') {
         case 'scan_ct':
             set_time_limit(90);

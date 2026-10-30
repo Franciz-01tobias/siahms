@@ -414,7 +414,7 @@ try {
            inline, which reads on both grounds (the tint is the same hue as the
            text), so there is nothing left here to flip for dark mode. */
     </style>
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -1214,7 +1214,7 @@ try {
         if (!wf || !wf.available || hiddenBySetting) { card.style.display = 'none'; return; }
         card.style.display = '';
 
-        const esc = (s) => { const x = document.createElement('div'); x.textContent = s == null ? '' : String(s); return x.innerHTML; };
+        const esc = (s) => { const x = document.createElement('div'); x.textContent = s == null ? '' : String(s); return x.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         const broken = wf.failed_24h + wf.aborted_24h;
 
         setDot('wtWfDot', broken > 0 ? 'red' : (wf.dead_webhooks > 0 ? 'amber' : 'green'));
@@ -1401,6 +1401,6 @@ try {
     // Auto-refresh every 5 minutes
     refreshTimer = setInterval(loadDashboard, 5 * 60 * 1000);
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

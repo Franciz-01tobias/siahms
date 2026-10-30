@@ -277,7 +277,7 @@ try {
     ChangesService::updateChange($conn, $ctx1, $id5, ['test_plan' => '<p>v3 - edited after approval</p>']);
     $r = $rounds($id5);
     $row = zzChange($conn, $id5);
-    ok('Withdraw: a material edit after approval supersedes it', $r[1]['state'] === 'superseded' && strpos((string)$r[1]['closed_reason'], 'Test plan') !== false, (string)$r[1]['closed_reason']);
+    ok('Withdraw: a material edit after approval supersedes it', $r[1]['state'] === 'superseded' && str_contains((string)$r[1]['closed_reason'], 'Test plan'), (string)$r[1]['closed_reason']);
     ok('the change goes back to awaiting approval, its date cleared', $row['status_stage'] === 'awaiting' && $row['approval_datetime'] === null);
     ok('and round 3 opens with the new text', count($r) === 3 && $r[2]['state'] === 'open'
         && $r[2]['snapshot']['revisions']['test_plan'] !== $r[1]['snapshot']['revisions']['test_plan']);
@@ -459,7 +459,7 @@ try {
     $rd = $rounds($t2);
     ok('switched on, untouched (markup aside): pre-authorised on submission', ($rd[0]['route'] ?? '') === 'pre_authorised' && $rd[0]['state'] === 'approved');
     ok('and moved on to the approved stage, its approval dated', zzChange($conn, $t2)['status_stage'] === 'approved' && zzChange($conn, $t2)['approval_datetime'] !== null);
-    ok('the round names the template version and its approver', strpos((string)$rd[0]['decision_note'], 'ZZ Restart print spooler" v') !== false
+    ok('the round names the template version and its approver', str_contains((string)$rd[0]['decision_note'], 'ZZ Restart print spooler" v')
         && $rd[0]['snapshot']['template_version_id'] === $v1);
 
     $t3 = $raise(['rollback_plan' => '<p>Reboot the whole server.</p>']);

@@ -99,7 +99,7 @@ function enAtRevision(string $root, string $rev, string $ns): array
 {
     $cmd = 'git -C ' . escapeshellarg($root) . ' show ' . escapeshellarg("$rev:lang/en/$ns.php") . ' 2>&1';
     $php = shell_exec($cmd);
-    if (!is_string($php) || strpos(ltrim($php), '<?php') !== 0) return [];
+    if (!is_string($php) || !str_starts_with(ltrim($php), '<?php')) return [];
 
     $tmp = tempnam(sys_get_temp_dir(), 'i18nev') . '.php';
     file_put_contents($tmp, $php);

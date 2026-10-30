@@ -86,23 +86,23 @@ eq('ADF link is a text node',    'text', $linkNode['type']);
 eq('ADF link text',              'SD-1042', $linkNode['text']);
 eq('ADF link mark href', 'https://sd.example/t/1042', $linkNode['marks'][0]['attrs']['href']);
 
-ok('Markdown heading',   strpos($md, '### Raised in FreeITSM') === 0);
-ok('Markdown link',      strpos($md, '](https://sd.example/t/1042)') !== false);
-ok('Markdown rule',      strpos($md, "\n---\n") !== false);
-ok('Markdown bullet',    strpos($md, '- Happens every time') !== false);
-ok('Markdown fence',     strpos($md, "```\nException") !== false);
+ok('Markdown heading',   str_starts_with($md, '### Raised in FreeITSM'));
+ok('Markdown link',      str_contains($md, '](https://sd.example/t/1042)'));
+ok('Markdown rule',      str_contains($md, "\n---\n"));
+ok('Markdown bullet',    str_contains($md, '- Happens every time'));
+ok('Markdown fence',     str_contains($md, "```\nException"));
 
-ok('Wiki heading',       strpos($wiki, 'h3. Raised in FreeITSM') === 0);
-ok('Wiki link syntax',   strpos($wiki, '|https://sd.example/t/1042]') !== false);
-ok('Wiki rule',          strpos($wiki, "\n----\n") !== false);
-ok('Wiki bullet',        strpos($wiki, '* Happens every time') !== false);
-ok('Wiki code macro',    strpos($wiki, "{code}\nException") !== false);
+ok('Wiki heading',       str_starts_with($wiki, 'h3. Raised in FreeITSM'));
+ok('Wiki link syntax',   str_contains($wiki, '|https://sd.example/t/1042]'));
+ok('Wiki rule',          str_contains($wiki, "\n----\n"));
+ok('Wiki bullet',        str_contains($wiki, '* Happens every time'));
+ok('Wiki code macro',    str_contains($wiki, "{code}\nException"));
 
-ok('HTML heading',       strpos($html, '<h3>Raised in FreeITSM</h3>') !== false);
-ok('HTML anchor',        strpos($html, '<a href="https://sd.example/t/1042">SD-1042</a>') !== false);
-ok('HTML rule',          strpos($html, '<hr>') !== false);
-ok('HTML list item',     strpos($html, '<li>Happens every time</li>') !== false);
-ok('HTML pre',           strpos($html, '<pre>Exception') !== false);
+ok('HTML heading',       str_contains($html, '<h3>Raised in FreeITSM</h3>'));
+ok('HTML anchor',        str_contains($html, '<a href="https://sd.example/t/1042">SD-1042</a>'));
+ok('HTML rule',          str_contains($html, '<hr>'));
+ok('HTML list item',     str_contains($html, '<li>Happens every time</li>'));
+ok('HTML pre',           str_contains($html, '<pre>Exception'));
 
 // ---------------------------------------------------------------------------
 echo "2. Ticket text cannot inject formatting (each with a positive control)\n";
@@ -113,29 +113,29 @@ echo "2. Ticket text cannot inject formatting (each with a positive control)\n";
 $nasty = (new IssueDoc)->para('use the * wildcard and [see notes] plus _underscore_');
 $nmd   = $nasty->toMarkdown();
 
-ok('MD escapes asterisk',        strpos($nmd, '\\*') !== false);
-ok('MD escapes bracket',         strpos($nmd, '\\[') !== false);
-ok('MD escapes underscore',      strpos($nmd, '\\_') !== false);
+ok('MD escapes asterisk',        str_contains($nmd, '\\*'));
+ok('MD escapes bracket',         str_contains($nmd, '\\['));
+ok('MD escapes underscore',      str_contains($nmd, '\\_'));
 ok('MD positive control: words survived',
-   strpos($nmd, 'wildcard') !== false && strpos($nmd, 'see notes') !== false);
+   str_contains($nmd, 'wildcard') && str_contains($nmd, 'see notes'));
 
 $nwiki = $nasty->toWikiMarkup();
-ok('Wiki escapes bracket',       strpos($nwiki, '\\[') !== false);
-ok('Wiki escapes asterisk',      strpos($nwiki, '\\*') !== false);
-ok('Wiki positive control: words survived', strpos($nwiki, 'wildcard') !== false);
+ok('Wiki escapes bracket',       str_contains($nwiki, '\\['));
+ok('Wiki escapes asterisk',      str_contains($nwiki, '\\*'));
+ok('Wiki positive control: words survived', str_contains($nwiki, 'wildcard'));
 
 // HTML is the one where a failure is an actual injection, not just ugly output.
 $xss  = (new IssueDoc)->para('<script>alert(1)</script> & "quoted"');
 $xh   = $xss->toHtml();
-ok('HTML escapes the tag',       strpos($xh, '<script>') === false);
-ok('HTML encoded the tag',       strpos($xh, '&lt;script&gt;') !== false);
-ok('HTML escapes ampersand',     strpos($xh, '&amp;') !== false);
-ok('HTML positive control: text survived', strpos($xh, 'alert(1)') !== false);
+ok('HTML escapes the tag',       !str_contains($xh, '<script>'));
+ok('HTML encoded the tag',       str_contains($xh, '&lt;script&gt;'));
+ok('HTML escapes ampersand',     str_contains($xh, '&amp;'));
+ok('HTML positive control: text survived', str_contains($xh, 'alert(1)'));
 
 // A link's TEXT is attacker-influenced too.
 $linkXss = (new IssueDoc)->para(IssueDoc::link('https://x.example', '<b>bold</b>'))->toHtml();
-ok('HTML escapes link text',     strpos($linkXss, '<b>bold</b>') === false);
-ok('HTML link positive control', strpos($linkXss, '&lt;b&gt;bold') !== false);
+ok('HTML escapes link text',     !str_contains($linkXss, '<b>bold</b>'));
+ok('HTML link positive control', str_contains($linkXss, '&lt;b&gt;bold'));
 
 // ADF carries text literally (it is JSON, not markup) — assert it is NOT escaped,
 // because double-escaping there would show users literal backslashes in Jira.
@@ -198,7 +198,7 @@ foreach (['addComment', 'addAttachment', 'verifyWebhook', 'pollChanges', 'listPr
 // vocabulary leaks into ours.
 eq('4 status categories', 4, count(array_filter(
     $rc->getConstants(),
-    function ($k) { return strpos($k, 'STATUS_') === 0; },
+    function ($k) { return str_starts_with($k, 'STATUS_'); },
     ARRAY_FILTER_USE_KEY
 )));
 
@@ -294,7 +294,7 @@ ok('Server renders a string',        is_string($serverRendered));
 // Guarded on is_string: if this regresses to ADF, the assertion must FAIL and
 // let the rest of the suite run, not fatal on strpos() and hide everything after.
 ok('Server renders wiki markup',     is_string($serverRendered)
-                                     && strpos($serverRendered, 'h3. Raised in FreeITSM') === 0);
+                                     && str_starts_with($serverRendered, 'h3. Raised in FreeITSM'));
 
 // Create payload.
 $p = $cloud->pubBuild(['project' => 'OPS', 'issue_type' => 'Bug'], 'Outlook crashes', $body);
@@ -330,13 +330,13 @@ eq('empty category → null',      null, $cloud->pubMapStatus(''));
 // Error extraction. The common real failure is a project demanding a field we
 // did not send; "HTTP 400" alone would make that undiagnosable.
 $err = $cloud->pubError(400, '{"errorMessages":[],"errors":{"customfield_10010":"Epic Link is required"}}');
-ok('Field error names the field', strpos($err, 'customfield_10010') !== false);
-ok('Field error gives the reason', strpos($err, 'Epic Link is required') !== false);
-ok('errorMessages surfaced', strpos($cloud->pubError(400, '{"errorMessages":["Project is required"]}'), 'Project is required') !== false);
+ok('Field error names the field', str_contains($err, 'customfield_10010'));
+ok('Field error gives the reason', str_contains($err, 'Epic Link is required'));
+ok('errorMessages surfaced', str_contains($cloud->pubError(400, '{"errorMessages":["Project is required"]}'), 'Project is required'));
 ok('401 is described as credentials', stripos($cloud->pubError(401, ''), 'credential') !== false);
 ok('404 mentions the site URL',       stripos($cloud->pubError(404, ''), 'site URL') !== false);
 ok('Non-JSON body still yields a message', $cloud->pubError(500, '<html>Server Error</html>') !== '');
-ok('Non-JSON body is stripped of tags',    strpos($cloud->pubError(500, '<html>Server Error</html>'), '<html>') === false);
+ok('Non-JSON body is stripped of tags',    !str_contains($cloud->pubError(500, '<html>Server Error</html>'), '<html>'));
 
 // fetchIssue parses a real-shaped Jira response.
 $cloud->queue = [[200, json_encode([
@@ -390,21 +390,21 @@ $many = $cloud->fetchIssues(['1', '2']);
 eq('Batch made ONE call', 1, count($cloud->seen));
 eq('Batch returned both', 2, count($many));
 eq('Batch keyed by id',   'done', $many['2']['status_category']);
-ok('Batch used JQL id in ()', strpos(urldecode($cloud->seen[0]['url']), 'id in (1,2)') !== false);
+ok('Batch used JQL id in ()', str_contains(urldecode($cloud->seen[0]['url']), 'id in (1,2)'));
 
 // ⚠️ Cloud REMOVED /rest/api/3/search (Atlassian CHANGE-2046) — it is
 // /search/jql now. Data Center's v2 /search still exists. This was found against
 // live Jira, where the old path returned "The requested API has been removed",
 // so both halves are pinned here.
 ok('Cloud batch uses /search/jql',
-   strpos($cloud->seen[0]['url'], '/rest/api/3/search/jql?') !== false);
+   str_contains($cloud->seen[0]['url'], '/rest/api/3/search/jql?'));
 $srvBatch = mkJira(['base_url' => 'https://jira.acme.internal',
                     'credentials' => ['api_token' => 'p', 'flavour' => 'server']]);
 $srvBatch->queue = [[200, json_encode(['issues' => []])]];
 $srvBatch->fetchIssues(['1']);
 ok('Data Center batch uses v2 /search (NOT /search/jql)',
-   strpos($srvBatch->seen[0]['url'], '/rest/api/2/search?') !== false
-   && strpos($srvBatch->seen[0]['url'], 'search/jql') === false);
+   str_contains($srvBatch->seen[0]['url'], '/rest/api/2/search?')
+   && !str_contains($srvBatch->seen[0]['url'], 'search/jql'));
 
 $cloud->seen = [];
 eq('Non-numeric ids rejected', [], $cloud->fetchIssues(['1 OR 1=1', 'DROP']));
@@ -416,7 +416,7 @@ $cloud->queue = [[200, json_encode(['accountId' => '5b10a2', 'displayName' => 'F
 $t = $cloud->testConnection();
 eq('Cloud identity is accountId', '5b10a2', $t['account_identity']);
 eq('Cloud flavour recorded', 'cloud', $t['flavour']);
-ok('Detail names the account', strpos($t['detail'], 'FreeITSM Bot') !== false);
+ok('Detail names the account', str_contains($t['detail'], 'FreeITSM Bot'));
 
 $server->queue = [[200, json_encode(['name' => 'svcacct', 'displayName' => 'Service Account'])]];
 $ts = $server->testConnection();
@@ -550,24 +550,24 @@ $marketing = '<html><head><style>
 
 $txt = integrationsBodyToText($marketing, 'html');
 
-ok('CSS content is gone',        strpos($txt, 'color-scheme') === false);
-ok('!important is gone',         strpos($txt, '!important') === false);
-ok('script content is gone',     strpos($txt, 'trackOpen') === false);
-ok('<title> content is gone',    strpos($txt, 'Invoice') === false || strpos($txt, 'invoice is available') !== false);
+ok('CSS content is gone',        !str_contains($txt, 'color-scheme'));
+ok('!important is gone',         !str_contains($txt, '!important'));
+ok('script content is gone',     !str_contains($txt, 'trackOpen'));
+ok('<title> content is gone',    !str_contains($txt, 'Invoice') || str_contains($txt, 'invoice is available'));
 // POSITIVE CONTROL: the actual message must survive all that removal.
 ok('POSITIVE CONTROL: the real text survived',
-   strpos($txt, 'Your invoice is available.') !== false
-   && strpos($txt, 'IMPORTANT: the balance will be charged automatically.') !== false);
-ok('block ends became newlines', strpos($txt, "available.\nIMPORTANT") !== false
-                                 || strpos($txt, "available.\n\nIMPORTANT") !== false);
+   str_contains($txt, 'Your invoice is available.')
+   && str_contains($txt, 'IMPORTANT: the balance will be charged automatically.'));
+ok('block ends became newlines', str_contains($txt, "available.\nIMPORTANT")
+                                 || str_contains($txt, "available.\n\nIMPORTANT"));
 
 // HTML mail is full of &nbsp; runs and CRLF — they must collapse, not survive as
 // a wall of whitespace.
 $spacey = integrationsBodyToText("<p>A&nbsp;&nbsp;&nbsp;&nbsp;B</p>\r\n\r\n\r\n\r\n<p>C</p>", 'html');
-ok('nbsp runs collapse',      strpos($spacey, '    ') === false);
-ok('no triple blank lines',   strpos($spacey, "\n\n\n") === false);
+ok('nbsp runs collapse',      !str_contains($spacey, '    '));
+ok('no triple blank lines',   !str_contains($spacey, "\n\n\n"));
 ok('POSITIVE CONTROL: letters survive collapsing',
-   strpos($spacey, 'A') !== false && strpos($spacey, 'B') !== false && strpos($spacey, 'C') !== false);
+   str_contains($spacey, 'A') && str_contains($spacey, 'B') && str_contains($spacey, 'C'));
 
 // Plain-text bodies must pass through essentially untouched — over-processing a
 // plain body is as wrong as under-processing an HTML one.
@@ -575,14 +575,14 @@ $plain = integrationsBodyToText("Line one\n\nLine two", 'text');
 eq('plain text preserved', "Line one\n\nLine two", $plain);
 
 // Entities decode (a description showing &amp; would look broken).
-ok('entities decoded', strpos(integrationsBodyToText('<p>Tom &amp; Jerry &lt;3</p>', 'html'), 'Tom & Jerry <3') !== false);
+ok('entities decoded', str_contains(integrationsBodyToText('<p>Tom &amp; Jerry &lt;3</p>', 'html'), 'Tom & Jerry <3'));
 
 // The cap keeps a newsletter from becoming the whole issue, and says it did.
 $long = integrationsBodyToText(str_repeat('word ', 5000), 'text', 200);
 ok('long body capped',        mb_strlen($long) < 400);
-ok('truncation is announced', strpos($long, 'truncated') !== false);
+ok('truncation is announced', str_contains($long, 'truncated'));
 ok('POSITIVE CONTROL: short body NOT capped',
-   strpos(integrationsBodyToText('short one', 'text', 200), 'truncated') === false);
+   !str_contains(integrationsBodyToText('short one', 'text', 200), 'truncated'));
 
 // Degenerate input must not explode.
 eq('null body → empty string', '', integrationsBodyToText(null, 'html'));
@@ -591,7 +591,7 @@ eq('empty body → empty string', '', integrationsBodyToText('', 'html'));
 // An HTML body mislabelled as text is common (some mailers lie) — sniffing the
 // markup means it still gets cleaned rather than dumped raw.
 ok('mislabelled HTML still cleaned',
-   strpos(integrationsBodyToText('<div><style>p{color:red}</style>Hello</div>', 'text'), 'color:red') === false);
+   !str_contains(integrationsBodyToText('<div><style>p{color:red}</style>Hello</div>', 'text'), 'color:red'));
 
 // ---------------------------------------------------------------------------
 echo "8. Comments coming back — reading, echo suppression, the poll window\n";
@@ -618,10 +618,10 @@ $adfComment = [
     ],
 ];
 $adfText = $cloud->pubAdfToText($adfComment);
-ok('ADF text: sentence survives',  strpos($adfText, 'What were the repro steps?') !== false);
-ok('ADF text: bullet 1 survives',  strpos($adfText, '- Which build?') !== false);
-ok('ADF text: bullet 2 survives',  strpos($adfText, '- Which OS?') !== false);
-ok('ADF text: no JSON leaked',     strpos($adfText, 'listItem') === false);
+ok('ADF text: sentence survives',  str_contains($adfText, 'What were the repro steps?'));
+ok('ADF text: bullet 1 survives',  str_contains($adfText, '- Which build?'));
+ok('ADF text: bullet 2 survives',  str_contains($adfText, '- Which OS?'));
+ok('ADF text: no JSON leaked',     !str_contains($adfText, 'listItem'));
 
 // A link's href is the useful half. "See here" with the URL dropped is worse
 // than useless in a plain-text note.
@@ -629,8 +629,8 @@ $adfLink = ['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => 
     ['type' => 'text', 'text' => 'See here', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'https://ci.example/build/9']]]],
 ]]]];
 $linkText = $cloud->pubAdfToText($adfLink);
-ok('ADF text: link text kept', strpos($linkText, 'See here') !== false);
-ok('ADF text: link href kept', strpos($linkText, 'https://ci.example/build/9') !== false);
+ok('ADF text: link text kept', str_contains($linkText, 'See here'));
+ok('ADF text: link href kept', str_contains($linkText, 'https://ci.example/build/9'));
 
 // Mentions and emoji carry their label in attrs, not in a text child — recursing
 // blindly would drop them and mangle the sentence.
@@ -639,7 +639,7 @@ $adfMention = ['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' 
     ['type' => 'text', 'text' => ' can you look?'],
 ]]]];
 ok('ADF text: mention label kept',
-   strpos($cloud->pubAdfToText($adfMention), '@Jane Doe can you look?') !== false);
+   str_contains($cloud->pubAdfToText($adfMention), '@Jane Doe can you look?'));
 
 // Degenerate input must not explode — a comment can genuinely be an empty doc.
 eq('ADF text: empty doc → empty string', '', $cloud->pubAdfToText(['type' => 'doc', 'content' => []]));
@@ -649,7 +649,7 @@ eq('ADF text: non-array → empty string', '', $cloud->pubAdfToText('not adf'));
 // renderDoc() picks the format going out; commentBodyToText() must handle both
 // coming back. Data Center sends a plain wiki-markup string.
 ok('Cloud reads an ADF body',
-   strpos($cloud->pubCommentBody($adfComment), 'repro steps') !== false);
+   str_contains($cloud->pubCommentBody($adfComment), 'repro steps'));
 eq('Server reads a string body', 'Any update on this?',
    $server->pubCommentBody('Any update on this?'));
 eq('Unknown body shape → empty, not a crash', '', $cloud->pubCommentBody(null));
@@ -710,22 +710,22 @@ eq('Event is a comment', 'comment_added', $events[0]['type'] ?? null);
 eq('Event carries the comment id', '9001', $events[0]['comment_id'] ?? null);
 eq('Event carries the author identity', 'dev-1', $events[0]['author_identity'] ?? null);
 ok('Event body is readable text',
-   strpos($events[0]['comment_body'] ?? '', 'Need the repro steps') !== false);
+   str_contains($events[0]['comment_body'] ?? '', 'Need the repro steps'));
 
 // ⚠️ JQL must use RELATIVE minutes. An absolute JQL date is interpreted in the
 // Jira USER's timezone, not UTC, so a server and an account in different zones
 // would silently miss or re-read a window's worth of comments every poll.
 $searchUrl = $second->seen[0]['url'] ?? '';
-ok('Search uses relative minutes', strpos(urldecode($searchUrl), 'updated >= -') !== false);
-ok('Search scopes to the watch list', strpos(urldecode($searchUrl), 'id in (10042)') !== false);
+ok('Search uses relative minutes', str_contains(urldecode($searchUrl), 'updated >= -'));
+ok('Search scopes to the watch list', str_contains(urldecode($searchUrl), 'id in (10042)'));
 // Cloud's /search was REMOVED by Atlassian — this is the endpoint that broke in
 // #953, so the comment poll pins it too rather than repeating the mistake.
-ok('Cloud searches /search/jql', strpos($searchUrl, '/search/jql') !== false);
+ok('Cloud searches /search/jql', str_contains($searchUrl, '/search/jql'));
 $dcSecond = mkJira(['base_url' => 'https://jira.acme.internal',
                     'credentials' => ['api_token' => 'pat', 'flavour' => 'server']]);
 $dcSecond->queue = [[200, json_encode(['issues' => []])]];
 $dcSecond->pollChanges(gmdate('Y-m-d H:i:s', time() - 600), ['10042']);
-ok('Data Center searches /search', strpos($dcSecond->seen[0]['url'] ?? '', '/rest/api/2/search?') !== false);
+ok('Data Center searches /search', str_contains($dcSecond->seen[0]['url'] ?? '', '/rest/api/2/search?'));
 
 // Comments older than the watermark are not re-imported as "new".
 $stale = mkJira();
@@ -828,13 +828,13 @@ $noteText = integrationsCommentNoteText(
     ['author_name' => 'Dave Smith', 'comment_body' => "Need the repro steps"],
     ['external_key' => 'KAN-6', 'external_id' => '10042']
 );
-ok('Note names the issue',   strpos($noteText, 'KAN-6') !== false);
-ok('Note names the author',  strpos($noteText, 'Dave Smith') !== false);
-ok('Note carries the body',  strpos($noteText, 'Need the repro steps') !== false);
+ok('Note names the issue',   str_contains($noteText, 'KAN-6'));
+ok('Note names the author',  str_contains($noteText, 'Dave Smith'));
+ok('Note carries the body',  str_contains($noteText, 'Need the repro steps'));
 // An anonymous comment must still say where it came from.
 ok('Note falls back to the issue id when there is no key',
-   strpos(integrationsCommentNoteText(['comment_body' => 'x'],
-          ['external_key' => null, 'external_id' => '10042']), '10042') !== false);
+   str_contains(integrationsCommentNoteText(['comment_body' => 'x'],
+          ['external_key' => null, 'external_id' => '10042']), '10042'));
 
 // ---------------------------------------------------------------------------
 echo "9. Mapping — routing a ticket to the right project, type and priority\n";
@@ -1004,14 +1004,14 @@ $mp = $cloud->pubMultipart('screenshot.png', 'image/png', $png, $boundary);
 
 ok('A boundary is produced',            is_string($boundary) && $boundary !== '');
 ok('Field name is "file" — Jira requires exactly this',
-   strpos($mp, 'name="file"') !== false);
-ok('Filename travels',                  strpos($mp, 'filename="screenshot.png"') !== false);
-ok('Content type travels',              strpos($mp, 'Content-Type: image/png') !== false);
+   str_contains($mp, 'name="file"'));
+ok('Filename travels',                  str_contains($mp, 'filename="screenshot.png"'));
+ok('Content type travels',              str_contains($mp, 'Content-Type: image/png'));
 ok('Body opens with the boundary',      strpos($mp, "--{$boundary}\r\n") === 0);
 ok('Body closes with the terminator',   substr($mp, -strlen("--{$boundary}--\r\n")) === "--{$boundary}--\r\n");
 // ⚠️ The binary must survive byte-for-byte. A body that re-encoded or truncated
 // at the first NUL would upload a corrupt file that still "succeeded".
-ok('The binary payload survives intact', strpos($mp, $png) !== false);
+ok('The binary payload survives intact', str_contains($mp, $png));
 
 // ⚠️ The boundary must be random. A fixed one that happened to occur inside a
 // file would truncate the upload at that point — a corrupt file, no error.
@@ -1023,8 +1023,8 @@ ok('Boundaries differ between calls', $boundary !== $b2);
 // a quoted header. Quotes or CRLF there would let it break out of that header.
 $b3 = null;
 $evil = $cloud->pubMultipart("../../etc/pa\"ss\r\nwd.png", 'image/png', 'x', $b3);
-ok('Path components are stripped from the filename', strpos($evil, '../..') === false);
-ok('Quotes are stripped from the filename',          strpos($evil, 'pa"ss') === false);
+ok('Path components are stripped from the filename', !str_contains($evil, '../..'));
+ok('Quotes are stripped from the filename',          !str_contains($evil, 'pa"ss'));
 // ⚠️ Assert the FILENAME VALUE is clean, not the bytes around it. A correctly
 // sanitised header legitimately ends `wd.png"\r\nContent-Type`, so matching on
 // the surroundings fails on correct output — my first version of this did
@@ -1033,11 +1033,11 @@ preg_match('/filename="([^"]*)"/', $evil, $fnMatch);
 eq('The filename value itself is sanitised', 'passwd.png', $fnMatch[1] ?? null);
 eq('...and the part still has exactly one Content-Type header', 1, substr_count($evil, 'Content-Type:'));
 ok('POSITIVE CONTROL: the safe part of the name survives',
-   strpos($evil, 'passwd.png') !== false);
+   str_contains($evil, 'passwd.png'));
 // An empty name must still produce a usable one rather than filename=""
 $b4 = null;
 ok('An empty filename falls back',
-   strpos($cloud->pubMultipart('', 'image/png', 'x', $b4), 'filename="attachment"') !== false);
+   str_contains($cloud->pubMultipart('', 'image/png', 'x', $b4), 'filename="attachment"'));
 
 // ── Byte formatting, used in the preview and the link error ────────────────
 eq('Formats bytes',     '512 B',  integrationsFormatBytes(512));
@@ -1110,7 +1110,7 @@ eq('...with the title',  'A title', $byPath['/fields/System.Title']['value'] ?? 
 ok('body travels as a field op',    isset($byPath['/fields/System.Description']));
 ok('body is HTML, not ADF or wiki',
    is_string($byPath['/fields/System.Description']['value'] ?? null)
-   && strpos($byPath['/fields/System.Description']['value'], '<p>') !== false);
+   && str_contains($byPath['/fields/System.Description']['value'], '<p>'));
 
 // Area/iteration path are routing, and only sent when asked for.
 $ops2 = $ado->pubPatch(['project'=>'S','issue_type'=>'Task','area_path'=>'S\\Team','iteration_path'=>'S\\Sprint 1'], 't', $doc);
@@ -1166,8 +1166,8 @@ eq('comment id is captured',        '42', $parsed['comment_id']);
 eq('author identity is the GUID',   'guid-1', $parsed['author_identity']);
 ok('the descriptor is NOT used',    $parsed['author_identity'] !== 'aad.SOMETHINGELSE');
 eq('author name is kept for display', 'Dev Eloper', $parsed['author_name']);
-ok('HTML is reduced to text',       strpos($parsed['comment_body'], '<') === false);
-ok('...keeping the words',          strpos($parsed['comment_body'], 'there') !== false);
+ok('HTML is reduced to text',       !str_contains($parsed['comment_body'], '<'));
+ok('...keeping the words',          str_contains($parsed['comment_body'], 'there'));
 ok('the timestamp parses',          $parsed['created_ts'] > 0);
 
 // ── Parsing a work item ───────────────────────────────────────────────────
@@ -1185,11 +1185,11 @@ eq('assignee is read',              'Dev Eloper', $item['assignee_name']);
 
 // ── Errors an analyst has to act on ───────────────────────────────────────
 ok('a JSON message is surfaced',
-   strpos($ado->pubError(400, '{"message":"TF401320: Rule Error"}'), 'TF401320') !== false);
+   str_contains($ado->pubError(400, '{"message":"TF401320: Rule Error"}'), 'TF401320'));
 // ⚠️ A rejected token answers 203 with a sign-in PAGE, not 401 with JSON.
 ok('a 203 sign-in page is reported as a token problem',
    stripos($ado->pubError(203, '<html><body>Sign In</body></html>'), 'token') !== false);
-ok('an unhelpful body still names the status', strpos($ado->pubError(500, ''), '500') !== false);
+ok('an unhelpful body still names the status', str_contains($ado->pubError(500, ''), '500'));
 
 // ── Capabilities, and the one deliberately absent ─────────────────────────
 ok('declares attachments', $ado->supports(IssueTrackerProvider::CAP_ATTACHMENTS));

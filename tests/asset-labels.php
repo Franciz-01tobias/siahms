@@ -39,7 +39,7 @@ ok('printed names are the short ones', ($print['service_tag'] ?? '') === 'Serial
 $custom = assetLabelCustomFields($conn);
 if ($custom) {
     $k = array_key_first($custom);
-    ok('a custom field is marked as one in the picker', strpos($available[$k], $custom[$k]) === 0 && $available[$k] !== $custom[$k], $available[$k]);
+    ok('a custom field is marked as one in the picker', str_starts_with($available[$k], $custom[$k]) && $available[$k] !== $custom[$k], $available[$k]);
     ok('...and printed under its own name, with no marker', $print[$k] === $custom[$k], $print[$k]);
 } else {
     echo "  SKIP  custom-field names: no custom asset fields on this install\n";
@@ -60,7 +60,7 @@ $url = assetLabelUrl('abc123', $conn);
 ok('is built on publicBaseUrl() - the install\'s one public address', $url === publicBaseUrl($conn) . '/a/abc123', $url);
 ok('...and is absolute, for a phone that knows nothing of the app', preg_match('#^https?://#', $url) === 1 || publicBaseUrlSetting($conn) === '', $url);
 $app = rtrim(BASE_URL, '/');
-ok('never repeats the app folder', $app === '' || strpos($url, $app . $app) === false, $url);
+ok('never repeats the app folder', $app === '' || !str_contains($url, $app . $app), $url);
 ok('a mis-scanned token is rejected before the database is asked', assetIdForToken($conn, "nope'; --") === null);
 
 echo "\n{$pass} passed, {$fail} failed\n";

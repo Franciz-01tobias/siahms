@@ -59,6 +59,14 @@ function sla_get_state(PDO $conn, int $ticket_id): array {
     }
 
     // --- 2. Check global enforcement ---
+    // SLA switched off for the install (GH #217) - before sla_enforce_from, which
+    // it leaves alone so switching back on restores the date that was set. Every
+    // reader treats enabled=false as "show nothing": the pane, the list pill, the
+    // workspace summary, the batch endpoint and the breach check.
+    if (function_exists('moduleIsEnabled') && !moduleIsEnabled($conn, 'sla')) {
+        $state['reason_disabled'] = moduleDisabledMessage('sla');
+        return $state;
+    }
     $settings = sla_load_settings($conn);
     if (empty($settings['sla_enforce_from'])) {
         $state['reason_disabled'] = 'SLA enforcement is disabled globally';

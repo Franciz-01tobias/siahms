@@ -258,10 +258,10 @@ check('null is not answerable',            FormsService::isAnswerable(null) === 
 $sql = FormsService::presentationalSqlExclusion();
 check('the SQL exclusion covers every presentational type',
     count(array_filter(FormsService::PRESENTATIONAL_TYPES,
-        fn($t) => strpos($sql, "'" . $t . "'") !== false)) === count(FormsService::PRESENTATIONAL_TYPES),
+        fn($t) => str_contains($sql, "'" . $t . "'"))) === count(FormsService::PRESENTATIONAL_TYPES),
     $sql);
 check('the SQL exclusion is an exclusion, not an inclusion',
-    strpos($sql, 'NOT IN') !== false, $sql);
+    str_contains($sql, 'NOT IN'), $sql);
 
 /* PHP and JavaScript keep separate copies because they run in different places.
    A test is the cheaper guard — the same reasoning as the width lists. */

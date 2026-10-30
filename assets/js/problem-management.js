@@ -342,7 +342,7 @@ function pmRenderDetail(data) {
             <div style="display:flex;gap:10px;margin:6px 0 4px;flex-wrap:wrap;">
                 <button class="pm-btn" onclick="pmEditCurrent()">${pmEsc(pmT('detail.edit', 'Edit'))}</button>
                 <button class="pm-btn" onclick="pmLinkIncident()">${pmEsc(pmT('detail.link_incident', 'Link incident'))}</button>
-                <button class="pm-btn" onclick="pmLinkChange()">${pmEsc(pmT('detail.link_change', 'Link change'))}</button>
+                ${window.PM_SHOW_CHANGES === false ? '' : `<button class="pm-btn" onclick="pmLinkChange()">${pmEsc(pmT('detail.link_change', 'Link change'))}</button>`}<!-- GH #217 -->
                 <button class="pm-btn" onclick="pmAiRootCause()" title="${pmEsc(pmT('detail.draft_title', 'Draft a root cause from the linked incidents'))}">${pmEsc(pmT('detail.draft_cause', '🤖 Draft root cause'))}</button>
                 <button class="pm-btn pm-btn-danger" onclick="pmDelete()">${pmEsc(pmT('detail.delete', 'Delete'))}</button>
             </div>
@@ -363,10 +363,10 @@ function pmRenderDetail(data) {
                 <h3>${pmEsc(pmT('detail.incidents', 'Linked incidents ({n})', { n: (data.incidents || []).length }))}</h3>
                 ${incidents}
             </div>
-            <div class="pm-section">
+            ${window.PM_SHOW_CHANGES === false ? '' : `<div class="pm-section">
                 <h3>${pmEsc(pmT('detail.fix', 'Fix (linked change)'))}</h3>
                 ${changes}
-            </div>
+            </div>`}<!-- GH #217: not while Changes is switched off -->
             ${window.PM_SHOW_PROJECTS ? '<div class="pm-section"><h3>' + pmEsc(pmT('detail.projects', 'Projects')) + '</h3><div id="pmProjects"></div></div>' : ''}
             <div class="pm-section">
                 <h3>${pmEsc(pmT('detail.notes', 'Notes'))}</h3>

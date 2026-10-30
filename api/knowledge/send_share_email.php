@@ -8,6 +8,9 @@ require_once '../../includes/functions.php';
 require_once '../../includes/encryption.php';
 require_once '../../includes/email_log.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 // Check if user is logged in

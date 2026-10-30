@@ -30,6 +30,11 @@ $translationNamespaces = ['common', 'tickets'];
 $days = max(1, min(365, (int)($_GET['days'] ?? 30)));
 
 $conn = connectToDatabase();
+// GH #217: CSAT switched off for the install - back to the inbox.
+if (!moduleIsEnabled($conn, 'csat')) {
+    header('Location: ' . BASE_URL . 'tickets/');
+    exit;
+}
 
 // GH #157: every figure on this page follows the company switcher in the
 // header, like the ticket list - the company picked there, or every company
@@ -304,7 +309,7 @@ table.analyst-table td.score { font-weight: 600; }
 .csat-pager { display: flex; justify-content: center; align-items: center; gap: 16px; padding-top: 14px; font-size: 13px; color: var(--text-dim, #888); }
 .csat-pager a { color: var(--accent, #0078d4); text-decoration: none; font-weight: 600; }
 </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="tickets-csat">
 
@@ -479,6 +484,6 @@ function csatShowFilters(open) {
     document.body.classList.toggle('csat-filters-open', open);
 }
 </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

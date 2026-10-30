@@ -23,6 +23,9 @@ require_once '../../includes/mailbox_graph.php';
 require_once '../../includes/email_log.php';
 require_once '../../includes/timezone.php';   // fmt_local() for the quoted thread's dates
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 // Most bytes of thread pictures one email carries - see processInlineImages().
 // ⚠️ Must stay up here, above the code that sends. Unlike a function, a top-level
 // const only exists once PHP has run the line, and this file's functions are
@@ -98,16 +101,16 @@ try {
 
     // Determine provider + auth mode, and point Graph at the right mailbox
     // (delegated → /me; app-only → /users/<target_mailbox>).
-    $provider = $mailbox['provider'] ?? 'microsoft';
+    $provider = MailboxProvider::fromMailbox($mailbox);
     $authMode = $mailbox['auth_mode'] ?? 'delegated';
     mailboxResolveGraphBase($mailbox);
 
-    if ($provider === 'imap') {
+    if ($provider === MailboxProvider::Imap) {
         // Basic IMAP mailboxes send via SMTP with the stored username + password —
         // no OAuth token. A placeholder keeps the shared "got a token?" guard happy.
         require_once dirname(dirname(__DIR__)) . '/includes/mailbox_imap.php';
         $accessToken = 'imap-session';
-    } elseif ($provider === 'microsoft' && $authMode === 'app_only') {
+    } elseif ($provider === MailboxProvider::Microsoft && $authMode === 'app_only') {
         // App-only: the app authenticates itself; we send as /users/<target_mailbox>.
         $accessToken = mailboxAppOnlyToken($conn, $mailbox);
     } else {
@@ -125,14 +128,14 @@ try {
         // SAFETY (delegated Microsoft): don't SEND from the wrong account. A target that
         // matches the signed-in mailbox's primary OR any alias is fine; a genuine
         // mismatch is refused until re-authenticated. Unknown identity is grandfathered.
-        if ($provider === 'microsoft') {
+        if ($provider === MailboxProvider::Microsoft) {
             if ($mismatchError = mailboxIdentityMismatch($mailbox)) {
                 throw new Exception($mismatchError . ' (Cannot send until this is resolved.)');
             }
         }
 
         // Get valid access token (will refresh if needed)
-        if ($provider === 'google') {
+        if ($provider === MailboxProvider::Google) {
             require_once dirname(dirname(__DIR__)) . '/includes/gmail.php';
             $accessToken = gmailGetValidAccessToken($conn, $mailbox, $tokenData);
         } else {
@@ -152,14 +155,14 @@ try {
     }
 
     try {
-        if ($provider === 'imap' || $provider === 'google') {
+        if ($provider === MailboxProvider::Imap || $provider === MailboxProvider::Google) {
             // SMTP and Gmail both take a finished MIME message, built by
             // includes/mime_message.php from the same file list Graph gets.
             // GH #158: both used to send the HTML alone - the attachments, the
             // pasted images and (on Gmail) the CC list never left.
             $inline = processInlineImages($bodyForSending, (int)$ticketId);
             $parts  = array_merge($inline['attachments'], uploadedFileParts($attachments));
-            if ($provider === 'imap') {
+            if ($provider === MailboxProvider::Imap) {
                 imapSmtpSend($mailbox, $to, $cc, $subject, $inline['body'], $parts);
             } else {
                 gmailSendEmail($accessToken, $to, $subject, $inline['body'], $mailbox['target_mailbox'] ?? '', $cc, $parts);

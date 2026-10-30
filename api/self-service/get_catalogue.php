@@ -33,6 +33,8 @@ if (!isset($_SESSION['ss_user_id'])) {
 
 try {
     $conn = connectToDatabase();
+    // GH #217: nothing from a module switched off for the install.
+    requireModuleOnJson($conn, 'forms');
 
     /* A third gate, but only when the operator chose it: forms whose
        collection has closed. Empty string on every other install, so the

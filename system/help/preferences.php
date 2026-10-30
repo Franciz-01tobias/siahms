@@ -160,7 +160,8 @@ require __DIR__ . '/_top.php';
     <div class="help-cards">
         <div class="help-card">
             <h4>Opening a task</h4>
-            <p>In the <strong>side panel</strong>, which keeps the board visible, or in a <strong>large window</strong> with room for the description and comments. The expand button on a task changes the same setting.</p>
+            <p>On the board: in the <strong>side panel</strong>, which keeps the board visible, or in a <strong>large window</strong> with room for the description and comments. The expand button on a task changes the same setting.</p>
+            <p>On the Table, Calendar and Timeline: a <strong>quick look</strong> (status, dates, assignee and the description, with an Edit button), or <strong>the full task</strong> - the board's editor, with subtasks, checklists and comments - in the same panel.</p>
         </div>
         <div class="help-card">
             <h4>Subtasks on the task calendar</h4>

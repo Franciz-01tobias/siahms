@@ -91,7 +91,7 @@ class TicketNumbering
                     $cache[$k] = $v;
                 }
             }
-        } catch (Exception $e) {
+        } catch (Exception) {
             // No settings table yet — the defaults reproduce today's behaviour.
         }
         self::$cache = $cache;
@@ -238,10 +238,10 @@ class TicketNumbering
             $out
         );
 
-        if (strpos($out, "{TYPE}") !== false) {
+        if (str_contains($out, "{TYPE}")) {
             $out = str_replace("{TYPE}", self::typeCode($conn, $ticketTypeId), $out);
         }
-        if (strpos($out, "{COMPANY}") !== false) {
+        if (str_contains($out, "{COMPANY}")) {
             $out = str_replace("{COMPANY}", self::companyCode($conn, $tenantId), $out);
         }
         return $out;
@@ -265,7 +265,7 @@ class TicketNumbering
             $stmt = $conn->prepare("SELECT name FROM ticket_types WHERE id = ?");
             $stmt->execute([$ticketTypeId]);
             $name = (string)$stmt->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             return '';
         }
         if ($name === '') {
@@ -301,7 +301,7 @@ class TicketNumbering
             try {
                 $id = $conn->query("SELECT id FROM tenants WHERE is_default = 1 LIMIT 1")->fetchColumn();
                 $defaultId = ($id === false) ? null : (int)$id;
-            } catch (Exception $e) {
+            } catch (Exception) {
                 $defaultId = null;          // no tenancy tables — single company, nothing to resolve
             }
         }
@@ -330,14 +330,14 @@ class TicketNumbering
             $stmt = $conn->prepare("SELECT name, slug, ticket_code FROM tenants WHERE id = ?");
             $stmt->execute([$tenantId]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        } catch (Exception $e) {
+        } catch (Exception) {
             // An install that has not run db_verify since this column arrived.
             // Fall back rather than break every ticket number on the install.
             try {
                 $stmt = $conn->prepare("SELECT name, slug FROM tenants WHERE id = ?");
                 $stmt->execute([$tenantId]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-            } catch (Exception $e2) {
+            } catch (Exception) {
                 return '';
             }
         }
@@ -394,7 +394,7 @@ class TicketNumbering
         try {
             $rows = $conn->query("SELECT id, name, slug, ticket_code FROM tenants WHERE is_active = 1")
                          ->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Exception $e) {
+        } catch (Exception) {
             return [];
         }
         $byCode = [];
@@ -500,7 +500,7 @@ class TicketNumbering
             $stmt = $conn->prepare("SELECT 1 FROM ticket_number_history WHERE ticket_number = ? LIMIT 1");
             $stmt->execute([$number]);
             return $stmt->fetchColumn() !== false;
-        } catch (Exception $e) {
+        } catch (Exception) {
             return false;   // table not created yet
         }
     }
@@ -527,7 +527,7 @@ class TicketNumbering
             $stmt->execute([$number]);
             $id = $stmt->fetchColumn();
             return $id === false ? null : (int)$id;
-        } catch (Exception $e) {
+        } catch (Exception) {
             return null;
         }
     }
@@ -612,10 +612,10 @@ class TicketNumbering
         // format says which is which. Live creation survives it (it proves
         // uniqueness against the table and simply burns numbers), but the
         // per-type counting the administrator asked for silently does nothing.
-        if ($scope === "per_type" && strpos($format, "{TYPE}") === false) {
+        if ($scope === "per_type" && !str_contains($format, "{TYPE}")) {
             $problems[] = "Counting separately for each ticket type needs {TYPE} in the format, or every type produces the same numbers.";
         }
-        if ($scope === "per_company" && strpos($format, "{COMPANY}") === false) {
+        if ($scope === "per_company" && !str_contains($format, "{COMPANY}")) {
             $problems[] = "Counting separately for each company needs {COMPANY} in the format, or every company produces the same numbers.";
         }
         if (mb_strlen(self::render($format, 999999)) > 50) {

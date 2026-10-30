@@ -76,12 +76,12 @@ try {
             return [(int)curl_getinfo($ch, CURLINFO_HTTP_CODE), $body];
         };
         [$c, $b] = $http('api/tasks/get.php?id=' . $taskId);
-        ok('HTTP: they can read the task', $c === 200 && strpos($b, '"success":true') !== false, substr($b, 0, 120));
-        ok('HTTP: and are told they cannot write it', strpos($b, '"can_write":false') !== false);
+        ok('HTTP: they can read the task', $c === 200 && str_contains($b, '"success":true'), substr($b, 0, 120));
+        ok('HTTP: and are told they cannot write it', str_contains($b, '"can_write":false'));
         [$c, $b] = $http('api/tasks/history.php?task_id=' . $taskId);
-        ok('HTTP: they can read its history', strpos($b, '"success":true') !== false, substr($b, 0, 120));
+        ok('HTTP: they can read its history', str_contains($b, '"success":true'), substr($b, 0, 120));
         [$c, $b] = $http('api/tasks/save.php', ['id' => $taskId, 'title' => 'ZZ-RO via http']);
-        ok('HTTP: a save is refused as read only', $c === 403 && strpos($b, '"code":"read_only"') !== false, substr($b, 0, 120));
+        ok('HTTP: a save is refused as read only', $c === 403 && str_contains($b, '"code":"read_only"'), substr($b, 0, 120));
         [$c, $b] = $http('api/tasks/reorder.php', ['task_id' => $taskId, 'new_status' => 'x', 'positions' => []]);
         ok('HTTP: so is a drag on the board', $c === 403);
         [$c, $b] = $http('api/tasks/save_comment.php', ['task_id' => $taskId, 'comment' => 'ZZ']);
@@ -89,7 +89,7 @@ try {
         [$c, $b] = $http('api/tasks/delete.php', ['id' => $taskId]);
         ok('HTTP: so is a delete', $c === 403);
         [$c, $b] = $http('tasks/');
-        ok('HTTP: the board marks itself read only', strpos($b, 'class="module-read-only"') !== false);
+        ok('HTTP: the board marks itself read only', str_contains($b, 'class="module-read-only"'));
         @unlink(session_save_path() . '/sess_' . $sess);
     } else {
         echo "  SKIP  HTTP checks (no base URL)\n";

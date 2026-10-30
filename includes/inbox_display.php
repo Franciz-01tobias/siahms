@@ -138,7 +138,7 @@ function inboxDisplayInstallDefault(PDO $conn): array
         if ($row !== false && $row !== null && $row !== '') {
             return inboxDisplayNormalise($row);
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Setting table unavailable — the shipped default is still a valid answer.
     }
     return inboxDisplayDefaults();
@@ -178,7 +178,7 @@ function inboxDisplayForAnalyst(PDO $conn, int $analystId): array
                 )));
             }
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // No preferences table, or an un-migrated install.
     }
 
@@ -198,7 +198,7 @@ function inboxDisplayIsPersonal(PDO $conn, int $analystId): bool
         );
         $stmt->execute([$analystId]);
         return (int)$stmt->fetchColumn() > 0;
-    } catch (Exception $e) {
+    } catch (Exception) {
         return false;
     }
 }

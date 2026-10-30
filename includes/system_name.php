@@ -27,7 +27,7 @@ if (!function_exists('systemName')) {
             $st->execute();
             $v = trim((string)$st->fetchColumn());
             if ($v !== '') $name = $v;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // keep the default
         }
         return $name;
@@ -70,7 +70,7 @@ if (!function_exists('pageTitle')) {
                 static $en = null;
                 if ($en === null) {
                     $en = [];
-                    try { $c = @include __DIR__ . '/../lang/en/common.php'; $en = is_array($c) ? ($c['modules'] ?? []) : []; } catch (Throwable $e) {}
+                    try { $c = @include __DIR__ . '/../lang/en/common.php'; $en = is_array($c) ? ($c['modules'] ?? []) : []; } catch (Throwable) {}
                 }
                 $name = $en[$module]['name'] ?? ucfirst(str_replace('-', ' ', $module));
             }

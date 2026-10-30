@@ -316,8 +316,8 @@ if (empty($exposed) && empty($problems)) {
         // configuration problem; an exposed .git is a deployment problem, and
         // telling somebody to change AllowOverride would not fix it — worse, they
         // would re-run the tool, still see it, and stop trusting the tool.
-        $uploadsExposed = array_values(array_filter($exposed, fn($p) => strpos($p, '.git') === false));
-        $gitExposed     = array_values(array_filter($exposed, fn($p) => strpos($p, '.git') !== false));
+        $uploadsExposed = array_values(array_filter($exposed, fn($p) => !str_contains($p, '.git')));
+        $gitExposed     = array_values(array_filter($exposed, fn($p) => str_contains($p, '.git')));
 
         $v[] = "WHAT TO DO:";
         $n = 0;

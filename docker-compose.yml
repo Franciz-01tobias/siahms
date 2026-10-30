@@ -39,6 +39,9 @@ services:
       # container — X-Forwarded-Proto is client-settable, so it must never be trusted
       # by default.
       # - TRUST_PROXY_HTTPS=1
+      # Show PHP errors in the browser - development only. They are always logged
+      # (docker logs) either way; never turn this on for an install people use.
+      # - FREEITSM_DISPLAY_ERRORS=1
     volumes:
       - attachments:/var/www/html/tickets/attachments
       - cm-attachments:/var/www/html/change-management/attachments

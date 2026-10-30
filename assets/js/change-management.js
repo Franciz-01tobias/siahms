@@ -1939,6 +1939,9 @@ function initEditors(callback) {
 
     editorIds.forEach(id => {
         tinymce.init({
+            // Plugins and skins load without the page's ?v=, so a browser could pair a new
+            // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+            cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
             selector: '#' + id,
             license_key: 'gpl',
             height: 300,
@@ -2489,7 +2492,7 @@ function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // NAIVE wall-clock scheduling date (only caller is work_start on the list card)
@@ -2587,23 +2590,70 @@ function shareChangeLink() {
     });
 }
 
+/**
+ * The change as an A4 PDF, laid out as html2pdf laid it out until 4.1.0: the
+ * content drawn by html2canvas at the page's printable width, then cut into
+ * page-high slices, each a JPEG on its own page inside 10mm margins.
+ *
+ * html2pdf did exactly this with a copy of jsPDF bundled inside it, which fell
+ * behind the install's own (and its security fixes). Doing the three steps here
+ * keeps one jsPDF.
+ *
+ * TRAP: the content must be IN the document, at the printable width, while it is
+ * drawn - html2canvas renders laid-out elements, and a detached one has no size.
+ *
+ * @param {HTMLElement} content  what buildPdfContent() returns (detached)
+ * @returns {Promise<object>} the jsPDF document
+ */
+async function changePdfDocument(content) {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const margin = 10;
+    const pageW = pdf.internal.pageSize.getWidth() - margin * 2;
+    const pageH = pdf.internal.pageSize.getHeight() - margin * 2;
+
+    const holder = document.createElement('div');
+    // A PDF page is always white, so the text colour is set here rather than
+    // inherited from the screen's theme - in dark mode it would be pale grey on white.
+    holder.style.cssText = 'position: fixed; left: -10000px; top: 0; background: #fff; color: #333; width: '
+        + Math.round(pageW * 96 / 25.4) + 'px;';   // the printable width at 96 CSS px per inch
+    holder.appendChild(content);
+    document.body.appendChild(holder);
+    try {
+        const canvas = await html2canvas(content, { scale: 2, backgroundColor: '#ffffff' });
+        const pxPerMm = canvas.width / pageW;
+        const slice = Math.floor(pageH * pxPerMm);
+        const page = document.createElement('canvas');
+        page.width = canvas.width;
+        for (let y = 0, n = 0; y < canvas.height; y += slice, n++) {
+            const h = Math.min(slice, canvas.height - y);
+            page.height = h;
+            const ctx = page.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, page.width, h);
+            ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+            if (n > 0) pdf.addPage();
+            pdf.addImage(page.toDataURL('image/jpeg', 0.98), 'JPEG', margin, margin, pageW, h / pxPerMm);
+        }
+    } finally {
+        holder.remove();
+    }
+    return pdf;
+}
+
 /** Downloads the current change as a PDF. */
-function shareChangePdf() {
+async function shareChangePdf() {
     closeShareDropdown();
     if (!currentChange) return;
 
-    const pdfContent = buildPdfContent();
     const ref = getChangeRef();
-
-    const opt = {
-        margin: 10,
-        filename: `${ref}_${currentChange.title.replace(/[^a-z0-9]/gi, '_')}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    html2pdf().set(opt).from(pdfContent).save();
+    try {
+        const pdf = await changePdfDocument(buildPdfContent());
+        pdf.save(`${ref}_${currentChange.title.replace(/[^a-z0-9]/gi, '_')}.pdf`);
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        showToast(window.t('change-management.toast.pdf_error'), 'error');
+    }
 }
 
 /** Opens the email dialog for sharing the current change as a link, a PDF or both. */
@@ -2652,17 +2702,8 @@ async function sendShareEmail() {
     const pdfFilename = `${ref}_${currentChange.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
 
     if (includePdf) {
-        const pdfContent = buildPdfContent();
-
-        const opt = {
-            margin: 10,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
         try {
-            const pdfBlob = await html2pdf().set(opt).from(pdfContent).outputPdf('blob');
+            const pdfBlob = (await changePdfDocument(buildPdfContent())).output('blob');
             pdfBase64 = await blobToBase64(pdfBlob);
         } catch (error) {
             console.error('Error generating PDF:', error);

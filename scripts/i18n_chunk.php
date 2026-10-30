@@ -122,7 +122,7 @@ for ($i = 0; $i < count($argvRest); $i++) {
         $locales = array_merge($locales, ['hi','bn','ta','te','mr','pa','gu','kn','ml']);
         continue;
     }
-    if (strpos($a, '--') === 0) { fwrite(STDERR, "unknown option $a\n"); exit(2); }
+    if (str_starts_with($a, '--')) { fwrite(STDERR, "unknown option $a\n"); exit(2); }
     $locales[] = $a;
 }
 $locales = array_values(array_unique($locales));
@@ -191,7 +191,7 @@ foreach ($locales as $loc) {
         // Group the gap by its top-level section.
         $sections = [];
         foreach ($gap as $k => $v) {
-            $top = strpos($k, I18N_SEP) === false ? '_root' : substr($k, 0, strpos($k, I18N_SEP));
+            $top = !str_contains($k, I18N_SEP) ? '_root' : substr($k, 0, strpos($k, I18N_SEP));
             $sections[$top][$k] = $v;
         }
 

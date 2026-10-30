@@ -53,6 +53,15 @@ $retentionDays = (int)($settings['webhook_delivery_retention_days'] ?? 30);
 // and whether webhook credentials are actually being encrypted at rest.
 require_once __DIR__ . '/../../includes/webhook_delivery.php';
 $payloadRetention = webhookPayloadRetentionDays($conn);
+$deliveryCfg      = webhookDeliverySettings($conn);
+
+// The retry fact: the waits a delivery actually gets, from the backoff schedule
+// and the attempts setting - one wait between each pair of tries.
+$retryWaits = [];
+for ($i = 1; $i < $deliveryCfg['max_attempts']; $i++) {
+    $sec = webhookBackoffSeconds($i);
+    $retryWaits[] = $sec >= 3600 ? ($sec / 3600) . 'h' : ($sec / 60) . 'm';
+}
 $encryptionOn     = webhookEncryptionAvailable();
 
 // Age of the last cron run, computed in the DB so UTC comparison is exact.
@@ -359,7 +368,7 @@ function whAgo($s) {
         [data-theme-mode="dark"] .rate .track { background: #2c333d; }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> block (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
 </head>
@@ -438,11 +447,55 @@ function whAgo($s) {
 
             <div class="facts">
                 <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_worker')); ?><b>cron/webhook_deliveries.php</b></div>
-                <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_retry')); ?><b><?php echo t('system.webhooks.fact_retry_val'); ?></b></div>
+                <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_retry')); ?><b><?php echo $retryWaits
+                    ? t('system.webhooks.fact_retry_sched', ['schedule' => implode(' &middot; ', $retryWaits), 'n' => $deliveryCfg['max_attempts']])
+                    : t('system.webhooks.fact_retry_once'); ?></b></div>
                 <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_retention')); ?><b><?php echo htmlspecialchars(t('system.webhooks.days', ['n' => $retentionDays])); ?></b></div>
                 <?php if ($cronState !== 'never'): ?>
                     <div class="fact"><?php echo htmlspecialchars(t('system.webhooks.fact_queued')); ?><b><?php echo $pendingCount; ?></b></div>
                 <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- ============ DELIVERY ============ -->
+        <div class="card">
+            <h3 id="delivery"><?php echo htmlspecialchars(t('system.webhooks.del_title')); ?></h3>
+            <p class="desc"><?php echo htmlspecialchars(t('system.webhooks.del_desc')); ?></p>
+
+            <div class="form-group" style="max-width: 520px; margin-top: 16px;">
+                <label for="whMaxAttempts" style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;"><?php echo htmlspecialchars(t('system.webhooks.del_attempts_label')); ?></label>
+                <select id="whMaxAttempts" class="form-input" onchange="saveDeliverySetting('max_attempts', parseInt(this.value, 10), 'whMaxAttemptsStatus')">
+                    <?php foreach (WEBHOOK_ATTEMPTS_ALLOWED as $n):
+                        $label = $n === 1 ? t('system.webhooks.del_attempts_one') : t('system.webhooks.del_attempts_opt', ['n' => $n]);
+                        if ($n === WEBHOOK_ATTEMPTS_DEFAULT) $label = t('system.webhooks.opt_default', ['label' => $label]); ?>
+                        <option value="<?php echo $n; ?>" <?php echo $deliveryCfg['max_attempts'] === $n ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span id="whMaxAttemptsStatus" style="display:block; font-size:12px; margin-top:6px; min-height:16px;"></span>
+                <small style="display:block; color:var(--text-muted,#666); margin-top:6px; line-height:1.55;"><?php echo t('system.webhooks.del_attempts_help'); ?></small>
+            </div>
+
+            <div class="form-group" style="max-width: 520px; margin-top: 16px;">
+                <label for="whTimeout" style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;"><?php echo htmlspecialchars(t('system.webhooks.del_timeout_label')); ?></label>
+                <select id="whTimeout" class="form-input" onchange="saveDeliverySetting('timeout', parseInt(this.value, 10), 'whTimeoutStatus')">
+                    <?php foreach (WEBHOOK_TIMEOUT_ALLOWED as $n):
+                        $label = t('system.webhooks.del_timeout_opt', ['n' => $n]);
+                        if ($n === WEBHOOK_TIMEOUT_DEFAULT) $label = t('system.webhooks.opt_default', ['label' => $label]); ?>
+                        <option value="<?php echo $n; ?>" <?php echo $deliveryCfg['timeout'] === $n ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span id="whTimeoutStatus" style="display:block; font-size:12px; margin-top:6px; min-height:16px;"></span>
+                <small style="display:block; color:var(--text-muted,#666); margin-top:6px; line-height:1.55;"><?php echo t('system.webhooks.del_timeout_help'); ?></small>
+            </div>
+
+            <div class="form-group" style="max-width: 520px; margin-top: 16px;">
+                <label for="whInterrupted" style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;"><?php echo htmlspecialchars(t('system.webhooks.del_int_label')); ?></label>
+                <select id="whInterrupted" class="form-input" onchange="saveDeliverySetting('interrupted', this.value, 'whInterruptedStatus')">
+                    <option value="<?php echo WEBHOOK_INTERRUPTED_RETRY; ?>" <?php echo $deliveryCfg['interrupted'] === WEBHOOK_INTERRUPTED_RETRY ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.webhooks.opt_default', ['label' => t('system.webhooks.del_int_retry')])); ?></option>
+                    <option value="<?php echo WEBHOOK_INTERRUPTED_STOP; ?>" <?php echo $deliveryCfg['interrupted'] === WEBHOOK_INTERRUPTED_STOP ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.webhooks.del_int_stop')); ?></option>
+                </select>
+                <span id="whInterruptedStatus" style="display:block; font-size:12px; margin-top:6px; min-height:16px;"></span>
+                <small style="display:block; color:var(--text-muted,#666); margin-top:6px; line-height:1.55;"><?php echo t('system.webhooks.del_int_help'); ?></small>
             </div>
         </div>
 
@@ -623,7 +676,7 @@ function whAgo($s) {
     const wh = (k, p) => t('system.webhooks.' + k, p);
     let filter = '';
     let cache = [];
-    const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+    const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
     const host = u => { try { return new URL(u).host; } catch (e) { return u; } };
     // Server-stamped UTC delivery timestamps (kind-1): render in the analyst's zone.
     const fmt = s => {
@@ -711,6 +764,31 @@ function whAgo($s) {
         return h + '</div>';
     }
 
+    /** Persist one Delivery setting; the worker reads it on its next run. */
+    async function saveDeliverySetting(key, value, statusId) {
+        const el = document.getElementById(statusId);
+        el.style.color = 'var(--text-muted, #666)';
+        el.textContent = t('common.saving');
+        try {
+            const res = await fetch(API + '/save_delivery_settings.php', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [key]: value })
+            });
+            const d = await res.json();
+            if (!d.success) {
+                el.style.color = 'var(--danger-text, #c0392b)';
+                el.textContent = d.error || wh('save_failed');
+                return;
+            }
+            el.style.color = 'var(--success-text, #1e7e34)';
+            el.textContent = wh('saved');
+        } catch (e) {
+            el.style.color = 'var(--danger-text, #c0392b)';
+            el.textContent = wh('save_failed');
+        }
+    }
+
     /** Persist the payload-retention choice; applies immediately, not on next cron. */
     async function savePayloadRetention(days) {
         const el = document.getElementById('payloadRetentionStatus');
@@ -759,6 +837,6 @@ function whAgo($s) {
     document.getElementById('payloadModal').onclick = e => { if (e.target.id === 'payloadModal') e.target.style.display = 'none'; };
     load();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

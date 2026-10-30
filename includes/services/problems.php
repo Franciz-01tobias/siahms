@@ -243,7 +243,7 @@ class ProblemsService
         try {
             $conn->prepare("DELETE FROM change_relations WHERE related_type = 'problem' AND related_id = ?")
                  ->execute([$problemId]);
-        } catch (Exception $e) { /* change module absent */ }
+        } catch (Exception) { /* change module absent */ }
         $conn->prepare("DELETE FROM problems WHERE id = ?")->execute([$problemId]);
         WorkflowEngine::dispatch('problem.deleted', ['problem' => ['id' => $problemId, 'problem_number' => $row['problem_number'] ?? null, 'title' => $row['title'] ?? null]]);
     }
@@ -365,7 +365,7 @@ class ProblemsService
             $cStmt = $conn->prepare("SELECT id, title FROM changes WHERE id = ?");
             $cStmt->execute([$changeId]);
             $change = $cStmt->fetch(PDO::FETCH_ASSOC);
-        } catch (Exception $e) {
+        } catch (Exception) {
             throw new ServiceError('validation', 'invalid_field', 'Change Management is not available on this install.');
         }
         if (!$change) {
@@ -400,7 +400,7 @@ class ProblemsService
         try {
             $stmt = $conn->prepare("DELETE FROM change_relations WHERE change_id = ? AND related_type = 'problem' AND related_id = ?");
             $stmt->execute([$changeId, $problemId]);
-        } catch (Exception $e) {
+        } catch (Exception) {
             throw new ServiceError('validation', 'invalid_field', 'Change Management is not available on this install.');
         }
         if ($stmt->rowCount() === 0) {

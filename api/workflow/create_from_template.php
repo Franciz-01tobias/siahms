@@ -15,6 +15,9 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once __DIR__ . '/../../workflow/includes/templates.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -40,19 +43,42 @@ try {
     $wf = WorkflowTemplates::resolve($tpl);
 
     $conn = connectToDatabase();
+
+    // GH #209. The clone's company: the one asked for, else shared for someone
+    // who can see every company and the switched-to company for anyone else -
+    // the same rules as saving (save.php).
+    require_once __DIR__ . '/../../includes/workflow_tenancy.php';
+    $analystId = (int)$_SESSION['analyst_id'];
+    $tenancyOn = workflowTenancyActive($conn);
+    $tenant = null;
+    if ($tenancyOn) {
+        if (array_key_exists('company_id', $in)) {
+            [$ok, $tenant, $err] = workflowParseCompany($conn, $in['company_id']);
+            if (!$ok) { echo json_encode(['success' => false, 'error' => $err]); exit; }
+        } else {
+            $tenant = analystHasAllTenantAccess($conn, $analystId) ? null : getActiveTenantId($conn, $analystId);
+        }
+        if (!analystCanWriteWorkflowFor($conn, $analystId, $tenant)) {
+            echo json_encode(['success' => false, 'error' => 'You cannot make a workflow for that company.']);
+            exit;
+        }
+    }
+    $tCol = $tenancyOn ? ', tenant_id' : '';
     $stmt = $conn->prepare(
         "INSERT INTO workflows
-         (name, description, trigger_event, conditions, actions, is_active, created_by, created_datetime, updated_datetime)
-         VALUES (?, ?, ?, ?, ?, 0, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+         (name, description, trigger_event, conditions, actions, is_active, created_by, created_datetime, updated_datetime$tCol)
+         VALUES (?, ?, ?, ?, ?, 0, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP()" . ($tenancyOn ? ', ?' : '') . ")"
     );
-    $stmt->execute([
+    $vals = [
         $wf['name'],
         $wf['description'],
         $wf['trigger_event'],
         json_encode($wf['conditions']),
         json_encode($wf['actions']),
-        (int)$_SESSION['analyst_id'],
-    ]);
+        $analystId,
+    ];
+    if ($tenancyOn) $vals[] = $tenant;
+    $stmt->execute($vals);
 
     echo json_encode([
         'success'    => true,

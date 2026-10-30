@@ -51,7 +51,7 @@ function tenantSetting(PDO $conn, ?int $tenantId, string $key, ?string $default 
                 $row = $st->fetchColumn();
                 if ($row !== false) $value = (string) $row;
             }
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // Table absent on a part-migrated install: fall through to the
             // install-wide value rather than failing the page.
         }
@@ -64,7 +64,7 @@ function tenantSetting(PDO $conn, ?int $tenantId, string $key, ?string $default 
             $st->execute([$key]);
             $row = $st->fetchColumn();
             if ($row !== false) $value = (string) $row;
-        } catch (Throwable $e) { /* fall through */ }
+        } catch (Throwable) { /* fall through */ }
     }
 
     // 3. The caller's default.
@@ -148,7 +148,7 @@ function tenantSettingsForKey(PDO $conn, string $key): array
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $out[(int) $r['tenant_id']] = (string) $r['setting_value'];
         }
-    } catch (Throwable $e) { /* table absent — everyone follows the default */ }
+    } catch (Throwable) { /* table absent — everyone follows the default */ }
     return $out;
 }
 
@@ -161,15 +161,23 @@ function tenantSettingsForKey(PDO $conn, string $key): array
 const SETTING_TIME_TRACKING_UI  = 'time_tracking_enabled';
 const SETTING_TIME_TRACKING_API = 'time_tracking_api_enabled';
 
-/** Should the time-recording UI appear for a ticket belonging to this company? */
+/**
+ * Should the time-recording UI appear for a ticket belonging to this company?
+ *
+ * Both answers are no while Time tracking is switched off for the whole install
+ * (GH #217), whatever the company or the install-wide setting below says: that
+ * switch sits above these two, and switching back on restores what they said.
+ */
 function timeTrackingUiOn(PDO $conn, ?int $tenantId): bool
 {
+    if (function_exists('moduleIsEnabled') && !moduleIsEnabled($conn, 'time-tracking')) return false;
     return tenantSettingOn($conn, $tenantId, SETTING_TIME_TRACKING_UI, true);
 }
 
 /** Should the REST API serve time entries for a ticket belonging to this company? */
 function timeTrackingApiOn(PDO $conn, ?int $tenantId): bool
 {
+    if (function_exists('moduleIsEnabled') && !moduleIsEnabled($conn, 'time-tracking')) return false;   // GH #217
     return tenantSettingOn($conn, $tenantId, SETTING_TIME_TRACKING_API, true);
 }
 
@@ -286,7 +294,7 @@ function ticketTenantId(PDO $conn, int $ticketId): ?int
         $st->execute([$ticketId]);
         $v = $st->fetchColumn();
         return ($v === false || $v === null) ? null : (int) $v;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return null;
     }
 }

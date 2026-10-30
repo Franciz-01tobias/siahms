@@ -81,21 +81,34 @@ function formatStepDatetime(dtStr) {
 // 1. Fetch & Render Checklists for a Ticket
 async function loadTicketChecklists(ticketId) {
     if (!ticketId) return;
+    // Checklists switched off for the install, or not this analyst's (GH #217): no
+    // card, no Checklist button, and nothing for closing a ticket to wait on.
+    if ((window.TICKETS_MODULE_ON || {}).checklists === false) {
+        ticketChecklistsData = [];
+        window.ticketChecklistEmptyClosureMode = 'off';
+        return;
+    }
+    const isCurrent = typeof ticketReadGuard === 'function' ? ticketReadGuard(ticketId) : () => currentViewingTicketId === ticketId;
     currentViewingTicketId = ticketId;
     try {
         const res = await fetch(CHK_API + '?action=get_ticket_checklists&ticket_id=' + ticketId);
         const data = await res.json();
+        if (!isCurrent()) return;
         if (!data.success) {
             console.error('Error fetching ticket checklists:', data.error);
+            window.TicketWorkspace?.setSectionState(ticketId, 'work', 'error', null, 'checklists');
             return;
         }
 
         ticketChecklistsData = data.checklists || [];
+        window.TicketWorkspace?.setSectionState(ticketId, 'work', 'ready', null, 'checklists');
         window.ticketChecklistEmptyClosureMode = data.empty_closure_mode || 'off';
         renderChecklistToolbarButton(ticketId);
         renderTicketChecklistsInline(ticketId);
     } catch (e) {
+        if (!isCurrent()) return;
         console.error('Failed to load checklists:', e);
+        window.TicketWorkspace?.setSectionState(ticketId, 'work', 'error', null, 'checklists');
     }
 }
 
@@ -194,14 +207,24 @@ function renderTicketChecklistsInline(ticketId) {
         return;
     }
 
+    // The workspace's Work tab has the room to list every step, so there the
+    // card can be expanded; the classic reading pane keeps the one "Next:" step.
+    const inWorkspace = !!host.closest('.ticket-workspace');
+    const expanded = inWorkspace && inlineChecklistExpanded();
+    const toggleBtn = inWorkspace ? `
+                    <button type="button" class="chk-chip" onclick="toggleInlineChecklistSteps(${ticketId})" aria-expanded="${expanded}"
+                            title="${expanded ? chkT('checklists.panel.collapse_title', 'Show only the next step') : chkT('checklists.panel.expand_title', 'Show every step')}">
+                        ${expanded ? chkT('checklists.panel.collapse', 'Collapse') : chkT('checklists.panel.expand', 'Expand')}
+                    </button>` : '';
+
     let html = `
-        <div style="background: var(--surface, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 6px; padding: 10px 14px; color: var(--text, #1e293b); box-shadow: 0 1px 2px var(--shadow, rgba(0,0,0,0.04)); margin: -15px 0 12px 0;">
+        <div style="background: var(--surface, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 6px; padding: 10px 14px; color: var(--text, #1e293b); box-shadow: 0 1px 2px var(--shadow, rgba(0,0,0,0.04)); margin: ${inWorkspace ? '0' : '-15px'} 0 12px 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">✅</span>
-                    <strong style="font-size: 13px; color: var(--text, #1e293b);">${chkT('checklists.panel.next_steps', 'Checklist next steps')}</strong>
+                    <strong style="font-size: 13px; color: var(--text, #1e293b);">${expanded ? chkT('checklists.panel.title', 'Checklist') : chkT('checklists.panel.next_steps', 'Checklist next steps')}</strong>
                 </div>
-                <div style="display: flex; gap: 6px;">
+                <div style="display: flex; gap: 6px;">${toggleBtn}
                     <button type="button" class="chk-chip" onclick="openChecklistModal(${ticketId})" title="${chkT('checklists.panel.pop_out', 'Pop out full checklist')}">
                         <span>⤢</span> Pop out
                     </button>
@@ -232,7 +255,9 @@ function renderTicketChecklistsInline(ticketId) {
                 </div>
         `;
 
-        if (allDone) {
+        if (expanded) {
+            items.forEach(it => { html += checklistStepRowHtml(ticketId, it, false); });
+        } else if (allDone) {
             html += `
                 <div style="font-size: 12px; color: #16a34a; display: flex; align-items: center; gap: 6px; padding: 2px 0;">
                     <span>✓</span> All ${items.length} steps completed
@@ -265,6 +290,62 @@ function renderTicketChecklistsInline(ticketId) {
 
     html += `</div></div>`;
     host.innerHTML = html;
+}
+
+/**
+ * One step of a checklist with its tickbox, badges, recorded input and who
+ * completed it. Shared by the pop-out and the workspace's expanded card, so the
+ * two cannot drift apart. reopenPopout: true re-opens the pop-out after the
+ * tick is saved (the pop-out's rows); false leaves it shut (the inline card's).
+ */
+function checklistStepRowHtml(ticketId, it, reopenPopout) {
+    const isChecked = (it.is_completed == 1 || it.is_completed === true || it.is_completed === '1');
+    const isMand = (it.is_mandatory == 1 || it.is_mandatory === true || it.is_mandatory === '1');
+    // `|| it.completed_at` was the client half of the same phantom-column
+    // fallback the API carried; there has never been a completed_at.
+    const completedDate = formatStepDatetime(it.completed_datetime);
+    const completedMeta = isChecked && it.completed_by_name ? `<div style="font-size: 11px; color: var(--text-muted, #64748b); margin-left: 24px;">Completed by ${escapeHtml(it.completed_by_name)}${completedDate ? ' on ' + escapeHtml(completedDate) : ''}</div>` : '';
+    const responseMeta = it.response_value ? `<div style="font-size: 11px; color: #3730a3; background: #eef2ff; padding: 3px 8px; border-radius: 4px; margin-left: 24px; margin-top: 2px; border-left: 2px solid #6366f1;"><strong>Input:</strong> ${escapeHtml(it.response_value)}</div>` : '';
+    const reqBadge = (!isChecked && it.requires_input == 1) ? `<span style="font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; margin-left: 6px;">📝 Note required</span>` : '';
+    const roleBadge = it.suggested_role ? `<span style="font-size: 10px; background: rgba(13,148,136,0.1); color: #0d9488; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; margin-left: 6px;" title="Suggested Role"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: -1px;"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${escapeHtml(it.suggested_role)}</span>` : '';
+
+    return `
+        <div style="padding: 4px 0;">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13px; color: var(--text, #1e293b);">
+                <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="handleStepCheckboxChange(${ticketId}, ${it.id}, this, ${reopenPopout ? 'true' : 'false'})" style="cursor: pointer; width: 16px; height: 16px; margin-top: 2px; accent-color: var(--primary, #2563eb);">
+                <div style="flex: 1;">
+                    <span style="${isChecked ? 'text-decoration: line-through; color: var(--text-muted, #94a3b8);' : ''}">
+                        ${escapeHtml(it.title)}
+                        ${isMand ? '<span style="color: #ef4444; font-weight: bold; margin-left: 2px;" title="Mandatory">*</span>' : ''}
+                        ${roleBadge}
+                        ${reqBadge}
+                    </span>
+                </div>
+            </label>
+            ${responseMeta}
+            ${completedMeta}
+        </div>
+    `;
+}
+
+/**
+ * Whether the workspace's checklist card lists every step. Remembered per
+ * browser, and expanded unless the analyst has collapsed it - the Work tab is
+ * where the steps get worked through. Storage can throw (private window,
+ * blocked site data), so a failure just means the default.
+ */
+const CHK_EXPANDED_KEY = 'freeitsm.workspaceChecklistExpanded';
+let chkExpandedThisPage = null;   // the toggle still works for the visit when storage does not
+function inlineChecklistExpanded() {
+    if (chkExpandedThisPage !== null) return chkExpandedThisPage;
+    try { return localStorage.getItem(CHK_EXPANDED_KEY) !== '0'; } catch (e) { return true; }
+}
+
+/** Expands or collapses the workspace's checklist card and redraws it. */
+function toggleInlineChecklistSteps(ticketId) {
+    chkExpandedThisPage = !inlineChecklistExpanded();
+    try { localStorage.setItem(CHK_EXPANDED_KEY, chkExpandedThisPage ? '1' : '0'); } catch (e) { /* this visit only */ }
+    renderTicketChecklistsInline(ticketId);
 }
 
 // 4. Full Pop-out Checklist Modal
@@ -311,33 +392,7 @@ function openChecklistModal(ticketId) {
             `;
 
             (chk.items || []).forEach(it => {
-                const isChecked = (it.is_completed == 1 || it.is_completed === true || it.is_completed === '1');
-                const isMand = (it.is_mandatory == 1 || it.is_mandatory === true || it.is_mandatory === '1');
-                // `|| it.completed_at` was the client half of the same phantom-column
-                // fallback the API carried; there has never been a completed_at.
-                const completedDate = formatStepDatetime(it.completed_datetime);
-                const completedMeta = isChecked && it.completed_by_name ? `<div style="font-size: 11px; color: var(--text-muted, #64748b); margin-left: 24px;">Completed by ${escapeHtml(it.completed_by_name)}${completedDate ? ' on ' + escapeHtml(completedDate) : ''}</div>` : '';
-                const responseMeta = it.response_value ? `<div style="font-size: 11px; color: #3730a3; background: #eef2ff; padding: 3px 8px; border-radius: 4px; margin-left: 24px; margin-top: 2px; border-left: 2px solid #6366f1;"><strong>Input:</strong> ${escapeHtml(it.response_value)}</div>` : '';
-                const reqBadge = (!isChecked && it.requires_input == 1) ? `<span style="font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; margin-left: 6px;">📝 Note required</span>` : '';
-                const roleBadge = it.suggested_role ? `<span style="font-size: 10px; background: rgba(13,148,136,0.1); color: #0d9488; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; margin-left: 6px;" title="Suggested Role"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: -1px;"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${escapeHtml(it.suggested_role)}</span>` : '';
-
-                checklistsHtml += `
-                    <div style="padding: 4px 0;">
-                        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13px; color: var(--text, #1e293b);">
-                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="handleStepCheckboxChange(${ticketId}, ${it.id}, this, true)" style="cursor: pointer; width: 16px; height: 16px; margin-top: 2px; accent-color: var(--primary, #2563eb);">
-                            <div style="flex: 1;">
-                                <span style="${isChecked ? 'text-decoration: line-through; color: var(--text-muted, #94a3b8);' : ''}">
-                                    ${escapeHtml(it.title)}
-                                    ${isMand ? '<span style="color: #ef4444; font-weight: bold; margin-left: 2px;" title="Mandatory">*</span>' : ''}
-                                    ${roleBadge}
-                                    ${reqBadge}
-                                </span>
-                            </div>
-                        </label>
-                        ${responseMeta}
-                        ${completedMeta}
-                    </div>
-                `;
+                checklistsHtml += checklistStepRowHtml(ticketId, it, true);
             });
 
             checklistsHtml += `</div></div>`;

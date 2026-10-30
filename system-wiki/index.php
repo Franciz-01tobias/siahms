@@ -243,7 +243,7 @@ $translationNamespaces = ['common', 'system-wiki'];
          equal specificity loses on document order (Techniques §9).
          WARNING: includes/header.php emits a <style> INSIDE the BODY, which is
          later still (§24) - the hover-rail rules there need !important. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="wiki" data-mobile-page="wiki-browse">
     <?php include 'includes/header.php'; ?>
@@ -432,9 +432,9 @@ $translationNamespaces = ['common', 'system-wiki'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

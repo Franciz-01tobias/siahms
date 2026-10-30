@@ -33,6 +33,13 @@
  * NOT CHECKED: GET/HEAD/OPTIONS (they must not change anything - see
  * csrfRequireToken() for the few that do), the CLI, and callers that are
  * deliberately cross-origin and never use the login cookie (CSRF_EXEMPT_PATHS).
+ *
+ * 🔴 "MUST NOT CHANGE ANYTHING" IS ENFORCED, NOT ASSUMED. A SameSite=Lax cookie IS
+ * sent on a top-level GET from another site, so a link on any web page could empty
+ * the ticket trash, run Database Verification or reset a setting for whoever
+ * clicked it - none of which the token check ever saw. Every endpoint that writes
+ * now calls csrfRequireWriteMethod() first, and tests/get-must-not-write.php fails
+ * the build for a writer that does not. Reported privately, October 2026.
  */
 
 const CSRF_SESSION_KEY = 'csrf_token';
@@ -57,6 +64,17 @@ const CSRF_EXEMPT_PATHS = [
     'api/webchat/poll.php',
     'api/lms/test_public.php',         // a candidate's competency test: the link's token is the credential
     'cron/',                           // scheduled jobs over HTTP: ?token=
+];
+
+/**
+ * Where a password or a one-time code is submitted. These get the origin check
+ * even with no session cookie - see csrfEnforce().
+ */
+const CSRF_LOGIN_PATHS = [
+    'auth/login.php',
+    'api/self-service/login.php',
+    'api/myaccount/verify_login_otp.php',
+    'api/self-service/verify_login_otp.php',
 ];
 
 /** The request's path relative to the app root, e.g. "api/tickets/save.php". */
@@ -164,7 +182,7 @@ function csrfOwnHosts(bool $withConfigured = false): array
             $ph = $u !== '' ? strtolower((string)parse_url($u, PHP_URL_HOST)) : '';
             $pp = $u !== '' ? parse_url($u, PHP_URL_PORT) : null;
             if ($ph !== '') $hosts[] = $pp ? "$ph:$pp" : $ph;
-        } catch (Throwable $e) {}
+        } catch (Throwable) {}
     }
     return array_values(array_unique($hosts));
 }
@@ -215,7 +233,7 @@ function csrfRefuse(string $why): void
 {
     http_response_code(403);
     header('X-CSRF-Refused: ' . $why);
-    $wantsJson = strpos(csrfRequestPath(), 'api/') === 0
+    $wantsJson = str_starts_with(csrfRequestPath(), 'api/')
         || stripos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false
         || stripos((string)($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json') !== false;
     $msg = $why === 'origin'
@@ -240,7 +258,20 @@ function csrfEnforce(): void
 {
     if (PHP_SAPI === 'cli' || !csrfIsStateChanging()) return;
     if (csrfIsExempt(csrfRequestPath())) return;
-    if (!csrfHasSessionCookie()) return;                 // no cookie, nothing to forge
+
+    // 🔴 "No cookie, nothing to forge" is not true of signing IN. A form on another
+    // site could post an attacker's own username and password to the login page;
+    // the response sets a fresh session cookie, and the visitor is now working
+    // inside the attacker's account - typing notes, uploading files, entering
+    // credentials into forms the attacker reads later. And a SameSite=Lax cookie is
+    // never sent on a cross-site POST, so even a signed-in visitor arrives
+    // "cookieless". So the sign-in endpoints get the origin check regardless. A
+    // real first visit says Sec-Fetch-Site: same-origin and passes; a request with
+    // no browser headers at all is not a browser, and passes as before.
+    // Reported privately, October 2026.
+    if (in_array(csrfRequestPath(), CSRF_LOGIN_PATHS, true) && csrfSameOrigin() === false) csrfRefuse('origin');
+
+    if (!csrfHasSessionCookie()) return;                 // no cookie: nothing else to forge
 
     if (csrfSameOrigin() === false) csrfRefuse('origin');
 
@@ -261,6 +292,26 @@ function csrfRequireToken(): void
     $expected = (string)($_SESSION[CSRF_SESSION_KEY] ?? '');
     $given = csrfProvidedToken();
     if ($expected === '' || $given === '' || !hash_equals($expected, $given)) csrfRefuse('token');
+}
+
+/**
+ * For every endpoint that changes something: refuse GET, HEAD and OPTIONS, so the
+ * request has to be one csrfEnforce() checks. Call it before the first write, after
+ * functions.php is loaded.
+ *
+ * TRAP: an endpoint that only reads a JSON body still needs this. A link sends no
+ *   body, every field falls back to its default, and an endpoint whose defaults
+ *   pass validation saves them - wiping SLA settings, switching module permissions
+ *   to "most", blanking branding. Twelve endpoints did exactly that.
+ */
+function csrfRequireWriteMethod(): void
+{
+    if (PHP_SAPI === 'cli' || csrfIsStateChanging()) return;
+    http_response_code(405);
+    header('Allow: POST');
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'This request must be sent as a POST.']);
+    exit;
 }
 
 /** The tags every page needs: the token and the script that sends it. */
@@ -284,7 +335,7 @@ function csrfStartPageInjection(): void
 {
     if (PHP_SAPI === 'cli') return;
     $path = csrfRequestPath();
-    if (strpos($path, 'api/') === 0 || strpos($path, 'cron/') === 0) return;
+    if (str_starts_with($path, 'api/') || str_starts_with($path, 'cron/')) return;
     if (!isset($_SESSION)) return;   // no session, nothing to protect
     $tags = csrfHeadTags();          // create the token NOW, while headers can still be sent
     if ($tags === '') return;
@@ -292,7 +343,7 @@ function csrfStartPageInjection(): void
         foreach (headers_list() as $h) {
             if (stripos($h, 'content-type:') === 0 && stripos($h, 'text/html') === false) return $html;
         }
-        if (strpos($html, 'name="csrf-token"') !== false) return $html;   // already there
+        if (str_contains($html, 'name="csrf-token"')) return $html;   // already there
         $n = 0;
         $out = preg_replace_callback('/<head\b[^>]*>/i', fn($m) => $m[0] . $tags, $html, 1, $n);
         return ($n && $out !== null) ? $out : $html;

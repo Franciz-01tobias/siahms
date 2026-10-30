@@ -467,7 +467,7 @@ class TelegramProvider extends MessagingProvider
             throw new Exception('Attachment file not found.');
         }
 
-        $isPhoto = (strpos($mimeType, 'image/') === 0) && $mimeType !== 'image/svg+xml';
+        $isPhoto = (str_starts_with($mimeType, 'image/')) && $mimeType !== 'image/svg+xml';
         $method  = $isPhoto ? 'sendPhoto' : 'sendDocument';
         $field   = $isPhoto ? 'photo' : 'document';
 
@@ -582,7 +582,7 @@ class TelegramProvider extends MessagingProvider
                     $result .= ' This bot was connected by an older version, so rating buttons will not respond - press Connect again to fix it.';
                 }
             }
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // The check is advice; the connection itself has already succeeded.
         }
         return $result;

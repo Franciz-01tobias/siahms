@@ -72,7 +72,7 @@ function ticketCategoriesResolved(PDO $conn, ?int $tenantId, array $opts = []): 
     } else {
         try {
             $rows = $conn->query("SELECT $cols FROM ticket_categories ORDER BY display_order, name")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return [];   // table absent on a part-migrated install
         }
     }
@@ -216,7 +216,7 @@ function ticketCategoryPathLabel(PDO $conn, ?int $categoryId): ?string
             $cur = $row['parent_id'] === null ? null : (int) $row['parent_id'];
             $steps++;
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return $cache[$categoryId] = null;
     }
     return $cache[$categoryId] = $path ? implode(TICKET_CATEGORY_SEPARATOR, $path) : null;
@@ -244,7 +244,7 @@ function ticketCategoryDepthUnder(PDO $conn, ?int $parentId): int
             $depth++;
             $cur = $row['parent_id'] === null ? null : (int) $row['parent_id'];
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return TICKET_CATEGORY_MAX_DEPTH + 1;   // unknown → refuse, don't guess
     }
     return $depth;
@@ -266,7 +266,7 @@ function ticketCategorySubtreeDepth(PDO $conn, int $id, int $guard = 0): int
         $st = $conn->prepare("SELECT id FROM ticket_categories WHERE parent_id = ?");
         $st->execute([$id]);
         $kids = $st->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return TICKET_CATEGORY_MAX_DEPTH + 1;   // unknown → refuse, don't guess
     }
     if (!$kids) return 1;
@@ -302,7 +302,7 @@ function ticketCategoryWouldCycle(PDO $conn, int $id, ?int $parentId): bool
             $cur = $row['parent_id'] === null ? null : (int) $row['parent_id'];
             $steps++;
         }
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return true;   // cannot prove it is safe → refuse
     }
     return false;
@@ -324,7 +324,7 @@ function ticketResolutionCodesResolved(PDO $conn, ?int $tenantId, array $opts = 
         try {
             $sql  = "SELECT $cols FROM ticket_resolution_codes" . ($where !== '' ? " WHERE $where" : '') . " ORDER BY display_order, name";
             $rows = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return [];
         }
     }
@@ -361,7 +361,7 @@ function ticketResolutionCodeName(PDO $conn, ?int $codeId): ?string
         $st->execute([$codeId]);
         $v = $st->fetchColumn();
         return $cache[$codeId] = ($v === false ? null : (string) $v);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return $cache[$codeId] = null;
     }
 }

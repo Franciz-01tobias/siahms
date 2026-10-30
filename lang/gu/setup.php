@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'સક્ષમ — પ્રોડક્શન માટે નિષ્ક્રિય કરો (config.php માં display_errors ને 0 સેટ કરો)',
         'display_errors_disabled' => 'નિષ્ક્રિય',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 અથવા તેથી વધુ જરૂરી છે',
+        'php_version_too_low' => '{version} — PHP 8.1 અથવા તેથી વધુ જરૂરી છે',
         'php_version_eol' => '{version} — હજુ સપોર્ટેડ છે, પણ આ રિલીઝ એન્ડ ઓફ લાઈફ થયા પછી કોઈ સિક્યુરિટી અપડેટ મળ્યા નથી. PHP 8.3 અથવા 8.4 ભલામણ કરેલ છે.',
         'extension_loaded' => 'લોડ થયેલ',
         'extension_not_loaded' => 'લોડ થયેલ નથી — php.ini માં સક્ષમ કરો',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'ગોઠવેલ',
         'ca_ini_masked_broken' => 'સેટ છે, પણ એવી ફાઇલ તરફ નિર્દેશ કરે છે જે ત્યાં નથી — path ઠીક કરો અથવા php.ini માં સેટિંગ કોમેન્ટ કરો.',
         'php_version_ok_masked' => 'જરૂરિયાત પૂરી કરે છે',
-        'php_version_too_low_masked' => 'ખૂબ જૂનું — PHP 7.4 અથવા તેથી વધુ જરૂરી છે',
+        'php_version_too_low_masked' => 'ખૂબ જૂનું — PHP 8.1 અથવા તેથી વધુ જરૂરી છે',
         'php_version_eol_masked' => 'સપોર્ટેડ છે, પણ આ રિલીઝ એન્ડ ઓફ લાઈફ થઈ ગયું છે અને હવે સિક્યુરિટી અપડેટ મળતા નથી. વર્ઝન જોવા માટે એડમિનિસ્ટ્રેટર તરીકે સાઈન ઈન કરો.',
     ],
     'locked' => [

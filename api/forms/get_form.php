@@ -61,6 +61,12 @@ try {
         // would silently convert one into the other on the next save.
         $raw = $form['submission_actions'] ?? null;
         $decoded = ($raw === null || trim((string)$raw) === '') ? null : json_decode((string)$raw, true);
+        // Webhook url + secret are stored encrypted; the designer shows them to the
+        // person editing the form, as the workflow editor does (api/workflow/get.php).
+        if (is_array($decoded)) {
+            require_once __DIR__ . '/../../includes/webhook_delivery.php';
+            foreach ($decoded as $k => $list) if (is_array($list)) $decoded[$k] = webhookDecryptActions($list);
+        }
         $form['submission_actions'] = is_array($decoded) ? $decoded : null;
     }
 

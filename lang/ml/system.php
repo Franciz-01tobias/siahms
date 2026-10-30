@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>ഈ പേജ് നിരീക്ഷിക്കുക.</strong> വർക്കർ ഒരിക്കൽ പ്രവർത്തിച്ചുകഴിഞ്ഞാൽ, മുകളിലെ നില പച്ചയാകും, ഡെലിവറികൾ താഴെ കാണിക്കും. പൂർണ്ണമായ സജ്ജീകരണ കുറിപ്പുകൾ (Windows &amp; Linux, signature verification) <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">Workflows വിക്കിയിൽ</a> ഉണ്ട്.',
         'fact_worker' => 'വർക്കർ സ്ക്രിപ്റ്റ്',
         'fact_retry' => 'റീട്രൈ ഷെഡ്യൂൾ',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1h &middot; 6h, പിന്നെ പരാജയം',
         'fact_retention' => 'ലോഗ് നിലനിർത്തൽ',
         'fact_queued' => 'ഇപ്പോൾ ക്യൂവിൽ',
         'days' => '{n} ദിവസം',

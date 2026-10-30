@@ -127,6 +127,7 @@ body {
 .system-header .header-nav,
 .tasks-header .header-nav,
 .projects-header .header-nav,
+.starters-header .header-nav,
 .tickets-header .header-nav,
 .watchtower-header .header-nav,
 .wiki-header .header-nav,
@@ -142,6 +143,7 @@ body {
 .changes-header .header-nav .nav-btn,
 .domains-header .header-nav .nav-btn,
 .projects-header .header-nav .nav-btn,
+.starters-header .header-nav .nav-btn,
 .knowledge-header .header-nav .nav-btn,
 .lms-header .header-nav .nav-btn,
 .morning-checks-header .header-nav .nav-btn,
@@ -846,6 +848,12 @@ body.ticket-popout .ticket-popout-toggle .popout-icon-contract { display: inline
  * as a right-hand panel via absolute positioning. Pure CSS — DOM unchanged. */
 body.ticket-popout .folder-container,
 body.ticket-popout .email-list-container { display: none; }
+
+/* GH #225: Messages / Table switches the list, which full screen hides - so it
+ * goes too. The action row shows the ticket and a Back button instead (inbox.js
+ * applyPopoutChrome). A pane scroller is focused for the keyboard, not to be seen. */
+body.ticket-popout .ticket-list-choice { display: none; }
+.pane-scroller:focus { outline: none; }
 
 body.ticket-popout .reading-pane {
     position: relative;
@@ -1591,6 +1599,61 @@ body.ticket-popout .ticket-toolbar {
     line-height: 1.5;
     white-space: pre-wrap;
 }
+
+/* --- Pictures in a note (GH #224) -------------------------------------------
+   On a saved note, a picture sits where it was pasted and opens in the viewer
+   window. In the note box (a contenteditable div keeping .form-textarea, so the
+   phone sheet still fills the screen with it), the same picture is a preview.
+   Kept modest in height so a tall screenshot does not push the text away. */
+.note-inline-image { display: inline-block; max-width: 100%; margin: 4px 0; vertical-align: top; cursor: zoom-in; }
+.note-inline-image img {
+    display: block;
+    max-width: 100%;
+    max-height: 320px;
+    height: auto;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+}
+/* A fixed height, not one that grows: a box that jumps in size as you type is
+   off-putting (Ed). The text and pictures scroll inside it.
+   On a desktop the dialog is a fixed 90vh and the box takes whatever the
+   share toggle, Files and the buttons leave, so nothing below it is ever
+   scrolled out of sight (Ed) - however the hint wraps. A number would have
+   to be re-measured every time a line is added. Desktop only: the phone sheet
+   (mobile.css, max-width 768px) has its own fill-the-screen rules. */
+@media (min-width: 769px) {
+    #noteModal .modal-content { height: 90vh; }
+    #noteModal .modal-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    #noteModal .note-editor-group { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    #noteModal .note-editor { flex: 1 1 auto; min-height: 120px; }
+}
+.note-editor,
+.form-textarea.note-editor {   /* beats .form-textarea's resize: vertical, defined later */
+    resize: none;
+}
+.note-editor {
+    overflow-y: auto;
+    height: 300px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+    cursor: text;
+}
+.note-editor img {
+    display: inline-block;
+    vertical-align: top;
+    max-width: 100%;
+    max-height: 240px;
+    margin: 4px 0;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+}
+.note-editor.is-empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted, #888);
+    pointer-events: none;
+}
+.note-editor-hint { font-size: 12px; color: var(--text-muted, #666); margin-top: 4px; }
 
 /* --- Files on a note (discussion #69) ---------------------------------------
    Two lists that look the same on purpose: the one in the modal shows files
@@ -3880,6 +3943,16 @@ body .tox-tinymce-aux {
    linking a CI is what feeds impact analysis. Shared row, separate identities.
    ========================================================= */
 .strip-pill-group { display: contents; }
+/* The pills' own box. Invisible to the layout everywhere except the desktop
+   reading pane, which makes it the one-row, truncating box (reading-pane.css). */
+.links-strip-pills { display: contents; }
+/* The reading pane's "+N" / "Less" chip (fitLinksStrip in inbox.js). */
+.links-strip-more {
+    flex: none; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    background: var(--surface, #fff); color: var(--problem-text, #6a1b9a); border: 1px solid var(--problem-border, #cbb6e0);
+}
+.links-strip-more:hover { background: var(--problem-badge-bg, #ede7f6); }
+.links-strip-more[hidden] { display: none; }
 .links-strip-empty { color: var(--text-faint, #9ca3af); font-size: 13px; }
 .links-strip-empty[hidden] { display: none; }
 

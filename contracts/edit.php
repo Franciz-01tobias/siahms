@@ -34,7 +34,7 @@ $contract_id = $_GET['id'] ?? null;
     <script src="../assets/js/money.js?v=1"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
-    <script src="../assets/js/tinymce/tinymce.min.js"></script>
+    <script src="../assets/js/tinymce/tinymce.min.js?v=8.10.0"></script>
     <style>
         /* Full-screen layout with sidebar - matches contracts dashboard */
         body { --accent: var(--con-accent, #f59e0b); }
@@ -231,7 +231,7 @@ $contract_id = $_GET['id'] ?? null;
         .party-hint { display: block; margin-top: 6px; color: var(--text-muted, #777); font-size: 12px; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="contracts" data-mobile-page="contract-edit">
     <?php include 'includes/header.php'; ?>
@@ -442,7 +442,8 @@ $contract_id = $_GET['id'] ?? null;
                     //
                     // Only on a saved contract. A new one has no id, so there is
                     // nothing to link equipment to yet and nowhere to send them.
-                    if ($contract_id): ?>
+                    // GH #217: not while Assets is off (or not granted) - view.php hides the section too.
+                    if ($contract_id && analystCanAccessModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'assets')): ?>
                         <div class="form-section"><?php echo htmlspecialchars(t('contracts.detail.linked_assets')); ?></div>
                         <p class="form-hint">
                             <?php echo t('contracts.edit.equipment_signpost'); ?>
@@ -840,7 +841,7 @@ $contract_id = $_GET['id'] ?? null;
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Contract Terms
@@ -899,6 +900,9 @@ $contract_id = $_GET['id'] ?? null;
             const tinyIsPhone = window.matchMedia('(max-width: 768px)').matches;
             termEditorIds.forEach(id => {
                 tinymce.init({
+                    // Plugins and skins load without the page's ?v=, so a browser could pair a new
+                    // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+                    cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
                     selector: '#' + id,
                     license_key: 'gpl',
                     height: 300,
@@ -967,6 +971,6 @@ $contract_id = $_GET['id'] ?? null;
         }
 
     </script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

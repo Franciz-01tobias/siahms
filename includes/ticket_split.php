@@ -92,7 +92,7 @@ function splitMarkerEmailIds(PDO $conn, int $ticketId): array {
         );
         $stmt->execute([$ticketId]);
         return array_values(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN))));
-    } catch (Exception $e) {
+    } catch (Exception) {
         return []; // pre-#915 install without the column
     }
 }
@@ -234,7 +234,7 @@ function splitTicket(PDO $conn, int $actorId, int $ticketId, int $fromEmailId, b
                 "INSERT INTO ticket_links (source_ticket_id, target_ticket_id, relation_type, created_by_id, created_datetime)
                  VALUES (?, ?, 'related', ?, UTC_TIMESTAMP())"
             )->execute([$ticketId, $newId, $actorId ?: null]);
-        } catch (Exception $e) { /* linking not installed, or already linked */ }
+        } catch (Exception) { /* linking not installed, or already linked */ }
 
         $conn->commit();
         return ['new_ticket_id' => $newId, 'new_ticket_number' => $newNumber, 'moved' => count($moving)];
@@ -281,7 +281,7 @@ function splitCreateTicket(PDO $conn, array $source, array $moving, int $actorId
         $openStatus = $conn->query(
             "SELECT id FROM ticket_statuses WHERE is_closed = 0 ORDER BY display_order, id LIMIT 1"
         )->fetchColumn() ?: null;
-    } catch (Exception $e) { /* fall back to the source's status */ }
+    } catch (Exception) { /* fall back to the source's status */ }
 
     $stmt = $conn->prepare(
         "INSERT INTO tickets
@@ -348,7 +348,7 @@ function splitAudit(PDO $conn, int $ticketId, int $actorId, string $field, ?stri
             "INSERT INTO ticket_audit (ticket_id, analyst_id, field_name, old_value, new_value, created_datetime)
              VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())"
         )->execute([$ticketId, $actorId ?: null, $field, $old, $new]);
-    } catch (Exception $e) { /* audit is best-effort, never fail a split for it */ }
+    } catch (Exception) { /* audit is best-effort, never fail a split for it */ }
 }
 
 /**
@@ -372,7 +372,7 @@ function splitInfoFor(PDO $conn, int $ticketId): array {
                               WHERE new_ticket_id = ? AND undone_datetime IS NULL LIMIT 1");
         $s->execute([$ticketId]);
         $out['split_from'] = $s->fetch(PDO::FETCH_ASSOC) ?: null;
-    } catch (Exception $e) { /* pre-upgrade install */ }
+    } catch (Exception) { /* pre-upgrade install */ }
     return $out;
 }
 
@@ -445,7 +445,7 @@ function undoSplit(PDO $conn, int $actorId, int $splitId): array {
                 throw new Exception($split['new_ticket_number'] . ' has ' . $n . ' ' . $label . ($n === 1 ? '' : 's')
                     . ' added since the split — undoing would lose ' . ($n === 1 ? 'it' : 'them'));
             }
-        } catch (PDOException $e) { /* table absent on a part-upgraded install */ }
+        } catch (PDOException) { /* table absent on a part-upgraded install */ }
     }
 
     $conn->beginTransaction();
@@ -462,7 +462,7 @@ function undoSplit(PDO $conn, int $actorId, int $splitId): array {
         try {
             $conn->prepare("DELETE FROM ticket_links WHERE source_ticket_id = ? AND target_ticket_id = ? AND relation_type = 'related'")
                  ->execute([$sourceId, $newId]);
-        } catch (Exception $e) { /* linking not installed */ }
+        } catch (Exception) { /* linking not installed */ }
 
         // The new ticket is now empty. Soft-delete through the service so it lands in
         // the Trash with an audit row rather than vanishing — the reference may have

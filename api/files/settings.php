@@ -46,7 +46,7 @@ filesApiRun(function () use ($conn, $analystId) {
         if ($root === '' || rtrim($root, '/') === filesDefaultStorageRoot()) {
             $root = '';
         } else {
-            if (strpos($root, '..') !== false) filesApiFail('Give the folder as a full path, without "..".');
+            if (str_contains($root, '..')) filesApiFail('Give the folder as a full path, without "..".');
             if (!is_dir($root)) filesApiFail('That folder does not exist on the server. Create it first, then save.');
             if (!is_writable($root)) filesApiFail('The web server cannot write to that folder.');
             $root = rtrim($root, '/');

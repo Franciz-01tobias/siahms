@@ -197,7 +197,7 @@
                     + (canChange() ? '<span class="prj-tl-h r" data-h="r"></span>' : '') + '</div>';
             }
             const nDeps = (t.depends_on || []).length;
-            return '<div class="prj-tl-row" style="height:' + ROW_H + 'px"><div class="prj-tl-label task" style="width:' + LW + 'px"><a class="prj-tl-name" href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '" title="' + esc(t.title) + '">'
+            return '<div class="prj-tl-row" style="height:' + ROW_H + 'px"><div class="prj-tl-label task" style="width:' + LW + 'px"><a class="prj-tl-name"' + (window.PRJ_TASKS ? ' href="' + esc(window.PRJ_BASE + 'tasks/?task=' + t.id) + '"' : '') + ' title="' + esc(t.title) + '">'   // GH #217: no href while Tasks is off
                 + '<span class="prj-task-status" style="background:' + esc(t.status_colour || '#94a3b8') + '"></span><span class="prj-tl-label-text' + (closed ? ' done' : '') + '">' + esc(t.title) + '</span></a>'
                 // Its dependencies (3.3.0): the count when it has any; the button only for somebody who may change the plan, or to read them.
                 + (canChange() || nDeps ? '<button type="button" class="prj-tl-dep' + (nDeps ? ' has' : '') + (t.clash ? ' clash' : '') + '" data-tl-dep="' + t.id + '" title="' + esc(T('deps.button', { count: nDeps })) + '" aria-label="' + esc(T('deps.button', { count: nDeps }) + ': ' + t.title) + '">'
@@ -409,7 +409,7 @@
 
     /** A tap or a click without a drag: open the thing. */
     function click(el) {
-        if (el.dataset.tlTask) { window.location.href = window.PRJ_BASE + 'tasks/?task=' + el.dataset.tlTask; return; }
+        if (el.dataset.tlTask) { if (window.PRJ_TASKS) window.location.href = window.PRJ_BASE + 'tasks/?task=' + el.dataset.tlTask; return; }   // GH #217: not while Tasks is off
         if (el.dataset.tlMs) { window.PrjMilestones.open((ctx.data.milestones || []).find(m => String(m.id) === el.dataset.tlMs)); return; }
         if (el.dataset.tlStage) {
             const b = document.querySelector('#pvPlan [data-stage-edit="' + el.dataset.tlStage + '"]');

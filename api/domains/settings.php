@@ -16,10 +16,10 @@ require_once __DIR__ . '/../../includes/domains/api_bootstrap.php';
 require_once __DIR__ . '/../../includes/domains/scheduler.php';
 
 $tabCaps = [
-    'alerts'     => Cap::DOMAINS_ALERTS,
-    'monitoring' => Cap::DOMAINS_MONITORING,
-    'auth-codes' => Cap::DOMAINS_AUTH_CODES,
-    'service-status' => Cap::DOMAINS_SERVICE_STATUS,
+    'alerts'     => capKey(Cap::DOMAINS_ALERTS),
+    'monitoring' => capKey(Cap::DOMAINS_MONITORING),
+    'auth-codes' => capKey(Cap::DOMAINS_AUTH_CODES),
+    'service-status' => capKey(Cap::DOMAINS_SERVICE_STATUS),
 ];
 
 domainApiRun(function () use ($conn, $analystId, $tabCaps) {
@@ -28,7 +28,7 @@ domainApiRun(function () use ($conn, $analystId, $tabCaps) {
         $defs = [];
         foreach (domainSettingDefinitions() as $k => $d) $defs[$k] = ['default' => $d[0], 'tab' => $d[2]];
         $canWrite = [];
-        foreach ($tabCaps as $tab => $cap) $canWrite[$tab] = domainHasCap($conn, $analystId, $cap);
+        foreach ($tabCaps as $tab => $cap) $canWrite[$tab] = domainHasCap($conn, $analystId, Cap::from($cap));
 
         $cronUrl = null;
         if ($canWrite['monitoring'] || $canWrite['alerts']) {
@@ -91,7 +91,7 @@ domainApiRun(function () use ($conn, $analystId, $tabCaps) {
 
     $tab = (string)($in['tab'] ?? '');
     if (!isset($tabCaps[$tab])) domainApiFail('Unknown settings tab.');
-    domainRequireCap($conn, $tabCaps[$tab]);
+    domainRequireCap($conn, Cap::from($tabCaps[$tab]));
 
     $defs = domainSettingDefinitions();
     $clean = [];

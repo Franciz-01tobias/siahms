@@ -62,6 +62,9 @@ Written down so nobody spends an afternoon rediscovering them:
 - `includes/tenancy.php` holds the multi-company isolation checks; endpoints that
   bypass it and query tables directly are the likeliest source of cross-company
   problems.
+- The CSRF check in `includes/csrf.php` covers every method except `GET`, so every
+  endpoint that writes must call `csrfRequireWriteMethod()`; `tests/get-must-not-write.php`
+  enforces it. An endpoint that changes something on a `GET` anyway is worth reporting.
 - `api/system/db_verify.php` builds and migrates the schema. It is administrator-only
   except on an install with no analyst accounts yet, where it is the bootstrap.
 - There is no `composer.json` or `package.json`, so no dependency scanner sees the

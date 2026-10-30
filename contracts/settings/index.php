@@ -82,7 +82,7 @@ $translationNamespaces = ['common', 'contracts'];
         [data-theme-mode="dark"] .tab-content .action-btn.delete:hover { background: #3a1e1e; }
     </style>
     <!-- Mobile layer: linked AFTER this page's own <style> so its @media rules win on ties. -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="contracts" data-mobile-page="settings">
     <?php include '../includes/header.php'; ?>
@@ -92,7 +92,7 @@ $translationNamespaces = ['common', 'contracts'];
 
         <?php if (settingsTabVisible($visibleTabs, 'supplier-types')): ?>
         <!-- Supplier types Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'supplier-types' ? ' active' : ''; ?>" id="supplier-types-tab" data-capability="<?php echo Cap::CONTRACTS_SUPPLIER_TYPES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'supplier-types' ? ' active' : ''; ?>" id="supplier-types-tab" data-capability="<?php echo capKey(Cap::CONTRACTS_SUPPLIER_TYPES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('contracts.settings.tab_supplier_types')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('supplier-type')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -117,7 +117,7 @@ $translationNamespaces = ['common', 'contracts'];
 
         <?php if (settingsTabVisible($visibleTabs, 'supplier-statuses')): ?>
         <!-- Supplier statuses Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'supplier-statuses' ? ' active' : ''; ?>" id="supplier-statuses-tab" data-capability="<?php echo Cap::CONTRACTS_SUPPLIER_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'supplier-statuses' ? ' active' : ''; ?>" id="supplier-statuses-tab" data-capability="<?php echo capKey(Cap::CONTRACTS_SUPPLIER_STATUSES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('contracts.settings.tab_supplier_statuses')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('supplier-status')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -142,7 +142,7 @@ $translationNamespaces = ['common', 'contracts'];
 
         <?php if (settingsTabVisible($visibleTabs, 'contract-statuses')): ?>
         <!-- Contract statuses Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'contract-statuses' ? ' active' : ''; ?>" id="contract-statuses-tab" data-capability="<?php echo Cap::CONTRACTS_CONTRACT_STATUSES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'contract-statuses' ? ' active' : ''; ?>" id="contract-statuses-tab" data-capability="<?php echo capKey(Cap::CONTRACTS_CONTRACT_STATUSES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('contracts.settings.tab_contract_statuses')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('contract-status')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -167,7 +167,7 @@ $translationNamespaces = ['common', 'contracts'];
 
         <?php if (settingsTabVisible($visibleTabs, 'payment-schedules')): ?>
         <!-- Payment schedules Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'payment-schedules' ? ' active' : ''; ?>" id="payment-schedules-tab" data-capability="<?php echo Cap::CONTRACTS_PAYMENT_SCHEDULES; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'payment-schedules' ? ' active' : ''; ?>" id="payment-schedules-tab" data-capability="<?php echo capKey(Cap::CONTRACTS_PAYMENT_SCHEDULES); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('contracts.settings.tab_payment_schedules')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('payment-schedule')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -191,7 +191,7 @@ $translationNamespaces = ['common', 'contracts'];
 
         <?php if (settingsTabVisible($visibleTabs, 'contract-term-tabs')): ?>
         <!-- Contract terms Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'contract-term-tabs' ? ' active' : ''; ?>" id="contract-term-tabs-tab" data-capability="<?php echo Cap::CONTRACTS_CONTRACT_TERMS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'contract-term-tabs' ? ' active' : ''; ?>" id="contract-term-tabs-tab" data-capability="<?php echo capKey(Cap::CONTRACTS_CONTRACT_TERMS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('contracts.settings.tab_contract_terms')); ?></h2>
                 <button class="add-btn" onclick="openAddModal('contract-term-tab')"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -216,7 +216,7 @@ $translationNamespaces = ['common', 'contracts'];
 
         <?php if (settingsTabVisible($visibleTabs, 'rfp-departments')): ?>
         <!-- RFP departments Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'rfp-departments' ? ' active' : ''; ?>" id="rfp-departments-tab" data-capability="<?php echo Cap::CONTRACTS_RFP_DEPARTMENTS; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'rfp-departments' ? ' active' : ''; ?>" id="rfp-departments-tab" data-capability="<?php echo capKey(Cap::CONTRACTS_RFP_DEPARTMENTS); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('contracts.settings.tab_rfp_departments')); ?></h2>
                 <button class="add-btn" onclick="openAddRfpDept()"><?php echo htmlspecialchars(t('common.add')); ?></button>
@@ -244,7 +244,7 @@ $translationNamespaces = ['common', 'contracts'];
 
         <?php if (settingsTabVisible($visibleTabs, 'rfp-ai')): ?>
         <!-- RFP AI Tab -->
-        <div class="tab-content<?php echo $activeTabId === 'rfp-ai' ? ' active' : ''; ?>" id="rfp-ai-tab" data-capability="<?php echo Cap::CONTRACTS_RFP_AI; ?>">
+        <div class="tab-content<?php echo $activeTabId === 'rfp-ai' ? ' active' : ''; ?>" id="rfp-ai-tab" data-capability="<?php echo capKey(Cap::CONTRACTS_RFP_AI); ?>">
             <div class="section-header">
                 <h2><?php echo htmlspecialchars(t('contracts.settings.tab_rfp_ai')); ?></h2>
             </div>
@@ -940,9 +940,9 @@ $translationNamespaces = ['common', 'contracts'];
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

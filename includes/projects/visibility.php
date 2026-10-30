@@ -42,7 +42,7 @@ if (!defined('PROJECT_VISIBILITY_LOADED')) {
         static $ready = null;
         if ($ready === null) {
             try { $conn->query("SELECT visibility FROM projects LIMIT 0"); $ready = true; }
-            catch (Throwable $e) { $ready = false; }
+            catch (Throwable) { $ready = false; }
         }
         return $ready;
     }

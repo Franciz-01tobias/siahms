@@ -18,6 +18,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+// GH #217: refused while the assets module is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'assets');
 
 try {
     $ticketId = isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : 0;

@@ -46,7 +46,7 @@ function filesApiBody(): array
  *
  * @param array $data  extra keys merged into the reply beside success
  */
-function filesApiOk(array $data = []): void
+function filesApiOk(array $data = []): never
 {
     echo json_encode(['success' => true] + $data);
     exit;
@@ -60,7 +60,7 @@ function filesApiOk(array $data = []): void
  * @param int $status      the HTTP status; 200 (the default) leaves it unchanged
  * @param array $extra     extra keys merged into the reply beside success and error
  */
-function filesApiFail(string $message, int $status = 200, array $extra = []): void
+function filesApiFail(string $message, int $status = 200, array $extra = []): never
 {
     if ($status !== 200) http_response_code($status);
     echo json_encode(['success' => false, 'error' => $message] + $extra);
@@ -70,11 +70,11 @@ function filesApiFail(string $message, int $status = 200, array $extra = []): vo
 /**
  * True when the analyst holds the capability; a failed lookup counts as no.
  *
- * @param string $cap  the capability key, normally a Cap:: constant such as Cap::FILES_FOLDERS
+ * @param Cap $cap  the capability, such as Cap::FILES_FOLDERS
  */
-function filesHasCap(PDO $conn, int $analystId, string $cap): bool
+function filesHasCap(PDO $conn, int $analystId, Cap $cap): bool
 {
-    try { return analystHasCapability($conn, $analystId, $cap); } catch (Throwable $e) { return false; }
+    try { return analystHasCapability($conn, $analystId, $cap); } catch (Throwable) { return false; }
 }
 
 /**
@@ -216,7 +216,7 @@ function filesArticleTarget(PDO $conn, int $analystId, int $id): ?array
                 require_once __DIR__ . '/../knowledge/visibility.php';
                 $viewer[$analystId] = KnowledgeViewer::forAnalyst($conn, $analystId);
             }
-        } catch (Throwable $e) { /* fail closed */ }
+        } catch (Throwable) { /* fail closed */ }
     }
     if (!$viewer[$analystId]) return null;
     [$sql, $params] = knowledgeVisibilitySql($conn, $viewer[$analystId], 'a', ['no_admin_floor' => true]);

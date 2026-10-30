@@ -40,7 +40,7 @@ try {
     if ($event === '') {
         throw new Exception('Choose an event to test.');
     }
-    if ($email === '' || strpos($email, '@') === false) {
+    if ($email === '' || !str_contains($email, '@')) {
         throw new Exception('Enter a full email address, including the @.');
     }
 

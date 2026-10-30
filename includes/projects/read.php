@@ -59,7 +59,7 @@ function projectTaskStats(PDO $conn, array $projectIds): array
         foreach ($tk->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $out[(int)$r['project_id']] = ($out[(int)$r['project_id']] ?? ['total' => 0, 'done' => 0, 'overdue' => 0]) + ['tickets_7d' => (int)$r['n']];
         }
-    } catch (Throwable $e) { /* no links yet: no jump to see */ }
+    } catch (Throwable) { /* no links yet: no jump to see */ }
     // Budget totals (3.2.0) - planned and actual in each project's currency, for
     // the cost tolerance. Their own try, like the tickets above.
     try {
@@ -73,7 +73,7 @@ function projectTaskStats(PDO $conn, array $projectIds): array
                 $out[$pid] = ($out[$pid] ?? ['total' => 0, 'done' => 0, 'overdue' => 0]) + ['budget' => $b];
             }
         }
-    } catch (Throwable $e) { /* no budget yet */ }
+    } catch (Throwable) { /* no budget yet */ }
     foreach (projectTargetsFor($conn, $projectIds) as $pid => $targets) {
         $out[$pid] = ($out[$pid] ?? ['total' => 0, 'done' => 0, 'overdue' => 0]) + ['targets_health' => projectTargetsWorst($targets)];
     }
@@ -90,28 +90,28 @@ function projectTaskStats(PDO $conn, array $projectIds): array
             $out[(int)$r['project_id']] = ($out[(int)$r['project_id']] ?? ['total' => 0, 'done' => 0, 'overdue' => 0])
                 + ['raid_overdue' => (int)$r['overdue'], 'raid_escalated' => (int)$r['escalated']];
         }
-    } catch (Throwable $e) { /* before Database Verification: no escalation column */ }
+    } catch (Throwable) { /* before Database Verification: no escalation column */ }
     // Milestones (3.3.0): missed ones for the health, the next one for the card.
     try {
         foreach (projectMilestoneStats($conn, $projectIds) as $pid => $m) {
             $out[$pid] = ($out[$pid] ?? ['total' => 0, 'done' => 0, 'overdue' => 0])
                 + ['milestones_missed' => $m['missed'] ?? 0, 'next_milestone' => $m['next'] ?? null];
         }
-    } catch (Throwable $e) { /* no milestones yet */ }
+    } catch (Throwable) { /* no milestones yet */ }
     // Benefits (3.3.0): how many, and reviews due - shown even on a finished project.
     try {
         require_once __DIR__ . '/benefits.php';
         foreach (projectBenefitStats($conn, $projectIds) as $pid => $b) {
             $out[$pid] = ($out[$pid] ?? ['total' => 0, 'done' => 0, 'overdue' => 0]) + $b;
         }
-    } catch (Throwable $e) { /* before Database Verification */ }
+    } catch (Throwable) { /* before Database Verification */ }
     // Change requests waiting for a decision (3.3.0 change control).
     try {
         require_once __DIR__ . '/control.php';
         foreach (projectChangeStats($conn, $projectIds) as $pid => $n) {
             $out[$pid] = ($out[$pid] ?? ['total' => 0, 'done' => 0, 'overdue' => 0]) + ['changes_pending' => $n];
         }
-    } catch (Throwable $e) { /* before Database Verification */ }
+    } catch (Throwable) { /* before Database Verification */ }
     return $out;
 }
 
@@ -197,7 +197,7 @@ function projectsPhase2Ready(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT 1 FROM project_tolerances LIMIT 0"); $conn->query("SELECT 1 FROM project_raid LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -349,7 +349,7 @@ function projectPriorityColumn(PDO $conn): string
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT priority FROM projects LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready ? 'p.priority' : "'medium' AS priority";
 }
@@ -360,7 +360,7 @@ function projectPlanOrderReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT project_position FROM tasks LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -371,7 +371,7 @@ function projectEstimatesReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT estimate_hours FROM tasks LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }

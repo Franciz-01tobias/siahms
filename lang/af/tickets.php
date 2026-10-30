@@ -1009,7 +1009,7 @@ return [
                 'provider' => 'Verskaffer',
                 'provider_microsoft' => 'Microsoft 365 (Exchange / Graph API)',
                 'provider_google' => 'Google Workspace (Gmail API)',
-                'provider_imap' => 'Basiese IMAP / SMTP (gebruikersnaam &amp; wagwoord)',
+                'provider_imap' => 'Basiese IMAP / SMTP (gebruikersnaam & wagwoord)',
                 'display_name' => 'Vertoonnaam',
                 'display_name_placeholder' => 'bv. Dienstoonbank',
                 'target_mailbox' => 'Teikenposbus',

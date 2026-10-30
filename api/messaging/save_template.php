@@ -6,6 +6,10 @@ session_start(['read_and_close' => true]);
 require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/rbac.php';
+require_once '../../includes/messaging/MessagingProviderKind.php';
+
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
 
 header('Content-Type: application/json');
 
@@ -26,7 +30,9 @@ try {
 
     $id          = $data['id'] ?? null;
     $name        = trim((string) ($data['name'] ?? ''));
-    $provider    = ($data['provider'] ?? 'twilio') === 'meta' ? 'meta' : 'twilio';
+    // Templates exist for Twilio and Meta only; anything else is Twilio, as before.
+    $provider    = (MessagingProviderKind::tryFrom((string)($data['provider'] ?? '')) === MessagingProviderKind::Meta
+                    ? MessagingProviderKind::Meta : MessagingProviderKind::Twilio)->value;
     $language    = trim((string) ($data['language'] ?? 'en')) ?: 'en';
     $providerRef = trim((string) ($data['provider_ref'] ?? ''));
     $body        = trim((string) ($data['body'] ?? ''));

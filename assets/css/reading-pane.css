@@ -28,6 +28,20 @@
         display: flex; flex-direction: column; justify-content: center;
     }
     .reading-pane .pane-strips > .ai-summary[hidden] { display: none; }
+    /* The Links strip is one row: "Links", the pills (which truncate, then fold
+       into "+N" - fitLinksStrip in inbox.js), and Link to… always on the right.
+       It wraps only while a picker is open (the picker takes a row of its own)
+       or after "+N" has unfolded it. */
+    .reading-pane .pane-strips > .links-strip { flex-wrap: nowrap; gap: 6px; padding-top: 6px; padding-bottom: 6px; }
+    .reading-pane .pane-strips > .links-strip:has(> .strip-picker-host:not([hidden])),
+    .reading-pane .pane-strips > .links-strip.links-unfolded { flex-wrap: wrap; }
+    .reading-pane .pane-strips > .links-strip > .problem-strip-label,
+    .reading-pane .pane-strips > .links-strip > .link-add-wrap { flex: none; }
+    .reading-pane .pane-strips .links-strip-pills { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+    .reading-pane .pane-strips .links-unfolded .links-strip-pills { flex-wrap: wrap; overflow: visible; }
+    .reading-pane .pane-strips .links-strip-pills .pm-ticket-badge { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+    .reading-pane .pane-strips .links-strip-pills .pill-text { min-width: 0; max-width: 18em; overflow: hidden; text-overflow: ellipsis; }
+    .reading-pane .pane-strips .links-strip-pills .pill-folded { display: none; }
     /* A summary that has been opened up needs the width to be read. */
     .reading-pane .pane-strips:has(.ai-summary-body) { flex-wrap: wrap; }
     .reading-pane .pane-strips:has(.ai-summary-body) > .ai-summary { flex-basis: 100%; border-left: none; border-top: 1px solid var(--border, #e0e0e0); }
@@ -36,29 +50,59 @@
        and Delete in a More menu at its end. */
     .action-toolbar .pane-secondary { display: none; }
     .pane-more-wrap { position: relative; }
-    .pane-more-menu {
-        position: absolute; top: calc(100% + 4px); right: 0; z-index: 50; min-width: 190px;
-        background: var(--surface, #fff); border: 1px solid var(--border, #e0e0e0); border-radius: 6px;
-        box-shadow: 0 6px 18px var(--shadow, rgba(0,0,0,0.18)); padding: 4px;
-    }
-    .pane-more-menu[hidden] { display: none; }
-    .pane-more-menu button {
-        display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px;
-        background: none; border: none; border-radius: 4px; color: var(--text, #333);
-        font: inherit; font-size: 13px; text-align: left; cursor: pointer;
-    }
-    .pane-more-menu button:hover { background: var(--surface-hover, #f0f0f0); }
-    .pane-more-menu button.is-danger { color: var(--danger, #c62828); }
+    /* The More menu itself is styled outside this block, below - the workspace
+       shows it at phone widths too (PR #211). */
 
     /* Scrolled down the thread: the header shrinks to the subject alone, on one
        line, and comes back in full at the top. Toolbar and properties stay. */
+       Animated, not switched: display:none cannot transition, so the meta lines
+       and the strips fold to height 0 and fade. height:auto -> 0 needs
+       interpolate-size (Chromium); elsewhere they still fade, and the height
+       snaps as it always did. visibility follows at the END of the fold, so
+       nothing hidden can take a Tab, and returns at the START of the unfold. */
+    .reading-pane .email-header { transition: padding .22s ease; }
+    .reading-pane .email-subject-line { transition: font-size .22s ease, margin-bottom .22s ease; }
+    .reading-pane .email-meta,
+    .reading-pane .pane-strips {
+        interpolate-size: allow-keywords;
+        transition: height .22s ease, opacity .18s ease, border-bottom-width .22s ease, visibility 0s;
+    }
     .reading-pane.pane-compact .email-header { padding-top: 8px; padding-bottom: 8px; }
     .reading-pane.pane-compact .email-subject-line { font-size: 15px; margin-bottom: 0; }
     .reading-pane.pane-compact .email-subject-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .reading-pane.pane-compact .email-meta,
-    .reading-pane.pane-compact .pane-strips { display: none; }
+    .reading-pane.pane-compact .pane-strips {
+        height: 0; opacity: 0; overflow: hidden; border-bottom-width: 0; visibility: hidden;
+        transition: height .22s ease, opacity .18s ease, border-bottom-width .22s ease, visibility 0s linear .22s;
+    }
 }
 
 @media (max-width: 768px) {
     .pane-more-wrap { display: none; }
+}
+
+/* The More menu. Outside the desktop-only block above because the ticket
+   workspace keeps More on a phone as well (PR #211). */
+.pane-more-menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 50; min-width: 190px;
+    background: var(--surface, #fff); border: 1px solid var(--border, #e0e0e0); border-radius: 6px;
+    box-shadow: 0 6px 18px var(--shadow, rgba(0,0,0,0.18)); padding: 4px;
+}
+.pane-more-menu[hidden] { display: none; }
+.pane-more-menu button {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px;
+    background: none; border: none; border-radius: 4px; color: var(--text, #333);
+    font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.pane-more-menu button:hover { background: var(--surface-hover, #f0f0f0); }
+.pane-more-menu button.is-danger { color: var(--danger, #c62828); }
+
+/* The header's fold is decoration: without motion it simply switches. */
+@media (prefers-reduced-motion: reduce) {
+    .reading-pane .email-header,
+    .reading-pane .email-subject-line,
+    .reading-pane .email-meta,
+    .reading-pane .pane-strips,
+    .reading-pane.pane-compact .email-meta,
+    .reading-pane.pane-compact .pane-strips { transition: none; }
 }

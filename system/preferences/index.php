@@ -9,6 +9,7 @@ require_once '../../includes/theme.php';
 require_once '../../includes/i18n.php';
 require_once '../../includes/timezone.php';
 require_once '../../includes/money.php';
+require_once '../../includes/ticket_workspace.php';
 I18n::initFromSession();
 Tz::init();
 
@@ -60,6 +61,7 @@ $prefDefaults = [
     // preference — the drawer keeps the board visible behind it, the modal gives
     // the description and comments room to breathe.
     'tasks_detail_view'          => 'panel',
+    'tasks_open_panel'           => 'quick',   // GH #219: the Table, Calendar and Timeline's panel
     // Whether clicking away closes the draggable search panel (#144, asked for
     // by mbsouth). '' — only the ✕ or Escape — because the panel is draggable:
     // it is meant to be parked somewhere useful while you work, and a
@@ -94,6 +96,13 @@ $prefDefaults = [
     // once. Read by assets/js/inbox.js. 'summary' is the default because it puts
     // what you are about to act on, and the actions themselves, on screen.
     'tickets_multiselect_pane'   => 'summary',
+    // Use the ticket workspace (PR #211). On unless turned off, and only offered
+    // when an administrator has switched the workspace on; see
+    // ticketWorkspacePersonal() in includes/ticket_workspace.php.
+    'ticket_workspace'           => '1',
+    // Show the ticket list as Messages or as a Table (PR #213). Read by
+    // tickets/index.php; also switchable from the inbox's action row.
+    'tickets_list_layout'        => 'messages',
     // Which front door "/" sends you to (discussion #63). Empty string means
     // "whatever the administrator chose" — the only value that is NOT a landing
     // key, because "follow the install default" is a real third choice here.
@@ -117,6 +126,18 @@ if (isset($_SESSION['analyst_id'])) {
         }
     } catch (Exception $e) {
         // Defaults stand
+    }
+}
+// The workspace switch is offered only where it can do something: the install has
+// the workspace on, and this analyst can open Tickets at all.
+$showTicketWorkspace = false;
+if (isset($_SESSION['analyst_id'])) {
+    try {
+        $conn = connectToDatabase();
+        $showTicketWorkspace = ticketWorkspaceMode($conn) !== TicketWorkspaceMode::Off
+            && analystCanAccessModule($conn, (int)$_SESSION['analyst_id'], 'tickets');
+    } catch (Throwable $e) {
+        // Not shown
     }
 }
 
@@ -429,7 +450,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
         [data-theme-mode="dark"] .anim-option:not(.active):hover { background: var(--surface-hover, #39414f); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
@@ -590,6 +611,13 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                     <option value="modal" <?php echo $prefs['tasks_detail_view'] === 'modal' ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.task_view_modal')); ?></option>
                 </select>
                 <span class="pref-saving-hint" id="taskViewSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
+                <?php /* GH #219: the same question for Tasks' other views - their side panel. */ ?>
+                <p style="margin-top:14px;"><?php echo htmlspecialchars(t('system.preferences.task_open_other_desc')); ?></p>
+                <select id="taskOpenSelect" class="pref-language-select">
+                    <option value="quick" <?php echo $prefs['tasks_open_panel'] !== 'full' ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.task_open_quick')); ?></option>
+                    <option value="full" <?php echo $prefs['tasks_open_panel'] === 'full' ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.task_open_full')); ?></option>
+                </select>
+                <span class="pref-saving-hint" id="taskOpenSavingHint"><?php echo htmlspecialchars(t('system.preferences.saving')); ?></span>
             </div>
 
             <!-- Closing the search panel (#144). Sits beside "Opening a task"
@@ -956,6 +984,15 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                         <option value="<?php echo $sbMode; ?>"<?php echo $sbPrefs['names'] === $sbMode ? ' selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.sidebar_names_' . $sbMode)); ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <?php /* The waffle button (#124). Show is the default; hiding
+                             leaves the panel, which the rail's Recent opens. */ ?>
+                    <div class="app-sidebar-pick">
+                        <label class="app-sidebar-pick-hint" for="appSidebarWaffle"><?php echo htmlspecialchars(t('system.preferences.sidebar_waffle')); ?></label>
+                        <select id="appSidebarWaffle" class="pref-language-select">
+                            <option value="show"<?php echo $sbPrefs['waffle'] ? ' selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.sidebar_waffle_show')); ?></option>
+                            <option value="hide"<?php echo $sbPrefs['waffle'] ? '' : ' selected'; ?>><?php echo htmlspecialchars(t('system.preferences.sidebar_waffle_hide')); ?></option>
+                        </select>
+                    </div>
                     <p class="app-sidebar-pick-hint"><?php echo htmlspecialchars(t('system.preferences.sidebar_pick')); ?></p>
                     <div class="app-sidebar-pick-list">
                         <?php foreach ($moItems as $sbItem): ?>
@@ -979,6 +1016,34 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                      change here + a default in $prefDefaults above. -->
                 <div id="sidebarPanelsList" class="sidebar-panels-list"></div>
             </div>
+
+            <!-- How the ticket list is shown (PR #213): the familiar message list,
+                 or a paginated table with saved views. Per analyst. -->
+            <div class="pref-section">
+                <h3 id="ticket-list"><?php echo htmlspecialchars(t('system.preferences.ticket_list_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.ticket_list_desc')); ?></p>
+                <select id="ticketListSelect" class="pref-language-select">
+                    <?php foreach (['messages', 'table'] as $layout): ?>
+                    <option value="<?php echo $layout; ?>" <?php echo $prefs['tickets_list_layout'] === $layout ? 'selected' : ''; ?>><?php echo htmlspecialchars(t('system.preferences.ticket_list_' . $layout)); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- Use the ticket workspace (PR #211). Hidden while an administrator
+                 has the workspace off, because then it would change nothing. -->
+            <?php if ($showTicketWorkspace): ?>
+            <div class="pref-section">
+                <h3 id="ticket-workspace"><?php echo htmlspecialchars(t('system.preferences.ticket_workspace_heading')); ?></h3>
+                <p><?php echo htmlspecialchars(t('system.preferences.ticket_workspace_desc')); ?></p>
+                <label class="toggle-group">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="ticketWorkspacePref" <?php echo ticketWorkspacePersonal($prefs['ticket_workspace']) ? 'checked' : ''; ?>>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span class="toggle-label"><?php echo htmlspecialchars(t('system.preferences.ticket_workspace_label')); ?></span>
+                </label>
+            </div>
+            <?php endif; ?>
 
             <div class="pref-section">
                 <h3 id="multi-select"><?php echo htmlspecialchars(t('system.preferences.multiselect_heading')); ?></h3>
@@ -1106,7 +1171,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
     <script src="../../assets/js/reorder-list.js?v=1"></script>
     <script src="../../assets/js/qrcode.min.js"></script>
     <script src="../../assets/js/subscribe.js?v=1"></script>
-    <script src="../../assets/js/tinymce/tinymce.min.js"></script>
+    <script src="../../assets/js/tinymce/tinymce.min.js?v=8.10.0"></script>
     <script>
         // Initial preference values pre-fetched server-side. The page
         // hydrates UI controls from these instead of localStorage.
@@ -1261,9 +1326,30 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             soundPreview.addEventListener('click', playSelectedSound);
         }
 
+        // ===== Ticket list: Messages or Table (tickets_list_layout, PR #213) =====
+        // A failed save puts the dropdown back, so it never shows a choice that
+        // was not kept.
+        const ticketListSelect = document.getElementById('ticketListSelect');
+        let savedTicketList = ticketListSelect.value;
+        ticketListSelect.addEventListener('change', async () => {
+            ticketListSelect.disabled = true;
+            if (await savePref('tickets_list_layout', ticketListSelect.value)) savedTicketList = ticketListSelect.value;
+            else ticketListSelect.value = savedTicketList;
+            ticketListSelect.disabled = false;
+        });
+
         // ===== How a task opens (tasks_detail_view) =====
         const taskViewSelect = document.getElementById('taskViewSelect');
         const taskViewHint   = document.getElementById('taskViewSavingHint');
+        const taskOpenSelect = document.getElementById('taskOpenSelect');   // GH #219
+        if (taskOpenSelect) {
+            taskOpenSelect.addEventListener('change', async function() {
+                const hint = document.getElementById('taskOpenSavingHint');
+                hint.classList.add('show');
+                await savePref('tasks_open_panel', taskOpenSelect.value);
+                setTimeout(() => hint.classList.remove('show'), 1200);
+            });
+        }
         if (taskViewSelect) {
             taskViewSelect.addEventListener('change', async function() {
                 taskViewHint.classList.add('show');
@@ -1445,6 +1531,14 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
                 hint.classList.remove('show');
                 if (ok) showToast(P('sidebar_saved'), 'success');
             });
+            // 'show' is stored as no row at all - the built-in default.
+            const waffle = document.getElementById('appSidebarWaffle');
+            if (waffle) waffle.addEventListener('change', async () => {
+                hint.classList.add('show');
+                const ok = await savePref('app_sidebar_waffle', waffle.value === 'hide' ? 'hide' : '');
+                hint.classList.remove('show');
+                if (ok) showToast(P('sidebar_saved'), 'success');
+            });
             box.addEventListener('change', async e => {
                 if (!e.target.matches('input[type="checkbox"]')) return;
                 const keys = [...box.querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value);
@@ -1619,6 +1713,14 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             const el = document.getElementById('multiSelectPaneHint');
             if (el) el.textContent = MULTISELECT_HINTS[v] || '';
         }
+        // Use the ticket workspace (ticket_workspace, PR #211). Same rule: a failed
+        // save puts the switch back.
+        document.getElementById('ticketWorkspacePref')?.addEventListener('change', async function () {
+            this.disabled = true;
+            const ok = await savePref('ticket_workspace', this.checked ? '1' : '0');
+            if (!ok) this.checked = !this.checked;
+            this.disabled = false;
+        });
         setMultiSelectHint(INITIAL_PREFS.tickets_multiselect_pane);
         wireToggle('multiSelectPaneToggle', 'msmode', 'tickets_multiselect_pane',
                    INITIAL_PREFS.tickets_multiselect_pane, setMultiSelectHint);
@@ -1757,7 +1859,7 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
         function escapeHtmlSig(s) {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         function renderSignatureList() {
@@ -1805,6 +1907,9 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
             if (sigEditor || typeof tinymce === 'undefined') return Promise.resolve();
             const isDark = (document.documentElement.getAttribute('data-theme-mode') || 'light') === 'dark';
             return tinymce.init({
+                // Plugins and skins load without the page's ?v=, so a browser could pair a new
+                // editor with old cached plugins after an update. TinyMCE's own version stamps them.
+                cache_suffix: '?v=' + tinymce.majorVersion + '.' + tinymce.minorVersion,
                 selector: '#sigBody',
                 license_key: 'gpl',
                 height: 220,
@@ -2361,6 +2466,6 @@ $fmtSample = new DateTime('2026-08-05 14:30:00', new DateTimeZone(Tz::current())
 
         document.addEventListener('DOMContentLoaded', loadSignatures);
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

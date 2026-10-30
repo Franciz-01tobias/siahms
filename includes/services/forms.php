@@ -550,7 +550,7 @@ class FormsService
             // All three, not any: two of the three is a half-migrated database
             // and offering the feature there writes stamps nothing can read.
             $known = ((int)$q->fetchColumn() === 3);
-        } catch (Exception $e) {
+        } catch (Exception) {
             $known = false;
         }
         return $known;
@@ -569,7 +569,7 @@ class FormsService
             $q = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'forms_collection_close_effect'");
             $q->execute();
             $v = (string)$q->fetchColumn();
-        } catch (Exception $e) {
+        } catch (Exception) {
             $v = '';
         }
         $cached = in_array($v, self::CLOSE_EFFECTS, true) ? $v : self::CLOSE_EFFECT_DEFAULT;
@@ -940,7 +940,7 @@ class FormsService
             $q->execute([$formId]);
             $name = $q->fetchColumn();
             return $name === false ? null : (string)$name;
-        } catch (Exception $e) {
+        } catch (Exception) {
             // A broken probe must not stop people filling forms in.
             return null;
         }
@@ -1072,6 +1072,7 @@ class FormsService
                         : []),
                     $formId,
                 ]);
+                self::saveApprovalPolicy($conn, $formId, $in);   // GH #220
                 if ($fields !== null) {
                     self::syncFields($conn, $formId, $fields);
                 }
@@ -1112,6 +1113,7 @@ class FormsService
                 $ctx->actorId,
             ]);
             $formId = (int)$conn->lastInsertId();
+            self::saveApprovalPolicy($conn, $formId, $in);   // GH #220
             // Same path as an update, so a brand-new form's conditions get resolved
             // and stored by exactly the same code rather than a second copy of it.
             self::syncFields($conn, $formId, $fields);
@@ -1227,7 +1229,8 @@ class FormsService
                 }
                 $list[] = ['type' => $type, 'args' => is_array($action['args'] ?? null) ? $action['args'] : []];
             }
-            $out[$key] = $list;
+            require_once __DIR__ . '/../webhook_delivery.php';
+            $out[$key] = webhookEncryptActions($list);   // webhook url + secret at rest, as workflows do
         }
         return json_encode($out);
     }
@@ -1364,6 +1367,11 @@ class FormsService
                     : []),
             ]);
             $newId = (int)$conn->lastInsertId();
+            // The group-approval policy travels with the version (GH #220) - the trap
+            // above, again: a per-form setting left out of the copy is a setting that
+            // pressing Save deletes, and here a team-approved form would fall back to
+            // its named approver (or to no gate at all) the moment somebody edited it.
+            self::copyApprovalPolicy($conn, $src, $newId);
 
             // Copied row by row rather than INSERT..SELECT because a condition stores
             // the form_fields.id it depends on: a bulk copy would leave the new
@@ -1749,14 +1757,14 @@ class FormsService
         // analyst filling a form internally has no requester to raise one for. A form
         // flagged requires_approval but with no approver is treated as unconfigured so
         // it can never strand a request nobody can clear.
-        $gateApproverId = ($portalUserId !== null && !empty($form['requires_approval']) && !empty($form['approver_id']))
-            ? (int) $form['approver_id']
-            : null;
-        $gateApproverIds = ($portalUserId !== null && !empty($form['requires_approval']))
-            ? self::decodeApproverIds($form['approver_ids'] ?? null)
-            : [];
-        if ($gateApproverIds) $gateApproverId = $gateApproverIds[0];
-        $approvalStatus = $gateApproverId !== null ? 'pending' : 'not_required';
+        //
+        // GH #220: one rule, catalogueApprovalGate(), for both ways of deciding - a
+        // named person or a team - and it returns what to SNAPSHOT onto the
+        // submission, so a later edit of the form never reroutes a waiting request.
+        require_once __DIR__ . '/../catalogue_approvals.php';
+        $gate = catalogueApprovalGate($form, $portalUserId);
+        $approvalStatus = $gate !== null ? 'pending' : 'not_required';
+        $teamColumns = catalogueTeamApprovalAvailable($conn);
 
         $conn->beginTransaction();
         try {
@@ -1772,16 +1780,23 @@ class FormsService
             $collectionId = $hasCollections ? ($form['collection_id'] ?? null) : null;
             $collectionId = ($collectionId !== null && $collectionId !== '') ? (int)$collectionId : null;
 
-            $cols = 'form_id, submitted_by, submitted_by_user_id, submitted_date, approval_status, approver_id, approver_ids';
-            $vals = '?, ?, ?, UTC_TIMESTAMP(), ?, ?, ?';
+            $cols = 'form_id, submitted_by, submitted_by_user_id, submitted_date, approval_status, approver_id';
+            $vals = '?, ?, ?, UTC_TIMESTAMP(), ?, ?';
             $args = [
                 $formId,
                 $portalUserId !== null ? null : $ctx->actorId,
                 $portalUserId,
                 $approvalStatus,
-                $gateApproverId,
-                $gateApproverIds ? json_encode($gateApproverIds) : null,
+                $gate['approver_id'] ?? null,
             ];
+            // The group-approval snapshot (GH #220) - only once Database Verification
+            // has added the columns; before that every form is named-person only.
+            if ($teamColumns) {
+                $cols .= ', approval_team_id, approvals_required, rejections_required, approval_exclude_requester';
+                $vals .= ', ?, ?, ?, ?';
+                array_push($args, $gate['approval_team_id'] ?? null, $gate['approvals_required'] ?? null,
+                    $gate['rejections_required'] ?? null, (int)($gate['approval_exclude_requester'] ?? 0));
+            }
             if ($hasCollections) {
                 $cols .= ', collection_id';
                 $vals .= ', ?';
@@ -1849,8 +1864,13 @@ class FormsService
             // rule on that event would jump the approval gate and raise the ticket
             // anyway. It fires catalogue_request.submitted instead — the hook to
             // notify the approver that something is waiting for them.
-            if ($gateApproverId !== null) {
-                $payload['approver'] = ['id' => $gateApproverId];
+            if ($gate !== null) {
+                // Who decides: the named approver, or the team (GH #220) - so a rule
+                // can tell whoever it is that something is waiting for them.
+                if ($gate['approver_id'] !== null) $payload['approver'] = ['id' => $gate['approver_id']];
+                if ($gate['approval_team_id'] !== null) {
+                    $payload['approval_team'] = ['id' => $gate['approval_team_id'], 'approvals_required' => $gate['approvals_required']];
+                }
                 WorkflowEngine::dispatch('catalogue_request.submitted', $payload);
             } else {
                 WorkflowEngine::dispatch('form.submitted', $payload);
@@ -1871,7 +1891,7 @@ class FormsService
         // A gated request runs NOTHING here, for the same reason it fires a
         // different event: its actions belong to the approval decision, and
         // raising a ticket at submission time would step straight over the gate.
-        if ($gateApproverId === null) {
+        if ($gate === null) {
             try {
                 $lists = self::actionLists($conn, $formId);
                 if (!empty($lists['submitted'])) {
@@ -1946,17 +1966,17 @@ class FormsService
             $q->execute($args);
             $linked = (int)$q->fetchColumn();
             $needed = 0;
-            if (strpos($where, 'form_id') === 0) {
+            if (str_starts_with($where, 'form_id')) {
                 $r = $conn->prepare("SELECT COUNT(*) FROM task_forms WHERE $where");
                 $r->execute($args);
                 $needed = (int)$r->fetchColumn();
             }
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return;
         }
         if ($linked > 0) {
             throw new ServiceError('conflict', 'task_evidence',
-                $linked === 1 && strpos($where, 'id = ?') === 0
+                $linked === 1 && str_starts_with($where, 'id = ?')
                     ? 'This submission is the record of work done on a task, so it cannot be deleted. It stays with that task\'s history and its evidence report.'
                     : 'Submissions of this form are the record of work on ' . $linked . ' task occurrence(s), so it cannot be deleted. Make it inactive instead.');
         }
@@ -2006,6 +2026,73 @@ class FormsService
      *
      * @param int $id  the form to load
      */
+    /**
+     * Store a form's group-approval policy (GH #220), each part only when sent and
+     * only once Database Verification has added the columns - so an adapter that
+     * knows nothing about teams (the REST API, an older page) cannot clear one by
+     * saving something else, and an un-migrated install saves exactly as before.
+     *
+     * approval_team_id set = a team decides, approvals_required different members;
+     * null = the named approver (approver_id), unchanged. The two are kept apart, so
+     * switching back to a named person restores the person who was chosen before.
+     *
+     * @param array $in  the save payload: approval_team_id, approvals_required, rejections_required, approval_exclude_requester
+     */
+    private static function saveApprovalPolicy(PDO $conn, int $formId, array $in): void
+    {
+        require_once __DIR__ . '/../catalogue_approvals.php';
+        if (!catalogueTeamApprovalAvailable($conn)) return;
+        $set = [];
+        $args = [];
+        if (array_key_exists('approval_team_id', $in)) {
+            $teamId = ($in['approval_team_id'] === null || $in['approval_team_id'] === '') ? null : (int)$in['approval_team_id'];
+            if ($teamId !== null) {
+                $t = $conn->prepare('SELECT 1 FROM teams WHERE id = ? AND is_active = 1');
+                $t->execute([$teamId]);
+                if (!$t->fetchColumn()) throw new ServiceError('validation', 'invalid_field', 'That team was not found.');
+            }
+            $set[] = 'approval_team_id = ?';
+            $args[] = $teamId;
+        }
+        foreach (['approvals_required', 'rejections_required'] as $k) {
+            if (!array_key_exists($k, $in)) continue;
+            $n = (int)$in[$k];
+            if ($n < 1 || $n > 20) {
+                throw new ServiceError('validation', 'invalid_field', "'$k' must be between 1 and 20.");
+            }
+            $set[] = "$k = ?";
+            $args[] = $n;
+        }
+        if (array_key_exists('approval_exclude_requester', $in)) {
+            $set[] = 'approval_exclude_requester = ?';
+            $args[] = (int)(bool)$in['approval_exclude_requester'];
+        }
+        if (!$set) return;
+        $args[] = $formId;
+        $conn->prepare('UPDATE forms SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($args);
+    }
+
+    /**
+     * Carry the group-approval policy to a new version of the form (GH #220).
+     *
+     * @param array $src  the version being copied (loadFormRow())
+     * @param int $newId  the new version's id
+     */
+    private static function copyApprovalPolicy(PDO $conn, array $src, int $newId): void
+    {
+        require_once __DIR__ . '/../catalogue_approvals.php';
+        if (!catalogueTeamApprovalAvailable($conn) || !array_key_exists('approval_team_id', $src)) return;
+        $conn->prepare(
+            'UPDATE forms SET approval_team_id = ?, approvals_required = ?, rejections_required = ?, approval_exclude_requester = ? WHERE id = ?'
+        )->execute([
+            $src['approval_team_id'] !== null ? (int)$src['approval_team_id'] : null,
+            max(1, (int)($src['approvals_required'] ?? 1)),
+            max(1, (int)($src['rejections_required'] ?? 1)),
+            (int)($src['approval_exclude_requester'] ?? 0),
+            $newId,
+        ]);
+    }
+
     private static function loadFormRow(PDO $conn, int $id): array
     {
         $stmt = $conn->prepare(
@@ -2263,7 +2350,7 @@ class FormsService
             );
             $q->execute();
             $known = ((int)$q->fetchColumn() === 1);
-        } catch (Exception $e) {
+        } catch (Exception) {
             $known = false;
         }
         return $known;
@@ -2406,7 +2493,7 @@ class FormsService
             );
             $q->execute();
             $known = ((int)$q->fetchColumn() === 1);
-        } catch (Exception $e) {
+        } catch (Exception) {
             $known = false;
         }
         return $known;
@@ -2583,7 +2670,7 @@ class FormsService
             );
             $q->execute();
             $known = ((int)$q->fetchColumn() === 1);
-        } catch (Exception $e) {
+        } catch (Exception) {
             $known = false;
         }
         return $known;
@@ -3057,7 +3144,7 @@ class FormsService
 
             // Resolve the referenced field to a position in this payload.
             $ref = $rule['field'] ?? null;
-            if (is_string($ref) && strpos($ref, 'idx:') === 0) {
+            if (is_string($ref) && str_starts_with($ref, 'idx:')) {
                 $refIndex = (int)substr($ref, 4);
                 $refValue = $ref;
             } else {
@@ -3157,7 +3244,7 @@ class FormsService
             if (is_array($config) && isset($config['visible_if']['rules'])) {
                 foreach ($config['visible_if']['rules'] as $r => $rule) {
                     $ref = $rule['field'] ?? null;
-                    if (is_string($ref) && strpos($ref, 'idx:') === 0) {
+                    if (is_string($ref) && str_starts_with($ref, 'idx:')) {
                         $refIndex = (int)substr($ref, 4);
                         // validateFields already proved this position exists and is earlier.
                         $config['visible_if']['rules'][$r]['field'] = $idByIndex[$refIndex] ?? 0;

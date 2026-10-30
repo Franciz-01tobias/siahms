@@ -65,6 +65,7 @@ function getHelpTopics() {
             'sub'  => 'Create the people who work in FreeITSM, decide who is an administrator, control which companies and modules each of them can reach, put them into teams and reset their passwords.',
             'sections' => [
                 ['id' => 'overview',  'label' => 'Overview'],
+                ['id' => 'list',      'label' => 'Finding people in the list'],
                 ['id' => 'adding',    'label' => 'Adding an analyst'],
                 ['id' => 'admin',     'label' => 'Administrators'],
                 ['id' => 'signin',    'label' => 'Sign-in method'],
@@ -74,6 +75,7 @@ function getHelpTopics() {
                 ['id' => 'leavers',   'label' => 'Leavers'],
             ],
             'terms' => 'user staff agent account technician add person joiner leaver disable deactivate admin rights permissions anonymise anonymize gdpr forget erasure delete analyst reassign remove'
+                     . ' group by company team tabs tree jump pages pagination filter search sort per page default view'
                      . " can't see tickets cannot see tickets no tickets empty queue locked out of system",
         ],
         'teams' => [

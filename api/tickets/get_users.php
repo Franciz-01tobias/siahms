@@ -8,6 +8,7 @@ require_once '../../config.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/users.php';   // userDirectoryOwnedFields()
+require_once '../../includes/phone_dial.php';   // the Call links
 
 header('Content-Type: application/json');
 
@@ -165,7 +166,12 @@ try {
     //
     // Empty array on an unmanaged person, so a client can use it directly without
     // first testing is_managed.
+    // The Call links, built here for the same reason: one place reads a phone
+    // field into a dialable number (phoneDialHref). '' when click-to-call is off.
+    $dial = phoneDialTemplate($conn);
     foreach ($users as &$u) {
+        $u['phone_dial']  = phoneDialHref($dial, $u['phone'] ?? null);
+        $u['mobile_dial'] = phoneDialHref($dial, $u['mobile'] ?? null);
         $u['managed_fields'] = ((int)($u['is_managed'] ?? 0) === 1)
             ? array_values(userDirectoryOwnedFields(
                   $u['managed_protocol'] ?? null,

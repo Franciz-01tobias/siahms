@@ -156,8 +156,9 @@ function setupKey(array $cfg): string {
  * @param string $p  the provider key, e.g. 'anthropic' or 'azure'
  */
 function providerLabel(string $p): string {
-    return ['anthropic' => 'Anthropic', 'openai' => 'OpenAI', 'openrouter' => 'OpenRouter', 'azure' => 'Azure OpenAI',
-            'openai_compatible' => 'Custom endpoint'][$p] ?? $p;
+    // No ?-> here: this file is run directly, so it must parse on old PHP (php_version_guard.php).
+    $case = AiProvider::tryFrom($p);
+    return $case !== null ? $case->label() : $p;
 }
 
 $conn     = connectToDatabase();

@@ -33,11 +33,20 @@
 (function () {
     'use strict';
 
-    var B   = window.FILES_BOOT;
-    var WM  = window.FilesWM;
+    // On the Files desktop: FILES_BOOT and FilesWM. Anywhere else (openUrl - a
+    // ticket note's image, GH #226) neither exists: the window is FloatWin.page()'s
+    // and the caller hands over the file's own address, so this file never needs
+    // Files' token API there.
+    // TRAP: the base must be ABSOLUTE. pdf.js loads with import(), which resolves a
+    // relative path against THIS SCRIPT's address, not the page's - '../' from
+    // assets/js/ pointed at assets/assets/js/vendor/. So outside Files it is worked
+    // out from this file's own URL.
+    var selfBase = (document.currentScript && document.currentScript.src || '').replace(/assets\/js\/files-viewer\.js.*$/, '');
+    var B   = window.FILES_BOOT || { base: selfBase, api: selfBase + 'api/files/' };
+    var WM  = window.FilesWM || null;
     var FI  = window.FilesIcons;
-    var L   = WM.L;
-    var esc = WM.esc;
+    var L   = WM ? WM.L : function (key, english, params) { return window.tf ? window.tf('files.' + key, english, params) : english; };
+    var esc = window.FloatWin.esc;
     var V   = B.base + 'assets/js/vendor/';
     var MAX_PARSE_BYTES = 60 * 1024 * 1024;   // docx / spreadsheets are parsed in the browser
     var MAX_TEXT_BYTES  = 5 * 1024 * 1024;
@@ -193,7 +202,8 @@
      */
     function renderInto(host, info, opts) {
         opts = opts || {};
-        var url = info.bytes ? null : B.api + info.url;
+        // info.src: an address the caller already holds (openUrl); otherwise view.php's token URL.
+        var url = info.bytes ? null : (info.src || B.api + info.url);
         var viewOnly = !info.can_download;
         var blobUrls = [];
         /** The file's bytes - from memory for a zip entry, else from view.php. */
@@ -254,7 +264,10 @@
                     setTimeout(function () { URL.revokeObjectURL(bu); }, 10000);
                     auditEntry(info, 'download');
                 } else {
-                    a.href = B.api + 'download.php?id=' + info.id + '&version=' + info.version_id;
+                    a.href = info.download_url || (B.api + 'download.php?id=' + info.id + '&version=' + info.version_id);
+                    // openUrl's address may serve an image to SHOW (a ticket note's file does), so
+                    // without this the "download" would just open the picture in the tab.
+                    if (info.download_url) a.download = info.name;
                 }
                 document.body.appendChild(a); a.click(); a.remove();
             }
@@ -503,13 +516,14 @@
 
         // ── Images ─────────────────────────────────────────────────────────
         function renderImage() {
-            var img = new Image(), zoom = 0;
+            var img = new Image(), zoom = 0, fitting = true;
             img.className = 'fdv-img';
             img.alt = info.name;
             img.draggable = false;
             var showZoom = zoomTools(function (z) {
                 var fit = fitZoom();
-                zoom = z === 'fit' ? fit : Math.max(0.05, Math.min(8, (zoom || fit) * (z === 'in' ? 1.25 : 0.8)));
+                fitting = z === 'fit';
+                zoom = fitting ? fit : Math.max(0.05, Math.min(8, (zoom || fit) * (z === 'in' ? 1.25 : 0.8)));
                 apply();
             });
             /** Returns the zoom that fits the whole image in the stage, never above 100%. */
@@ -520,6 +534,27 @@
             img.onload = function () { stage.innerHTML = ''; stage.classList.add('fdv-imgstage'); stage.appendChild(img); zoom = fitZoom(); apply(); };
             /** Shows "The file could not be shown" when the image fails to load. */
             img.onerror = function () { error(new Error(L('viewer.load_failed', 'The file could not be shown.'))); };
+            // Resizing or maximising the window refits the picture, as a PDF does - until
+            // the person zooms in or out themselves; Fit hands it back (GH #226 follow-up).
+            // TRAP: refit just after, never inside the observer. Resizing the picture
+            // there adds or removes the stage's scrollbars, which resizes the stage again
+            // inside the same callback - "ResizeObserver loop completed with undelivered
+            // notifications", and the dropped notifications were whole window resizes
+            // that never refitted.
+            if (window.ResizeObserver) {
+                var frame = 0;
+                var ro = new ResizeObserver(function () {
+                    if (frame) return;
+                    frame = setTimeout(function () {
+                        frame = 0;
+                        if (!fitting || !img.naturalWidth || !stage.contains(img)) return;
+                        var z = fitZoom();
+                        if (Math.abs(z - zoom) > 0.001) { zoom = z; apply(); }
+                    }, 16);
+                });
+                ro.observe(stage);
+                ctl.destroy = function () { ro.disconnect(); clearTimeout(frame); };
+            }
             img.src = mediaUrl();
         }
 
@@ -686,5 +721,39 @@
         return ov;
     }
 
-    window.FilesViewer = { open: open, sanitise: sanitise };
+    /**
+     * Open a file that is not in Files - one the caller already has an address for,
+     * and has already checked the person may see. A floating window over the page
+     * (FloatWin.page()), or full screen on a phone.
+     *
+     *   o = { name, src, downloadUrl?, size?, key? }
+     *
+     * Returns null for a kind this viewer cannot show, so the caller can fall back
+     * to a plain download.
+     */
+    function openUrl(o) {
+        var kind = kindOf(o.name);
+        if (kind === 'none') return null;
+        var info = {
+            kind: kind, name: o.name, src: o.src, size: o.size || 0,
+            download_url: o.downloadUrl || null, can_download: !!o.downloadUrl,
+            is_current: true, watermark: null
+        };
+        if (window.innerWidth <= 768) return openPhone(info);
+        var w = window.FloatWin.page().open({
+            kind: 'viewer', key: o.key || o.src, single: true,
+            title: o.name, icon: FI ? FI.file(o.name, 16) : '',
+            width: 820, height: 600, x: 140, y: 70,
+            /** Tears down the viewer (media, blob URLs) when its window closes. */
+            onClose: function () { if (w.viewer) w.viewer.destroy(); }
+        });
+        if (!w.viewer) w.viewer = renderInto(w.body, info, {});
+        // Focus INTO the window, so Escape closes it straight away - FloatWin.page()
+        // leaves Escape alone while the person is typing somewhere else on the page.
+        var stage = w.body.querySelector('.fdv-stage');
+        if (stage) stage.focus({ preventScroll: true });
+        return w;
+    }
+
+    window.FilesViewer = { open: open, openUrl: openUrl, sanitise: sanitise };
 })();

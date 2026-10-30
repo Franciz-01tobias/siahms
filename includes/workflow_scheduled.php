@@ -23,6 +23,7 @@
 require_once __DIR__ . '/../workflow/includes/engine.php';
 require_once __DIR__ . '/contract_party.php';   // who a contract is with (#153)
 require_once __DIR__ . '/timezone.php';   // naive_today_sql() — expiry dates are bare dates (GH #126)
+require_once __DIR__ . '/asset_retirement.php';   // retired assets get no warranty reminder
 
 /**
  * Dispatch a time-based event — but only the FIRST time this exact situation is
@@ -200,6 +201,7 @@ function workflowEmitWarrantyExpiries(PDO $conn): int
           WHERE a.warranty_expiry IS NOT NULL
             AND a.warranty_expiry >= $today
             AND a.warranty_expiry <= DATE_ADD($today, INTERVAL ? DAY)"
+          . assetNotRetiredSql($conn, 'a')   // a retired asset's warranty is nobody's business now
     );
     $rows->execute([$maxWindow]);
 
@@ -252,19 +254,29 @@ function workflowScheduledRun(PDO $conn, ?array &$parts = null): array
             return 0;
         }
     };
-    $expiries = $part('expiries', fn() => [workflowEmitContractExpiries($conn), workflowEmitWarrantyExpiries($conn)]);
+    // GH #217. Each part belongs to a module and does nothing while it is switched
+    // off - and records nothing, so its fire-once ledger is not filled with events
+    // nobody was told about. Back on, whatever is still inside its window is
+    // announced then; what passed while it was off is not sent as a backlog.
+    $on = fn(string $module) => moduleIsEnabled($conn, $module);
+    $expiries = $part('expiries', fn() => [
+        $on('contracts') ? workflowEmitContractExpiries($conn) : 0,
+        $on('assets')    ? workflowEmitWarrantyExpiries($conn) : 0,
+    ]);
     return [
         'contract_expiring'        => is_array($expiries) ? $expiries[0] : 0,
         'asset_warranty_expiring'  => is_array($expiries) ? $expiries[1] : 0,
         // Service Status planned maintenance (3.2.0): start what is due, finish
         // what has ended. Not a workflow trigger itself - the incident it makes is.
-        'planned_maintenance'      => $part('planned_maintenance', function () use ($conn) {
+        'planned_maintenance'      => $part('planned_maintenance', function () use ($conn, $on) {
+            if (!$on('service-status')) return 0;
             require_once __DIR__ . '/service_status_planned.php';
             return array_sum(statusPlannedRun($conn));
         }),
         // Projects keep their own fire-once state (includes/projects/alerts.php):
         // health and tolerance changes, and stages ending soon.
-        'projects'                 => $part('projects', function () use ($conn) {
+        'projects'                 => $part('projects', function () use ($conn, $on) {
+            if (!$on('projects')) return 0;
             require_once __DIR__ . '/projects/alerts.php';
             return array_sum(projectAlertsRun($conn));   // the cron prints one number per entry
         }),
@@ -287,7 +299,7 @@ function workflowPruneEmissions(PDO $conn, int $keepDays = 365): int
         );
         $stmt->execute([$keepDays]);
         return $stmt->rowCount();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return 0;
     }
 }

@@ -179,7 +179,7 @@ $b = fn(string $k) => t('system.bingo.' . $k);
     (function () {
         const API = '../../api/system/feature_bingo.php';
         const $ = id => document.getElementById(id);
-        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         const T = k => window.t('system.bingo.' + k);
         const fmt = (s, p) => String(s).replace(/\{(\w+)\}/g, (_, k) => (p && k in p) ? p[k] : '{' + k + '}');
         const TIER_ORDER = { essential: 0, recommended: 1, extra: 2 };

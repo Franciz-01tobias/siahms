@@ -60,6 +60,51 @@ return array (
       'required'=>['external_id'],
       'additionalProperties'=>false
     ],
+    'InventoryConnectionItem'=>[
+      'type'=>'object',
+      'description'=>'Exactly one of connected_asset_id or serial.',
+      'properties'=>[
+        'connected_asset_id'=>['type'=>'integer', 'description'=>'The other asset\'s FreeITSM id, if your tool has already matched it. Must be in this asset\'s company.'],
+        'serial'=>['type'=>'string', 'maxLength'=>100, 'description'=>'The other device\'s serial (a monitor\'s EDID serial), matched like any inventory source - never guessed between two assets.'],
+        'name'=>['type'=>'string', 'maxLength'=>255],
+        'model'=>['type'=>'string', 'maxLength'=>255],
+        'connected'=>['type'=>'boolean', 'default'=>true, 'description'=>'false = your tool saw it is no longer connected; ends your row for it.'],
+      ],
+      'additionalProperties'=>false
+    ],
+    'AssetConnectionRow'=>[
+      'type'=>'object',
+      'properties'=>[
+        'id'=>['type'=>'integer'],
+        'source'=>['type'=>'string', 'description'=>'manual (confirmed by a person) or rest:<your source>'],
+        'manual'=>['type'=>'boolean'],
+        'reported_here'=>['type'=>'boolean', 'description'=>'true if recorded from this asset\'s side'],
+        'connected_at'=>['type'=>'string', 'format'=>'date-time'],
+        'first_observed_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'last_observed_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true, 'description'=>'When the source last saw it connected - not a current assignment'],
+        'disconnected_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+        'confirmed_by'=>['type'=>'string', 'nullable'=>true],
+        'disconnected_by'=>['type'=>'string', 'nullable'=>true],
+        'other'=>['$ref'=>'#/components/schemas/AssetConnectionOther'],
+      ],
+    ],
+    'AssetConnectionOther'=>[
+      'type'=>'object',
+      'properties'=>[
+        'id'=>['type'=>'integer'], 'hostname'=>['type'=>'string', 'nullable'=>true], 'asset_type_id'=>['type'=>'integer', 'nullable'=>true],
+        'service_tag'=>['type'=>'string', 'nullable'=>true], 'manufacturer'=>['type'=>'string', 'nullable'=>true], 'model'=>['type'=>'string', 'nullable'=>true],
+      ],
+    ],
+    'AssetConnections'=>[
+      'type'=>'object',
+      'properties'=>[
+        'current'=>['type'=>'array', 'description'=>'Connected now, one entry per other asset, each source\'s row beside the others', 'items'=>['type'=>'object', 'properties'=>[
+          'other'=>['$ref'=>'#/components/schemas/AssetConnectionOther'],
+          'rows'=>['type'=>'array', 'items'=>['$ref'=>'#/components/schemas/AssetConnectionRow']],
+        ]]],
+        'history'=>['type'=>'array', 'description'=>'Connections that have ended, newest first', 'items'=>['$ref'=>'#/components/schemas/AssetConnectionRow']],
+      ],
+    ],
     'AssetInventorySnapshot'=>[
       'type'=>'object',
       'properties'=>[
@@ -85,6 +130,14 @@ return array (
             'network_adapters'=>[
               'type'=>'object',
               'properties'=>['complete'=>['type'=>'boolean'], 'items'=>['type'=>'array', 'maxItems'=>10000, 'items'=>['$ref'=>'#/components/schemas/InventoryAdapterItem']]],
+              'required'=>['complete', 'items'],
+              'additionalProperties'=>false
+            ],
+            // GH #200 part C: what is physically connected to this device.
+            'connections'=>[
+              'type'=>'object',
+              'description'=>'Assets physically connected to this one (a monitor, a dock). Complete = these and no others: a connection of yours not listed ends. Partial never ends one. A serial no asset has (or several do) is kept for review, never created.',
+              'properties'=>['complete'=>['type'=>'boolean'], 'items'=>['type'=>'array', 'maxItems'=>10000, 'items'=>['$ref'=>'#/components/schemas/InventoryConnectionItem']]],
               'required'=>['complete', 'items'],
               'additionalProperties'=>false
             ]
@@ -126,14 +179,22 @@ return array (
       'type'=>'object',
       'properties'=>[
         'source'=>['type'=>'string'],
-        'source_device_ref'=>['type'=>'string'],
+        'source_device_ref'=>['type'=>'string', 'nullable'=>true, 'description'=>'Null for the inventory agent (source agent)'],
         'owner_analyst_id'=>['type'=>'integer', 'nullable'=>true],
         'sections'=>[
           'type'=>'object',
           'additionalProperties'=>[
             'type'=>'object',
-            'properties'=>['observed_at'=>['type'=>'string', 'format'=>'date-time'], 'imported_at'=>['type'=>'string', 'format'=>'date-time'], 'imported_by_id'=>['type'=>'integer']],
-            'required'=>['observed_at', 'imported_at', 'imported_by_id'],
+            // GH #200 Part B: the last good data, and beside it what the last attempt came to.
+            'properties'=>[
+              'observed_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true, 'description'=>'When the last good data was observed; null if the section has only ever failed'],
+              'imported_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+              'imported_by_id'=>['type'=>'integer', 'nullable'=>true, 'description'=>'Null for the inventory agent'],
+              'last_outcome'=>['type'=>'string', 'enum'=>['succeeded', 'empty', 'skipped', 'failed']],
+              'last_error'=>['type'=>'string', 'nullable'=>true],
+              'last_attempt_at'=>['type'=>'string', 'format'=>'date-time', 'nullable'=>true],
+            ],
+            'required'=>['observed_at', 'imported_at', 'imported_by_id', 'last_outcome', 'last_error', 'last_attempt_at'],
             'additionalProperties'=>false
           ]
         ]
@@ -551,6 +612,18 @@ return array (
           'format' => 'date-time',
           'nullable' => true,
         ),
+        'retired_at' => 
+        array (
+          'type' => 'string',
+          'format' => 'date-time',
+          'nullable' => true,
+          'description' => 'When the asset moved into a status ticked Retired - it has left the estate. Null when it has not.',
+        ),
+        'retired_reason' => 
+        array (
+          'type' => 'string',
+          'nullable' => true,
+        ),
         // Custom asset fields. Keyed by the field's stable key; the value's type
         // follows the field's own type (string / number / boolean / date, or an
         // integer id for a link field). A field the asset does not carry is
@@ -798,6 +871,19 @@ return array (
               'items' => 
               array (
                 '$ref' => '#/components/schemas/AssetAssignedUser',
+              ),
+            ),
+            'linked_ci' =>
+            array (
+              'type' => 'object',
+              'nullable' => true,
+              'description' => 'GH #201: the configuration item this asset is linked to; {restricted: true} without cmdb_objects.read; null when not linked.',
+              'properties' =>
+              array (
+                'id' => array ('type' => 'integer'),
+                'name' => array ('type' => 'string', 'nullable' => true),
+                'class' => array ('type' => 'string', 'nullable' => true),
+                'restricted' => array ('type' => 'boolean'),
               ),
             ),
             'id' => 
@@ -3362,6 +3448,18 @@ return array (
         array (
           '$ref' => '#/components/schemas/CmdbObjectRelationships',
         ),
+        'linked_asset' =>
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'GH #201: the asset this configuration item is linked to; {restricted: true} without assets.read; null when not linked.',
+          'properties' =>
+          array (
+            'id' => array ('type' => 'integer'),
+            'name' => array ('type' => 'string', 'nullable' => true),
+            'restricted' => array ('type' => 'boolean'),
+          ),
+        ),
       ),
     ),
     'CmdbObjectPropertyValue' => 
@@ -3991,6 +4089,66 @@ return array (
             6 => 'campaign',
           ),
         ),
+        'scope' => 
+        array (
+          'type' => 'string',
+          'description' => 'public, or internal: never sent outside the network, and given a health instead of a grade (GH #203)',
+          'enum' => 
+          array (
+            0 => 'public',
+            1 => 'internal',
+          ),
+        ),
+        'health' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'An internal domain\'s health; null for a public domain. state is worked out when read: stale when no check has completed for twice the interval. known is the last completed result, kept when later checks cannot complete.',
+          'properties' => 
+          array (
+            'state' => 
+            array (
+              'type' => 'string',
+              'enum' => 
+              array (
+                0 => 'healthy',
+                1 => 'problem',
+                2 => 'not_checked',
+                3 => 'stale',
+              ),
+            ),
+            'known' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+              'enum' => 
+              array (
+                0 => 'healthy',
+                1 => 'problem',
+              ),
+            ),
+            'last_completed_at' => 
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+            'last_healthy_at' => 
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+            'since_incomplete' => 
+            array (
+              'type' => 'boolean',
+            ),
+            'interval_minutes' => 
+            array (
+              'type' => 'integer',
+            ),
+          ),
+        ),
         'registrar' => 
         array (
           'type' => 'object',
@@ -4287,6 +4445,11 @@ return array (
         'monitoring_enabled' => 
         array (
           'type' => 'boolean',
+        ),
+        'parent_domain_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
         ),
         'security_grade' => 
         array (
@@ -4432,6 +4595,66 @@ return array (
             6 => 'campaign',
           ),
         ),
+        'scope' => 
+        array (
+          'type' => 'string',
+          'description' => 'public, or internal: never sent outside the network, and given a health instead of a grade (GH #203)',
+          'enum' => 
+          array (
+            0 => 'public',
+            1 => 'internal',
+          ),
+        ),
+        'health' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'An internal domain\'s health; null for a public domain. state is worked out when read: stale when no check has completed for twice the interval. known is the last completed result, kept when later checks cannot complete.',
+          'properties' => 
+          array (
+            'state' => 
+            array (
+              'type' => 'string',
+              'enum' => 
+              array (
+                0 => 'healthy',
+                1 => 'problem',
+                2 => 'not_checked',
+                3 => 'stale',
+              ),
+            ),
+            'known' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+              'enum' => 
+              array (
+                0 => 'healthy',
+                1 => 'problem',
+              ),
+            ),
+            'last_completed_at' => 
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+            'last_healthy_at' => 
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+            'since_incomplete' => 
+            array (
+              'type' => 'boolean',
+            ),
+            'interval_minutes' => 
+            array (
+              'type' => 'integer',
+            ),
+          ),
+        ),
         'registrar' => 
         array (
           'type' => 'object',
@@ -4728,6 +4951,11 @@ return array (
         'monitoring_enabled' => 
         array (
           'type' => 'boolean',
+        ),
+        'parent_domain_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
         ),
         'security_grade' => 
         array (
@@ -4881,6 +5109,66 @@ return array (
             6 => 'campaign',
           ),
         ),
+        'scope' => 
+        array (
+          'type' => 'string',
+          'description' => 'public, or internal: never sent outside the network, and given a health instead of a grade (GH #203)',
+          'enum' => 
+          array (
+            0 => 'public',
+            1 => 'internal',
+          ),
+        ),
+        'health' => 
+        array (
+          'type' => 'object',
+          'nullable' => true,
+          'description' => 'An internal domain\'s health; null for a public domain. state is worked out when read: stale when no check has completed for twice the interval. known is the last completed result, kept when later checks cannot complete.',
+          'properties' => 
+          array (
+            'state' => 
+            array (
+              'type' => 'string',
+              'enum' => 
+              array (
+                0 => 'healthy',
+                1 => 'problem',
+                2 => 'not_checked',
+                3 => 'stale',
+              ),
+            ),
+            'known' => 
+            array (
+              'type' => 'string',
+              'nullable' => true,
+              'enum' => 
+              array (
+                0 => 'healthy',
+                1 => 'problem',
+              ),
+            ),
+            'last_completed_at' => 
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+            'last_healthy_at' => 
+            array (
+              'type' => 'string',
+              'format' => 'date-time',
+              'nullable' => true,
+            ),
+            'since_incomplete' => 
+            array (
+              'type' => 'boolean',
+            ),
+            'interval_minutes' => 
+            array (
+              'type' => 'integer',
+            ),
+          ),
+        ),
         'registrar' => 
         array (
           'type' => 'object',
@@ -5177,6 +5465,11 @@ return array (
         'monitoring_enabled' => 
         array (
           'type' => 'boolean',
+        ),
+        'parent_domain_id' => 
+        array (
+          'type' => 'integer',
+          'nullable' => true,
         ),
         'security_grade' => 
         array (
@@ -10866,6 +11159,7 @@ return array (
         array (
           '$ref' => '#/components/schemas/IdNameRef',
         ),
+        'workspace' => array ('type' => 'boolean'),
         'first_time_fix' => 
         array (
           'type' => 'boolean',
@@ -11090,6 +11384,7 @@ return array (
               'type' => 'object',
               'nullable' => true,
             ),
+            'workspace' => array ('type' => 'boolean'),
             'first_time_fix' => 
             array (
               'type' => 'boolean',
@@ -11500,6 +11795,19 @@ return array (
         array (
           'type' => 'string',
         ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'description' => 'The company this workflow runs for. Null = shared: it runs for every company (and on a single-company install, always).',
+          'allOf' => 
+          array (
+            0 => 
+            array (
+              '$ref' => '#/components/schemas/NamedRef',
+            ),
+          ),
+          'nullable' => true,
+        ),
         'is_active' => 
         array (
           'type' => 'boolean',
@@ -11756,6 +12064,19 @@ return array (
         array (
           'type' => 'string',
         ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'description' => 'The company the triggering event belonged to. Null = none known (a settings event, or a run from before companies were recorded on runs).',
+          'allOf' => 
+          array (
+            0 => 
+            array (
+              '$ref' => '#/components/schemas/NamedRef',
+            ),
+          ),
+          'nullable' => true,
+        ),
         'status' => 
         array (
           'type' => 'string',
@@ -11935,6 +12256,19 @@ return array (
         array (
           'type' => 'string',
         ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'description' => 'The company the triggering event belonged to. Null = none known (a settings event, or a run from before companies were recorded on runs).',
+          'allOf' => 
+          array (
+            0 => 
+            array (
+              '$ref' => '#/components/schemas/NamedRef',
+            ),
+          ),
+          'nullable' => true,
+        ),
         'status' => 
         array (
           'type' => 'string',
@@ -12037,6 +12371,19 @@ return array (
         'trigger_event' => 
         array (
           'type' => 'string',
+        ),
+        'company' => 
+        array (
+          'type' => 'object',
+          'description' => 'The company this workflow runs for. Null = shared: it runs for every company (and on a single-company install, always).',
+          'allOf' => 
+          array (
+            0 => 
+            array (
+              '$ref' => '#/components/schemas/NamedRef',
+            ),
+          ),
+          'nullable' => true,
         ),
         'is_active' => 
         array (
@@ -13444,6 +13791,7 @@ return array (
     'GET /changes/{id}/attachments' => ['type'=>'array','items'=>['$ref'=>'#/components/schemas/ChangeEvidenceAttachment']],
     'POST /changes/{id}/attachments' => ['$ref'=>'#/components/schemas/ChangeEvidenceAttachment'],
     'GET /assets/{id}/inventory'=>['type'=>'array','items'=>['$ref'=>'#/components/schemas/AssetInventoryProvenance']],
+    'GET /assets/{id}/connections'=>['$ref'=>'#/components/schemas/AssetConnections'],
     'POST /assets/{id}/inventory'=>['$ref'=>'#/components/schemas/AssetInventoryResult'],
     'DELETE /assets/{id}/inventory/{source}'=>['type'=>'object', 'properties'=>[
       'asset_id'=>['type'=>'integer'], 'source'=>['type'=>'string'],
@@ -15450,6 +15798,13 @@ return array (
   ),
   'requestBodies' => 
   array (
+    'PATCH /tickets/{id}' => [
+      'type' => 'object',
+      'properties' => [
+        'workspace' => ['type' => 'boolean', 'description' => 'Audited ticket workspace flag. A flag-only update does not trigger workflow events.'],
+      ],
+      'additionalProperties' => true,
+    ],
     // Custom fields are dynamic, so their keys/types come from the asset's
     // field catalogue. Other existing core input properties remain accepted.
     'POST /assets' => [

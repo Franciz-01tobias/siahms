@@ -35,8 +35,8 @@ function cdpEvaluate(string $wsUrl, string $expression, int $timeout): string
     fwrite($sock, "GET {$u['path']} HTTP/1.1\r\nHost: {$u['host']}:{$u['port']}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                 . "Sec-WebSocket-Key: $key\r\nSec-WebSocket-Version: 13\r\n\r\n");
     $head = '';
-    while (strpos($head, "\r\n\r\n") === false && !feof($sock)) $head .= fread($sock, 1);
-    if (strpos($head, ' 101 ') === false) throw new RuntimeException('The browser refused the DevTools connection.');
+    while (!str_contains($head, "\r\n\r\n") && !feof($sock)) $head .= fread($sock, 1);
+    if (!str_contains($head, ' 101 ')) throw new RuntimeException('The browser refused the DevTools connection.');
 
     $send = function (string $text) use ($sock) {
         $len = strlen($text);

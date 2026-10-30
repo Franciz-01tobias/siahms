@@ -15,6 +15,7 @@ require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
 require_once '../includes/people.php';
 require_once '../includes/recent_trail.php';
+require_once '../includes/phone_dial.php';   // the Call button beside a number
 require_once 'includes/render.php';
 I18n::initFromSession();
 Tz::init();
@@ -25,6 +26,7 @@ $conn = connectToDatabase();
 $analystId = (int)$_SESSION['analyst_id'];
 $contactId = (int)($_GET['id'] ?? 0);
 $data = supplierContactDetail($conn, $analystId, $contactId);
+$dial = phoneDialTemplate($conn);
 if ($data) entityVisit('supplier_contact', $contactId, $conn);
 
 $current_page = 'suppliers';
@@ -54,7 +56,7 @@ $sections = $data['sections'] ?? [];
                     <?php echo pplE($ct['job_title'] ?: t('people.contact.is_contact')); ?>
                     <?php if ($ct['supplier_id']): ?> · <a href="supplier.php?id=<?php echo (int)$ct['supplier_id']; ?>"><?php echo pplE($ct['supplier']); ?></a><?php endif; ?>
                 </div>
-                <?php if ($ct['email']): ?><div class="ppl-hero-contact"><a href="mailto:<?php echo pplE($ct['email']); ?>"><?php echo pplE($ct['email']); ?></a><?php echo ($ct['direct_dial'] ?: $ct['mobile']) ? ' · ' . pplE($ct['direct_dial'] ?: $ct['mobile']) : ''; ?></div><?php endif; ?>
+                <?php if ($ct['email']): ?><div class="ppl-hero-contact"><a href="mailto:<?php echo pplE($ct['email']); ?>"><?php echo pplE($ct['email']); ?></a><?php echo ($ct['direct_dial'] ?: $ct['mobile']) ? ' · ' . phoneWithDialHtml($dial, $ct['direct_dial'] ?: $ct['mobile']) : ''; ?></div><?php endif; ?>
             </div>
             <div class="ppl-hero-actions">
                 <a class="ppl-btn" href="<?php echo BASE_URL; ?>contracts/contacts/"><?php echo pplE(t('people.contact.edit')); ?></a>
@@ -75,9 +77,9 @@ $sections = $data['sections'] ?? [];
                         };
                         $f('supplier', $ct['supplier_id'] ? '<a href="supplier.php?id=' . (int)$ct['supplier_id'] . '">' . pplE($ct['supplier']) . '</a>' : null, true);
                         $f('email', $ct['email'] ? '<a href="mailto:' . pplE($ct['email']) . '">' . pplE($ct['email']) . '</a>' : null, true);
-                        $f('direct_dial', $ct['direct_dial']);
-                        $f('mobile', $ct['mobile']);
-                        $f('switchboard', $ct['switchboard']);
+                        $f('direct_dial', $ct['direct_dial'] ? phoneWithDialHtml($dial, $ct['direct_dial']) : null, true);
+                        $f('mobile', $ct['mobile'] ? phoneWithDialHtml($dial, $ct['mobile']) : null, true);
+                        $f('switchboard', $ct['switchboard'] ? phoneWithDialHtml($dial, $ct['switchboard']) : null, true);
                         $f('added', $ct['created'] ? fmt_date($ct['created']) : null);
                         ?>
                     </dl>
@@ -90,6 +92,6 @@ $sections = $data['sections'] ?? [];
         </div>
     <?php endif; ?>
     </main>
-    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=82"></script>
+    <script src="<?php echo BASE_URL; ?>assets/js/mobile.js?v=83"></script>
 </body>
 </html>

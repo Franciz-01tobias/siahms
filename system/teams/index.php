@@ -115,7 +115,7 @@ $translationNamespaces = ['common', 'tickets'];
         .form-group input[type="checkbox"] { accent-color: var(--accent, #546e7a); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="settings" data-mobile-shell="own">
     <div class="settings-shell">
@@ -265,7 +265,7 @@ $translationNamespaces = ['common', 'tickets'];
             if (text === null || text === undefined) return '';
             const d = document.createElement('div');
             d.textContent = String(text);
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         let teams = [];
@@ -641,6 +641,6 @@ $translationNamespaces = ['common', 'tickets'];
             loadTeams();
         });
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

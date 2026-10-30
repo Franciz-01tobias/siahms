@@ -1685,7 +1685,6 @@ return [
         'step3' => '<strong>Pantau halaman ini.</strong> Setelah pekerja berjalan, status di atas berubah hijau dan pengiriman muncul di bawah. Catatan penyiapan lengkap (Windows &amp; Linux, verifikasi tanda tangan) ada di <a href="https://github.com/edmozley/freeitsm/wiki/Workflows" target="_blank" rel="noopener">wiki Workflows</a>.',
         'fact_worker' => 'Skrip pekerja',
         'fact_retry' => 'Jadwal percobaan ulang',
-        'fact_retry_val' => '1m &middot; 5m &middot; 15m &middot; 1j &middot; 6j, lalu gagal',
         'fact_retention' => 'Retensi log',
         'fact_queued' => 'Diantrekan sekarang',
         'days' => '{n} hari',

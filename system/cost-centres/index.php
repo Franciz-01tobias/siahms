@@ -146,7 +146,7 @@ $ccT = fn(string $k) => t('system.cost_centres.' . $k);
             .cc-toolbar input[type=search] { width: 100%; }
         }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="cost-centres">
     <?php include '../includes/header.php'; ?>
@@ -268,7 +268,7 @@ $ccT = fn(string $k) => t('system.cost_centres.' . $k);
         const API = '../../api/system/cost_centres.php';
         const $ = id => document.getElementById(id);
         const T = (k, p) => t('system.cost_centres.' + k, p);
-        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         const toast = (m, k) => { if (typeof showToast === 'function') showToast(m, k); };
 
         let companyId = 0;       // the company a NEW cost centre goes into
@@ -602,6 +602,6 @@ $ccT = fn(string $k) => t('system.cost_centres.' . $k);
         load();
     })();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

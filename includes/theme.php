@@ -109,7 +109,7 @@ class Theme
                         $_SESSION['ss_theme'] = $val;   // cache for later requests
                         return self::$cache[$ckey] = $val;
                     }
-                } catch (Throwable $e) {
+                } catch (Throwable) {
                     // column not added yet, or DB unavailable — fall through to default
                 }
             }
@@ -135,7 +135,7 @@ class Theme
                 foreach ($keys as $k) {
                     if (!empty($rows[$k]) && self::isValid($rows[$k])) { $theme = $rows[$k]; break; }
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 // fall back to default
             }
         }

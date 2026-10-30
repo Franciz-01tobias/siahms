@@ -118,7 +118,7 @@ if (!isset($_SESSION['analyst_id'])) {
         .srch-muted { color: var(--text-faint, #9ca3af); }
     </style>
     <!-- Mobile layer LAST, after this page's own <style> (Techniques §9). -->
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="system" data-mobile-page="search">
     <?php include '../includes/header.php'; ?>
@@ -189,7 +189,7 @@ if (!isset($_SESSION['analyst_id'])) {
         function esc(s) {
             var d = document.createElement('div');
             d.textContent = s == null ? '' : s;
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         function n(v) { return (v || 0).toLocaleString(); }
 
@@ -342,6 +342,6 @@ if (!isset($_SESSION['analyst_id'])) {
 
         loadStatus();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

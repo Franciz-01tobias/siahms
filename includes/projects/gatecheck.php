@@ -33,7 +33,7 @@ function projectGateItemsReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT 1 FROM project_gate_items LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -46,7 +46,7 @@ function projectGateDocuments(PDO $conn, int $projectId): array
                                WHERE l.parent_type = 'project' AND l.parent_id = ? ORDER BY d.title");
         $st->execute([$projectId]);
         return array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title']], $st->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { return []; }
+    } catch (Throwable) { return []; }
 }
 
 /** The project's linked changes with whether each is approved - what a change item may point at. */
@@ -57,7 +57,7 @@ function projectGateChanges(PDO $conn, int $projectId): array
         $st->execute([$projectId]);
         return array_map(fn($r) => ['id' => (int)$r['id'], 'label' => 'CHG-' . str_pad((string)$r['id'], 4, '0', STR_PAD_LEFT), 'title' => $r['title'],
             'approved' => $r['approval_datetime'] !== null], $st->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { return []; }
+    } catch (Throwable) { return []; }
 }
 
 /**

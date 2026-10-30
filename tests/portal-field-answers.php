@@ -145,7 +145,7 @@ $pendingNotFound = false;
     $asked = array_values(array_filter($items ?? [], fn($i) => $i['label'] === 'ZZ Start date'))[0] ?? [];
     ok('...with its answer', ($asked['display'] ?? '') === '2026-11-03', json_encode($asked));
     ok('an unanswered field is left out', !in_array('ZZ Laptop', $labels, true));
-    ok('an analyst-only field is never sent', !in_array('ZZ Cost code', $labels, true) && strpos(json_encode($d), 'SECRET-CC-1') === false);
+    ok('an analyst-only field is never sent', !in_array('ZZ Cost code', $labels, true) && !str_contains(json_encode($d), 'SECRET-CC-1'));
 
     setPlace($conn, 'side');
     ok("'side' is passed through", (detail($user, $ticket)['field_answers']['place'] ?? null) === 'side');

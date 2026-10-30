@@ -218,7 +218,7 @@ function changeApprovalSettings(PDO $conn, bool $fresh = false): array
         foreach ($s->fetchAll(PDO::FETCH_KEY_PAIR) as $k => $v) {
             if ($v !== null) $raw[$k] = (string)$v;
         }
-    } catch (Exception $e) { /* system_settings unreadable: defaults, i.e. today's behaviour */ }
+    } catch (Exception) { /* system_settings unreadable: defaults, i.e. today's behaviour */ }
 
     $list = fn(string $v, array $allowed) => array_values(array_intersect(array_filter(array_map('trim', explode(',', $v))), $allowed));
     $pick = fn(string $v, array $allowed, string $default) => in_array($v, $allowed, true) ? $v : $default;
@@ -775,7 +775,7 @@ function changeApprovalAllowedStatuses(PDO $conn, array $row, array $cfg): array
         try {
             changeApprovalGuardMove($round, $st, $cfg);
             $out[] = (int)$st['id'];
-        } catch (ServiceError $e) { /* not offered */ }
+        } catch (ServiceError) { /* not offered */ }
     }
     return $out;
 }

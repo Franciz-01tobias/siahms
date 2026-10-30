@@ -51,7 +51,7 @@ try {
     // stored value of "../../config.php" would otherwise be served happily.
     $realRoot = realpath($root);
     $realFile = realpath($filePath);
-    if ($realRoot === false || $realFile === false || strpos($realFile, $realRoot . DIRECTORY_SEPARATOR) !== 0) {
+    if ($realRoot === false || $realFile === false || !str_starts_with($realFile, $realRoot . DIRECTORY_SEPARATOR)) {
         http_response_code(404);
         echo 'File not found';
         exit;

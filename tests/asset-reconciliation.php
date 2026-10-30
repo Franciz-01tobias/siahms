@@ -54,7 +54,7 @@ try {
     ok('a renamed machine is found by its serial', $r['asset_id'] === $a && $r['matched_by'] === 'service_tag');
     ok('...and takes its new name', $r['hostname_updated'] && $hostOf($a) === 'ZZREC-NEWNAME');
     $h = $conn->query("SELECT analyst_id, new_value FROM asset_history WHERE asset_id = $a AND field_name = 'hostname'")->fetch(PDO::FETCH_ASSOC);
-    ok('...recorded in its history with no analyst', $h && $h['analyst_id'] === null && strpos($h['new_value'], 'ZZREC-NEWNAME') === 0, json_encode($h));
+    ok('...recorded in its history with no analyst', $h && $h['analyst_id'] === null && str_starts_with($h['new_value'], 'ZZREC-NEWNAME'), json_encode($h));
 
     echo "\nTier 2 - the ambiguity guard\n";
     $d1 = $asset('ZZREC-DUP1', 'ZZREC-SER-DUP');

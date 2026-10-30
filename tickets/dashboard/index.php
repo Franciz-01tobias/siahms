@@ -229,7 +229,7 @@ $translationNamespaces = ['common', 'tickets'];
         /* Form fields follow the palette (inbox.css only themes specific input classes). */
     .dashboard-page input, .dashboard-page select, .dashboard-page textarea { background: var(--surface, #fff); color: var(--text, #333); }
     </style>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-page="tickets-dashboard">
     <?php require_once '../includes/header.php'; ?>
@@ -279,7 +279,7 @@ $translationNamespaces = ['common', 'tickets'];
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
     <script src="../../assets/js/chart.min.js"></script>
-    <script src="../../assets/js/widget-editor.js?v=1"></script>
+    <script src="../../assets/js/widget-editor.js?v=2"></script>
     <script>
         const API_BASE = '../../api/tickets/';
         let dashboardWidgets = [];
@@ -711,7 +711,7 @@ $translationNamespaces = ['common', 'tickets'];
         function escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         document.addEventListener('keydown', function(e) {
@@ -724,6 +724,6 @@ $translationNamespaces = ['common', 'tickets'];
 
         init();
     </script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

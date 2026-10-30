@@ -54,7 +54,7 @@ function enforcePasswordChangeGate(): void
     }
 
     // Does the caller want JSON? An API path or an explicit Accept/X-Requested-With.
-    $isApi = strpos((string)($_SERVER['SCRIPT_NAME'] ?? ''), '/api/') !== false
+    $isApi = str_contains((string)($_SERVER['SCRIPT_NAME'] ?? ''), '/api/')
           || stripos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false
           || strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
 

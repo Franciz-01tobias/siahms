@@ -12,7 +12,15 @@
  *   - its COLUMNS catalogue (the single source of truth for the grid)
  *   - how to load() its rows
  *   - the accent colour + a preference key + the export filename
- *   - optionally: onSaveCell (inline editing), onRowClick, getLookups, pdf
+ *   - optionally: onSaveCell (inline editing), onRowClick, rowOpen, getLookups, pdf
+ *
+ * rowOpen (GH #219) - an "open" link at the start of every row, for a table whose
+ * cells are edited in place and so cannot also open the record on a click:
+ *   { href: row => url, onOpen?: (row, event) => void, label?: 'Open' }
+ * It is a real link to href, so Ctrl / middle-click / "open in new tab" work as in
+ * any page; a plain left click calls onOpen instead when one is given (a panel that
+ * keeps the analyst's place). Not a column: it is not sorted, filtered, chosen,
+ * reordered or exported.
  *
  * Styling is shared (assets/css/data-table.css); the accent is injected at
  * runtime onto :root as --dt-accent so even body-appended popovers pick it up.
@@ -30,6 +38,26 @@
  *
  * editable kinds: 'text' | 'date' | 'datetime' | 'bool' |
  *   { kind:'lookup', listKey, valueKey, labelKey, allowNull?, nullLabel?, colourKey? }
+ *
+ * Column flags (PR #213): sortable: false and filterable: false hide the sort
+ * arrow and the filter button for that column.
+ *
+ * SERVER MODE (PR #213, the ticket table)
+ * ---------------------------------------
+ * By default a table load()s every row and sorts, filters, searches and exports
+ * in the browser. A table too big for that passes `server` instead:
+ *   server: {
+ *     load: async query => ({rows, total, page, pageSize, facets}),
+ *     exportCsv: async (query + {columns}, abortSignal) => { ...download... },
+ *   }
+ * where query = {page, pageSize, sort, search, filters, context}. The server then
+ * does all of it over the WHOLE list and sends one page; facets are each filter
+ * column's values, labels and counts. Pages of 25/50/100 with Previous / Next.
+ * A failed load keeps the previous rows on screen, greyed and inert, with Retry.
+ * Optional hooks for a server table: manual (start() it yourself), initialFilters,
+ * getContext / applyContext (state outside the table that a saved view should
+ * carry), onLoading, onLoadError, onRowsRendered, onRowContextMenu.
+ * Every other module's table is unchanged: no `server`, no difference.
  *
  * @wiki Saved-Table-Views-Developer-Guide
  */
@@ -52,7 +80,7 @@
      * Builds one data table from a module's config and wires it up when the page has loaded.
      *
      * Exposed as window.createDataTable. Holds the column, sort, filter and search state in a closure.
-     * @return object  reload, render, findRow(id), getViewRows and getAllRows
+     * @return object  reload, render, findRow(id), getViewRows and getAllRows; start and setQuery for a server table
      */
     function createDataTable(config) {
         const els = Object.assign({}, DEFAULT_ELS, config.els || {});
@@ -64,20 +92,37 @@
         const defaultSort = config.defaultSort || { key: columns[0].key, dir: 'asc' };
         const rowId = config.rowId || (r => r.id);
         const editable = typeof config.onSaveCell === 'function';
+        const openLabel = (config.rowOpen && config.rowOpen.label) || 'Open';   // GH #219
 
         // --- State ----------------------------------------------------
         let allRows = [];
         let columnState = [];
         let sort = { key: defaultSort.key, dir: defaultSort.dir };
-        let filters = {};
+        // A module may enter the table from an already selected queue/folder.
+        // Include that scope in the first request; a saved default view can
+        // still replace it through the usual preference-loading path.
+        let filters = Object.fromEntries(Object.entries(config.initialFilters || {}).map(([key, values]) => [key, new Set(values)]));
         let searchTerm = '';
         let openPopover = null;
+
+        // Server mode (see the header). Unused, and harmless, for a load() table.
+        const server = config.server || null;
+        let page = 1, pageSize = 50, total = 0;
+        let facets = {};               // filter key => [{value, label, count}], from the server
+        let generation = 0;            // bumped per load, so a slow, older response is dropped
+        let signature = '';            // the query the rows on screen answer, less the page
+        let started = null;            // boot()'s promise, so start() runs it once
+        let booting = false;           // preferences are being applied; do not load yet
+        let exportController = null;   // the running CSV export, so a second click cancels it
+        const T = key => window.t('common.table_server.' + key);
 
         // Inject the accent so shared CSS + body-appended popovers pick it up.
         if (config.accent) document.documentElement.style.setProperty('--dt-accent', config.accent);
 
         // --- Boot -----------------------------------------------------
-        document.addEventListener('DOMContentLoaded', boot);
+        if (!config.manual) document.addEventListener('DOMContentLoaded', start);
+        /** Boot the table once. A `manual` table calls this itself, when it is first shown. */
+        function start() { return started || (started = boot()); }
 
         /**
          * Starts the table on DOMContentLoaded: columns, saved preferences, default view, rows, toolbar.
@@ -85,6 +130,7 @@
          * The order matters - a default view is applied after preferences so it wins over them.
          */
         async function boot() {
+            booting = true;
             columnState = columns.slice()
                 .sort((a, b) => a.defaultOrder - b.defaultOrder)
                 .map(c => ({ key: c.key, visible: c.defaultVisible }));
@@ -94,6 +140,7 @@
 
             await loadPreferences();
             await applyDefaultView();
+            booting = false;
             await reload();
             wireToolbar();
         }
@@ -127,6 +174,7 @@
         // --- Data -----------------------------------------------------
         /** Fetches the rows again through the module's load() and redraws; a failed load shows an empty table. */
         async function reload() {
+            if (server) return reloadPage();
             try {
                 allRows = (await config.load()) || [];
             } catch (e) {
@@ -134,6 +182,145 @@
                 allRows = [];
             }
             render();
+        }
+
+        // --- Server mode (PR #213) ------------------------------------
+
+        /** The table's state as the server's query. Filters go as plain arrays. */
+        function query() {
+            return {
+                page,
+                pageSize,
+                sort: { ...sort },
+                search: searchTerm,
+                filters: Object.fromEntries(Object.entries(filters).map(([key, values]) => [key, [...values]])),
+                context: config.getContext ? config.getContext() : config.context,
+            };
+        }
+
+        /** The query less its page: when this changes, the rows on screen answer a different question. */
+        function querySignature() {
+            const q = query();
+            delete q.page;
+            return JSON.stringify(q);
+        }
+
+        /** Show (or, with no message, remove) the failed-load notice and its Retry button. */
+        function serverNotice(message) {
+            let node = byId(els.table).parentElement.querySelector('.dt-server-error');
+            if (!message) { node?.remove(); return; }
+            if (!node) {
+                node = document.createElement('div');
+                node.className = 'dt-server-error';
+                node.setAttribute('role', 'alert');
+                byId(els.table).before(node);
+            }
+            node.replaceChildren(document.createTextNode(message + ' '));
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.textContent = T('retry');
+            retry.addEventListener('click', reload);
+            node.append(retry);
+        }
+
+        /**
+         * Fetch and draw one page. While it loads, the table is inert, so nothing
+         * is clicked on rows that are about to change. If it fails, the old rows
+         * stay, greyed (dt-stale) and inert, with Retry - never acted on, since
+         * they may no longer be true.
+         */
+        async function reloadPage() {
+            const current = ++generation;
+            signature = querySignature();
+            const table = byId(els.table);
+            table.inert = true;
+            table.setAttribute('aria-busy', 'true');
+            config.onLoading?.();
+            try {
+                const result = await server.load(query());
+                if (current !== generation) return;   // a newer load has started
+                if (!result || !Array.isArray(result.rows) || !Number.isInteger(result.total) || result.total < 0) {
+                    throw Error('Invalid table page');
+                }
+                allRows = result.rows;
+                total = result.total;
+                page = result.page;          // the server may have moved it back (fewer rows now)
+                pageSize = result.pageSize;
+                facets = result.facets || {};
+                table.inert = false;
+                table.classList.remove('dt-stale');
+                serverNotice(null);
+                renderHead();
+                renderBody();
+                renderPager();
+            } catch (error) {
+                if (current !== generation) return;
+                table.classList.add('dt-stale');
+                serverNotice(T('failed'));
+                config.onLoadError?.();
+            } finally {
+                if (current === generation) table.removeAttribute('aria-busy');
+            }
+        }
+
+        /** Previous / Next, "page / pages", and the rows-per-page choice, under the table. */
+        function renderPager() {
+            // The footer belongs to the layout, outside the table's horizontal
+            // scroller. Keep the plain-table fallback used by embedded callers.
+            const anchor = byId(els.table).closest('.dt-wrap') || byId(els.table);
+            let pager = anchor.parentElement.querySelector('.dt-pagination');
+            if (!pager) {
+                pager = document.createElement('div');
+                pager.className = 'dt-pagination';
+                anchor.after(pager);
+            }
+            pager.replaceChildren();
+            const range = document.createElement('span');
+            range.className = 'dt-page-range';
+            range.textContent = T('range').replace('{from}', total ? (page - 1) * pageSize + 1 : 0)
+                .replace('{to}', Math.min(page * pageSize, total)).replace('{total}', total);
+            pager.append(range);
+            const buttons = [
+                [T('previous'), page - 1, page <= 1],
+                [T('next'),     page + 1, page * pageSize >= total],
+            ];
+            for (const [label, next, disabled] of buttons) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = label;
+                button.disabled = disabled;
+                button.addEventListener('click', () => { page = next; void reloadPage(); });
+                pager.append(button);
+            }
+            const status = document.createElement('span');
+            status.textContent = T('page').replace('{page}', page).replace('{pages}', Math.max(1, Math.ceil(total / pageSize)));
+            pager.append(status);
+            const size = document.createElement('select');
+            size.setAttribute('aria-label', T('page_size'));
+            [25, 50, 100].forEach(n => {
+                const option = new Option(String(n), String(n));
+                option.selected = n === pageSize;
+                size.add(option);
+            });
+            size.addEventListener('change', () => { pageSize = Number(size.value); page = 1; void reloadPage(); });
+            const label = document.createElement('label');
+            label.className = 'dt-page-size';
+            label.append(T('page_size'), size);
+            pager.append(label);
+        }
+
+        /**
+         * Change the query from outside (a folder click, a context change) and
+         * reload. Anything not given keeps its value, except the page, which goes
+         * back to 1 unless given.
+         */
+        async function setQuery(next) {
+            if (next.sort) sort = { ...next.sort };
+            if (next.search !== undefined) searchTerm = next.search;
+            if (next.filters) filters = Object.fromEntries(Object.entries(next.filters).map(([k, v]) => [k, new Set(v)]));
+            page = next.page || 1;
+            if ([25, 50, 100].includes(next.pageSize)) pageSize = next.pageSize;
+            return reload();
         }
 
         // --- Preferences ----------------------------------------------
@@ -260,6 +447,7 @@
             });
             return {
                 cols: columnState.map(c => ({ k: c.key, v: c.visible ? 1 : 0 })),
+                ...(server ? {context:query().context} : {}),
                 sort: { k: sort.key, d: sort.dir },
                 filters: f,
             };
@@ -274,6 +462,7 @@
          */
         function applyViewConfig(cfg) {
             if (!cfg) return;
+            if (server && cfg.context && config.applyContext) config.applyContext(cfg.context);
             applyColumnConfig(cfg.cols);
             applySortConfig(cfg.sort);
             filters = {};
@@ -651,7 +840,7 @@
             const s = byId(els.search);
             if (s) s.addEventListener('input', e => {
                 searchTerm = e.target.value.trim().toLowerCase();
-                renderBody();
+                if (server) render(); else renderBody();
             });
             const cb = byId(els.columnsBtn);
             if (cb) cb.addEventListener('click', e => { e.stopPropagation(); openColumnsDrawer(e.currentTarget); });
@@ -712,7 +901,12 @@
         }
 
         /** Redraws the header and the body. */
-        function render() { renderHead(); renderBody(); }
+        function render() {
+            // Server mode: a sort, filter or search change means different rows, so
+            // fetch page 1 of the new answer rather than redraw the old rows.
+            if (server && !booting && signature !== querySignature()) { page = 1; void reloadPage(); return; }
+            renderHead(); renderBody();
+        }
 
         /**
          * Draws the header row and wires click-to-sort, the filter buttons and drag-to-reorder on each column heading.
@@ -720,7 +914,7 @@
         function renderHead() {
             const head = byId(els.head);
             const cols = visibleColumns();
-            head.innerHTML = `<tr>${cols.map(col => {
+            head.innerHTML = `<tr>${config.rowOpen ? '<th class="dt-open-col" aria-label="' + esc(openLabel) + '"></th>' : ''}${cols.map(col => {
                 const isSorted = sort.key === col.key;
                 const arrow = isSorted ? (sort.dir === 'asc' ? '▲' : '▼') : '↕';
                 const sortedClass = isSorted ? ' sorted' : '';
@@ -730,7 +924,7 @@
                     <th data-col-key="${esc(col.key)}" draggable="true">
                         <div class="dt-th-content${sortedClass}">
                             <span class="dt-th-label">${esc(col.label)}</span>
-                            <span class="dt-sort-arrow">${arrow}</span>
+                            <span class="dt-sort-arrow">${col.sortable === false ? '' : arrow}</span>
                             <button type="button" class="dt-filter-btn${filterClass}" title="Filter ${esc(col.label)}" data-filter-key="${esc(col.key)}">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
@@ -740,11 +934,12 @@
                     </th>`;
             }).join('')}</tr>`;
 
-            head.querySelectorAll('th').forEach(th => {
+            head.querySelectorAll('th[data-col-key]').forEach(th => {
                 const key = th.dataset.colKey;
+                if (colByKey[key].filterable === false) th.querySelector('.dt-filter-btn').hidden = true;
                 th.querySelector('.dt-th-content').addEventListener('click', e => {
                     if (e.target.closest('.dt-filter-btn')) return;
-                    toggleSort(key);
+                    if (colByKey[key].sortable !== false) toggleSort(key);
                 });
                 th.querySelector('.dt-filter-btn').addEventListener('click', e => {
                     e.stopPropagation();
@@ -786,24 +981,53 @@
             // the toolbar's right slot) with config.hideCount.
             const countEl = byId(els.count);
             if (countEl && !config.hideCount) {
-                countEl.textContent = rows.length === allRows.length
+                countEl.textContent = server ? `${rows.length} / ${total}` : rows.length === allRows.length
                     ? `${rows.length} ${noun}${rows.length === 1 ? '' : 's'}`
                     : `${rows.length} of ${allRows.length}`;
             }
 
             if (rows.length === 0) {
-                body.innerHTML = `<tr><td colspan="${cols.length || 1}" class="dt-empty">No ${noun}s match the current filters.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="${(cols.length || 1) + (config.rowOpen ? 1 : 0)}" class="dt-empty">No ${noun}s match the current filters.</td></tr>`;
+                config.onRowsRendered?.(rows);
                 return;
             }
 
             const clickable = typeof config.onRowClick === 'function' ? ' dt-clickable' : '';
             body.innerHTML = rows.map(row => {
-                const tds = cols.map(col => renderCell(row, col)).join('');
+                const tds = (config.rowOpen ? renderOpenCell(row) : '') + cols.map(col => renderCell(row, col)).join('');
                 return `<tr class="dt-row${clickable}" data-id="${esc(rowId(row))}">${tds}</tr>`;
             }).join('');
 
             if (editable) wireEditControls(body);
             if (clickable) wireRowClicks(body, rows);
+            if (config.rowOpen) wireOpenLinks(body);
+            config.onRowsRendered?.(rows);
+        }
+
+        /** The rowOpen link cell (GH #219): a real link, so a new tab works like anywhere else. */
+        function renderOpenCell(row) {
+            return `<td class="dt-open-col"><a class="dt-open" href="${esc(config.rowOpen.href(row))}" data-id="${esc(rowId(row))}"
+                title="${esc(openLabel)}" aria-label="${esc(openLabel)}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"></path>
+                <path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></a></td>`;
+        }
+
+        /**
+         * A plain left click on an open link calls rowOpen.onOpen and stays on the page;
+         * any other click (Ctrl, Shift, middle, keyboard Enter with a modifier) is left
+         * to the browser, which follows or opens the link as usual.
+         */
+        function wireOpenLinks(body) {
+            if (typeof config.rowOpen.onOpen !== 'function') return;
+            body.querySelectorAll('a.dt-open').forEach(a => {
+                a.addEventListener('click', e => {
+                    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                    const row = allRows.find(r => String(rowId(r)) === String(a.dataset.id));
+                    if (!row) return;
+                    e.preventDefault();
+                    config.rowOpen.onOpen(row, e);
+                });
+            });
         }
 
         /** Returns one cell's HTML - plain text, or an input or select for an editable column. */
@@ -929,7 +1153,11 @@
                 tr.addEventListener('click', e => {
                     if (e.target.closest('input, select, button, option, label, .dt-swatch')) return;
                     const row = allRows.find(r => String(rowId(r)) === String(tr.dataset.id));
-                    if (row) config.onRowClick(row);
+                    if (row) config.onRowClick(row, e);
+                });
+                if (config.onRowContextMenu) tr.addEventListener('contextmenu', e => {
+                    const row = allRows.find(r => String(rowId(r)) === String(tr.dataset.id));
+                    if (row) config.onRowContextMenu(row, e);
                 });
             });
         }
@@ -942,6 +1170,7 @@
          * always sort last, whichever the direction. Also exposed as getViewRows and used by the exports.
          */
         function applyFiltersAndSort() {
+            if (server) return allRows;   // the server has already filtered and sorted this page
             const cols = visibleColumns();
             let rows = allRows.filter(row => {
                 for (const colKey in filters) {
@@ -1047,6 +1276,19 @@
                 const key = display === '' ? '(empty)' : display;
                 distinct.set(key, (distinct.get(key) || 0) + 1);
             });
+            // Server mode: the values come from the server's counts over the whole
+            // list, not from this page's rows, and show the server's label (a
+            // status name) for each value (a status id). A ticked value with no
+            // rows left still appears, at 0, so it can be unticked.
+            const labels = new Map();
+            if (server) {
+                distinct.clear();
+                (facets[colKey] || []).forEach(item => {
+                    distinct.set(String(item.value), item.count);
+                    labels.set(String(item.value), item.label);
+                });
+                (filters[colKey] || []).forEach(value => { if (!distinct.has(value)) distinct.set(value, 0); });
+            }
             const sorted = [...distinct.keys()].sort((a, b) =>
                 a === '(empty)' ? -1 : b === '(empty)' ? 1
                 : String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })
@@ -1067,7 +1309,7 @@
                     ${sorted.map(v => `
                         <label class="dt-pop-item">
                             <input type="checkbox" value="${esc(v)}" ${selected.has(v) ? 'checked' : ''}>
-                            <span class="dt-pop-value">${esc(v)}</span>
+                            <span class="dt-pop-value">${esc(labels.get(v) ?? v)}</span>
                             <span style="color:#999;font-size:11px;">${distinct.get(v)}</span>
                         </label>`).join('')}
                 </div>
@@ -1192,7 +1434,26 @@
 
         // --- Exports --------------------------------------------------
         /** Downloads the filtered, sorted rows (visible columns only) as a CSV, with a BOM so Excel reads UTF-8. */
-        function exportCSV() {
+        async function exportCSV() {
+            // Server mode: the server builds the CSV of EVERY matching row (not this
+            // page), with the visible columns. The button reads Cancel export while
+            // it runs, and a second click cancels it.
+            if (server) {
+                if (exportController) { exportController.abort(); return; }
+                exportController = new AbortController();
+                const button = byId(els.csvBtn);
+                const label = button?.textContent;
+                if (button) button.textContent = T('cancel_export');
+                try {
+                    await server.exportCsv({ ...query(), columns: visibleColumns().map(c => c.key) }, exportController.signal);
+                } catch (error) {
+                    if (error.name !== 'AbortError') serverNotice(T('export_failed'));
+                } finally {
+                    exportController = null;
+                    if (button) button.textContent = label;
+                }
+                return;
+            }
             const cols = visibleColumns();
             const rows = applyFiltersAndSort();
             const header = cols.map(c => csvCell(c.label)).join(',');
@@ -1307,6 +1568,7 @@
 
         // Public surface
         return {
+            start, setQuery,
             reload,
             render,
             findRow: id => allRows.find(r => String(rowId(r)) === String(id)),

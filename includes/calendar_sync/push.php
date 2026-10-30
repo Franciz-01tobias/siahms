@@ -118,7 +118,7 @@ function calendarSyncReconcileTicket(PDO $conn, int $ticketId, bool $gone = fals
                     $provider->updateEvent($mine['remote_calendar'], $mine['remote_event_id'], $event);
                     $conn->prepare("UPDATE calendar_sync_events SET updated_datetime = UTC_TIMESTAMP() WHERE id = ?")
                          ->execute([(int)$mine['id']]);
-                } catch (CalendarEventMissing $e) {
+                } catch (CalendarEventMissing) {
                     // Somebody deleted it from their own calendar — ordinary, not
                     // an error. Put a fresh one back and re-point the map row,
                     // rather than the analyst silently losing the entry for good.
@@ -147,7 +147,7 @@ function calendarSyncReconcileTicket(PDO $conn, int $ticketId, bool $gone = fals
         } catch (Exception $e) {
             calendarSyncRecordError($conn, $wantAnalyst, $e->getMessage());
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Anything unexpected — a missing table, a query that failed — must not
         // take down the save that triggered this.
     }
@@ -266,7 +266,7 @@ function calendarSyncReconcileTask(PDO $conn, int $taskId, bool $gone = false): 
                         $provider->updateEvent($mine['remote_calendar'], $mine['remote_event_id'], $event);
                         $conn->prepare("UPDATE calendar_sync_events SET updated_datetime = UTC_TIMESTAMP() WHERE id = ?")
                              ->execute([(int)$mine['id']]);
-                    } catch (CalendarEventMissing $e) {
+                    } catch (CalendarEventMissing) {
                         // Deleted from their own calendar — ordinary. Put a fresh
                         // one back rather than losing the entry for good.
                         $newId = $provider->createEvent($address, $event);
@@ -295,7 +295,7 @@ function calendarSyncReconcileTask(PDO $conn, int $taskId, bool $gone = false): 
                 calendarSyncRecordError($conn, $wantAnalyst, $e->getMessage());
             }
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Never fatal. Saving a task must not fail because Microsoft was
         // unreachable — the task is FreeITSM's data, the calendar a projection.
     }
@@ -407,7 +407,7 @@ function calendarSyncRemoveRow(PDO $conn, array $row): void
     }
     try {
         $conn->prepare("DELETE FROM calendar_sync_events WHERE id = ?")->execute([(int)$row['id']]);
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Nothing sensible left to do.
     }
 }
@@ -422,7 +422,7 @@ function calendarSyncRemoveAllForAnalyst(PDO $conn, int $analystId): void
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
             calendarSyncRemoveRow($conn, $row);
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Best effort.
     }
 }
@@ -491,7 +491,7 @@ function calendarSyncRecordError(PDO $conn, int $analystId, string $message): vo
              VALUES (?, 'off', ?)
              ON DUPLICATE KEY UPDATE last_error = VALUES(last_error), updated_datetime = UTC_TIMESTAMP()"
         )->execute([$analystId, substr($message, 0, 500)]);
-    } catch (Exception $e) {
+    } catch (Exception) {
     }
 }
 
@@ -505,6 +505,6 @@ function calendarSyncClearError(PDO $conn, int $analystId): void
         $conn->prepare(
             "UPDATE calendar_enrolments SET last_error = NULL, last_sync_datetime = UTC_TIMESTAMP() WHERE analyst_id = ?"
         )->execute([$analystId]);
-    } catch (Exception $e) {
+    } catch (Exception) {
     }
 }

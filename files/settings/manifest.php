@@ -21,7 +21,7 @@ return [
     'label'  => 'Files',
 
     'umbrella' => [
-        'cap'       => Cap::FILES_MANAGE,
+        'cap'       => capKey(Cap::FILES_MANAGE),
         'grant'     => 'Manage everything in Files settings',
         'sensitive' => true,   // implies take ownership
     ],
@@ -29,14 +29,14 @@ return [
     'tabs' => [
         [
             'id'        => 'folders',
-            'cap'       => Cap::FILES_FOLDERS,
+            'cap'       => capKey(Cap::FILES_FOLDERS),
             'label_key' => 'files.settings.tab_folders',
             'grant'     => 'Create top-level folders, see every folder that exists, and take ownership of any folder (this grants themselves access to its files)',
             'sensitive' => true,
         ],
         [
             'id'        => 'storage',
-            'cap'       => Cap::FILES_STORAGE,
+            'cap'       => capKey(Cap::FILES_STORAGE),
             'label_key' => 'files.settings.tab_storage',
             'grant'     => 'Choose where files are stored on the server and the largest file that can be uploaded',
             'sensitive' => true,   // moves every file's bytes

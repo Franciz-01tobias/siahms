@@ -52,8 +52,8 @@ $translationNamespaces = ['common', 'domains'];
     <script src="../assets/js/money.js?v=1"></script>
     <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
-    <link rel="stylesheet" href="../assets/css/domains.css?v=7">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../assets/css/domains.css?v=8">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=196">
 </head>
 <body data-mobile-module="domains" data-mobile-page="domains-view">
     <?php include 'includes/header.php'; ?>
@@ -113,21 +113,24 @@ $translationNamespaces = ['common', 'domains'];
                 <div class="dom-form-grid" id="editForm">
                     <div class="dom-section-title"><?php echo htmlspecialchars(t('domains.edit.s_basics')); ?></div>
                     <div class="form-group"><label for="eName"><?php echo htmlspecialchars(t('domains.field.domain_name')); ?></label><input type="text" id="eName" data-f="domain_name"></div>
-                    <div class="form-group"><label for="ePurpose"><?php echo htmlspecialchars(t('domains.field.purpose')); ?></label><select id="ePurpose" data-f="purpose"></select><div class="dom-hint" id="ePurposeHint"></div></div>
+                    <div class="form-group"><label for="eScope"><?php echo htmlspecialchars(t('domains.field.scope')); ?></label><select id="eScope" data-f="scope"></select><div class="dom-hint" id="eScopeHint" hidden><?php echo htmlspecialchars(t('domains.field.scope_hint')); ?></div></div>
+                    <div class="form-group" id="ePurposeGroup"><label for="ePurpose"><?php echo htmlspecialchars(t('domains.field.purpose')); ?></label><select id="ePurpose" data-f="purpose"></select><div class="dom-hint" id="ePurposeHint"></div></div>
                     <div class="form-group"><label for="eStatus"><?php echo htmlspecialchars(t('domains.field.status')); ?></label><select id="eStatus" data-f="status_id"></select></div>
                     <div class="form-group"><label for="eOwner"><?php echo htmlspecialchars(t('domains.field.owner')); ?></label><select id="eOwner" data-f="owner_analyst_id"></select></div>
                     <div class="form-group full"><label for="eTags"><?php echo htmlspecialchars(t('domains.field.tags')); ?></label><input type="text" id="eTags" data-f="tags" placeholder="<?php echo htmlspecialchars(t('domains.field.tags_hint')); ?>"></div>
 
+                    <div class="form-group full" id="eParentGroup" hidden><label for="eParent"><?php echo htmlspecialchars(t('domains.field.parent')); ?></label><select id="eParent" data-f="parent_domain_id"></select><div class="dom-hint"><?php echo htmlspecialchars(t('domains.field.parent_hint')); ?></div></div>
+
                     <div class="dom-section-title"><?php echo htmlspecialchars(t('domains.edit.s_registration')); ?></div>
-                    <div class="form-group"><label for="eRegistrar"><?php echo htmlspecialchars(t('domains.field.registrar')); ?></label><select id="eRegistrar" data-f="registrar_supplier_id"></select><div class="dom-hint"><?php echo htmlspecialchars(t('domains.edit.registrar_hint')); ?></div></div>
-                    <div class="form-group"><label for="eAccount"><?php echo htmlspecialchars(t('domains.field.registrar_account')); ?></label><select id="eAccount" data-f="registrar_account_id"></select></div>
-                    <div class="form-group"><label for="eRegName"><?php echo htmlspecialchars(t('domains.field.registrar_name')); ?></label><input type="text" id="eRegName" data-f="registrar_name"></div>
-                    <div class="form-group"><label for="eRenewal"><?php echo htmlspecialchars(t('domains.field.renewal_mode')); ?></label><select id="eRenewal" data-f="renewal_mode"></select></div>
-                    <div class="form-group"><label for="eReg"><?php echo htmlspecialchars(t('domains.field.registration_date')); ?></label><input type="date" id="eReg" data-f="registration_date"></div>
-                    <div class="form-group"><label for="eExp"><?php echo htmlspecialchars(t('domains.field.expiry_date')); ?></label><input type="date" id="eExp" data-f="expiry_date"></div>
-                    <div class="form-group"><label for="eRenewed"><?php echo htmlspecialchars(t('domains.field.last_renewed_date')); ?></label><input type="date" id="eRenewed" data-f="last_renewed_date"></div>
-                    <div class="form-group"><label for="eRegistrant"><?php echo htmlspecialchars(t('domains.field.registrant_name')); ?></label><input type="text" id="eRegistrant" data-f="registrant_name"></div>
-                    <div class="form-group"><label for="eTLock"><?php echo htmlspecialchars(t('domains.field.transfer_lock')); ?></label><select id="eTLock" data-f="transfer_lock" data-tri="1"></select></div>
+                    <div class="form-group reg-only"><label for="eRegistrar"><?php echo htmlspecialchars(t('domains.field.registrar')); ?></label><select id="eRegistrar" data-f="registrar_supplier_id"></select><div class="dom-hint"><?php echo htmlspecialchars(t('domains.edit.registrar_hint')); ?></div></div>
+                    <div class="form-group reg-only"><label for="eAccount"><?php echo htmlspecialchars(t('domains.field.registrar_account')); ?></label><select id="eAccount" data-f="registrar_account_id"></select></div>
+                    <div class="form-group reg-only"><label for="eRegName"><?php echo htmlspecialchars(t('domains.field.registrar_name')); ?></label><input type="text" id="eRegName" data-f="registrar_name"></div>
+                    <div class="form-group reg-only"><label for="eRenewal"><?php echo htmlspecialchars(t('domains.field.renewal_mode')); ?></label><select id="eRenewal" data-f="renewal_mode"></select></div>
+                    <div class="form-group reg-only"><label for="eReg"><?php echo htmlspecialchars(t('domains.field.registration_date')); ?></label><input type="date" id="eReg" data-f="registration_date"></div>
+                    <div class="form-group reg-only"><label for="eExp"><?php echo htmlspecialchars(t('domains.field.expiry_date')); ?></label><input type="date" id="eExp" data-f="expiry_date"></div>
+                    <div class="form-group reg-only"><label for="eRenewed"><?php echo htmlspecialchars(t('domains.field.last_renewed_date')); ?></label><input type="date" id="eRenewed" data-f="last_renewed_date"></div>
+                    <div class="form-group reg-only"><label for="eRegistrant"><?php echo htmlspecialchars(t('domains.field.registrant_name')); ?></label><input type="text" id="eRegistrant" data-f="registrant_name"></div>
+                    <div class="form-group reg-only"><label for="eTLock"><?php echo htmlspecialchars(t('domains.field.transfer_lock')); ?></label><select id="eTLock" data-f="transfer_lock" data-tri="1"></select></div>
                     <div class="form-group"><label for="eTech"><?php echo htmlspecialchars(t('domains.field.tech_contact')); ?></label><select id="eTech"></select><div class="dom-hint"><?php echo htmlspecialchars(t('domains.field.tech_contact_hint')); ?></div></div>
                     <div class="form-group"><label for="eCustomer"><?php echo htmlspecialchars(t('domains.field.customer')); ?></label>
                         <div class="dom-person">
@@ -184,14 +187,35 @@ $translationNamespaces = ['common', 'domains'];
             </div>
         </div>
     </div>
+    <!-- A certificate recorded by hand -->
+    <div class="modal" id="mCert">
+        <div class="modal-content" style="max-width:620px">
+            <div class="modal-header" id="mcTitle"></div>
+            <div class="modal-body">
+                <div class="dom-form-grid">
+                    <div class="form-group full"><label for="mcPurpose"><?php echo htmlspecialchars(t('domains.cert.m_purpose')); ?></label><input type="text" id="mcPurpose" maxlength="255" placeholder="<?php echo htmlspecialchars(t('domains.cert.m_purpose_ph')); ?>"></div>
+                    <div class="form-group"><label for="mcType"><?php echo htmlspecialchars(t('domains.cert.m_type')); ?></label><select id="mcType"></select></div>
+                    <div class="form-group"><label for="mcExpiry"><?php echo htmlspecialchars(t('domains.cert.m_expiry')); ?></label><input type="date" id="mcExpiry"></div>
+                    <div class="form-group"><label for="mcSupplier"><?php echo htmlspecialchars(t('domains.cert.m_provider')); ?></label><select id="mcSupplier"></select></div>
+                    <div class="form-group" id="mcProviderGroup"><label for="mcProvider"><?php echo htmlspecialchars(t('domains.cert.m_provider_other')); ?></label><input type="text" id="mcProvider" maxlength="255" placeholder="<?php echo htmlspecialchars(t('domains.cert.m_provider_ph')); ?>"></div>
+                    <div class="form-group full"><label for="mcUrl"><?php echo htmlspecialchars(t('domains.cert.m_url')); ?></label><input type="url" id="mcUrl" maxlength="500" placeholder="<?php echo htmlspecialchars(t('domains.cert.m_url_ph')); ?>"></div>
+                    <div class="form-group full"><label for="mcNotes"><?php echo htmlspecialchars(t('domains.cert.m_notes')); ?></label><textarea id="mcNotes" rows="3"></textarea></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-close="mCert"><?php echo htmlspecialchars(t('common.cancel')); ?></button>
+                <button type="button" class="btn btn-primary" id="mcSave"><?php echo htmlspecialchars(t('common.save')); ?></button>
+            </div>
+        </div>
+    </div>
     <script>window.DOMAIN_ID = <?php echo (int)$domainId; ?>;
     // The customer links to their People page (#153), for analysts who can open People.
     window.DOM_PEOPLE = <?php echo json_encode(analystCanAccessModule($conn, (int)$_SESSION['analyst_id'], 'people') ? BASE_URL . 'people/' : null); ?>;
     // Supplier and contact pages in People (#162) also need Contracts, which owns those records.
     window.DOM_PEOPLE_SUPPLIERS = <?php echo json_encode(analystCanAccessModule($conn, (int)$_SESSION['analyst_id'], 'people') && analystCanAccessModule($conn, (int)$_SESSION['analyst_id'], 'contracts')); ?>;</script>
-    <script src="../assets/js/domains.js?v=2"></script>
-    <script src="../assets/js/domains-view.js?v=9"></script>
+    <script src="../assets/js/domains.js?v=3"></script>
+    <script src="../assets/js/domains-view.js?v=11"></script>
     <?php endif; ?>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

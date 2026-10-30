@@ -13,10 +13,37 @@ require_once '../includes/theme.php';
 require_once '../includes/timezone.php';
 require_once '../includes/ticket_snooze.php';
 require_once '../includes/inbox_display.php';   // what each row shows, per analyst
+require_once '../includes/ticket_workspace.php';
+require_once '../includes/ticket_list.php';
 I18n::initFromSession();
 Tz::init();
 
 requireModuleAccess('tickets');
+
+// Which other modules' parts this pane may offer: false when the analyst has no
+// access OR the module is switched off for the install (GH #217). The context
+// menu below and inbox.js (window.TICKETS_MODULE_ON) both read this one answer.
+$ticketsModuleOn = [];
+foreach (['problems', 'changes', 'assets', 'cmdb', 'tasks', 'checklists', 'knowledge'] as $__m) {
+    try {
+        $ticketsModuleOn[$__m] = analystCanAccessModule(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), $__m);
+    } catch (Throwable $e) {
+        $ticketsModuleOn[$__m] = true;   // the endpoints still refuse; the button just fails
+    }
+}
+// And the Tickets features with their own switch (slice 2) - availability only:
+// who may use them is unchanged.
+foreach (array_keys(TICKET_FEATURES) as $__f) {
+    $ticketsModuleOn[$__f] = portalModuleOn($__f);
+}
+// The ticket workspace (PR #211): the install mode and this analyst's own switch,
+// handed to assets/js/ticket-workspace.js as window.TICKET_WORKSPACE. can_write
+// decides whether More -> Make workspace is offered; Tickets has no Read only
+// level yet, so today it is true for everyone who can open this page.
+$workspaceConfig = ticketWorkspaceConfig(connectToDatabase(), (int)$_SESSION['analyst_id']);
+$workspaceConfig['can_write'] = analystCanWriteModule(connectToDatabase(), (int)$_SESSION['analyst_id'], 'tickets');
+// Messages or Table (PR #213) - how the LIST is shown, independent of the workspace.
+$ticketListLayout = ticketListLayout(connectToDatabase(), (int)$_SESSION['analyst_id']);
 
 $current_page = 'inbox';
 // Module id for per-module theme/palette resolution (account-menu picker).
@@ -35,11 +62,23 @@ $translationNamespaces = ['common', 'tickets'];
     <title><?php echo htmlspecialchars(pageTitle('tickets', t('tickets.nav.inbox'))); ?></title>
     <link rel="stylesheet" href="../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../checklists/ticket_checklist.css?v=4">
-    <link rel="stylesheet" href="../assets/css/inbox.css?v=79">
+    <link rel="stylesheet" href="../assets/css/inbox.css?v=85">
+    <link rel="stylesheet" href="../assets/css/float-window.css?v=1">
     <link rel="stylesheet" href="../assets/css/ticket-fields.css?v=1">
-    <link rel="stylesheet" href="../assets/css/reading-pane.css?v=1">
-    <link rel="stylesheet" href="../assets/css/mobile.css?v=195">
-    <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+    <link rel="stylesheet" href="../assets/css/reading-pane.css?v=4">
+    <link rel="stylesheet" href="../assets/css/ticket-workspace.css?v=4">
+    <link rel="stylesheet" href="../assets/css/mobile.css?v=198">
+    <link rel="stylesheet" href="../assets/css/data-table.css?v=7">
+    <link rel="stylesheet" href="../assets/css/tickets-table.css?v=4">
+<?php
+// Note images open in the Files viewer (GH #226), so it needs its own strings -
+// the window buttons, the zoom tools and Download - but not the rest of Files'.
+$jsTranslations = I18n::exportForJs($translationNamespaces);
+$filesStrings = I18n::exportForJs(['files'])['files'] ?? [];
+$jsTranslations['files'] = array_intersect_key($filesStrings, array_flip(['wm', 'viewer', 'loading']))
+    + ['ex' => ['download' => $filesStrings['ex']['download'] ?? 'Download']];
+?>
+    <script>window.translations = <?php echo json_encode($jsTranslations, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <?php
     /* The install's snooze wake hour, so the flyout can label "Tomorrow" with the
@@ -48,16 +87,23 @@ $translationNamespaces = ['common', 'tickets'];
     $snoozeWakeHour = 9;
     try { $snoozeWakeHour = snoozeWakeHour(connectToDatabase()); } catch (Exception $e) {}
     ?>
+    <script>window.TICKETS_LIST_LAYOUT = <?php echo json_encode($ticketListLayout); ?>;</script>
     <script>window.SNOOZE_WAKE_HOUR = <?php echo (int)$snoozeWakeHour; ?>;</script>
+    <script>window.TICKET_WORKSPACE = <?php echo json_encode($workspaceConfig); ?>;</script>
     <script src="../assets/js/i18n.js?v=3"></script>
     <link rel="stylesheet" href="../assets/css/record-preview.css?v=1">
     <script src="../assets/js/record-preview.js?v=1"></script>
-    <script src="../assets/js/tinymce/tinymce.min.js"></script>
+    <script src="../assets/js/tinymce/tinymce.min.js?v=8.10.0"></script>
 </head>
-<body class="inbox-page">
+<body class="inbox-page<?php echo $workspaceConfig['mode'] === 'selected' ? ' workspace-choice-available' : ''; ?>">
     <?php include 'includes/header.php'; ?>
     <?php require_once __DIR__ . '/../includes/action_row.php';
-          renderActionRow(t('tickets.nav.inbox'), [actionRowNew('openNewTicketModal()', t('tickets.list.new_ticket_btn'))]); ?>
+          // GH #225: Back shows only in full screen (inbox.js applyPopoutChrome).
+          renderActionRow(t('tickets.nav.inbox'), [
+                  ['label' => t('tickets.reading_pane.popout_back'), 'title' => t('tickets.reading_pane.popout_back_title'),
+                   'onclick' => 'toggleTicketPopout()', 'id' => 'popoutBackBtn', 'hidden' => true],
+                  actionRowNew('openNewTicketModal()', t('tickets.list.new_ticket_btn'))],
+              ['extra' => '<button type="button" id="ticketTableBack" class="action-row-btn" hidden onclick="TicketTable.backToList()" title="' . htmlspecialchars(t('tickets.queue.back_title')) . '">' . htmlspecialchars(t('tickets.queue.back')) . '</button>' . ticketListSelector($ticketListLayout), 'title_id' => 'inboxActionTitle']); ?>
 
     <div class="main-container">
         <!-- Folder Navigation -->
@@ -106,6 +152,15 @@ $translationNamespaces = ['common', 'tickets'];
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                         </button>
                         <div class="view-filter-menu" id="viewFilterMenu" role="dialog" aria-label="<?php echo htmlspecialchars(t('tickets.list.filter_btn')); ?>">
+                            <?php if ($workspaceConfig['mode'] !== 'off'): ?>
+                            <label class="view-filter-row">
+                                <span><?php echo htmlspecialchars(t('tickets.workspace.preference')); ?></span>
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="ticketWorkspacePreference" <?php echo $workspaceConfig['personal'] ? 'checked' : ''; ?> onchange="TicketWorkspace.requestPersonal(this.checked)">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
+                            <?php endif; ?>
                             <?php /* HIDDEN, not disabled, in Analyst grouping: there
                                      "My tickets" is a folder, and a greyed-out
                                      control you cannot click reads as broken (Ed). */ ?>
@@ -135,10 +190,23 @@ $translationNamespaces = ['common', 'tickets'];
                      until more than one ticket is selected AND that mode is chosen —
                      the other two modes never show it. */ ?>
             <div class="selection-bar" id="selectionBar" style="display: none;"></div>
+            <div id="ticketTableContainer" hidden>
+                <label class="ticket-content-search"><input type="checkbox" id="ticketTableContent"> <?php echo htmlspecialchars(t('tickets.queue.search_content')); ?></label>
+                <?php
+                $dtSearchPlaceholder=t('tickets.queue.search');
+                $dtShowCsv=ticketListCanExport(connectToDatabase(), (int)$_SESSION['analyst_id']);
+                $dtCsvTitle=t('tickets.queue.export_title');
+                include '../includes/data-table-skeleton.php';
+                ?>
+            </div>
             <div class="email-list" id="emailList">
                 <div class="reading-pane-empty"><?php echo htmlspecialchars(t('tickets.list.select_folder')); ?></div>
             </div>
         </div>
+
+        <div id="ticketTableSplitter" class="ticket-table-splitter" role="separator" tabindex="0" hidden
+             aria-orientation="vertical" aria-controls="ticketTableContainer readingPane"
+             aria-label="<?php echo htmlspecialchars(t('tickets.queue.resize')); ?>"></div>
 
         <!-- Reading Pane -->
         <div class="reading-pane" id="readingPane">
@@ -153,9 +221,16 @@ $translationNamespaces = ['common', 'tickets'];
         <div class="modal-content">
             <div class="modal-header"><?php echo htmlspecialchars(t('tickets.note_modal.title')); ?></div>
             <div class="modal-body">
-                <div class="form-group">
+                <div class="form-group note-editor-group">
                     <label class="form-label"><?php echo htmlspecialchars(t('tickets.note_modal.note_label')); ?></label>
-                    <textarea class="form-textarea" id="noteText" placeholder="<?php echo htmlspecialchars(t('tickets.note_modal.placeholder')); ?>"></textarea>
+                    <?php /* Not a textarea since GH #224: a screenshot pasted here lands at the
+                             cursor. Still plain text - assets/js/note-images.js. Keeps the
+                             form-textarea class so the phone sheet (mobile.css) still fills
+                             the screen with it. */ ?>
+                    <div class="form-textarea note-editor" id="noteText" contenteditable="true" role="textbox" aria-multiline="true"
+                         aria-label="<?php echo htmlspecialchars(t('tickets.note_modal.note_label')); ?>"
+                         data-placeholder="<?php echo htmlspecialchars(t('tickets.note_modal.placeholder')); ?>"></div>
+                    <div class="form-hint note-editor-hint"><?php echo htmlspecialchars(t('tickets.note_modal.paste_hint')); ?></div>
                 </div>
                 <?php /* Notes have ALWAYS supported being shared with the requester — the
                          column, the API and the portal all handle it — but the inbox
@@ -164,11 +239,16 @@ $translationNamespaces = ['common', 'tickets'];
                          mailbox: for them a shared note is the ONLY way to reach them,
                          and the reply screen tells analysts to use one. */ ?>
                 <div class="form-group">
-                    <label class="form-label" style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
-                        <input type="checkbox" id="noteShared" style="width:auto;margin:0;">
+                    <?php /* Caption, then the switch beneath it, then the hint (Ed) - the shared
+                             .toggle-label layout the settings modals use. */ ?>
+                    <label class="toggle-label">
                         <span><?php echo htmlspecialchars(t('tickets.note_modal.share_label')); ?></span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="noteShared">
+                            <span class="toggle-slider"></span>
+                        </span>
                     </label>
-                    <div class="form-hint" id="noteSharedHint" style="font-size:12px;color:#666;margin-top:4px;">
+                    <div class="form-hint" id="noteSharedHint" style="font-size:12px;color:#666;margin-top:6px;">
                         <?php echo htmlspecialchars(t('tickets.note_modal.share_hint')); ?>
                     </div>
                 </div>
@@ -689,26 +769,34 @@ $translationNamespaces = ['common', 'tickets'];
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.change_subject')); ?></span>
         </button>
+        <?php if ($ticketsModuleOn['cmdb']): ?>
         <button class="ticket-context-menu-item" type="button" onclick="openContextLinkCmdb()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.link_cmdb')); ?></span>
         </button>
+        <?php endif; ?>
+        <?php if ($ticketsModuleOn['problems']): ?>
         <button class="ticket-context-menu-item" type="button" onclick="openContextLinkProblem()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.link_problem')); ?></span>
         </button>
+        <?php endif; ?>
+        <?php if ($ticketsModuleOn['changes']): ?>
         <button class="ticket-context-menu-item" type="button" onclick="openContextLinkChange()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.link_change')); ?></span>
         </button>
+        <?php endif; ?>
         <button class="ticket-context-menu-item" type="button" onclick="openContextLinkTicket()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.link_ticket')); ?></span>
         </button>
+        <?php if ($ticketsModuleOn['tasks']): ?>
         <button class="ticket-context-menu-item" type="button" onclick="openContextLinkTask()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.link_task')); ?></span>
         </button>
+        <?php endif; ?>
         <?php /* Snooze (#933). A parent with the presets as a flyout, so the common
                  case ("tomorrow morning") is one hover and one click, and the custom
                  date lives behind the last row rather than in front of everything. */ ?>
@@ -736,10 +824,12 @@ $translationNamespaces = ['common', 'tickets'];
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.schedule')); ?></span>
         </button>
+        <?php if ($ticketsModuleOn['time-tracking']): /* GH #217 */ ?>
         <button class="ticket-context-menu-item" type="button" onclick="openContextRecordTime()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span><?php echo htmlspecialchars(t('tickets.context.record_time')); ?></span>
         </button>
+        <?php endif; ?>
         <!-- Status submenu parent. Hover/focus to reveal the flyout populated
              at menu-open time from the active ticket_statuses. -->
         <div class="ticket-context-menu-item ticket-context-menu-parent" role="menuitem" tabindex="0">
@@ -1001,6 +1091,7 @@ $translationNamespaces = ['common', 'tickets'];
     </div>
     <script>
         window.API_BASE = '../api/tickets/';
+        window.CASE_REPORT_URL = <?php echo json_encode(BASE_URL . 'tickets/case-report.php'); ?>;
         window.MYACCOUNT_API = '../api/myaccount/';   // signatures (#80)
         window.PREFS_URL = '../system/preferences/';
         window.CURRENT_ANALYST_ID = <?php echo (int)($_SESSION['analyst_id'] ?? 0); ?>;
@@ -1012,6 +1103,8 @@ $translationNamespaces = ['common', 'tickets'];
         // Domains on a ticket (3.0.0): Domains' data, so only for analysts who can open it.
         window.TICKETS_SHOW_DOMAINS = <?php echo analystCanAccessModule(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'domains') ? 'true' : 'false'; ?>;
         window.TICKETS_SHOW_PROJECTS = <?php echo analystCanAccessModule(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0), 'projects') ? 'true' : 'false'; ?>;
+        // The other modules this pane offers parts of (GH #217) - see $ticketsModuleOn.
+        window.TICKETS_MODULE_ON = <?php echo json_encode($ticketsModuleOn); ?>;
         window.KB_BASE = '../api/knowledge/';
         // What this analyst's ticket rows show (discussion #61). Resolved
         // server-side — their own choice over the install default — and already
@@ -1030,17 +1123,25 @@ $translationNamespaces = ['common', 'tickets'];
         window.INBOX_ROW_DISPLAY = <?php echo json_encode(inboxDisplayForAnalyst(connectToDatabase(), (int)($_SESSION['analyst_id'] ?? 0))); ?>;
     </script>
     <!-- Must load BEFORE inbox.js: it cleans every untrusted message body. -->
-    <script src="../assets/js/safe-html.js?v=1"></script>
+    <script src="../assets/js/safe-html.js?v=4"></script>
     <!-- Must also load BEFORE inbox.js: parseUTCDate / tzOpts / ymdInZone and the
          fmt* date formatters. inbox.js used to carry its own copies of the first
          three because this page was the one that never loaded tz.js. -->
     <script src="../assets/js/tz.js?v=5"></script>
     <script src="../assets/js/schedule.js?v=1"></script>
     <script src="../checklists/search_scoring.js?v=1"></script>
-    <script src="../checklists/ticket_view.js?v=10"></script>
+    <script src="../checklists/ticket_view.js?v=13"></script>
     <script src="../assets/js/ticket-fields.js?v=2"></script>
-    <script src="../assets/js/inbox.js?v=154"></script>
-    <script src="../assets/js/mobile.js?v=82"></script>
+    <script src="../assets/js/ticket-workspace.js?v=4"></script>
+    <script src="../assets/js/data-table.js?v=9"></script>
+    <!-- Note images open in the Files viewer, in a floating window (GH #226). -->
+    <script src="../assets/js/float-window.js?v=1"></script>
+    <script src="../assets/js/files-icons.js?v=2"></script>
+    <script src="../assets/js/files-viewer.js?v=8"></script>
+    <script src="../assets/js/note-images.js?v=1"></script>
+    <script src="../assets/js/inbox.js?v=181"></script>
+    <script src="../assets/js/tickets-table.js?v=4"></script>
+    <script src="../assets/js/mobile.js?v=85"></script>
     <script>
     // Auto-check mailboxes every 60 seconds - and refresh the inbox whenever
     // ANYTHING new has arrived, however it came in.

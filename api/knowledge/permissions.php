@@ -297,7 +297,7 @@ function handleAdd(PDO $conn, int $analystId, array $in): void
     } catch (PDOException $e) {
         // The unique key. Already listed is not an error worth showing — the
         // state the caller wanted is the state that exists.
-        if (strpos($e->getMessage(), '1062') === false && $e->getCode() !== '23000') throw $e;
+        if (!str_contains($e->getMessage(), '1062') && $e->getCode() !== '23000') throw $e;
     }
     knowledgeAclResetCaches();
     permAudit($conn, $type, $id, $analystId, ['added' => $ptype . ':' . $pid]);

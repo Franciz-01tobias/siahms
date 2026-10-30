@@ -68,6 +68,14 @@ try {
     if (!$analystId) {
         feed_deny('403 Forbidden', 'Invalid or missing feed token.');
     }
+    // 🔴 The token's owner must still be allowed to see this. Deactivating an
+    // analyst left their feed links working - nothing checked is_active - and so
+    // did removing the module. analystCanAccessModule() is false for an inactive
+    // or deleted analyst, and checking at use (rather than deleting the token)
+    // means reactivating them restores the link. Reported privately, October 2026.
+    if (!analystCanAccessModule($conn, $analystId, 'tickets')) {
+        feed_deny('403 Forbidden', 'Invalid or missing feed token.');
+    }
 
     // The install-wide policy switch. Turning subscribe links off must revoke
     // the ones already handed out, not merely stop new ones being minted —
@@ -117,7 +125,8 @@ try {
     // question is how the two routes drift apart.
     $taskMode  = (string)(calendarSyncEnrolment($conn, $analystId)['task_mode'] ?? TASK_CAL_OFF);
     $taskRows  = [];
-    if ($taskMode !== TASK_CAL_OFF) {
+    // GH #217: no task rows while Tasks is switched off for the install.
+    if ($taskMode !== TASK_CAL_OFF && moduleIsEnabled($conn, 'tasks')) {
         $stmt = $conn->prepare(
             "SELECT tk.id, tk.title, tk.due_date, tk.updated_datetime,
                     tk.work_start_datetime, tk.work_end_datetime, tk.work_all_day,

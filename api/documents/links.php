@@ -27,7 +27,7 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 $analystId  = (int) $_SESSION['analyst_id'];
-$allowed    = $_SESSION['allowed_modules'] ?? null;
+$allowed    = analystAllowedModulesNow();   // the grants now, not at sign-in
 $documentId = (int) ($_GET['id'] ?? 0);
 
 if ($documentId <= 0) {

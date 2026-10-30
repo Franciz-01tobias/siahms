@@ -13,6 +13,9 @@ require_once '../../includes/uploads.php';      // ATTACHMENT_QUARANTINE_EXT
 
 header('Content-Type: application/json');
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 // ⚠️ Database Verification CREATES, ALTERS **AND DROPS**. TAKE A BACKUP FIRST.
 //
 // This comment used to say it "never drops anything". That was false, and had been
@@ -95,6 +98,12 @@ $primaryKeys = [
     'task_tag_map'              => ['task_id', 'tag_id'],
     // 3.3.0: one row per project, day and status - the cumulative flow diagram.
     'project_task_flow'         => ['project_id', 'day', 'status_id'],
+    // Microsoft Teams alerts: one workflow per channel and alert.
+    'msteams_channel_workflows' => ['channel_id', 'alert_key'],
+    // GH #199 Part B: one mapping per connection, one sync-owned row per relationship, one decision per object.
+    'virt_cmdb_mappings'        => 'connection_id',
+    'cmdb_relationship_sources' => 'relationship_id',
+    'virt_cmdb_decisions'       => ['object_kind', 'virt_object_id'],
     // 🔴 GH #123. Both of these were missed, and the warning above is the one
     // they were missed in spite of. A table is only safe to leave out of this
     // map if its PK is literally `id`; neither of these has an `id` column at
@@ -858,6 +867,33 @@ try {
             $results[] = ['table' => 'domain_statuses', 'status' => 'seeded', 'details' => ['Inserted 5 default domain statuses']];
         }
     }
+    // Subdomains already in the register are linked to their parents ONCE, the
+    // first time Database Verification sees the column - after that, adding a
+    // domain links it (includes/domains/subdomains.php). Shortest names first,
+    // so in a chain (example.org, a.example.org, x.a.example.org) every one is
+    // linked to the domain itself, one level deep. A marker setting stops it
+    // ever running again: an operator who unlinks one is never overruled.
+    try {
+        $colOk = (bool)$conn->query("SHOW COLUMNS FROM domains LIKE 'parent_domain_id'")->fetch();
+        $done  = $colOk && $conn->query("SELECT 1 FROM system_settings WHERE setting_key = 'domain_subdomains_linked'")->fetchColumn();
+        if ($colOk && !$done) {
+            require_once dirname(__DIR__, 2) . '/includes/domains/subdomains.php';
+            $linked = domainLinkExistingSubdomains($conn);
+            $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('domain_subdomains_linked', ?)")->execute([gmdate('Y-m-d H:i:s')]);
+            if ($linked) $results[] = ['table' => 'domains', 'status' => 'updated', 'details' => ["Linked $linked subdomain(s) to their parent domain"]];
+        }
+    } catch (Throwable $e) { /* the domains table is not there yet - next run */ }
+    // The certificate types a recorded certificate can be - into an empty table only.
+    if ($tableExists('domain_certificate_types')) {
+        $cnt = (int) $conn->query("SELECT COUNT(*) FROM domain_certificate_types")->fetchColumn();
+        if ($cnt === 0) {
+            $conn->exec("INSERT INTO domain_certificate_types (name, display_order) VALUES
+                ('DV (domain validated)', 1), ('OV (organisation validated)', 2), ('EV (extended validation)', 3),
+                ('Wildcard', 4), ('Multi-domain (SAN)', 5), ('Code signing', 6), ('Email (S/MIME)', 7),
+                ('Client / device', 8), ('Internal CA', 9), ('Other', 10)");
+            $results[] = ['table' => 'domain_certificate_types', 'status' => 'seeded', 'details' => ['Inserted 10 certificate types']];
+        }
+    }
 
     if ($tableExists('ticket_types')) {
         $cnt = (int) $conn->query("SELECT COUNT(*) FROM ticket_types")->fetchColumn();
@@ -1017,6 +1053,26 @@ try {
         }
     }
 
+    // Group catalogue approvals (GH #220). A deleted team leaves its forms and waiting
+    // requests unconfigured (SET NULL) - visible as stuck, never silently approved. A
+    // vote or an administrator's action goes with its request, and outlives the
+    // person (SET NULL), because it is the record of a decision.
+    $groupApprovalFks = [
+        ['forms',                           'fk_forms_approval_team',                        'teams',            'approval_team_id', 'id', 'SET NULL'],
+        ['form_submissions',                'fk_form_submissions_approval_team',             'teams',            'approval_team_id', 'id', 'SET NULL'],
+        ['form_submission_votes',           'fk_form_submission_votes_submission',           'form_submissions', 'submission_id',    'id', 'CASCADE'],
+        ['form_submission_votes',           'fk_form_submission_votes_analyst',              'analysts',         'analyst_id',       'id', 'SET NULL'],
+        ['form_submission_approval_events', 'fk_form_submission_approval_events_submission', 'form_submissions', 'submission_id',    'id', 'CASCADE'],
+        ['form_submission_approval_events', 'fk_form_submission_approval_events_analyst',    'analysts',         'analyst_id',       'id', 'SET NULL'],
+    ];
+    foreach ($groupApprovalFks as [$table, $name, $refTable, $col, $refCol, $onDelete]) {
+        if ($tableExists($table) && $tableExists($refTable) && !$fkExists($table, $name)) {
+            try {
+                $conn->exec("ALTER TABLE {$table} ADD CONSTRAINT {$name} FOREIGN KEY ({$col}) REFERENCES {$refTable} ({$refCol}) ON DELETE {$onDelete}");
+            } catch (Exception $e) {}
+        }
+    }
+
     // Ticket team assignment (#1566). SET NULL, never CASCADE: deleting a team
     // must not take its tickets with it. They return to "no team", which is
     // visible on screen and fixable; vanishing is neither.
@@ -1133,6 +1189,26 @@ try {
         ['asset_field_set_fields', 'fk_afsf_field',                'asset_fields',      'field_id',              'id', 'CASCADE'],
         ['asset_type_field_sets',  'fk_atfs_type',                 'asset_types',       'asset_type_id',         'id', 'CASCADE'],
         ['asset_type_field_sets',  'fk_atfs_set',                  'asset_field_sets',  'set_id',                'id', 'CASCADE'],
+        ['asset_type_layout',      'fk_atl_type',                  'asset_types',       'asset_type_id',         'id', 'CASCADE'],
+        // GH #200 parts C and D: a connection or a review case goes with either asset.
+        ['asset_connections',      'fk_asset_connections_asset',   'assets',            'asset_id',              'id', 'CASCADE'],
+        ['asset_connections',      'fk_asset_connections_other',   'assets',            'connected_asset_id',    'id', 'CASCADE'],
+        ['asset_review_items',     'fk_asset_review_asset',        'assets',            'asset_id',              'id', 'CASCADE'],
+        // GH #199: a connection's estate goes with it; a VM's disks, adapters and placements with the VM.
+        ['virt_clusters',         'fk_virt_clusters_conn',     'virt_connections', 'connection_id',         'id', 'CASCADE'],
+        ['virt_hosts',            'fk_virt_hosts_conn',        'virt_connections', 'connection_id',         'id', 'CASCADE'],
+        ['virt_cluster_roles',    'fk_virt_roles_conn',        'virt_connections', 'connection_id',         'id', 'CASCADE'],
+        ['virt_vms',              'fk_virt_vms_conn',          'virt_connections', 'connection_id',         'id', 'CASCADE'],
+        ['virt_reports',          'fk_virt_reports_conn',      'virt_connections', 'connection_id',         'id', 'CASCADE'],
+        ['virt_identity_reviews', 'fk_virt_reviews_conn',      'virt_connections', 'connection_id',         'id', 'CASCADE'],
+        ['virt_vm_disks',         'fk_virt_vm_disks_vm',       'virt_vms',         'vm_id',                 'id', 'CASCADE'],
+        ['virt_vm_networks',      'fk_virt_vm_networks_vm',    'virt_vms',         'vm_id',                 'id', 'CASCADE'],
+        ['virt_placements',       'fk_virt_placements_vm',     'virt_vms',         'vm_id',                 'id', 'CASCADE'],
+        // GH #201: the link history goes only if the asset itself does (a merge moves it first).
+        ['asset_ci_links',         'fk_asset_ci_links_asset',      'assets',            'asset_id',              'id', 'CASCADE'],
+        ['asset_review_items',     'fk_asset_review_other',        'assets',            'other_asset_id',        'id', 'CASCADE'],
+        ['asset_merges',           'fk_asset_merges_into',         'assets',            'into_asset_id',         'id', 'CASCADE'],
+        ['asset_protected_fields', 'fk_asset_protected_asset',     'assets',            'asset_id',              'id', 'CASCADE'],
         ['asset_field_set_assets', 'fk_afsa_asset',                'assets',            'asset_id',              'id', 'CASCADE'],
         ['asset_field_set_assets', 'fk_afsa_set',                  'asset_field_sets',  'set_id',                'id', 'CASCADE'],
         ['asset_field_set_assets', 'fk_afsa_analyst',              'analysts',          'created_by_analyst_id', 'id', 'SET NULL'],
@@ -2120,7 +2196,7 @@ try {
                     $v = $row['setting_value'];
                     if ($v === null || $v === '') continue;
                     if (!isEncryptedSettingKey($k)) continue;
-                    if (strpos($v, ENCRYPTION_PREFIX) === 0) continue;   // already ciphertext
+                    if (str_starts_with($v, ENCRYPTION_PREFIX)) continue;   // already ciphertext
                     $updSecret->execute([encryptValue($v), $k]);
                     $reencrypted[] = $k;
                 }
@@ -2245,7 +2321,7 @@ try {
                     foreach ($mbCols as $col) {
                         $v = $mbRow[$col] ?? null;
                         if ($v === null || $v === '') continue;
-                        if (strpos($v, ENCRYPTION_PREFIX) === 0) continue;   // already ciphertext
+                        if (str_starts_with($v, ENCRYPTION_PREFIX)) continue;   // already ciphertext
                         $conn->prepare("UPDATE target_mailboxes SET `$col` = ? WHERE id = ?")
                              ->execute([encryptValue($v), $mbRow['id']]);
                         $encryptedCount++;
@@ -3192,6 +3268,29 @@ try {
         try { $conn->exec($sql); } catch (Exception $e) {}
     }
 
+    // Starters & leavers (4.6.0). Names and rules match freeitsm.sql.
+    $jmlFks = [
+        ['jml_templates',      'fk_jml_templates_tenant',  "ALTER TABLE jml_templates ADD CONSTRAINT fk_jml_templates_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE"],
+        ['jml_template_steps', 'fk_jml_steps_template',    "ALTER TABLE jml_template_steps ADD CONSTRAINT fk_jml_steps_template FOREIGN KEY (template_id) REFERENCES jml_templates (id) ON DELETE CASCADE"],
+        ['jml_template_steps', 'fk_jml_steps_team',        "ALTER TABLE jml_template_steps ADD CONSTRAINT fk_jml_steps_team FOREIGN KEY (assigned_team_id) REFERENCES teams (id) ON DELETE SET NULL"],
+        ['jml_template_steps', 'fk_jml_steps_analyst',     "ALTER TABLE jml_template_steps ADD CONSTRAINT fk_jml_steps_analyst FOREIGN KEY (assigned_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['jml_template_steps', 'fk_jml_steps_checklist',   "ALTER TABLE jml_template_steps ADD CONSTRAINT fk_jml_steps_checklist FOREIGN KEY (checklist_template_id) REFERENCES checklist_templates (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_tenant',      "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_user',        "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_manager',     "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_manager FOREIGN KEY (manager_user_id) REFERENCES users (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_template',    "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_template FOREIGN KEY (template_id) REFERENCES jml_templates (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_task',        "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_task FOREIGN KEY (parent_task_id) REFERENCES tasks (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_owner',       "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_owner FOREIGN KEY (owner_analyst_id) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_created_by',  "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_created_by FOREIGN KEY (created_by) REFERENCES analysts (id) ON DELETE SET NULL"],
+        ['jml_templates',      'fk_jml_templates_form',    "ALTER TABLE jml_templates ADD CONSTRAINT fk_jml_templates_form FOREIGN KEY (form_id) REFERENCES forms (id) ON DELETE SET NULL"],
+        ['jml_cases',          'fk_jml_cases_submission',  "ALTER TABLE jml_cases ADD CONSTRAINT fk_jml_cases_submission FOREIGN KEY (form_submission_id) REFERENCES form_submissions (id) ON DELETE SET NULL"],
+        ['jml_audit',          'fk_jml_audit_case',        "ALTER TABLE jml_audit ADD CONSTRAINT fk_jml_audit_case FOREIGN KEY (case_id) REFERENCES jml_cases (id) ON DELETE CASCADE"],
+    ];
+    foreach ($jmlFks as [$tbl, $name, $sql]) {
+        if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;
+        try { $conn->exec($sql); } catch (Exception $e) {}
+    }
+
     // Files. Names + rules match freeitsm.sql. files_audit has none on purpose:
     // the trail must outlive the folders, files and people it names.
     $filesFks = [
@@ -3351,6 +3450,11 @@ try {
         ['workflows',           'fk_workflows_created_by', "ALTER TABLE workflows ADD CONSTRAINT fk_workflows_created_by FOREIGN KEY (created_by) REFERENCES analysts (id) ON DELETE SET NULL"],
         ['workflow_executions', 'fk_we_workflow',          "ALTER TABLE workflow_executions ADD CONSTRAINT fk_we_workflow FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE SET NULL"],
         ['webhook_deliveries',  'fk_wd_workflow',          "ALTER TABLE webhook_deliveries ADD CONSTRAINT fk_wd_workflow FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE SET NULL"],
+        // GH #209. CASCADE on workflows: SET NULL would turn a deleted company's
+        // workflows into SHARED ones that run for every company. SET NULL on runs
+        // is safe - a run with no company is shown only to every-company viewers.
+        ['workflows',           'fk_workflows_tenant',     "ALTER TABLE workflows ADD CONSTRAINT fk_workflows_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE"],
+        ['workflow_executions', 'fk_we_tenant',            "ALTER TABLE workflow_executions ADD CONSTRAINT fk_we_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE SET NULL"],
     ];
     foreach ($workflowFks as [$tbl, $name, $sql]) {
         if (!$tableExists($tbl) || $fkExists($tbl, $name)) continue;

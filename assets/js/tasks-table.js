@@ -140,6 +140,17 @@
         columns: COLUMNS,
         getLookups: () => ({ analysts, teams, statuses, priorities }),
 
+        // GH #219: every cell is edited in place, so a row cannot also open the task
+        // on a click. An open link at the start of each row does: a plain click opens
+        // the quick-look panel the Calendar and Timeline use (the table and its
+        // filters stay where they are), and Ctrl- or middle-click opens the full task
+        // on the board in a new tab, like any link.
+        rowOpen: {
+            href: row => '../index.php?task=' + encodeURIComponent(row.id),
+            onOpen: row => TasksQuickPanel.open(row.id),
+            label: window.t('tasks.context.open'),
+        },
+
         load: async () => {
             // Lookups must be ready before the first render so the inline
             // status/priority/assignee/team selects can build their options.
@@ -181,13 +192,23 @@
         },
     });
 
-    // Shared right-click context menu (analyst / team / status / priority).
+    // The quick-look panel (GH #219) - the same one as the Calendar and Timeline,
+    // so the table, calendar and timeline all open a task the same way.
+    TasksQuickPanel.init({
+        apiBase: API_BASE,
+        getLookups: () => ({ analysts, teams, statuses, priorities }),
+        onUpdate: () => table.reload(),
+        fullEditUrl: id => '../index.php?task=' + id,
+    });
+
+    // Shared right-click context menu (open / analyst / team / status / priority).
     TasksCtxMenu.init({
         targetSelector: '.dt-row',
         getTaskId: el => parseInt(el.dataset.id, 10),
         getTask: id => table.findRow(id),
         getLookups: () => ({ analysts, teams, statuses, priorities }),
         onUpdate: () => table.reload(),
+        onOpen: id => TasksQuickPanel.open(id),   // GH #219
         apiBase: API_BASE,
     });
 })();

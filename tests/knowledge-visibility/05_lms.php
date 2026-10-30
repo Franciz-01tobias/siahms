@@ -65,14 +65,14 @@ file_put_contents(SESS_DIR . "/sess_$sid",
 echo "\n=== the picker ===\n";
 $d = hit('api/lms/knowledge_articles.php', $sid);
 $titles = array_column($d['data'] ?? [], 'title');
-check('offers the shared article', in_array('ZZ-LMS-SHARED', $titles), implode(',', array_filter($titles, function($t){ return strpos($t,'ZZ-LMS')===0; })));
+check('offers the shared article', in_array('ZZ-LMS-SHARED', $titles), implode(',', array_filter($titles, function($t){ return str_starts_with($t,'ZZ-LMS'); })));
 check('does NOT offer the company-owned one', !in_array('ZZ-LMS-DREAM-ONLY', $titles), 'LEAK in the picker');
 
 echo "\n=== posting the hidden id anyway (the real test) ===\n";
 $d = hit('api/lms/ai_author.php', $sid, ['mode' => 'lesson', 'article_id' => $owned]);
 $body = json_encode($d);
 check('refused', empty($d['success']), 'IT WAS ACCEPTED: ' . substr($body, 0, 160));
-check('the secret is not in the response', strpos($body, 's3cr3t-lms') === false, 'BODY LEAKED');
+check('the secret is not in the response', !str_contains($body, 's3cr3t-lms'), 'BODY LEAKED');
 echo '        response: ' . substr($d['error'] ?? $body, 0, 110) . "\n";
 
 @unlink(SESS_DIR . "/sess_$sid");

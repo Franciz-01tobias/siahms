@@ -22,6 +22,8 @@ if (!isset($_SESSION["analyst_id"])) {
 
 require_once __DIR__ . "/../../includes/tenancy.php";
 requireModuleAccessJson('tickets');
+// GH #217: refused while the checklists module is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'checklists');
 
 $analystId = (int)$_SESSION["analyst_id"];
 $analystName = $_SESSION["analyst_name"] ?? ($_SESSION["username"] ?? "Analyst");
@@ -76,6 +78,12 @@ if (!$action) {
             $_POST = array_merge($_POST, $json);
         }
     }
+}
+
+// The three actions that change data are never run from a GET, which a link on
+// another site can send (csrf.php). The reads stay on GET.
+if (in_array($action, ["attach_template", "toggle_item", "remove_checklist"], true)) {
+    csrfRequireWriteMethod();
 }
 
 try {
@@ -168,7 +176,7 @@ try {
                 $hasTitleMatch = false;
                 $matchedKeywordsCount = 0;
 
-                if (strpos($ticketText, $titleLower) !== false) {
+                if (str_contains($ticketText, $titleLower)) {
                     $score += 5;
                     $hasTitleMatch = true;
                 }
@@ -176,7 +184,7 @@ try {
                 if (!empty($tpl['keywords'])) {
                     $kwList = array_map('trim', explode(',', strtolower($tpl['keywords'])));
                     foreach ($kwList as $kw) {
-                        if ($kw !== '' && strpos($ticketText, $kw) !== false) {
+                        if ($kw !== '' && str_contains($ticketText, $kw)) {
                             $score += 2;
                             $matchedKeywordsCount++;
                         }

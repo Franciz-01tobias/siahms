@@ -23,6 +23,9 @@ require_once '../../includes/rbac.php';
 require_once '../../includes/tenancy.php';
 require_once '../../includes/tenant_settings.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -30,6 +33,8 @@ if (!isset($_SESSION['analyst_id'])) {
     exit;
 }
 requireModuleAccessJson('tickets');
+// GH #217: refused while the time-tracking feature is switched off for the install.
+requireModuleOnJson(connectToDatabase(), 'time-tracking');
 requireCapabilityJson(Cap::TICKETS_MANAGE);
 
 $in = json_decode(file_get_contents('php://input'), true);

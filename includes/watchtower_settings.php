@@ -82,7 +82,7 @@ function wtCardOrderSaved(PDO $conn): array
     try {
         $v = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'watchtower_card_order' LIMIT 1")->fetchColumn();
         return displayOrderParse($v === false ? '' : $v);
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         return [];
     }
 }
@@ -195,7 +195,7 @@ function wtImpersonalOnMine(PDO $conn, int $analystId): string
         );
         $stmt->execute([$analystId]);
         $v = (string)$stmt->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return 'show';
     }
     return $v === 'hide' ? 'hide' : 'show';
@@ -212,7 +212,7 @@ function wtScopeFor(PDO $conn, int $analystId): string
         );
         $stmt->execute([$analystId]);
         $v = (string)$stmt->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return WT_SCOPE_ALL;
     }
     return wtScopeIsValid($v) ? $v : WT_SCOPE_ALL;
@@ -238,7 +238,7 @@ function wtTeamAnalystIds(PDO $conn, int $analystId): array
         );
         $stmt->execute([$analystId]);
         $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-    } catch (Exception $e) {
+    } catch (Exception) {
         $ids = [];
     }
     if (!in_array($analystId, $ids, true)) $ids[] = $analystId;
@@ -275,7 +275,7 @@ function wtMorningCheckScope(PDO $conn, int $analystId, string $scope): array
         $stmt = $conn->prepare("SELECT team_id FROM analyst_teams WHERE analyst_id = ?");
         $stmt->execute([$analystId]);
         $teamIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-    } catch (Exception $e) {
+    } catch (Exception) {
         $teamIds = [];
     }
 
@@ -304,6 +304,24 @@ function wtMorningCheckScope(PDO $conn, int $analystId, string $scope): array
  * @param string $scope  WT_SCOPE_MINE, WT_SCOPE_TEAM or WT_SCOPE_ALL ('all' gives no clause)
  * @param string $column  the owner column with its alias, e.g. 't.assigned_analyst_id' - always a literal, never input
  */
+/**
+ * The company half of a Watchtower count: the companies the analyst is looking at
+ * (the header switcher, All companies included), exactly as every list does.
+ *
+ * 🔴 The ticket, change, task and asset cards counted across EVERY company - the
+ * code said so ("a pre-existing multi-tenancy gap") - so an analyst limited to one
+ * company saw the others' volumes. Reported privately, October 2026. No analyst
+ * (0) means no narrowing, which only an internal caller can be.
+ *
+ * @param string $alias  the table's alias in the query; '' for none
+ */
+function wtCompanyClause(PDO $conn, int $analystId, string $alias): array
+{
+    if ($analystId <= 0) return ['', []];
+    require_once __DIR__ . '/tenancy.php';
+    return ticketTenantFilter($conn, $analystId, $alias);
+}
+
 function wtScopeClause(PDO $conn, int $analystId, string $scope, string $column): array
 {
     if ($scope === WT_SCOPE_MINE) {
@@ -383,7 +401,7 @@ function wtVisibleCards(PDO $conn): array
             $key = substr($row['item_key'], 5);
             if (isset($visible[$key])) $visible[$key] = (bool)(int)$row['is_visible'];
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Table not created yet (upgrade not run) — everything shows, which is
         // the behaviour this screen was added on top of.
     }
@@ -419,7 +437,7 @@ function wtItemMembers(PDO $conn, string $itemKey): ?array
         );
         $stmt->execute([WT_INSTALL_SCOPE, $itemKey, $spec['entity_type']]);
         return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-    } catch (Exception $e) {
+    } catch (Exception) {
         return null;   // never let a settings read break the dashboard
     }
 }

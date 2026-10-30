@@ -7,6 +7,7 @@
  * email from the first active mailbox, reusing the same provider-branched send
  * logic (Gmail API / Microsoft Graph / IMAP-SMTP).
  */
+require_once __DIR__ . '/mailbox_provider.php';   // MailboxProvider
 require_once __DIR__ . '/encryption.php';       // decryptMailboxRow
 require_once __DIR__ . '/template_email.php';   // templateGetValidAccessToken, templateSendViaGraph
 require_once __DIR__ . '/session_security.php';  // requestScheme() — proxy-aware (GH #152)
@@ -50,12 +51,12 @@ function ssSendSystemEmail(PDO $conn, string $to, string $subject, string $htmlB
             'No active mailbox is able to send (none configured, or none authenticated)');
         return false;
     }
-    $provider = $mailbox['provider'] ?? 'microsoft';
+    $provider = MailboxProvider::fromMailbox($mailbox);
     try {
-        if ($provider === 'imap') {
+        if ($provider === MailboxProvider::Imap) {
             require_once __DIR__ . '/mailbox_imap.php';
             imapSmtpSend($mailbox, $to, '', $subject, $htmlBody);
-        } elseif ($provider === 'google') {
+        } elseif ($provider === MailboxProvider::Google) {
             $tokenData = json_decode(preg_replace('/[\x00-\x1F\x7F]/', '', (string)$mailbox['token_data']), true);
             if (!$tokenData || !isset($tokenData['access_token'])) {
                 emailLogFailed($conn, $mailbox, $route, $to, $subject, 'Mailbox has no usable stored token');
@@ -106,7 +107,7 @@ function ssBuildVerifyUrl(string $rawToken): string {
     $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
     $appRoot = rtrim(str_replace('\\', '/', realpath(__DIR__ . '/..')), '/');
-    $appPath = ($docRoot && strpos($appRoot, $docRoot) === 0) ? substr($appRoot, strlen($docRoot)) : '';
+    $appPath = ($docRoot && str_starts_with($appRoot, $docRoot)) ? substr($appRoot, strlen($docRoot)) : '';
     return $scheme . '://' . $host . $appPath . '/self-service/verify-email.php?token=' . urlencode($rawToken);
 }
 
@@ -125,7 +126,7 @@ function ssBuildResetUrl(string $rawToken): string {
     $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
     $appRoot = rtrim(str_replace('\\', '/', realpath(__DIR__ . '/..')), '/');
-    $appPath = ($docRoot && strpos($appRoot, $docRoot) === 0) ? substr($appRoot, strlen($docRoot)) : '';
+    $appPath = ($docRoot && str_starts_with($appRoot, $docRoot)) ? substr($appRoot, strlen($docRoot)) : '';
     return $scheme . '://' . $host . $appPath . '/self-service/reset-password.php?token=' . urlencode($rawToken);
 }
 

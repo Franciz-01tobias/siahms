@@ -60,7 +60,7 @@ function tikaUrl(PDO $conn): string {
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $st->execute([TIKA_SETTING_URL]);
         $v = (string)($st->fetchColumn() ?: '');
-    } catch (Exception $e) { $v = ''; }
+    } catch (Exception) { $v = ''; }
     return $cached = rtrim(trim($v), '/');
 }
 
@@ -93,7 +93,7 @@ function tikaTimeout(PDO $conn): int {
         $st = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ?");
         $st->execute([TIKA_SETTING_TIMEOUT]);
         $v = (int)($st->fetchColumn() ?: TIKA_TIMEOUT_DEFAULT);
-    } catch (Exception $e) { $v = TIKA_TIMEOUT_DEFAULT; }
+    } catch (Exception) { $v = TIKA_TIMEOUT_DEFAULT; }
     return max(TIKA_TIMEOUT_MIN, min(TIKA_TIMEOUT_MAX, $v ?: TIKA_TIMEOUT_DEFAULT));
 }
 

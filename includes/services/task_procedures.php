@@ -27,7 +27,7 @@ class TaskProcedures
             $s = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'tasks_procedures_enabled'");
             $s->execute();
             return (string)$s->fetchColumn() === '1';
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return false;
         }
     }
@@ -41,7 +41,7 @@ class TaskProcedures
             $conn->query("SELECT id FROM task_procedures LIMIT 0");
             $conn->query("SELECT id FROM task_procedure_snapshots LIMIT 0");
             return $ready = true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $ready = false;
         }
     }
@@ -53,6 +53,9 @@ class TaskProcedures
     public static function mayReadKnowledge(PDO $conn, int $analystId): bool
     {
         if ($analystId <= 0 || !function_exists('analystCanAccessModule')) return false;
+        // Not while Knowledge itself is switched off for the install (GH #217) -
+        // Tickets or LMS access would otherwise still reach its articles.
+        if (!moduleIsEnabled($conn, 'knowledge')) return false;
         foreach (['knowledge', 'tickets', 'lms'] as $m) {
             if (analystCanAccessModule($conn, $analystId, $m)) return true;
         }
@@ -210,7 +213,7 @@ class TaskProcedures
         try {
             $place = implode(',', array_fill(0, count($taskIds), '?'));
             $conn->prepare("DELETE FROM task_procedures WHERE task_id IN ($place)")->execute(array_values($taskIds));
-        } catch (Throwable $e) { /* before Database Verification */ }
+        } catch (Throwable) { /* before Database Verification */ }
     }
 
     /** For the #181 frozen record: each reference and what it was frozen against. */

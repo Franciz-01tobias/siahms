@@ -80,7 +80,8 @@ function mcpTools(): array
             // message as the answer ('That lookup failed: SQLSTATE...'), which would
             // hand table and column names to the client. mcpRunTool() catches,
             // logs and answers generically. Capability is checked by mcpToolAllowed().
-            'capability' => $w['capability'], 'handler' => fn($conn, $args, $analystId, $key) => call_user_func($w['handler'], $conn, $args, $analystId)];
+            'capability' => $w['capability'], 'feature' => $w['feature'] ?? null,   // GH #217: on_call needs the duty rota
+            'handler' => fn($conn, $args, $analystId, $key) => call_user_func($w['handler'], $conn, $args, $analystId)];
     }
     $project = ['type' => 'string', 'description' => 'The project: its code (PRJ-0042), its id, or enough of its name to be unique.'];
     $tools += [
@@ -171,7 +172,8 @@ function mcpToolAllowed(PDO $conn, array $apiKey, array $t): bool
 {
     $analystId = (int)$apiKey['analyst_id'];
     if (!analystCanAccessModule($conn, $analystId, $t['module'])) return false;
-    if ($t['capability'] !== null && !analystHasCapability($conn, $analystId, $t['capability'])) return false;
+    if (!empty($t['feature']) && !moduleIsEnabled($conn, $t['feature'])) return false;   // GH #217: a switched-off Tickets feature
+    if ($t['capability'] !== null && !analystHasCapability($conn, $analystId, Cap::from($t['capability']))) return false;
     if (!$t['company_safe'] && isMultiTenant($conn) && $apiKey['company_scope'] !== null) return false;
     return true;
 }

@@ -21,6 +21,8 @@ require_once __DIR__ . '/../includes/proxmox_sync.php';
 require_once __DIR__ . '/../includes/job_runs.php';   // run history (#182)
 
 $conn = connectToDatabase();
+// GH #217: nothing to do while the module is switched off for the install.
+if (cronModuleSwitchedOff($conn, 'assets', 'proxmox_sync', 'cron')) exit(0);
 
 // Never two at once (#182): a slow sync overlapping the next would read the same
 // servers twice and race to write the same assets.

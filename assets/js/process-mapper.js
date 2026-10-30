@@ -104,6 +104,8 @@ const PM = (() => {
         detailPanel = document.getElementById('detailPanel');
         processList = document.getElementById('processList');
         canvasEmpty = document.getElementById('canvasEmpty');
+        if (window.HoverPreview) HoverPreview.attach(processList, { item: '.pm-process-open', render: renderProcessPreview });
+        bindProcessListKeys();
 
         addArrowheadDef();
         bindCanvasEvents();
@@ -185,6 +187,7 @@ const PM = (() => {
             clearCanvas();
             canvasEmpty.style.display = '';
             renderProcessList();
+            updateTitle();
             closeDetail();
         }
     }
@@ -309,6 +312,7 @@ const PM = (() => {
             if (d.success) {
                 processes = d.data;
                 renderProcessList();
+                updateTitle();
             }
         } catch (e) { console.error(e); }
     }
@@ -321,15 +325,156 @@ const PM = (() => {
             processList.innerHTML = '<div class="pm-empty">No processes found</div>';
             return;
         }
+        // Opening is a real <button> (#202): Tab reaches it, Enter and Space
+        // work, and a screen reader reads its whole text - the FULL title,
+        // even where CSS cuts it off on screen. Delete is a sibling, not a
+        // child: everything inside a button is presentational, so a Delete
+        // nested in one would be invisible to assistive technology.
+        // Tab moves row to row (Ed's call - a single Tab stop for the whole
+        // list closed the Show on hover sidebar on the next press), and the
+        // arrows do too (bindProcessListKeys). The x buttons are out of the
+        // Tab order so it is one stop a row, not two, but still clickable and
+        // announced; the Delete key on a row does the same job.
         processList.innerHTML = filtered.map(p => {
-            const active = p.id == currentProcessId ? ' active' : '';
+            const isActive = p.id == currentProcessId;
             const date = p.updated_datetime ? fmtDate(p.updated_datetime) : '';
-            return `<div class="pm-process-item${active}" data-id="${p.id}" onclick="PM.openProcess(${p.id})">
-                <span class="pm-process-name">${esc(p.title)}</span>
-                <span class="pm-process-date">${date}</span>
-                <button class="pm-process-delete" onclick="event.stopPropagation(); PM.deleteProcess(${p.id})" title="Delete">&times;</button>
+            return `<div class="pm-process-item${isActive ? ' active' : ''}" data-id="${p.id}">
+                <button type="button" class="pm-process-open" data-id="${p.id}" aria-keyshortcuts="Delete"${isActive ? ' aria-current="true"' : ''} onclick="PM.openProcess(${p.id})">
+                    <span class="pm-process-name">${esc(p.title)}</span>
+                    <span class="pm-process-date">${date}</span>
+                </button>
+                <button type="button" class="pm-process-delete" tabindex="-1" onclick="PM.deleteProcess(${p.id})" title="${esc(t('common.delete'))}" aria-label="${esc(t('common.delete'))}">&times;</button>
             </div>`;
         }).join('');
+    }
+
+    // ---- Keyboard route to the process list (#202) ----
+    // "/" from anywhere on the page goes to Search processes - the same key
+    // GitHub, Gmail and YouTube use - and so does Alt+Shift+O (Ed's choice),
+    // which also works from inside a text box. Tab is no route: how many stops lie
+    // before the list depends on the module rail and on where focus was.
+    // From the search box Down goes into the list, Up/Down/Home/End move in
+    // it, Enter opens, Esc goes back to wherever you were before "/".
+    let focusBeforeSlash = null;
+
+    /** True while one of the page's dialogs (new process, export, a confirm) is open. */
+    function dialogOpen() {
+        if ([...document.querySelectorAll('.pm-modal-overlay')].some(m => m.style.display && m.style.display !== 'none')) return true;
+        // TRAP: .active - confirm.js keeps its overlay in the page once shown
+        // and only hides it, so its mere presence means nothing.
+        return !!document.querySelector('.fitsm-confirm-overlay.active');
+    }
+
+    /** True while the analyst is typing somewhere, or a dialog is open - when "/" must stay a plain character. */
+    function slashShouldType(e) {
+        const el = e.target;
+        if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return true;
+        return dialogOpen();
+    }
+
+    /** Focuses Search processes, opening the sidebar in Show on hover mode until focus leaves it. */
+    function focusProcessSearch() {
+        const sidebar = document.getElementById('pmSidebar');
+        const search = document.getElementById('processSearch');
+        if (!sidebar || !search) return;
+        focusBeforeSlash = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+        sidebar.classList.add('pm-sidebar-kbd');
+        search.focus();
+        search.select();
+    }
+
+    /** Leaves the list: back to where "/" was pressed, or nowhere. */
+    function leaveProcessList() {
+        if (window.HoverPreview) HoverPreview.hide();
+        const back = focusBeforeSlash;
+        focusBeforeSlash = null;
+        if (back && back.isConnected) back.focus();
+        else document.activeElement && document.activeElement.blur();
+    }
+
+    /** Wires "/" and the arrow keys for the sidebar. */
+    function bindProcessListKeys() {
+        const sidebar = document.getElementById('pmSidebar');
+        const search = document.getElementById('processSearch');
+        if (!sidebar || !search) return;
+
+        document.addEventListener('keydown', e => {
+            // TRAP: e.code, not e.key - on a Mac Option+Shift+O types "Ø", so
+            // e.key is never 'O' there.
+            const altShiftO = e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyO';
+            const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !slashShouldType(e);
+            if (!slash && !(altShiftO && !dialogOpen())) return;
+            e.preventDefault();
+            focusProcessSearch();
+        });
+
+        sidebar.addEventListener('keydown', e => {
+            const rows = [...processList.querySelectorAll('.pm-process-open')];
+            const at = rows.indexOf(document.activeElement);
+            const inSearch = e.target === search;
+            if (e.key === 'Escape' && (inSearch || at >= 0)) {
+                e.preventDefault();
+                leaveProcessList();
+                return;
+            }
+            if (!rows.length || (!inSearch && at < 0)) return;
+            if (e.key === 'Delete' && at >= 0) {
+                e.preventDefault();
+                deleteProcess(parseInt(rows[at].dataset.id, 10));
+                return;
+            }
+            let next = null;
+            if (e.key === 'ArrowDown') next = inSearch ? 0 : Math.min(at + 1, rows.length - 1);
+            else if (e.key === 'ArrowUp' && !inSearch) next = at - 1;   // above the first row is the search box
+            else if (e.key === 'Home' && !inSearch) next = 0;
+            else if (e.key === 'End' && !inSearch) next = rows.length - 1;
+            else if (e.key === 'Enter' && inSearch) next = 0;           // Enter in search moves to the first match
+            if (next === null) return;
+            e.preventDefault();
+            if (next < 0) { search.focus(); return; }
+            rows[next].focus();
+            rows[next].scrollIntoView({ block: 'nearest' });
+        });
+
+        // The keyboard-opened sidebar closes again once focus leaves it.
+        sidebar.addEventListener('focusout', e => {
+            if (!sidebar.contains(e.relatedTarget)) sidebar.classList.remove('pm-sidebar-kbd');
+        });
+    }
+
+    /** The hover preview card for a sidebar row: full name, description, counts, who made it and when (#202). */
+    function renderProcessPreview(item) {
+        const p = processes.find(x => x.id == item.dataset.id);
+        if (!p) return '';
+        const facts = [
+            [t('process-mapper.preview.steps'), String(p.step_count ?? 0)],
+            [t('process-mapper.preview.lanes'), String(p.lane_count ?? 0)],
+        ];
+        if (p.created_by_name) facts.push([t('process-mapper.preview.created_by'), p.created_by_name]);
+        if (p.created_datetime) facts.push([t('process-mapper.preview.created'), fmtDateTime(p.created_datetime)]);
+        if (p.updated_datetime) facts.push([t('process-mapper.preview.updated'), fmtDateTime(p.updated_datetime)]);
+        return `<div class="hover-preview-title">${esc(p.title)}</div>`
+            + (p.description ? `<div class="hover-preview-desc">${esc(p.description)}</div>` : '')
+            + `<dl class="hover-preview-facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+    }
+
+    /**
+     * The action row's title: "Processes" alone, or "Processes - <full name>"
+     * while a process is open (#202), so the name the sidebar cuts off is
+     * always readable and copyable. Called wherever currentProcessId changes.
+     */
+    function updateTitle(loadedTitle) {
+        const h = document.getElementById('pmTitle');
+        if (!h) return;
+        const p = currentProcessId != null ? processes.find(x => x.id == currentProcessId) : null;
+        const name = currentProcessId != null ? ((p && p.title) || loadedTitle || '') : '';
+        h.textContent = t('process-mapper.nav.processes');
+        if (name) {
+            const span = document.createElement('span');
+            span.className = 'pm-title-name';
+            span.textContent = name;
+            h.appendChild(span);
+        }
     }
 
     /** Filters the sidebar list by the typed text. */
@@ -508,6 +653,7 @@ const PM = (() => {
                 canvasEmpty.style.display = 'none';
                 renderAll();
                 renderProcessList();
+                updateTitle(d.data.title);
                 if (!preserveDetail) closeDetail();
                 setStatus(autosaveOn ? 'saved' : 'off');
             }
@@ -1273,7 +1419,7 @@ const PM = (() => {
     function escapeForAttr(s) {
         const d = document.createElement('div');
         d.textContent = s == null ? '' : String(s);
-        return d.innerHTML;
+        return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     /** Closes the step context menu and forgets its target step. */
@@ -3459,10 +3605,14 @@ const PM = (() => {
     }
 
     /** Escapes text for safe use in HTML. */
+    // TRAP: textContent -> innerHTML escapes < > & but NOT quotes, so on its
+    // own it is unsafe inside an attribute - a connector label in value="",
+    // the sidebar's aria-label (#202).
+    // The two replaces make it safe in an attribute as well as in text.
     function esc(str) {
         const div = document.createElement('div');
         div.textContent = str;
-        return div.innerHTML;
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     // =========================================================

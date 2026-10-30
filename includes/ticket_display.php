@@ -84,7 +84,7 @@ function ticketDisplaySettings(?PDO $conn = null): array
                 ? max($k === 'group_show' ? 2 : 4, min(80, (int)$row['setting_value']))
                 : (int)(bool)(int)$row['setting_value'];
         }
-    } catch (Exception $e) {
+    } catch (Exception) {
         // Defaults. A reading pane that cannot reach the settings still has to render.
     }
 

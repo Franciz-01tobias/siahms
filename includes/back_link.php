@@ -34,7 +34,7 @@ function backLinkSettings(PDO $conn): array
         $out['label'] = (string)($rows['back_link_label'] ?? '');
         $out['url']   = (string)($rows['back_link_url'] ?? '');
         $out['where'] = in_array($rows['back_link_where'] ?? '', BACK_LINK_PLACES, true) ? $rows['back_link_where'] : 'portal';
-    } catch (Throwable $e) { /* nothing to show */ }
+    } catch (Throwable) { /* nothing to show */ }
     return $out;
 }
 

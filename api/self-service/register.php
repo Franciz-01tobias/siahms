@@ -31,6 +31,11 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
+require_once __DIR__ . '/../../includes/password_policy.php';   // the one rule for a new password
+if ($why = passwordPolicyError($password)) {
+    echo json_encode(['success' => false, 'error' => $why]);
+    exit;
+}
 if (strlen($password) < 8) {
     echo json_encode(['success' => false, 'error' => 'Password must be at least 8 characters']);
     exit;

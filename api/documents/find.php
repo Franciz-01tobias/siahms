@@ -29,7 +29,7 @@ if (!isset($_SESSION['analyst_id'])) {
 }
 
 $analystId  = (int) $_SESSION['analyst_id'];
-$allowed    = $_SESSION['allowed_modules'] ?? null;
+$allowed    = analystAllowedModulesNow();   // the grants now, not at sign-in
 $q          = trim((string) ($_GET['q'] ?? ''));
 $parentType = trim((string) ($_GET['parent_type'] ?? ''));
 $parentId   = (int) ($_GET['parent_id'] ?? 0);

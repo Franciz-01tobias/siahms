@@ -41,7 +41,7 @@ function projectControlReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT 1 FROM project_baselines LIMIT 0"); $conn->query("SELECT 1 FROM project_change_requests LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -59,7 +59,7 @@ function projectPlanSnapshot(PDO $conn, int $projectId): array
 
     $t = $conn->prepare("SELECT COUNT(*) AS n, SUM(estimate_hours) AS h FROM tasks WHERE project_id = ? AND parent_task_id IS NULL");
     try { $t->execute([$projectId]); $tasks = $t->fetch(PDO::FETCH_ASSOC); }
-    catch (Throwable $e) {   // before estimates existed
+    catch (Throwable) {   // before estimates existed
         $t = $conn->prepare("SELECT COUNT(*) AS n, NULL AS h FROM tasks WHERE project_id = ? AND parent_task_id IS NULL");
         $t->execute([$projectId]); $tasks = $t->fetch(PDO::FETCH_ASSOC);
     }
@@ -73,14 +73,14 @@ function projectPlanSnapshot(PDO $conn, int $projectId): array
         $m = $conn->prepare("SELECT id, name, due_date FROM project_milestones WHERE project_id = ? ORDER BY due_date, position, id");
         $m->execute([$projectId]);
         $milestones = array_map(fn($x) => ['id' => (int)$x['id'], 'name' => $x['name'], 'due_date' => $x['due_date']], $m->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { /* no milestones yet */ }
+    } catch (Throwable) { /* no milestones yet */ }
 
     $must = [];
     try {
         $i = $conn->prepare("SELECT id, title FROM project_items WHERE project_id = ? AND moscow = 'must' AND status <> 'dropped' ORDER BY position, id");
         $i->execute([$projectId]);
         $must = array_map(fn($x) => ['id' => (int)$x['id'], 'title' => $x['title']], $i->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { /* no scope yet */ }
+    } catch (Throwable) { /* no scope yet */ }
 
     $lines = []; $planned = null;
     try {
@@ -91,7 +91,7 @@ function projectPlanSnapshot(PDO $conn, int $projectId): array
             $lines[] = ['id' => (int)$x['id'], 'title' => $x['title'], 'planned' => $amt];
             if ($amt !== null) $planned = ($planned ?? 0) + $amt;
         }
-    } catch (Throwable $e) { /* no budget yet */ }
+    } catch (Throwable) { /* no budget yet */ }
 
     return [
         'start_date'      => $row['start_date'],

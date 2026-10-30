@@ -83,7 +83,7 @@ class AssetFieldsService
             try {
                 $conn->query("SELECT 1 FROM asset_field_values LIMIT 1");
                 $ready = true;
-            } catch (Exception $e) {
+            } catch (Exception) {
                 $ready = false;
             }
         }

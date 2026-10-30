@@ -23,6 +23,9 @@ require_once '../../includes/functions.php';
 require_once '../../includes/encryption.php';
 require_once '../../includes/sso_identity.php';
 
+// Changes data: never on a GET, which a link on another site can send (csrf.php).
+csrfRequireWriteMethod();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['analyst_id'])) {
@@ -72,7 +75,7 @@ function ssoDnLines($value): ?string
     $out = [];
     foreach ($lines as $line) {
         $line = trim(preg_replace('/[\x00-\x1F\x7F]/u', '', (string)$line));
-        if ($line === '' || strpos($line, '=') === false) continue;
+        if ($line === '' || !str_contains($line, '=')) continue;
         if (mb_strlen($line) > 512) continue;
         $out[strtolower($line)] = $line;
         if (count($out) >= 200) break;
@@ -264,7 +267,7 @@ if ($protocol === 'carddav') {
     if ($host === '' || $baseDn === '' || $filter === '') {
         bail('Server, base DN and user filter are required');
     }
-    if (strpos($filter, '%s') === false) {
+    if (!str_contains($filter, '%s')) {
         bail('The user filter must contain %s — it is replaced by what the user types.');
     }
     $enc = $data['ldap_encryption'] ?? 'none';
@@ -280,7 +283,7 @@ if ($protocol === 'carddav') {
     if (($analystGroup !== '' || $userGroup !== '') && $groupFilter === '') {
         bail('A group filter is required when you restrict access by group.');
     }
-    if ($groupFilter !== '' && strpos($groupFilter, '%s') === false) {
+    if ($groupFilter !== '' && !str_contains($groupFilter, '%s')) {
         bail('The group filter must contain %s — it is replaced by the user\'s DN.');
     }
 
@@ -402,10 +405,10 @@ try {
                                                     'oidc_group_claim', 'oidc_analyst_group', 'oidc_admin_group']);
             } elseif ($protocol === 'ldap') {
                 $readable = array_merge($readable, ['auto_create_users', 'auto_create_analysts', 'analyst_fallback_mode', 'require_verified_email', 'profile_sync_mode'],
-                    array_values(array_filter($cols, fn($c) => strpos($c, 'ldap_') === 0 || strpos($c, 'sync_') === 0)));
+                    array_values(array_filter($cols, fn($c) => str_starts_with($c, 'ldap_') || str_starts_with($c, 'sync_'))));
             } else {
                 $readable = array_merge($readable,
-                    array_values(array_filter($cols, fn($c) => strpos($c, 'carddav_') === 0)));
+                    array_values(array_filter($cols, fn($c) => str_starts_with($c, 'carddav_'))));
             }
             foreach ($cols as $i => $c) {
                 // Every readable column is named after its request key.

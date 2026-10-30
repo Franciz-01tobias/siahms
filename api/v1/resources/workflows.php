@@ -24,23 +24,91 @@
  *     detaches them cleanly: workflow_id goes NULL and the workflow_name
  *     snapshot preserves attribution — no more dangling ids.
  *
- * Workflow tables carry no tenant_id (install-wide, same posture as tasks
- * and forms). NOTE for key admins: workflows.fire and workflows.create are
+ * Companies (GH #209). A workflow is SHARED (`company` null: it runs for every
+ * company) or one company's own - the Knowledge convention, so NULL is NOT the
+ * Default company here and apiKeyTenantFilter() must not be used (see
+ * includes/workflow_tenancy.php). A key sees the shared workflows and those of
+ * the companies in its scope; creating, changing, deleting or firing a shared
+ * one needs a key that reaches every company, because it acts on all of them.
+ * A run belongs to the company of the event it ran for, and is listed only for
+ * a key that reaches it; a run with no company known only for an every-company
+ * key. All of it is a no-op on a single-company install and before Database
+ * Verification has added the columns.
+ *
+ * NOTE for key admins: workflows.fire and workflows.create are
  * powerful grants — actions run with engine privileges (create tickets,
  * send email from the ticket's mailbox), so scope those to trusted keys.
  */
 
 require_once dirname(__DIR__, 3) . '/workflow/includes/engine.php';
+require_once dirname(__DIR__, 3) . '/includes/workflow_tenancy.php';
 
 // ---------------------------------------------------------------------------
 // Serializers + loaders
 // ---------------------------------------------------------------------------
 
-/** The SELECT for workflows, with the creator's name. */
-function apiWorkflowSelect(): string {
-    return "SELECT w.*, a.full_name AS created_by_name
+/**
+ * The SELECT for workflows, with the creator's name and, once the column exists, the company's.
+ */
+function apiWorkflowSelect(PDO $conn): string {
+    if (!workflowTenancyReady($conn)) {
+        return "SELECT w.*, NULL AS tenant_id, a.full_name AS created_by_name, NULL AS tenant_name
             FROM workflows w
             LEFT JOIN analysts a ON a.id = w.created_by";
+    }
+    return "SELECT w.*, a.full_name AS created_by_name, tn.name AS tenant_name
+            FROM workflows w
+            LEFT JOIN analysts a ON a.id = w.created_by
+            LEFT JOIN tenants tn ON tn.id = w.tenant_id";
+}
+
+/** Does this key reach every company? (Always, on a single-company install.) */
+function apiKeyReachesEveryCompany(PDO $conn, array $apiKey): bool {
+    return !workflowTenancyActive($conn) || $apiKey['company_scope'] === null;
+}
+
+/**
+ * May this key create, change, delete or fire a workflow for this company? null = shared.
+ *
+ * @param ?int $tenantId  the workflow's company; null = shared
+ */
+function apiKeyCanWriteWorkflowFor(PDO $conn, array $apiKey, ?int $tenantId): bool {
+    if (apiKeyReachesEveryCompany($conn, $apiKey)) return true;
+    return $tenantId !== null && apiKeyCanAccessTenant($conn, $apiKey, $tenantId);
+}
+
+/** 403 unless the key may write a workflow for this company. */
+function apiRequireWorkflowWrite(PDO $conn, array $apiKey, ?int $tenantId): void {
+    if (apiKeyCanWriteWorkflowFor($conn, $apiKey, $tenantId)) return;
+    apiError(403, 'forbidden', $tenantId === null
+        ? 'This workflow runs for every company, so only a key that reaches every company can change or fire it.'
+        : 'Your API key does not have access to that company.');
+}
+
+/**
+ * The company a request names for a workflow: absent = $default; null / '' / 'shared' = shared; else an existing company id.
+ *
+ * @param array $body  the request body
+ * @param ?int $default  what an absent company_id means
+ */
+function apiWorkflowCompanyFromBody(PDO $conn, array $body, ?int $default): ?int {
+    if (!array_key_exists('company_id', $body)) return $default;
+    [$ok, $tenant, $err] = workflowParseCompany($conn, $body['company_id']);
+    if (!$ok) apiError(422, 'invalid_field', "'company_id': " . $err . '.');
+    return $tenant;
+}
+
+/**
+ * Runs this key may read: those whose event's company is in its scope.
+ *
+ * @param string $qualified  the already-qualified column, e.g. 'we.tenant_id'
+ * @return array [sqlFragment, params]
+ */
+function apiWorkflowExecutionFilter(PDO $conn, array $apiKey, string $qualified): array {
+    if (apiKeyReachesEveryCompany($conn, $apiKey)) return ['', []];
+    $ids = array_values(array_map('intval', $apiKey['company_scope']));
+    if (!$ids) return [' AND 1 = 0', []];
+    return [" AND $qualified IN (" . implode(',', array_fill(0, count($ids), '?')) . ")", $ids];
 }
 
 /**
@@ -59,6 +127,8 @@ function apiSerializeWorkflow(array $r, bool $full): array {
         'name'          => $r['name'],
         'description'   => $r['description'],
         'trigger_event' => $r['trigger_event'],
+        // GH #209. null = shared: runs for every company.
+        'company'       => ($r['tenant_id'] ?? null) === null ? null : ['id' => (int)$r['tenant_id'], 'name' => $r['tenant_name'] ?? null],
         'is_active'     => (bool)$r['is_active'],
         'created_by'    => $r['created_by'] === null ? null : ['id' => (int)$r['created_by'], 'name' => $r['created_by_name']],
         'created_at'    => apiIsoDate($r['created_datetime']),
@@ -86,10 +156,15 @@ function apiSerializeWorkflow(array $r, bool $full): array {
  *
  * @param int $workflowId  the workflows id
  */
-function apiLoadWorkflow(PDO $conn, int $workflowId): array {
-    $stmt = $conn->prepare(apiWorkflowSelect() . " WHERE w.id = ?");
+function apiLoadWorkflow(PDO $conn, int $workflowId, ?array $apiKey = null): array {
+    $stmt = $conn->prepare(apiWorkflowSelect($conn) . " WHERE w.id = ?");
     $stmt->execute([$workflowId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    // GH #209: another company's workflow is not found, not forbidden.
+    if ($row && $apiKey !== null && $row['tenant_id'] !== null && !apiKeyReachesEveryCompany($conn, $apiKey)
+        && !apiKeyCanAccessTenant($conn, $apiKey, (int)$row['tenant_id'])) {
+        $row = false;
+    }
     if (!$row) {
         apiError(404, 'not_found', 'Workflow not found.');
     }
@@ -100,12 +175,18 @@ function apiLoadWorkflow(PDO $conn, int $workflowId): array {
  * The SELECT for workflow executions, keeping the workflow's name from the snapshot when
  * the workflow has since been deleted.
  */
-function apiWorkflowExecutionSelect(): string {
+function apiWorkflowExecutionSelect(PDO $conn): string {
     // COALESCE keeps orphaned executions attributed via the name snapshot
     // after their parent workflow is deleted.
-    return "SELECT we.*, COALESCE(w.name, we.workflow_name) AS resolved_workflow_name
+    if (!workflowTenancyReady($conn)) {
+        return "SELECT we.*, NULL AS tenant_id, NULL AS tenant_name, COALESCE(w.name, we.workflow_name) AS resolved_workflow_name
             FROM workflow_executions we
             LEFT JOIN workflows w ON w.id = we.workflow_id";
+    }
+    return "SELECT we.*, tn.name AS tenant_name, COALESCE(w.name, we.workflow_name) AS resolved_workflow_name
+            FROM workflow_executions we
+            LEFT JOIN workflows w ON w.id = we.workflow_id
+            LEFT JOIN tenants tn ON tn.id = we.tenant_id";
 }
 
 /**
@@ -123,6 +204,8 @@ function apiSerializeWorkflowExecution(array $r, bool $full): array {
             'name' => $r['resolved_workflow_name'],
         ],
         'trigger_event' => $r['trigger_event'],
+        // GH #209. The company the event belonged to; null = none known.
+        'company'       => ($r['tenant_id'] ?? null) === null ? null : ['id' => (int)$r['tenant_id'], 'name' => $r['tenant_name'] ?? null],
         'status'        => $r['status'],
         'started_at'    => apiIsoDate($r['started_datetime']),
         'finished_at'   => apiIsoDate($r['finished_datetime']),
@@ -229,11 +312,32 @@ function apiWorkflowsList(PDO $conn, array $apiKey, array $params, array $body):
         $args[] = $q;
         $args[] = $q;
     }
+    // GH #209. The shared workflows and the key's companies' own; ?company=
+    // narrows to one company's or, with 'shared', the shared ones.
+    if (workflowTenancyActive($conn)) {
+        if (!apiKeyReachesEveryCompany($conn, $apiKey)) {
+            $ids = array_values(array_map('intval', $apiKey['company_scope']));
+            $where[] = $ids ? '(w.tenant_id IS NULL OR w.tenant_id IN (' . implode(',', array_fill(0, count($ids), '?')) . '))' : 'w.tenant_id IS NULL';
+            $args = array_merge($args, $ids);
+        }
+        if (isset($_GET['company']) && $_GET['company'] !== '') {
+            if ($_GET['company'] === 'shared') {
+                $where[] = 'w.tenant_id IS NULL';
+            } else {
+                $companyId = (int)$_GET['company'];
+                if (!apiKeyCanAccessTenant($conn, $apiKey, $companyId)) {
+                    apiError(403, 'forbidden', 'Your API key does not have access to that company.');
+                }
+                $where[] = 'w.tenant_id = ?';
+                $args[]  = $companyId;
+            }
+        }
+    }
     $whereSql = implode(' AND ', $where);
 
     // The module's landing-page ordering: most recently updated first.
     $stmt = $conn->prepare(
-        apiWorkflowSelect() . " WHERE $whereSql ORDER BY w.updated_datetime DESC, w.id DESC"
+        apiWorkflowSelect($conn) . " WHERE $whereSql ORDER BY w.updated_datetime DESC, w.id DESC"
     );
     $stmt->execute($args);
     apiRespond(array_map(function ($r) {
@@ -243,7 +347,7 @@ function apiWorkflowsList(PDO $conn, array $apiKey, array $params, array $body):
 
 // GET /workflows/{id}
 function apiWorkflowsGet(PDO $conn, array $apiKey, array $params, array $body): void {
-    apiRespond(apiSerializeWorkflow(apiLoadWorkflow($conn, $params[0]), true));
+    apiRespond(apiSerializeWorkflow(apiLoadWorkflow($conn, $params[0], $apiKey), true));
 }
 
 // POST /workflows
@@ -254,13 +358,24 @@ function apiWorkflowsCreate(PDO $conn, array $apiKey, array $params, array $body
     }
     $trigger    = apiValidateWorkflowTrigger(trim((string)($body['trigger_event'] ?? '')));
     $conditions = apiValidateWorkflowConditions($body['conditions'] ?? []);
-    $actions    = apiValidateWorkflowActions($body['actions'] ?? []);
+    require_once __DIR__ . '/../../../includes/webhook_delivery.php';
+    $actions    = webhookEncryptActions(apiValidateWorkflowActions($body['actions'] ?? []));   // at rest, as the browser save does
 
+    // GH #209. No company_id: shared for a key that reaches every company (as
+    // before), otherwise the key's own default company - a scoped key can
+    // never make a workflow that runs for companies it cannot see.
+    $tenancyOn = workflowTenancyActive($conn);
+    $tenant = null;
+    if ($tenancyOn) {
+        $tenant = apiWorkflowCompanyFromBody($conn, $body, apiKeyReachesEveryCompany($conn, $apiKey) ? null : apiKeyDefaultTenantId($conn, $apiKey));
+        apiRequireWorkflowWrite($conn, $apiKey, $tenant);
+    }
+    $tCol = $tenancyOn ? ', tenant_id' : '';
     $conn->prepare(
         "INSERT INTO workflows
-         (name, description, trigger_event, conditions, actions, is_active, created_by, created_datetime, updated_datetime)
-         VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
-    )->execute([
+         (name, description, trigger_event, conditions, actions, is_active, created_by, created_datetime, updated_datetime$tCol)
+         VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP()" . ($tenancyOn ? ', ?' : '') . ")"
+    )->execute(array_merge([
         $name,
         ($v = trim((string)($body['description'] ?? ''))) !== '' ? $v : null,
         $trigger,
@@ -268,15 +383,24 @@ function apiWorkflowsCreate(PDO $conn, array $apiKey, array $params, array $body
         json_encode($actions),
         isset($body['is_active']) ? (int)(bool)$body['is_active'] : 1,
         (int)$apiKey['analyst_id'],
-    ]);
+    ], $tenancyOn ? [$tenant] : []));
     apiRespond(apiSerializeWorkflow(apiLoadWorkflow($conn, (int)$conn->lastInsertId()), true), 201);
 }
 
 // PATCH /workflows/{id}
 function apiWorkflowsUpdate(PDO $conn, array $apiKey, array $params, array $body): void {
-    $current = apiLoadWorkflow($conn, $params[0]);
+    $current = apiLoadWorkflow($conn, $params[0], $apiKey);
     if (!$body) {
         apiError(422, 'missing_field', 'No fields to update.');
+    }
+    // GH #209: the right to the workflow as it is, and to where it is moving.
+    $tenancyOn = workflowTenancyActive($conn);
+    $curTenant = $current['tenant_id'] === null ? null : (int)$current['tenant_id'];
+    $tenant = $curTenant;
+    if ($tenancyOn) {
+        apiRequireWorkflowWrite($conn, $apiKey, $curTenant);
+        $tenant = apiWorkflowCompanyFromBody($conn, $body, $curTenant);
+        apiRequireWorkflowWrite($conn, $apiKey, $tenant);
     }
 
     $name = array_key_exists('name', $body) ? trim((string)$body['name']) : $current['name'];
@@ -290,7 +414,7 @@ function apiWorkflowsUpdate(PDO $conn, array $apiKey, array $params, array $body
         ? json_encode(apiValidateWorkflowConditions($body['conditions']))
         : $current['conditions'];
     $actionsJson = array_key_exists('actions', $body)
-        ? json_encode(apiValidateWorkflowActions($body['actions']))
+        ? json_encode((function ($a) { require_once __DIR__ . '/../../../includes/webhook_delivery.php'; return webhookEncryptActions($a); })(apiValidateWorkflowActions($body['actions'])))
         : $current['actions'];
     $description = array_key_exists('description', $body)
         ? (($v = trim((string)$body['description'])) !== '' ? $v : null)
@@ -302,9 +426,9 @@ function apiWorkflowsUpdate(PDO $conn, array $apiKey, array $params, array $body
     $conn->prepare(
         "UPDATE workflows
          SET name = ?, description = ?, trigger_event = ?, conditions = ?, actions = ?,
-             is_active = ?, updated_datetime = UTC_TIMESTAMP()
+             is_active = ?, updated_datetime = UTC_TIMESTAMP()" . ($tenancyOn ? ', tenant_id = ?' : '') . "
          WHERE id = ?"
-    )->execute([$name, $description, $trigger, $conditionsJson, $actionsJson, $isActive, $params[0]]);
+    )->execute(array_merge([$name, $description, $trigger, $conditionsJson, $actionsJson, $isActive], $tenancyOn ? [$tenant] : [], [$params[0]]));
 
     apiRespond(apiSerializeWorkflow(apiLoadWorkflow($conn, $params[0]), true));
 }
@@ -314,7 +438,8 @@ function apiWorkflowsUpdate(PDO $conn, array $apiKey, array $params, array $body
 // NULLed. Explicit rather than FK-reliant so grown installs that haven't
 // re-run Database Verification behave identically.
 function apiWorkflowsDelete(PDO $conn, array $apiKey, array $params, array $body): void {
-    $workflow = apiLoadWorkflow($conn, $params[0]);
+    $workflow = apiLoadWorkflow($conn, $params[0], $apiKey);
+    if (workflowTenancyActive($conn)) apiRequireWorkflowWrite($conn, $apiKey, $workflow['tenant_id'] === null ? null : (int)$workflow['tenant_id']);
     $conn->beginTransaction();
     try {
         $conn->prepare(
@@ -335,7 +460,9 @@ function apiWorkflowsDelete(PDO $conn, array $apiKey, array $params, array $body
 
 // POST /workflows/{id}/fire — manual test fire with a synthetic payload.
 function apiWorkflowsFire(PDO $conn, array $apiKey, array $params, array $body): void {
-    apiLoadWorkflow($conn, $params[0]); // clean 404 before the engine runs
+    $wf = apiLoadWorkflow($conn, $params[0], $apiKey); // clean 404 before the engine runs
+    // GH #209: firing runs the actions, so the same right as changing it.
+    if (workflowTenancyActive($conn)) apiRequireWorkflowWrite($conn, $apiKey, $wf['tenant_id'] === null ? null : (int)$wf['tenant_id']);
     $payload = (isset($body['payload']) && is_array($body['payload'])) ? $body['payload'] : [];
     $result = WorkflowEngine::manualFire($params[0], $payload);
     apiRespond([
@@ -358,7 +485,12 @@ function apiWorkflowsFire(PDO $conn, array $apiKey, array $params, array $body):
  *    the query-string filters are added to it
  * @param array $args  the bound values for the ? placeholders in $where, in order
  */
-function apiWorkflowExecutionsRespondList(PDO $conn, array $where, array $args): void {
+function apiWorkflowExecutionsRespondList(PDO $conn, array $where, array $args, ?array $apiKey = null): void {
+    // GH #209: only runs for the key's companies.
+    if ($apiKey !== null) {
+        [$eSql, $eArgs] = apiWorkflowExecutionFilter($conn, $apiKey, 'we.tenant_id');
+        if ($eSql !== '') { $where[] = substr($eSql, strlen(' AND ')); $args = array_merge($args, $eArgs); }
+    }
     if (isset($_GET['status']) && trim($_GET['status']) !== '') {
         $where[] = 'we.status = ?';
         $args[]  = trim($_GET['status']);
@@ -380,7 +512,7 @@ function apiWorkflowExecutionsRespondList(PDO $conn, array $where, array $args):
     $total = (int)$countStmt->fetchColumn();
 
     $stmt = $conn->prepare(
-        apiWorkflowExecutionSelect() . " WHERE $whereSql
+        apiWorkflowExecutionSelect($conn) . " WHERE $whereSql
          ORDER BY we.started_datetime DESC, we.id DESC
          LIMIT $perPage OFFSET $offset"
     );
@@ -397,8 +529,8 @@ function apiWorkflowExecutionsRespondList(PDO $conn, array $where, array $args):
 
 // GET /workflows/{id}/executions
 function apiWorkflowExecutionsList(PDO $conn, array $apiKey, array $params, array $body): void {
-    apiLoadWorkflow($conn, $params[0]);
-    apiWorkflowExecutionsRespondList($conn, ['we.workflow_id = ?'], [$params[0]]);
+    apiLoadWorkflow($conn, $params[0], $apiKey);
+    apiWorkflowExecutionsRespondList($conn, ['we.workflow_id = ?'], [$params[0]], $apiKey);
 }
 
 // GET /workflow-executions — install-wide, including orphaned runs whose
@@ -413,14 +545,16 @@ function apiWorkflowExecutionsListAll(PDO $conn, array $apiKey, array $params, a
     if (isset($_GET['orphaned']) && $_GET['orphaned'] === 'true') {
         $where[] = 'we.workflow_id IS NULL';
     }
-    apiWorkflowExecutionsRespondList($conn, $where, $args);
+    apiWorkflowExecutionsRespondList($conn, $where, $args, $apiKey);
 }
 
 // GET /workflow-executions/{id} — full detail with payload + step log.
 function apiWorkflowExecutionsGet(PDO $conn, array $apiKey, array $params, array $body): void {
-    $stmt = $conn->prepare(apiWorkflowExecutionSelect() . " WHERE we.id = ?");
-    $stmt->execute([$params[0]]);
+    [$eSql, $eArgs] = apiWorkflowExecutionFilter($conn, $apiKey, 'we.tenant_id');
+    $stmt = $conn->prepare(apiWorkflowExecutionSelect($conn) . " WHERE we.id = ?$eSql");
+    $stmt->execute(array_merge([$params[0]], $eArgs));
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    // GH #209: a run for another company is not found.
     if (!$row) {
         apiError(404, 'not_found', 'Execution not found.');
     }

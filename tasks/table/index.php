@@ -34,13 +34,13 @@ $translationNamespaces = ['common', 'tasks'];
     <title><?php echo htmlspecialchars(pageTitle('tasks', t('tasks.nav.table'))); ?></title>
     <link rel="stylesheet" href="../../assets/css/theme.css?v=27">
     <link rel="stylesheet" href="../../assets/css/inbox.css?v=79">
-    <link rel="stylesheet" href="../../assets/css/tasks.css?v=53">
-    <link rel="stylesheet" href="../../assets/css/data-table.css?v=4">
+    <link rel="stylesheet" href="../../assets/css/tasks.css?v=56">
+    <link rel="stylesheet" href="../../assets/css/data-table.css?v=7">
     <script>window.translations = <?php echo json_encode(I18n::exportForJs($translationNamespaces), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
     <?php echo Tz::scriptTag(); ?>
     <script src="../../assets/js/tz.js?v=5"></script>
     <script src="../../assets/js/i18n.js?v=3"></script>
-    <link rel="stylesheet" href="../../assets/css/mobile.css?v=195">
+    <link rel="stylesheet" href="../../assets/css/mobile.css?v=196">
 </head>
 <body data-analyst-id="<?php echo $_SESSION['analyst_id'] ?? ''; ?>"<?php echo $tasksReadOnly ? ' class="module-read-only"' : ''; ?>>
     <?php include '../includes/header.php'; ?>
@@ -88,6 +88,11 @@ $translationNamespaces = ['common', 'tasks'];
 
     <!-- Shared right-click context menu (same markup contract as dashboard + timeline) -->
     <div class="ctx-menu" id="ctxMenu">
+        <?php /* GH #219: open the task - the quick-look panel, like a click on the row's open link. */ ?>
+        <div class="ctx-item" data-action="open">
+            <span class="ctx-item-label"><?php echo htmlspecialchars(t('tasks.context.open')); ?></span>
+        </div>
+        <div class="ctx-sep"></div>
         <div class="ctx-item ctx-has-sub">
             <span class="ctx-item-label"><?php echo htmlspecialchars(t('tasks.context.assign_analyst')); ?></span>
             <span class="ctx-arrow">&rsaquo;</span>
@@ -116,9 +121,13 @@ $translationNamespaces = ['common', 'tasks'];
         </div>
     </div>
 
-    <script src="../../assets/js/data-table.js?v=6"></script>
-    <script src="../../assets/js/tasks-ctx-menu.js?v=4"></script>
-    <script src="../../assets/js/tasks-table.js?v=5"></script>
-    <script src="../../assets/js/mobile.js?v=82"></script>
+    <script src="../../assets/js/data-table.js?v=9"></script>
+    <script src="../../assets/js/tasks-ctx-menu.js?v=5"></script>
+    <?php /* The panel renders a description through the shared cleaner - without it
+             the HTML showed as text (GH #219). Calendar and Timeline load it too. */ ?>
+    <script src="../../assets/js/safe-html.js?v=4"></script>
+    <script src="../../assets/js/tasks-quick-panel.js?v=5"></script>
+    <script src="../../assets/js/tasks-table.js?v=6"></script>
+    <script src="../../assets/js/mobile.js?v=83"></script>
 </body>
 </html>

@@ -164,8 +164,8 @@ try {
     ok('both answers are stored, neither overwrote the other', isset($resp['0'], $resp['1']) && (int)$resp['0'] === $rightIdx);
 
     [$code, $html] = http($base . 'lms/test.php?t=' . $raw);
-    ok('the page shows the questions', $code === 200 && strpos($html, "$tag Q1") !== false);
-    ok('the page never carries the marks or the explanation', strpos($html, '"marks"') === false && strpos($html, 'class="ct-mark') === false && stripos($html, 'explanation') === false);
+    ok('the page shows the questions', $code === 200 && str_contains($html, "$tag Q1"));
+    ok('the page never carries the marks or the explanation', !str_contains($html, '"marks"') && !str_contains($html, 'class="ct-mark') && stripos($html, 'explanation') === false);
 
     [, , $d] = http($api, ['t' => $raw, 'action' => 'submit']);
     $row = $conn->query("SELECT * FROM lms_ct_sittings WHERE id = $sid")->fetch(PDO::FETCH_ASSOC);
@@ -224,7 +224,7 @@ try {
     [$code, , $d] = http($base . 'api/lms/tests.php?action=tests');
     ok('no session, no data', empty($d['success']), "HTTP $code");
     [$code, , $d] = http($base . 'api/lms/tests.php?action=sitting&id=' . $sid);
-    ok('...including a candidate\'s result', empty($d['success']) && strpos(json_encode($d), "$tag candidate") === false);
+    ok('...including a candidate\'s result', empty($d['success']) && !str_contains(json_encode($d), "$tag candidate"));
 } finally {
     $conn->exec("DELETE FROM lms_ct_sittings WHERE candidate_name LIKE " . $conn->quote("$tag%"));
     if ($testId) {

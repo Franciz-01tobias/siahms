@@ -151,7 +151,7 @@ function searchCorpusReady(PDO $conn): bool {
     try {
         $conn->query("SELECT 1 FROM search_documents LIMIT 1");
         $ready = true;
-    } catch (Throwable $e) {
+    } catch (Throwable) {
         $ready = false;
     }
     return $ready;

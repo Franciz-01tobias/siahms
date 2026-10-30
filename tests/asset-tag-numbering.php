@@ -82,7 +82,7 @@ try {
     ok('...and, having the generated shape and a higher number, winds the counter past it', $create('ZZTAG-H5')['tag'] === 'ZZTAG-0501');
     $clash = refused(fn() => $create('ZZTAG-H6', 'ZZTAG-0500'));
     ok('a typed tag already in use is refused...', $clash !== null);
-    ok('...naming the asset that has it', $clash !== null && strpos($clash, 'ZZTAG-H4') !== false, (string)$clash);
+    ok('...naming the asset that has it', $clash !== null && str_contains($clash, 'ZZTAG-H4'), (string)$clash);
     $free = $create('ZZTAG-H7', 'ZZTAG-ODD-1');
     ok('a typed tag of another shape is fine and leaves the counter alone', $free['tag'] === 'ZZTAG-ODD-1' && $create('ZZTAG-H8')['tag'] === 'ZZTAG-0502');
 

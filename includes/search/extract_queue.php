@@ -52,7 +52,7 @@ function extractQueueSettingOn(PDO $conn, string $key): bool {
         $v = $st->fetchColumn();
         if ($v === false || $v === null || $v === '') return true;   // unset = on
         return $v === '1' || $v === 1 || strtolower((string)$v) === 'true';
-    } catch (Exception $e) {
+    } catch (Exception) {
         return true;
     }
 }
@@ -63,7 +63,7 @@ function extractQueueDepth(PDO $conn): int {
         $st = $conn->prepare("SELECT COUNT(*) FROM attachment_text WHERE status = ?");
         $st->execute([ATT_TEXT_PENDING]);
         return (int)$st->fetchColumn();
-    } catch (Exception $e) {
+    } catch (Exception) {
         return 0;
     }
 }
@@ -119,7 +119,7 @@ function extractQueueDrain(PDO $conn, int $limit, float $deadline = 0): array {
                 $conn->prepare("UPDATE attachment_text SET status = ? WHERE attachment_id IN ($in)")
                      ->execute(array_merge([ATT_TEXT_UNSUPPORTED], $bad));
             }
-        } catch (Exception $e) { /* best effort */ }
+        } catch (Exception) { /* best effort */ }
 
         // ⚠️ Return abandoned claims to the queue first. A worker that dies
         // mid-file — a killed cron, a request that timed out — leaves rows in
@@ -130,7 +130,7 @@ function extractQueueDrain(PDO $conn, int $limit, float $deadline = 0): array {
                   WHERE status = ?
                     AND extracted_datetime < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? MINUTE)"
             )->execute([ATT_TEXT_PENDING, ATT_TEXT_EXTRACTING, ATT_TEXT_CLAIM_STALE_MINUTES]);
-        } catch (Exception $e) { /* best effort */ }
+        } catch (Exception) { /* best effort */ }
 
         // Oldest first, so a backlog drains in the order it arrived.
         $sel = $conn->prepare(
@@ -225,7 +225,7 @@ function extractQueueDepthUnchanged(PDO $conn, array $rows): bool {
                                WHERE attachment_id IN ($in) AND status = ?");
         $st->execute(array_merge($ids, [ATT_TEXT_PENDING]));
         return (int)$st->fetchColumn() === count($ids);
-    } catch (Exception $e) {
+    } catch (Exception) {
         return true;   // can't tell — stop rather than loop
     }
 }

@@ -70,7 +70,7 @@ return [
         'display_errors_enabled' => 'Diaktifkan — nyahaktifkan untuk produksi (tetapkan display_errors kepada 0 dalam config.php)',
         'display_errors_disabled' => 'Dinyahaktifkan',
         'php_version_ok' => '{version}',
-        'php_version_too_low' => '{version} — PHP 7.4 atau lebih tinggi diperlukan',
+        'php_version_too_low' => '{version} — PHP 8.1 atau lebih tinggi diperlukan',
         'php_version_eol' => '{version} — masih disokong, tetapi keluaran ini tidak lagi menerima kemas kini keselamatan sejak mencapai tamat hayat. PHP 8.3 atau 8.4 disyorkan.',
         'extension_loaded' => 'Dimuatkan',
         'extension_not_loaded' => 'Tidak dimuatkan — aktifkan dalam php.ini',
@@ -85,7 +85,7 @@ return [
         'ca_ini_masked_ok' => 'Dikonfigurasikan',
         'ca_ini_masked_broken' => 'Ditetapkan, tetapi menuju kepada fail yang tiada di situ — betulkan laluan atau komenkan tetapan itu dalam php.ini.',
         'php_version_ok_masked' => 'Memenuhi keperluan',
-        'php_version_too_low_masked' => 'Terlalu lama — PHP 7.4 atau lebih tinggi diperlukan',
+        'php_version_too_low_masked' => 'Terlalu lama — PHP 8.1 atau lebih tinggi diperlukan',
         'php_version_eol_masked' => 'Disokong, tetapi keluaran ini telah mencapai penghujung hayat dan tidak lagi menerima kemas kini keselamatan. Log masuk sebagai pentadbir untuk melihat versi.',
     ],
     'locked' => [

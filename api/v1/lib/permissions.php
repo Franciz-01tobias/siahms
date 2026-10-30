@@ -87,6 +87,21 @@ function apiV1PermissionCatalog(): array {
                 'delete' => 'Unlink a source from an asset, removing the rows that source reported there',
             ],
         ],
+        'asset_ci_links' => [
+            'label'   => 'Asset and configuration item links',
+            'actions' => [
+                'read'   => 'See which configuration item an asset is linked to, and the link history (the other end needs its own read permission, or it shows as restricted)',
+                'create' => 'Link an asset to a configuration item, or replace a link - without being able to edit either record',
+                'delete' => 'End the link between an asset and its configuration item (both records are kept)',
+            ],
+        ],
+        'virtual_estate' => [
+            'label'   => 'Virtual estate (Hyper-V)',
+            'actions' => [
+                'read'   => 'See whether a Hyper-V connection is reporting on time, and what its estate holds',
+                'create' => 'Send a Hyper-V collector\'s report - accepted only from the key the connection was given',
+            ],
+        ],
         'problems' => [
             'label'   => 'Problems',
             'actions' => [

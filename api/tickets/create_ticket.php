@@ -77,6 +77,25 @@ try {
         exit;
     }
 
+    // A typed address nobody has yet becomes a new requester in the company its
+    // domain maps to - so it gets the check save_user.php makes: you can only
+    // file someone into a company you can reach. Without it an analyst scoped to
+    // one company created people in another just by typing their address.
+    // Reported privately, October 2026. The isMultiTenant() short-circuit is
+    // load-bearing for the same reason as there (single-company installs have no
+    // analyst_tenant_access rows).
+    if ($userId === null && $fromEmail !== '' && isMultiTenant($conn)) {
+        $known = $conn->prepare("SELECT id FROM users WHERE email = ?");
+        $known->execute([strtolower(trim($fromEmail))]);
+        if ($known->fetchColumn() === false) {
+            $newTenant = resolveTenantForNewUser($conn, $fromEmail);
+            if ($newTenant !== null && !analystCanAccessTenant($conn, $analystId, (int)$newTenant)) {
+                echo json_encode(['success' => false, 'error' => 'You do not have access to that company']);
+                exit;
+            }
+        }
+    }
+
     // Map the manual-create payload onto the service's canonical keys.
     $in = [
         'subject'             => $subject,

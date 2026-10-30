@@ -9,6 +9,16 @@
  * right-click menu, the tag picker and the five settings tabs.
  */
 return [
+    // A task opened inside a ticket's workspace (PR #212); see
+    // assets/js/task-embed-bridge.js.
+    'embed' => [
+        'open_separately' => 'Open separately',
+        'leave_title'     => 'Unsaved task changes',
+        'discard'         => 'Discard unsaved changes and leave this task?',
+        'discard_button'  => 'Discard',
+        'unavailable' => 'This task is no longer available in this ticket. Reload the ticket to check its current links and permissions.',
+        'unavailable_tasks' => 'This task is no longer available to you. Close it and reload the page to check your permissions.',   // GH #219: opened from the Table, Calendar or Timeline
+    ],
     'title' => 'Tasks',
 
     'nav' => [
@@ -125,6 +135,7 @@ return [
         'project_set'     => 'Added to the project',
         'project_cleared' => 'Taken out of the project',
         'delete'         => 'Delete',
+        'export_tip'     => 'Export this task as a case report',
         'close'          => 'Close',
         'view_to_modal'  => 'Open in a large window',
         'view_to_panel'  => 'Show in the side panel',
@@ -142,7 +153,7 @@ return [
         'tab_history'    => 'History',
         'view_not_saved' => 'View changed, but it could not be remembered for next time',
         'open_full'      => 'Open full editor',
-        'description_preview_hint' => 'Open the full editor to edit the description.',
+        'description_preview_hint' => 'Open the full task here, to edit the description, subtasks, checklists and comments.',
         'no_description' => 'No description.',
         'status'         => 'Status',
         'priority'       => 'Priority',
@@ -873,6 +884,8 @@ return [
         'evidence_heading' => 'History and evidence',
         'evidence_intro'   => 'Every task keeps a history, and every repeating task has an evidence report: the record an auditor asks for when they say &ldquo;show me this check was done every month this year&rdquo;.',
         'evidence_history_heading' => 'A task\'s History',
+        'case_report_heading' => 'A case report for one task',
+        'case_report_body'    => 'The <strong>document</strong> button at the top of the task window opens the task and its subtasks as one printable report - details, description, checklist results, forms, procedures followed, follow-ups, comments, history and the files attached. Choose <strong>Print</strong>, then <em>Save as PDF</em>. A task that belongs to a ticket is usually better reported from the ticket\'s <strong>Export</strong>, which takes in the conversation too. Printing is recorded on the task\'s history.',
         'evidence_history_body'    => 'The <strong>History</strong> tab in the task window lists everything that happened to the task, newest first: who created it (a person, or <em>the repeat</em>), every status change, <strong>who completed it</strong> and the due date at that moment, reopening, due-date, start-date and assignee changes, a skip and its reason, checklists attached and removed, and every tick, untick, value and result on its checklist steps. Changes made after the task was completed say so. Nothing in it can be edited or deleted, and it stays on record even if the task is deleted.',
         'evidence_history_note'    => 'History starts on the day this was added to your FreeITSM. Anything from before - who completed an older task, for example - was never recorded, and the report says <em>not recorded</em> rather than guess.',
         'evidence_report_heading'  => 'The evidence report',
@@ -998,6 +1011,8 @@ return [
         'table_heading' => 'Table view',
         'table_intro'   => 'The Table view is a full-screen Excel-style grid &mdash; one row per task, with editable cells. It\'s the fastest place to triage a list, bulk-tweak fields, or build the exact column layout you want to live in.',
         'table_edit_heading' => 'Edit straight in the cell',
+        'table_open_heading' => 'Opening a task',
+        'table_open_body'    => 'Every row starts with an <strong>open</strong> icon (or right-click a row and choose <strong>Open</strong>). It opens the same panel as the Calendar and Timeline, over the table, so your filters, sort and place stay put. The panel is a quick look - status, dates, assignee and the description - with an <strong>Edit</strong> button that turns it into the full task, right there; or choose <strong>The full task</strong> under <strong>Preferences &rarr; Opening a task</strong> to always get the full task, as on the board. The launch icon at the top goes to the task on the board. Ctrl- or middle-click the icon to open the full task in a new tab instead. Clicking a cell still edits it, as before.',
         'table_edit_body'    => 'Most columns render an editable control instead of static text. Pick a new status or priority from its dropdown, swap the assignee or team, type a new title, type or pick a new start / due date &mdash; each cell saves on change with no Save button to hunt for. Status and priority show a coloured dot that updates in place after the save.',
         'table_views_heading'      => 'Saved views',
         'table_views_body'         => 'Once the table looks how you want it &mdash; the right columns, sorted and filtered &mdash; <strong>Save view</strong> in the toolbar keeps that arrangement under a name, and <strong>Views</strong> beside it opens the library. A view can be visible to <strong>only you</strong>, to <strong>one of your teams</strong>, or to <strong>everyone</strong>; the star makes one your default so the table opens with it. The library can be searched by name, description or who made it, and shown as a list or as cards.',

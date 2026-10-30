@@ -32,12 +32,22 @@ domainApiRun(function () use ($conn, $analystId) {
     $scans = $conn->prepare("SELECT field_name, new_value FROM domain_audit WHERE domain_id = ? AND field_name IN ('ct_scanned', 'lookalikes_scanned')");
     $scans->execute([$id]);
 
+    // Subdomains (its own, or the parents it could belong to) and the
+    // certificates recorded by hand - includes/domains/subdomains.php.
+    $storeTenant = $d['tenant_id'] === null ? null : (int)$d['tenant_id'];
+
     domainApiOk([
         'domain'       => $d,
         'history'      => $hist->fetchAll(PDO::FETCH_ASSOC),
         'lookalikes'   => $la->fetchAll(PDO::FETCH_ASSOC),
         'ct'           => $ct->fetchAll(PDO::FETCH_ASSOC),
         'last_scans'   => $scans->fetchAll(PDO::FETCH_KEY_PAIR),
+        'subdomains_ready'   => domainSubdomainsReady($conn),
+        'subdomains'         => domainSubdomains($conn, $id),
+        'parent_candidates'  => domainParentCandidates($conn, $d['domain_name'], $storeTenant, $id),
+        'manual_certs_ready' => domainManualCertsReady($conn),
+        'manual_certificates'=> domainManualCertificates($conn, $id),
+        'cert_types'         => array_values(array_filter(domainCertificateTypes($conn), fn($t) => $t['is_active'])),
         'can_auth_codes' => domainHasCap($conn, $analystId, Cap::DOMAINS_AUTH_CODES),
         'multi_company'  => isMultiTenant($conn),
     ]);

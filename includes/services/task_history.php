@@ -82,7 +82,7 @@ final class TaskHistory
             $conn->query("SELECT completed_by_id, skipped_datetime FROM tasks LIMIT 0");
             $conn->query("SELECT id FROM task_removed_records LIMIT 0");
             return $ready = true;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $ready = false;
         }
     }
@@ -155,7 +155,7 @@ final class TaskHistory
                                    FROM tasks t LEFT JOIN task_statuses ts ON ts.id = t.status_id WHERE t.id = ?");
             $s->execute([$taskId]);
             return $s->fetch(PDO::FETCH_ASSOC) ?: [];
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             // Before Database Verification has added the #181 columns.
             $s = $conn->prepare("SELECT t.id, t.status_id, t.due_date, t.recurrence_id, t.parent_task_id, t.completed_datetime,
                                         ts.name AS status_name, ts.is_closed AS status_is_closed
@@ -445,7 +445,7 @@ final class TaskHistory
                           'detail' => $r['detail_json'] ? (json_decode($r['detail_json'], true) ?: []) : [],
                           'job_run_id' => $r['job_run_id'] !== null ? (int)$r['job_run_id'] : null];
             }
-        } catch (Throwable $e) { /* before Database Verification */ }
+        } catch (Throwable) { /* before Database Verification */ }
         try {
             $s = $conn->prepare("SELECT au.*, a.full_name FROM task_audit au LEFT JOIN analysts a ON a.id = au.analyst_id
                                   WHERE au.task_id = ? ORDER BY au.id DESC LIMIT 500");
@@ -455,7 +455,7 @@ final class TaskHistory
                           'who' => $r['full_name'], 'actor_kind' => $r['analyst_id'] ? 'analyst' : ($r['source'] ?: 'system'),
                           'from' => $r['old_value'], 'to' => $r['new_value'], 'detail' => ['source' => $r['source']]];
             }
-        } catch (Throwable $e) { /* nothing */ }
+        } catch (Throwable) { /* nothing */ }
         try {
             $s = $conn->prepare("SELECT * FROM task_checklist_item_events WHERE task_id = ? ORDER BY id DESC LIMIT 500");
             $s->execute([$taskId]);
@@ -468,7 +468,7 @@ final class TaskHistory
                                        'after' => json_decode((string)$r['after_json'], true) ?: [],
                                        'after_completion' => (bool)$r['after_completion']]];
             }
-        } catch (Throwable $e) { /* nothing */ }
+        } catch (Throwable) { /* nothing */ }
         usort($out, fn($a, $b) => strcmp((string)$b['at'], (string)$a['at']));
         return $out;
     }
@@ -483,7 +483,7 @@ final class TaskHistory
             $s->execute([$id]);
             $v = $s->fetchColumn();
             return $cache[$id] = ($v !== false && $v !== null && $v !== '') ? (string)$v : null;
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return null;
         }
     }

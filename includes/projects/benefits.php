@@ -36,7 +36,7 @@ function projectBenefitsReady(PDO $conn): bool
     static $ready = null;
     if ($ready === null) {
         try { $conn->query("SELECT 1 FROM project_benefits LIMIT 0"); $conn->query("SELECT 1 FROM project_benefit_measures LIMIT 0"); $ready = true; }
-        catch (Throwable $e) { $ready = false; }
+        catch (Throwable) { $ready = false; }
     }
     return $ready;
 }
@@ -181,7 +181,7 @@ function projectAlertsBenefits(PDO $conn, ?int $projectId = null): int
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
         try {
             $claim->execute(['project_benefit:' . (int)$r['b_id'] . ':review', (string)$r['review_date']]);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             return $fired;   // no ledger: firing without one would repeat every run
         }
         if ($claim->rowCount() !== 1) continue;
